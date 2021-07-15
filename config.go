@@ -24,7 +24,7 @@ type JsonConfig struct {
 }
 
 func (config *JsonConfig) As(v interface{}) (err error) {
-	decodeErr := jsonAPI().Unmarshal(config.raw, v)
+	decodeErr := JsonAPI().Unmarshal(config.raw, v)
 	if decodeErr != nil {
 		err = fmt.Errorf("fns decode config as %v failed, %s, %v", v, string(config.raw), decodeErr)
 	}
@@ -37,7 +37,7 @@ func (config *JsonConfig) Get(path string, v interface{}) (err error) {
 		err = fmt.Errorf("fns config get %s failed, not exists", path)
 		return
 	}
-	decodeErr := jsonAPI().UnmarshalFromString(result.Raw, v)
+	decodeErr := JsonAPI().UnmarshalFromString(result.Raw, v)
 	if decodeErr != nil {
 		err = fmt.Errorf("fns config get %s failed, %v", path, decodeErr)
 	}

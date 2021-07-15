@@ -2,24 +2,21 @@ package fns
 
 import (
 	"context"
-	"github.com/aacfactory/cluster"
-	"github.com/aacfactory/eventbus"
-	"github.com/aacfactory/logs"
 	"time"
 )
 
 type Context interface {
 	context.Context
-	Log() (log logs.Logs)
+	Log() (log Logs)
 	Meta() (meta ContextMeta)
-	Eventbus() (bus eventbus.Eventbus)
+	Eventbus() (bus Eventbus)
 	Shared() (shared ContextShared, err error)
 }
 
 type ContextShared interface {
-	Map(name string) (sm cluster.SharedMap)
-	Counter(name string) (counter cluster.SharedCounter)
-	Locker(name string) (locker cluster.SharedLocker)
+	Map(name string) (sm SharedMap)
+	Counter(name string) (counter SharedCounter)
+	Locker(name string) (locker SharedLocker)
 }
 
 type ContextMeta interface {

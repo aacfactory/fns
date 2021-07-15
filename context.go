@@ -39,7 +39,6 @@ type ContextMeta interface {
 type FnContext interface {
 	Context
 	RequestId() (id string)
-	AuthCredentials() (authCredentials AuthCredentials, has bool)
 	User() (user User, has bool)
 }
 
@@ -240,19 +239,6 @@ type fnsFnContext struct {
 
 func (ctx *fnsFnContext) RequestId() (id string) {
 	id = ctx.requestId
-	return
-}
-
-func (ctx *fnsFnContext) setAuthCredentials(authCredentials AuthCredentials) {
-	ctx.authCredentials = authCredentials
-}
-
-func (ctx *fnsFnContext) AuthCredentials() (authCredentials AuthCredentials, has bool) {
-	if ctx.authCredentials != nil {
-		authCredentials = ctx.authCredentials
-		has = true
-		return
-	}
 	return
 }
 

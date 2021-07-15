@@ -52,6 +52,17 @@ func JsonDecodeFromString(data string, v interface{}) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+func NewJsonObjectFromInterface(v interface{}) *JsonObject {
+	if v == nil {
+		panic(fmt.Errorf("new json object from interface failed, value is nil"))
+	}
+	b, encodeErr := JsonAPI().Marshal(v)
+	if encodeErr != nil {
+		panic(fmt.Errorf("new json object from interface failed, encode value to json failed, %v", encodeErr))
+	}
+	return NewJsonObjectFromBytes(b)
+}
+
 func NewJsonObjectFromBytes(b []byte) *JsonObject {
 	if b[0] != '{' || b[len(b)-1] != '}' {
 		panic(fmt.Errorf("new json object from bytes failed, %s is not json object bytes", string(b)))

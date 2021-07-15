@@ -10,4 +10,5 @@ require (
 	github.com/json-iterator/go v1.1.11
 	github.com/tidwall/gjson v1.8.1
 	github.com/tidwall/sjson v1.1.7
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
 )

@@ -31,14 +31,12 @@ type Arguments interface {
 	Scan(v interface{}) (err error)
 }
 
-type Fn func(fc FnContext, arguments Arguments) (result interface{}, err error)
 
-type FnEBProxy interface {
-}
-
-type FnEBHandleProxy interface {
-	Proxy(fn Fn) (handler EventHandler)
-}
+/*FnProxy
+fn eb client：arguments 扫后调用 eventbus send
+fn eb handle: event 调 FnProxy，然后 arguments 扫后调用 fn
+ */
+type FnProxy func(fc FnContext, arguments Arguments, tags ...string) (result interface{}, err error)
 
 // +-------------------------------------------------------------------------------------------------------------------+
 

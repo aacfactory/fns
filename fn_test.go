@@ -31,3 +31,32 @@ func TestFnArguments_Scan(t *testing.T) {
 	fmt.Println("xxx", reflect.TypeOf([]string{}) == reflect.TypeOf(make([]string, 0, 1)))
 
 }
+
+// @fn address.1
+// @tag t1 t2
+func FnA(fc fns.FnContext, arg ArgA) (err error) {
+
+	return
+}
+
+func FnAHttpProxy(fc fns.FnContext, arguments fns.Arguments, tags ...string) (result interface{}, err error)  {
+	arg := &ArgA{}
+	scanErr := arguments.Scan(arg)
+	if scanErr != nil {
+		err = scanErr
+		return
+	}
+
+	// options := fns.DeliveryOptions{} add tags
+
+	reply := fc.Eventbus().Request("address.1", arg)
+
+	requestErr := reply.Get(&result)
+	if requestErr != nil {
+		err = requestErr
+		return
+	}
+
+	return
+}
+

@@ -3,6 +3,7 @@ package fns
 import (
 	"context"
 	"fmt"
+	"github.com/aacfactory/logs"
 	"time"
 )
 
@@ -220,9 +221,22 @@ func (meta *fnsContextMeta) GetDuration(key string) (value time.Duration, has bo
 	return
 }
 
-func newFnsFnContext(requestId string, ctx context.Context, log Logs, bus Eventbus, cluster Cluster) FnContext {
+func newFnsFnContext(fnAddr string, requestId string, ctx Context, clusterMode bool) FnContext {
+	var shared ContextShared = nil
+	if clusterMode {
+		shared = ctx.Shared()
+	}
+	subLog, subLogErr := logs.With(ctx.Log(), logs.F("fn", fnAddr), logs.F("rid", requestId))
+	if subLogErr != nil {
+		ctx.Log().Warnf("fns create fn context log failed, %v", subLogErr)
+		subLog = ctx.Log()
+	}
 	return &fnsFnContext{
-		Context:         newFnsContext(ctx, log, bus, cluster),
+		Context:         context.TODO(),
+		log:             subLog,
+		meta:            newFnsContextMeta(),
+		bus:             ctx.Eventbus(),
+		shared:          shared,
 		requestId:       requestId,
 		authCredentials: nil,
 		user:            nil,
@@ -230,10 +244,37 @@ func newFnsFnContext(requestId string, ctx context.Context, log Logs, bus Eventb
 }
 
 type fnsFnContext struct {
-	Context
+	context.Context
+	log             Logs
+	meta            ContextMeta
+	bus             Eventbus
+	shared          ContextShared
 	requestId       string
 	authCredentials AuthCredentials
 	user            User
+}
+
+func (ctx *fnsFnContext) Log() (log Logs) {
+	log = ctx.log
+	return
+}
+
+func (ctx *fnsFnContext) Meta() (meta ContextMeta) {
+	meta = ctx.meta
+	return
+}
+
+func (ctx *fnsFnContext) Eventbus() (bus Eventbus) {
+	bus = ctx.bus
+	return
+}
+
+func (ctx *fnsFnContext) Shared() (shared ContextShared) {
+	if ctx.shared == nil {
+		panic(fmt.Errorf("fns is not in cluster mode"))
+	}
+	shared = ctx.shared
+	return
 }
 
 func (ctx *fnsFnContext) RequestId() (id string) {

@@ -3,6 +3,7 @@ package fns
 import "fmt"
 
 type Environment interface {
+	ClusterMode() (ok bool)
 	Config() (config Config)
 	Discovery() (discovery ServiceDiscovery)
 }
@@ -17,6 +18,11 @@ func newFnsEnvironment(config Config, discovery ServiceDiscovery) Environment {
 type fnsEnvironment struct {
 	config    Config
 	discovery ServiceDiscovery
+}
+
+func (env *fnsEnvironment) ClusterMode() (ok bool) {
+	ok = env.discovery != nil
+	return
 }
 
 func (env *fnsEnvironment) Config() (config Config) {

@@ -11,7 +11,7 @@ type Context interface {
 	Log() (log Logs)
 	Meta() (meta ContextMeta)
 	Eventbus() (bus Eventbus)
-	Shared() (shared ContextShared, err error)
+	Shared() (shared ContextShared)
 }
 
 type ContextShared interface {
@@ -77,10 +77,9 @@ func (ctx *fnsContext) Eventbus() (bus Eventbus) {
 	return
 }
 
-func (ctx *fnsContext) Shared() (shared ContextShared, err error) {
+func (ctx *fnsContext) Shared() (shared ContextShared) {
 	if ctx.cluster == nil {
-		err = fmt.Errorf("fns is not in cluster mode")
-		return
+		panic(fmt.Errorf("fns is not in cluster mode"))
 	}
 	shared = &fnsContextShared{
 		cluster: ctx.cluster,

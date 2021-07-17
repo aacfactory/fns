@@ -17,6 +17,7 @@ type Eventbus interface {
 	Send(address string, v interface{}, options ...DeliveryOptions) (err error)
 	Request(address string, v interface{}, options ...DeliveryOptions) (reply ReplyFuture)
 	RegisterHandler(address string, handler EventHandler, tags ...string) (err error)
+	RegisterLocalHandler(address string, handler EventHandler, tags ...string) (err error)
 	Start(context context.Context)
 	Close(context context.Context)
 }
@@ -41,4 +42,3 @@ type EventHandler func(event Event) (result interface{}, err error)
 type ReplyFuture interface {
 	Get(v interface{}) (err error)
 }
-

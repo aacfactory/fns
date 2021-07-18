@@ -1,6 +1,7 @@
 package fns
 
 import (
+	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -16,12 +18,14 @@ var (
 )
 
 type HttpServiceConfig struct {
-	Name       string     `json:"name,omitempty"`
-	Host       string     `json:"host,omitempty"`
-	Port       int        `json:"port,omitempty"`
-	PublicHost string     `json:"publicHost,omitempty"`
-	PublicPort int        `json:"publicPort,omitempty"`
-	TLS        ServiceTLS `json:"tls,omitempty"`
+	Name       string      `json:"name,omitempty"`
+	Host       string      `json:"host,omitempty"`
+	Port       int         `json:"port,omitempty"`
+	PublicHost string      `json:"publicHost,omitempty"`
+	PublicPort int         `json:"publicPort,omitempty"`
+	TLS        ServiceTLS  `json:"tls,omitempty"`
+	Tags       []string    `json:"tags,omitempty"`
+	Meta       ServiceMeta `json:"meta,omitempty"`
 }
 
 func NewHttpServiceFnRegister() *HttpServiceFnRegister {
@@ -94,7 +98,73 @@ func (service *httpService) Start(context Context, env Environment) (err error) 
 		err = fmt.Errorf("fns start http service failed, no name in http config")
 		return
 	}
-	// todo config
+
+	publicHost := strings.TrimSpace(config.PublicHost)
+	host := strings.TrimSpace(config.Host)
+	if publicHost == "" {
+		if host == "" {
+			hostIp, hostIpErr := IpFromHostname(false)
+			if hostIpErr != nil || hostIp == "" {
+				err = fmt.Errorf("fns create http failed, can not get ip from hostname, please set public host in config, %v", hostIpErr)
+				return
+			}
+			publicHost = hostIp
+		}
+	}
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	port := config.Port
+	if port < 1 || port > 65535 {
+		err = fmt.Errorf("fns create http failed, port is invalied")
+		return
+	}
+	service.port = port
+	publicPort := config.PublicPort
+	if publicPort == 0 {
+		publicPort = port
+	}
+	if publicPort < 1 || publicPort > 65535 {
+		err = fmt.Errorf("fns create http failed, public port is invalied")
+		return
+	}
+	protocol := "http"
+	var serverTLSConfig *tls.Config
+	serviceTLS := config.TLS
+	if serviceTLS.Enable() {
+		serverTLSConfig0, tlsErr := serviceTLS.ToServerTLSConfig()
+		if tlsErr != nil {
+			err = fmt.Errorf("fns create http failed, tls is enabled, but build tls config failed, %v", tlsErr)
+			return
+		}
+		serverTLSConfig = serverTLSConfig0
+		protocol = "https"
+	}
+
+	if serverTLSConfig != nil {
+		ln, lnErr := tls.Listen("tcp", fmt.Sprintf("%s:%d", host, port), serverTLSConfig)
+		if lnErr != nil {
+			err = fmt.Errorf("fns create http failed, tls is enabled, but listen failed, %v", lnErr)
+			return
+		}
+		service.ln = ln
+	} else {
+		ln, lnErr := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+		if lnErr != nil {
+			err = fmt.Errorf("fns create http failed, listen failed, %v", lnErr)
+			return
+		}
+		service.ln = ln
+	}
+
+	tags := config.Tags
+	if tags == nil {
+		tags = make([]string, 0, 1)
+	}
+	meta := config.Meta
+	if meta == nil {
+		meta = NewServiceMeta()
+	}
 
 	httpLog, withErr := logs.With(context.Log(), logs.F("http", service.name))
 	if withErr != nil {
@@ -102,6 +172,18 @@ func (service *httpService) Start(context Context, env Environment) (err error) 
 		return
 	}
 	service.log = httpLog
+
+	service.serve(context)
+	time.Sleep(1 * time.Second)
+	if env.ClusterMode() {
+		registration, publishErr := env.Discovery().Publish("http", service.name, protocol, fmt.Sprintf("%s:%d", publicHost, publicPort), tags, meta, serviceTLS)
+		if publishErr != nil {
+			err = fmt.Errorf("fns create http service failed, publish http service failed, %v", publishErr)
+			_ = service.ln.Close()
+			return
+		}
+		service.registration = registration
+	}
 
 	return
 }

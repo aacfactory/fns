@@ -8,12 +8,9 @@ import (
 
 //IpFromHostname 通过host获取ip列表中的第一个
 func IpFromHostname(enableIpV6 bool) (ip string, err error) {
-	hostname, hostErr := os.Hostname()
-	if hostErr != nil {
-		hostnameEnv, has := os.LookupEnv("HOSTNAME")
-		if has {
-			hostname = hostnameEnv
-		}
+	hostname, has := os.LookupEnv("HOSTNAME")
+	if !has {
+		hostname, _ = os.Hostname()
 	}
 	if hostname == "" {
 		err = fmt.Errorf("fns get ip from hostname failed")

@@ -8,6 +8,7 @@ import (
 )
 
 type Service interface {
+	Name() (name string)
 	Start(context Context, env Environment) (err error)
 	Stop(context Context) (err error)
 }

@@ -120,6 +120,9 @@ func (store *ConfigFileStore) Read() (root []byte, subs map[string][]byte, err e
 		if info.IsDir() {
 			return
 		}
+		if strings.Index(path, "fns") != 0 {
+			return
+		}
 		fileContent, readErr := ioutil.ReadFile(path)
 		if readErr != nil {
 			err = fmt.Errorf("read %s failed, %v", path, readErr)
@@ -227,7 +230,7 @@ func (retriever ConfigRetriever) Get() (config Config, err error) {
 	return
 }
 
-func (retriever ConfigRetriever) merge(format string, root []byte, sub []byte, ) (config Config, err error) {
+func (retriever ConfigRetriever) merge(format string, root []byte, sub []byte) (config Config, err error) {
 	if format == "JSON" {
 		config, err = retriever.mergeJson(root, sub)
 	} else if format == "YAML" {

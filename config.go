@@ -144,6 +144,12 @@ func (store *ConfigFileStore) Read() (root []byte, subs map[string][]byte, err e
 	return
 }
 
+var defaultConfigRetrieverOption = ConfigRetrieverOption{
+	Active: "",
+	Format: "YAML",
+	Store:  NewConfigFileStore("./config/fns.yaml"),
+}
+
 type ConfigRetrieverOption struct {
 	Active string
 	Format string

@@ -2,6 +2,7 @@ package fns
 
 import (
 	"fmt"
+	"github.com/aacfactory/eventbus"
 	"io/ioutil"
 	"net/http"
 	"path"
@@ -31,11 +32,10 @@ type Arguments interface {
 	Scan(v interface{}) (err error)
 }
 
-
 /*FnProxy
 fn eb client：arguments 扫后调用 eventbus send
 fn eb handle: event 调 FnProxy，然后 arguments 扫后调用 fn
- */
+*/
 type FnProxy func(fc FnContext, arguments Arguments, tags ...string) (result interface{}, err error)
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -110,7 +110,7 @@ func fnArgumentsGetField(_type reflect.Type) (argFields []fnArgumentsField, err 
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newFnEventArguments(event Event) Arguments {
+func newFnEventArguments(event eventbus.Event) Arguments {
 	if event == nil {
 		panic(fmt.Sprintf("fns create event typed Arguments failed, event is nil"))
 	}
@@ -120,7 +120,7 @@ func newFnEventArguments(event Event) Arguments {
 }
 
 type fnEventArguments struct {
-	event Event
+	event eventbus.Event
 }
 
 func (args *fnEventArguments) Scan(target interface{}) (err error) {

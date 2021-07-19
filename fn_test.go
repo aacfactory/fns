@@ -39,7 +39,7 @@ func FnA(fc fns.FnContext, arg ArgA) (err error) {
 	return
 }
 
-func FnAHttpProxy(fc fns.FnContext, arguments fns.Arguments, tags ...string) (result interface{}, err error)  {
+func FnAHttpProxy(fc fns.FnContext, arguments fns.Arguments, tags ...string) (result interface{}, err error) {
 	arg := &ArgA{}
 	scanErr := arguments.Scan(arg)
 	if scanErr != nil {
@@ -59,4 +59,3 @@ func FnAHttpProxy(fc fns.FnContext, arguments fns.Arguments, tags ...string) (re
 
 	return
 }
-

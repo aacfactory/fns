@@ -3,6 +3,8 @@ package fns
 import (
 	"context"
 	"fmt"
+	"github.com/aacfactory/cluster"
+	"github.com/aacfactory/eventbus"
 	"github.com/aacfactory/logs"
 	"time"
 )
@@ -11,14 +13,14 @@ type Context interface {
 	context.Context
 	Log() (log Logs)
 	Meta() (meta ContextMeta)
-	Eventbus() (bus Eventbus)
+	Eventbus() (bus eventbus.Eventbus)
 	Shared() (shared ContextShared)
 }
 
 type ContextShared interface {
-	Map(name string) (sm SharedMap)
-	Counter(name string) (counter SharedCounter, err error)
-	Locker(name string, timeout time.Duration) (locker SharedLocker)
+	Map(name string) (sm cluster.SharedMap)
+	Counter(name string) (counter cluster.SharedCounter, err error)
+	Locker(name string, timeout time.Duration) (locker cluster.SharedLocker)
 }
 
 type ContextMeta interface {
@@ -45,13 +47,13 @@ type FnContext interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newFnsContext(ctx context.Context, log Logs, bus Eventbus, cluster Cluster) Context {
+func newFnsContext(ctx context.Context, log Logs, bus eventbus.Eventbus, c cluster.Cluster) Context {
 	return &fnsContext{
 		Context: ctx,
 		log:     log,
 		meta:    newFnsContextMeta(),
 		bus:     bus,
-		cluster: cluster,
+		cluster: c,
 	}
 }
 
@@ -59,8 +61,8 @@ type fnsContext struct {
 	context.Context
 	log     Logs
 	meta    ContextMeta
-	bus     Eventbus
-	cluster Cluster
+	bus     eventbus.Eventbus
+	cluster cluster.Cluster
 }
 
 func (ctx *fnsContext) Log() (log Logs) {
@@ -73,7 +75,7 @@ func (ctx *fnsContext) Meta() (meta ContextMeta) {
 	return
 }
 
-func (ctx *fnsContext) Eventbus() (bus Eventbus) {
+func (ctx *fnsContext) Eventbus() (bus eventbus.Eventbus) {
 	bus = ctx.bus
 	return
 }
@@ -89,20 +91,20 @@ func (ctx *fnsContext) Shared() (shared ContextShared) {
 }
 
 type fnsContextShared struct {
-	cluster Cluster
+	cluster cluster.Cluster
 }
 
-func (shared *fnsContextShared) Map(name string) (sm SharedMap) {
+func (shared *fnsContextShared) Map(name string) (sm cluster.SharedMap) {
 	sm = shared.cluster.GetMap(name)
 	return
 }
 
-func (shared *fnsContextShared) Counter(name string) (counter SharedCounter, err error) {
+func (shared *fnsContextShared) Counter(name string) (counter cluster.SharedCounter, err error) {
 	counter, err = shared.cluster.Counter(name)
 	return
 }
 
-func (shared *fnsContextShared) Locker(name string, timeout time.Duration) (locker SharedLocker) {
+func (shared *fnsContextShared) Locker(name string, timeout time.Duration) (locker cluster.SharedLocker) {
 	locker = shared.cluster.GetLock(name, timeout)
 	return
 }
@@ -247,7 +249,7 @@ type fnsFnContext struct {
 	context.Context
 	log             Logs
 	meta            ContextMeta
-	bus             Eventbus
+	bus             eventbus.Eventbus
 	shared          ContextShared
 	requestId       string
 	authCredentials AuthCredentials
@@ -264,7 +266,7 @@ func (ctx *fnsFnContext) Meta() (meta ContextMeta) {
 	return
 }
 
-func (ctx *fnsFnContext) Eventbus() (bus Eventbus) {
+func (ctx *fnsFnContext) Eventbus() (bus eventbus.Eventbus) {
 	bus = ctx.bus
 	return
 }

@@ -3,7 +3,9 @@ package fns
 import (
 	"crypto/tls"
 	"fmt"
+	"github.com/aacfactory/cluster"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/eventbus"
 	"github.com/aacfactory/logs"
 	"github.com/rs/xid"
 	"net"
@@ -18,14 +20,14 @@ var (
 )
 
 type HttpServiceConfig struct {
-	Name       string      `json:"name,omitempty"`
-	Host       string      `json:"host,omitempty"`
-	Port       int         `json:"port,omitempty"`
-	PublicHost string      `json:"publicHost,omitempty"`
-	PublicPort int         `json:"publicPort,omitempty"`
-	TLS        ServiceTLS  `json:"tls,omitempty"`
-	Tags       []string    `json:"tags,omitempty"`
-	Meta       ServiceMeta `json:"meta,omitempty"`
+	Name       string              `json:"name,omitempty"`
+	Host       string              `json:"host,omitempty"`
+	Port       int                 `json:"port,omitempty"`
+	PublicHost string              `json:"publicHost,omitempty"`
+	PublicPort int                 `json:"publicPort,omitempty"`
+	TLS        cluster.ServiceTLS  `json:"tls,omitempty"`
+	Tags       []string            `json:"tags,omitempty"`
+	Meta       cluster.ServiceMeta `json:"meta,omitempty"`
 }
 
 func NewHttpServiceFnRegister() *HttpServiceFnRegister {
@@ -80,10 +82,10 @@ type httpService struct {
 	ln           net.Listener
 	fnProxyMap   map[string]FnProxy
 	log          Logs
-	eventbus     Eventbus
+	eventbus     eventbus.Eventbus
 	clusterMode  bool
-	cluster      Cluster
-	registration Registration
+	cluster      cluster.Cluster
+	registration cluster.Registration
 }
 
 func (service *httpService) Name() (name string) {
@@ -173,7 +175,7 @@ func (service *httpService) Start(context Context, env Environment) (err error) 
 	}
 	meta := config.Meta
 	if meta == nil {
-		meta = NewServiceMeta()
+		meta = cluster.NewServiceMeta()
 	}
 
 	httpLog, withErr := logs.With(context.Log(), logs.F("http", service.name))

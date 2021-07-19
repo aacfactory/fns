@@ -13,6 +13,18 @@ import (
 	"strings"
 )
 
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type ApplicationConfig struct {
+	Name     string         `json:"name,omitempty"`
+	Tags     []string       `json:"tags,omitempty"`
+	Log      LogConfig      `json:"log,omitempty"`
+	Cluster  ClusterConfig  `json:"cluster,omitempty"`
+	EventBus EventbusConfig `json:"eventBus,omitempty"`
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type Config interface {
 	As(v interface{}) (err error)
 	Get(path string, v interface{}) (err error)

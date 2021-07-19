@@ -1,44 +1,85 @@
 package fns
 
-import "context"
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/aacfactory/cluster"
+	"github.com/aacfactory/eventbus"
+	"strings"
+)
 
-type DeliveryOptions interface {
-	Add(key string, value string)
-	Put(key string, value []string)
-	Get(key string) (string, bool)
-	Keys() []string
-	Empty() bool
-	Values(key string) ([]string, bool)
-	Remove(key string)
-	AddTag(tags ...string)
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type EventbusConfig struct {
+	Kind   string          `json:"kind,omitempty"`
+	Config json.RawMessage `json:"config,omitempty"`
 }
 
-type Eventbus interface {
-	Send(address string, v interface{}, options ...DeliveryOptions) (err error)
-	Request(address string, v interface{}, options ...DeliveryOptions) (reply ReplyFuture)
-	RegisterHandler(address string, handler EventHandler, tags ...string) (err error)
-	RegisterLocalHandler(address string, handler EventHandler, tags ...string) (err error)
-	Start(context context.Context)
-	Close(context context.Context)
+// +-------------------------------------------------------------------------------------------------------------------+
+
+var eventbusRetrievers map[string]EventbusRetriever = make(map[string]EventbusRetriever)
+
+type EventbusRetriever func(config []byte) (bus eventbus.Eventbus, err error)
+
+//RegisterEventbusRetriever 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
+func RegisterEventbusRetriever(name string, fn EventbusRetriever) {
+	eventbusRetrievers[name] = fn
 }
 
-type EventHead interface {
-	Add(key string, value string)
-	Put(key string, value []string)
-	Get(key string) (string, bool)
-	Keys() []string
-	Empty() bool
-	Values(key string) ([]string, bool)
-	Remove(key string)
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func newEventBus(discovery cluster.ServiceDiscovery, config EventbusConfig) (bus eventbus.Eventbus, err error) {
+	kind := strings.ToLower(strings.TrimSpace(config.Kind))
+	if kind == "local" {
+		bus, err = newLocalEventbus(config)
+	} else if kind == "tcp" {
+		bus, err = newTcpEventbus(discovery, config)
+	} else if kind == "nats" {
+		bus, err = newNatsEventbus(discovery, config)
+	} else {
+		retriever, has := eventbusRetrievers[kind]
+		if !has || retriever == nil {
+			err = fmt.Errorf("unknown %s kind of eventbus", kind)
+			return
+		}
+		bus, err = retriever(config.Config)
+		if err != nil {
+			err = fmt.Errorf("create  %s kind eventbus from retriever failed, %v", kind, err)
+			return
+		}
+	}
+	return
 }
 
-type Event interface {
-	Head() EventHead
-	Body() []byte
+func newLocalEventbus(config EventbusConfig) (bus eventbus.Eventbus, err error) {
+	option := eventbus.LocaledEventbusOption{}
+	decodeErr := JsonAPI().Unmarshal(config.Config, &option)
+	if decodeErr != nil {
+		err = fmt.Errorf("create local event bus failed for decode config")
+		return
+	}
+	bus = eventbus.NewEventbusWithOption(option)
+	return
 }
 
-type EventHandler func(event Event) (result interface{}, err error)
+func newTcpEventbus(discovery cluster.ServiceDiscovery, config EventbusConfig) (bus eventbus.Eventbus, err error) {
+	option := eventbus.ClusterEventbusOption{}
+	decodeErr := JsonAPI().Unmarshal(config.Config, &option)
+	if decodeErr != nil {
+		err = fmt.Errorf("create tcp based event bus failed for decode config")
+		return
+	}
+	bus, err = eventbus.NewClusterEventbus(discovery, option)
+	return
+}
 
-type ReplyFuture interface {
-	Get(v interface{}) (err error)
+func newNatsEventbus(discovery cluster.ServiceDiscovery, config EventbusConfig) (bus eventbus.Eventbus, err error) {
+	option := eventbus.NatsEventbusOption{}
+	decodeErr := JsonAPI().Unmarshal(config.Config, &option)
+	if decodeErr != nil {
+		err = fmt.Errorf("create nats based event bus failed for decode config")
+		return
+	}
+	bus, err = eventbus.NewNatsEventbus(discovery, option)
+	return
 }

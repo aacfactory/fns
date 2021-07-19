@@ -91,6 +91,11 @@ func (service *httpService) Name() (name string) {
 	return
 }
 
+func (service *httpService) Index() (idx int) {
+	idx = 80000
+	return
+}
+
 func (service *httpService) Start(context Context, env Environment) (err error) {
 	config := &HttpServiceConfig{}
 	configErr := env.Config().Get("http", config)

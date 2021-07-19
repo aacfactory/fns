@@ -86,6 +86,11 @@ type httpService struct {
 	registration Registration
 }
 
+func (service *httpService) Name() (name string) {
+	name = service.name
+	return
+}
+
 func (service *httpService) Start(context Context, env Environment) (err error) {
 	config := &HttpServiceConfig{}
 	configErr := env.Config().Get("http", config)

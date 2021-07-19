@@ -2,6 +2,7 @@ package fns_test
 
 import (
 	"github.com/aacfactory/fns"
+	"strings"
 	"testing"
 )
 
@@ -29,4 +30,5 @@ func TestNewJsonArray(t *testing.T) {
 	n0 := 0
 	_ = a.Get(0, &n0)
 	t.Log(n0)
+	t.Log(strings.Index("fns-", "fns"))
 }

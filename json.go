@@ -8,6 +8,7 @@ import (
 	"github.com/tidwall/sjson"
 	"github.com/valyala/bytebufferpool"
 	"io"
+	"time"
 )
 
 var _json jsoniter.API
@@ -48,6 +49,44 @@ func JsonDecodeFromString(data string, v interface{}) {
 	if err != nil {
 		panic(fmt.Errorf("json decode from string failed, target is %v, cause is %v", data, err))
 	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func DateTimeNow() DateTime {
+	return DateTime(time.Now())
+}
+
+type DateTime time.Time
+
+func (dt DateTime) MarshalJSON() (b []byte, err error) {
+	b = []byte(fmt.Sprintf("\"%s\"", time.Time(dt).Format(time.RFC3339)))
+	return
+}
+
+func (dt *DateTime) UnmarshalJSON(b []byte) (err error) {
+	if b == nil || len(b) == 0 {
+		return
+	}
+	if bytes.IndexByte(b, '"') == 0 {
+		b = b[1:]
+	}
+	if bytes.LastIndexByte(b, '"') == len(b)-1 {
+		b = b[0 : len(b)-1]
+	}
+	x := string(b)
+
+	t, parseErr := ParseTime(x)
+	if parseErr != nil {
+		err = fmt.Errorf("json decode time failed, layout is not support")
+		return
+	}
+	*dt = DateTime(t)
+	return
+}
+
+func (dt DateTime) String() string {
+	return time.Time(dt).Format(time.RFC3339)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

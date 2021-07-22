@@ -32,3 +32,28 @@ func TestNewJsonArray(t *testing.T) {
 	t.Log(n0)
 	t.Log(strings.Index("fns-", "fns"))
 }
+
+type FooTimed struct {
+	Time fns.DateTime `json:"time,omitempty"`
+}
+
+func TestDateTime_MarshalJSON(t *testing.T) {
+
+	foo := &FooTimed{
+		Time: fns.DateTimeNow(),
+	}
+
+	b, encodeErr := fns.JsonAPI().Marshal(foo)
+	if encodeErr != nil {
+		t.Error("encode failed", encodeErr)
+		return
+	}
+	t.Log(string(b))
+	bar := FooTimed{}
+	decodeErr := fns.JsonAPI().Unmarshal(b, &bar)
+	if decodeErr != nil {
+		t.Error("decode failed", decodeErr)
+		return
+	}
+	t.Log(bar)
+}

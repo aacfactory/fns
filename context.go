@@ -228,11 +228,7 @@ func newFnsFnContext(fnAddr string, requestId string, ctx Context, clusterMode b
 	if clusterMode {
 		shared = ctx.Shared()
 	}
-	subLog, subLogErr := logs.With(ctx.Log(), logs.F("fn", fnAddr), logs.F("rid", requestId))
-	if subLogErr != nil {
-		ctx.Log().Warnf("fns create fn context log failed, %v", subLogErr)
-		subLog = ctx.Log()
-	}
+	subLog := logs.With(ctx.Log(), logs.F("fn", fnAddr), logs.F("rid", requestId))
 	return &fnsFnContext{
 		Context:         context.TODO(),
 		log:             subLog,

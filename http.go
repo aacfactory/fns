@@ -178,11 +178,7 @@ func (service *httpService) Start(context Context, env Environment) (err error) 
 		meta = cluster.NewServiceMeta()
 	}
 
-	httpLog, withErr := logs.With(context.Log(), logs.F("http", service.name))
-	if withErr != nil {
-		err = fmt.Errorf("fns create http service failed, make http log failed")
-		return
-	}
+	httpLog := logs.With(context.Log(), logs.F("http", service.name))
 	service.log = httpLog
 
 	service.serve(context)

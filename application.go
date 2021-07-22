@@ -237,10 +237,7 @@ func (a *app) Run(ctx context.Context) (err error) {
 	env := newFnsEnvironment(a.config, a.cluster)
 	for _, service := range services {
 		serviceName := service.Name()
-		serviceLog, serviceLogErr := logs.With(a.log, logs.F("service", serviceName))
-		if serviceLogErr != nil {
-			serviceLog = a.log
-		}
+		serviceLog := logs.With(a.log, logs.F("service", serviceName))
 		fnsCTX := newFnsContext(ctx, serviceLog, a.eventbus, a.cluster)
 		serviceErr := service.Start(fnsCTX, env)
 		if serviceErr != nil {
@@ -342,10 +339,7 @@ func (a *app) Close(ctx context.Context) (err error) {
 	services := a.services
 	for _, service := range services {
 		serviceName := service.Name()
-		serviceLog, serviceLogErr := logs.With(a.log, logs.F("service", serviceName))
-		if serviceLogErr != nil {
-			serviceLog = a.log
-		}
+		serviceLog := logs.With(a.log, logs.F("service", serviceName))
 		fnsCTX := newFnsContext(ctx, serviceLog, a.eventbus, a.cluster)
 		serviceErr := service.Stop(fnsCTX)
 		if serviceErr != nil {

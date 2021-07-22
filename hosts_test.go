@@ -8,4 +8,5 @@ import (
 func TestIpFromHostname(t *testing.T) {
 	t.Log(fns.IpFromHostname(true))
 	t.Log(fns.IpFromHostname(false))
+
 }

@@ -4,9 +4,9 @@ go 1.16
 
 require (
 	github.com/aacfactory/cluster v1.0.4
-	github.com/aacfactory/errors v1.2.0
-	github.com/aacfactory/eventbus v1.1.1
-	github.com/aacfactory/logs v1.0.1
+	github.com/aacfactory/errors v1.2.2
+	github.com/aacfactory/eventbus v1.1.2
+	github.com/aacfactory/logs v1.0.4
 	github.com/goccy/go-yaml v1.8.10
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
 	github.com/json-iterator/go v1.1.11

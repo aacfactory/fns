@@ -18,10 +18,25 @@ package fns
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"github.com/tidwall/gjson"
+	"github.com/valyala/bytebufferpool"
 	"strings"
 	"time"
 )
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type AuthInterceptorBuild func(ctx Context, config Config) (interceptor AuthInterceptor, err error)
+
+// AuthInterceptor
+// todo 当service的 内置FN做，或者单独一个service + fn proxy
+type AuthInterceptor interface {
+	Check(ctx FnContext, authorization string) (ok bool)
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 type AuthCredentials interface {
 	ToHttpAuthorization() (v string)
@@ -146,12 +161,118 @@ func (credentials *TokenCredentials) ToHttpAuthorization() (v string) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type User interface {
-	Expired() (expired bool)
+	Exists() (ok bool)
 	Attributes() (attributes UserAttributes)
 	Principal() (principal UserPrincipal)
+	json.Marshaler
+	json.Unmarshaler
 }
 
+func NewUser() User {
+	return &fnsUser{
+		attributes: newFnsUserAttributes(),
+		principal:  newFnsUserPrincipal(),
+	}
+}
+
+type fnsUser struct {
+	attributes UserAttributes
+	principal  UserPrincipal
+}
+
+func (u *fnsUser) Exists() (ok bool) {
+	ok = !u.principal.Empty() || !u.attributes.Empty()
+	return
+}
+
+func (u *fnsUser) Attributes() (attributes UserAttributes) {
+	attributes = u.attributes
+	return
+}
+
+func (u *fnsUser) Principal() (principal UserPrincipal) {
+	principal = u.principal
+	return
+}
+
+func (u fnsUser) MarshalJSON() (content []byte, err error) {
+	if !u.Exists() {
+		content = []byte{'{', '}'}
+		return
+	}
+	buf := bytebufferpool.Get()
+	defer bytebufferpool.Put(buf)
+	_ = buf.WriteByte('{')
+	if !u.principal.Empty() {
+		_, _ = buf.WriteString(`"principal":`)
+		encoded, encodeErr := u.principal.MarshalJSON()
+		if encodeErr != nil {
+			err = fmt.Errorf("encode fns user failed, %v", encodeErr)
+			return
+		}
+		_, _ = buf.Write(encoded)
+	}
+	_ = buf.WriteByte('}')
+
+	_ = buf.WriteByte('{')
+	if !u.attributes.Empty() {
+		_, _ = buf.WriteString(`"attributes":`)
+		encoded, encodeErr := u.attributes.MarshalJSON()
+		if encodeErr != nil {
+			err = fmt.Errorf("encode fns user failed, %v", encodeErr)
+			return
+		}
+		_, _ = buf.Write(encoded)
+	}
+	_ = buf.WriteByte('}')
+	return
+}
+
+func (u *fnsUser) UnmarshalJSON(content []byte) (err error) {
+	if !JsonValid(content) {
+		err = fmt.Errorf("decode user failed, not json")
+		return
+	}
+	root := gjson.ParseBytes(content)
+	if !root.Exists() {
+		return
+	}
+
+	if !root.IsObject() {
+		err = fmt.Errorf("decode user failed, not object json")
+		return
+	}
+	principal := root.Get("principal")
+	if principal.Exists() {
+		if !principal.IsObject() {
+			err = fmt.Errorf("decode user failed, principal is not object json")
+			return
+		}
+		decodeErr := u.principal.UnmarshalJSON([]byte(principal.Raw))
+		if decodeErr != nil {
+			err = fmt.Errorf("decode user failed, %v", decodeErr)
+			return
+		}
+	}
+	attributes := root.Get("attributes")
+	if attributes.Exists() {
+		if !attributes.IsObject() {
+			err = fmt.Errorf("decode user failed, attributes is not object json")
+			return
+		}
+		decodeErr := u.attributes.UnmarshalJSON([]byte(attributes.Raw))
+		if decodeErr != nil {
+			err = fmt.Errorf("decode user failed, %v", decodeErr)
+			return
+		}
+	}
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type UserAttributes interface {
+	Empty() (ok bool)
 	Contains(key string) (has bool)
 	Put(key string, value interface{})
 	Get(key string, value interface{}) (err error)
@@ -165,6 +286,8 @@ type UserAttributes interface {
 	GetFloat64(key string) (value float64, err error)
 	GetTime(key string) (value time.Time, err error)
 	GetDuration(key string) (value time.Duration, err error)
+	json.Marshaler
+	json.Unmarshaler
 }
 
 func newFnsUserAttributes() UserAttributes {
@@ -175,6 +298,11 @@ func newFnsUserAttributes() UserAttributes {
 
 type fnsUserAttributes struct {
 	data *JsonObject
+}
+
+func (attr *fnsUserAttributes) Empty() (ok bool) {
+	ok = attr.data.Empty()
+	return
 }
 
 func (attr *fnsUserAttributes) Contains(key string) (has bool) {
@@ -278,7 +406,32 @@ func (attr *fnsUserAttributes) GetDuration(key string) (value time.Duration, err
 	return
 }
 
+func (attr *fnsUserAttributes) MarshalJSON() (content []byte, err error) {
+	if attr.Empty() {
+		content = []byte{'{', '}'}
+		return
+	}
+	content = attr.data.raw
+	return
+}
+
+func (attr *fnsUserAttributes) UnmarshalJSON(content []byte) (err error) {
+	if content == nil || len(content) == 0 {
+		content = []byte{'{', '}'}
+		return
+	}
+	if !JsonValid(content) {
+		err = fmt.Errorf("decode user attributes failed, content is not json")
+		return
+	}
+	attr.data = NewJsonObjectFromBytes(content)
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type UserPrincipal interface {
+	Empty() (ok bool)
 	Contains(key string) (has bool)
 	Put(key string, value interface{})
 	Get(key string, value interface{}) (err error)
@@ -292,6 +445,8 @@ type UserPrincipal interface {
 	GetFloat64(key string) (value float64, err error)
 	GetTime(key string) (value time.Time, err error)
 	GetDuration(key string) (value time.Duration, err error)
+	json.Marshaler
+	json.Unmarshaler
 }
 
 func newFnsUserPrincipal() UserPrincipal {
@@ -302,6 +457,11 @@ func newFnsUserPrincipal() UserPrincipal {
 
 type fnsUserPrincipal struct {
 	data *JsonObject
+}
+
+func (principal *fnsUserPrincipal) Empty() (ok bool) {
+	ok = principal.data.Empty()
+	return
 }
 
 func (principal *fnsUserPrincipal) Contains(key string) (has bool) {
@@ -402,6 +562,28 @@ func (principal *fnsUserPrincipal) GetDuration(key string) (value time.Duration,
 	if err != nil {
 		err = fmt.Errorf("user principal put %s failed", key)
 	}
+	return
+}
+
+func (principal fnsUserPrincipal) MarshalJSON() (content []byte, err error) {
+	if principal.Empty() {
+		content = []byte{'{', '}'}
+		return
+	}
+	content = principal.data.raw
+	return
+}
+
+func (principal *fnsUserPrincipal) UnmarshalJSON(content []byte) (err error) {
+	if content == nil || len(content) == 0 {
+		content = []byte{'{', '}'}
+		return
+	}
+	if !JsonValid(content) {
+		err = fmt.Errorf("decode user principal failed, content is not json")
+		return
+	}
+	principal.data = NewJsonObjectFromBytes(content)
 	return
 }
 

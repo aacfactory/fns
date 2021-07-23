@@ -58,7 +58,9 @@ type ContextMeta interface {
 type FnContext interface {
 	Context
 	RequestId() (id string)
+	FnAddress() (addr string)
 	User() (user User, has bool)
+	SetUser(user User)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -246,26 +248,26 @@ func newFnsFnContext(fnAddr string, requestId string, ctx Context, clusterMode b
 	}
 	subLog := logs.With(ctx.Log(), logs.F("fn", fnAddr), logs.F("rid", requestId))
 	return &fnsFnContext{
-		Context:         context.TODO(),
-		log:             subLog,
-		meta:            newFnsContextMeta(),
-		bus:             ctx.Eventbus(),
-		shared:          shared,
-		requestId:       requestId,
-		authCredentials: nil,
-		user:            nil,
+		Context:   context.TODO(),
+		log:       subLog,
+		meta:      newFnsContextMeta(),
+		bus:       ctx.Eventbus(),
+		shared:    shared,
+		requestId: requestId,
+		fnAddress: fnAddr,
+		user:      nil,
 	}
 }
 
 type fnsFnContext struct {
 	context.Context
-	log             Logs
-	meta            ContextMeta
-	bus             eventbus.Eventbus
-	shared          ContextShared
-	requestId       string
-	authCredentials AuthCredentials
-	user            User
+	log       Logs
+	meta      ContextMeta
+	bus       eventbus.Eventbus
+	shared    ContextShared
+	requestId string
+	fnAddress string
+	user      User
 }
 
 func (ctx *fnsFnContext) Log() (log Logs) {
@@ -296,6 +298,11 @@ func (ctx *fnsFnContext) RequestId() (id string) {
 	return
 }
 
+func (ctx *fnsFnContext) FnAddress() (addr string) {
+	addr = ctx.fnAddress
+	return
+}
+
 func (ctx *fnsFnContext) setUser(user User) {
 	ctx.user = user
 }
@@ -306,5 +313,10 @@ func (ctx *fnsFnContext) User() (user User, has bool) {
 		has = true
 		return
 	}
+	return
+}
+
+func (ctx *fnsFnContext) SetUser(user User) {
+	ctx.user = user
 	return
 }

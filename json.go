@@ -137,6 +137,15 @@ type JsonObject struct {
 	raw []byte
 }
 
+func (object *JsonObject) Empty() (ok bool) {
+	if object.raw == nil || len(object.raw) == 0 {
+		ok = true
+		return
+	}
+	ok = !gjson.ParseBytes(object.raw).Exists()
+	return
+}
+
 func (object *JsonObject) Raw() (raw []byte) {
 	raw = object.raw
 	return
@@ -221,6 +230,15 @@ func NewJsonArray() *JsonArray {
 
 type JsonArray struct {
 	raw []byte
+}
+
+func (array *JsonArray) Empty() (ok bool) {
+	if array.raw == nil || len(array.raw) == 0 {
+		ok = true
+		return
+	}
+	ok = !gjson.ParseBytes(array.raw).Exists()
+	return
 }
 
 func (array *JsonArray) Raw() (raw []byte) {

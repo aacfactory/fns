@@ -42,6 +42,8 @@ type AuthCredentials interface {
 	ToHttpAuthorization() (v string)
 }
 
+// 以下实现转到 contrib 中
+
 func NewUsernamePasswordCredentials(username string, password string) *UsernamePasswordCredentials {
 	return &UsernamePasswordCredentials{
 		username: username,

@@ -16,15 +16,9 @@
 
 package fns
 
-import (
-	"sync"
-)
+import "github.com/rs/xid"
 
-var _once = new(sync.Once)
-
-func init() {
-	_once.Do(func() {
-		initEnv()
-		initJsonApi()
-	})
+func UID() (id string) {
+	id = xid.New().String()
+	return
 }

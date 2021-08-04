@@ -7,8 +7,6 @@ github.com/aacfactory/errors v1.2.2 h1:WYRPO5++9EJQqVmHMYB88lC1TVeItVdKhkYFsxxet
 github.com/aacfactory/errors v1.2.2/go.mod h1:K6nGjssSLTe28YSP/boS0pjP5yBv34Z6iKSqHa88CFk=
 github.com/aacfactory/eventbus v1.1.2 h1:dDR3nJ71fgRABVbXJ+DpP4pc8luJoaTb9tBST5iBjp8=
 github.com/aacfactory/eventbus v1.1.2/go.mod h1:fTlQ9ZRFK7452JIszf3pvW5uaDVzg8b/Lbq7iz6xGOs=
-github.com/aacfactory/logs v1.0.4 h1:KU2xJzq6/TS04TjOeSPRA8BQK+VpBDPx3yAvXdhjcfg=
-github.com/aacfactory/logs v1.0.4/go.mod h1:O2A+TOslw6RDEWizCVENvVJ+QUESP98yy6Dlxv2v9ic=
 github.com/aacfactory/workers v1.0.0 h1:SiMJ1o/IWrAIqzq4jVZSqcMNWDwxqPy7FaIJZuODMww=
 github.com/aacfactory/workers v1.0.0/go.mod h1:albQxjIU805p+J89SyzGvaikYGFknphGoUpEdNOP2wU=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -208,7 +206,6 @@ go.etcd.io/etcd/client/v3 v3.5.0 h1:62Eh0XOro+rDwkrypAGDfgmNh5Joq+z+W9HZdlXMzek=
 go.etcd.io/etcd/client/v3 v3.5.0/go.mod h1:AIKXXVX/DQXtfTEqBryiLTUXwON+GuvO6Z7lLS/oTh0=
 go.opentelemetry.io/proto/otlp v0.7.0/go.mod h1:PqfVotwruBrMGOCsRd/89rSnXhoiJIqeYNgFYFoEGnI=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
-go.uber.org/atomic v1.8.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/atomic v1.9.0 h1:ECmE8Bn/WFTYwEW/bpKD3M8VtR/zQVbavAoalC1PYyE=
 go.uber.org/atomic v1.9.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/goleak v1.1.10 h1:z+mqJhf6ss6BSfSM671tgKyZBFPTTJM+HLxnhPC3wu0=

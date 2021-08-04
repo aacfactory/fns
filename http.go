@@ -20,9 +20,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/cluster"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/eventbus"
-	"github.com/aacfactory/logs"
 	"github.com/rs/xid"
 	"net"
 	"net/http"
@@ -194,7 +192,7 @@ func (service *httpService) Start(context Context, env Environment) (err error) 
 		meta = cluster.NewServiceMeta()
 	}
 
-	httpLog := logs.With(context.Log(), logs.F("http", service.name))
+	httpLog := LogWith(context.Log(), LogF("http", service.name))
 	service.log = httpLog
 
 	service.serve(context)
@@ -292,7 +290,7 @@ func (h *fnHttpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	result, proxyErr := h.fnProxy(fc, arguments, tags...)
 	if proxyErr != nil {
-		codeErr := errors.Map(proxyErr)
+		codeErr := MapError(proxyErr)
 		rw.WriteHeader(codeErr.FailureCode())
 		_, _ = rw.Write(codeErr.ToJson())
 		return
@@ -304,7 +302,7 @@ func (h *fnHttpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	data, encodeErr := JsonAPI().Marshal(result)
 	if encodeErr != nil {
-		codeErr := errors.Map(encodeErr)
+		codeErr := MapError(encodeErr)
 		rw.WriteHeader(codeErr.FailureCode())
 		_, _ = rw.Write(codeErr.ToJson())
 		return

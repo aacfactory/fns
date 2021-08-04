@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/cluster"
 	"github.com/aacfactory/eventbus"
-	"github.com/aacfactory/logs"
 	"os"
 	"os/signal"
 	"sort"
@@ -253,7 +252,7 @@ func (a *app) Run(ctx context.Context) (err error) {
 	env := newFnsEnvironment(a.config, a.cluster)
 	for _, service := range services {
 		serviceName := service.Name()
-		serviceLog := logs.With(a.log, logs.F("service", serviceName))
+		serviceLog := LogWith(a.log, LogF("service", serviceName))
 		fnsCTX := newFnsContext(ctx, serviceLog, a.eventbus, a.cluster)
 		serviceErr := service.Start(fnsCTX, env)
 		if serviceErr != nil {
@@ -355,7 +354,7 @@ func (a *app) Close(ctx context.Context) (err error) {
 	services := a.services
 	for _, service := range services {
 		serviceName := service.Name()
-		serviceLog := logs.With(a.log, logs.F("service", serviceName))
+		serviceLog := LogWith(a.log, LogF("service", serviceName))
 		fnsCTX := newFnsContext(ctx, serviceLog, a.eventbus, a.cluster)
 		serviceErr := service.Stop(fnsCTX)
 		if serviceErr != nil {

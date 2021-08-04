@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/cluster"
 	"github.com/aacfactory/eventbus"
-	"github.com/aacfactory/logs"
 	"time"
 )
 
@@ -246,7 +245,7 @@ func newFnsFnContext(fnAddr string, requestId string, ctx Context, clusterMode b
 	if clusterMode {
 		shared = ctx.Shared()
 	}
-	subLog := logs.With(ctx.Log(), logs.F("fn", fnAddr), logs.F("rid", requestId))
+	subLog := LogWith(ctx.Log(), LogF("fn", fnAddr), LogF("rid", requestId))
 	return &fnsFnContext{
 		Context:   context.TODO(),
 		log:       subLog,

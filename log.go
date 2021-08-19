@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"os"
 	"strings"
 	"time"
 )
@@ -225,7 +224,6 @@ var (
 		zapcore.PanicLevel:  red,
 		zapcore.FatalLevel:  red,
 	}
-	gopath = os.Getenv("GOPATH")
 )
 
 func zapLogCapitalColorLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
@@ -238,11 +236,7 @@ func zapLogCapitalColorLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayE
 }
 
 func zapLogFullCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
-	if gopath == "" {
-		enc.AppendString(caller.FullPath())
-	} else {
-		enc.AppendString(caller.FullPath()[len(gopath)+5:])
-	}
+	enc.AppendString(TrimRCFilepath(caller.FullPath()))
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -290,7 +284,7 @@ func createLog(option logOption) Logs {
 	var callerEncoder zapcore.CallerEncoder
 	if option.EnableCaller {
 		if formatter == LogJsonFormatter {
-			callerEncoder = zapcore.ShortCallerEncoder
+			callerEncoder = zapLogFullCallerEncoder
 			option.Colorable = false
 		} else {
 			callerEncoder = zapLogFullCallerEncoder
@@ -356,6 +350,7 @@ func LogWith(log Logs, fields ...LogField) (_log Logs) {
 				kvs = append(kvs, zap.Object(field.Key, newCodeErrorMarshalLogObject(codeErr)))
 				continue
 			}
+		} else {
 			kvs = append(kvs, zap.Any(field.Key, field.Value))
 		}
 	}

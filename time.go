@@ -28,32 +28,31 @@ func ParseTime(value string) (result time.Time, err error) {
 		result = time.Time{}
 		return
 	}
-	result, err = time.Parse(time.RFC3339, value)
-	if err == nil {
+	if len(value) == 10 {
+		result, err = time.Parse("2006-01-02", value)
 		return
 	}
-
-	result, err = time.Parse(time.RFC3339Nano, value)
-	if err == nil {
+	if len(value) == len(time.RFC3339) {
+		result, err = time.Parse(time.RFC3339, value)
 		return
 	}
-
-	result, err = time.Parse("2006-01-02T15:04:05", value)
-	if err == nil {
+	if len(value) == len(time.RFC3339Nano) {
+		result, err = time.Parse(time.RFC3339Nano, value)
 		return
 	}
-
-	result, err = time.Parse("2006-01-02 15:04:05", value)
-	if err == nil {
+	if len(value) == 19 {
+		if strings.IndexByte(value, 'T') > 0 {
+			result, err = time.Parse("2006-01-02T15:04:05", value)
+		} else {
+			result, err = time.Parse("2006-01-02 15:04:05", value)
+		}
 		return
 	}
-
-	// ISO8601
-	result, err = time.Parse("2006-01-02T15:04:05.000Z0700", value)
-	if err == nil {
+	if len(value) > 19 && strings.IndexByte(value, 'T') > 0 && strings.IndexByte(value, 'Z') > 0 {
+		// ISO8601
+		result, err = time.Parse("2006-01-02T15:04:05.000Z0700", value)
 		return
 	}
-
-	err = fmt.Errorf("parse %s to time failed", value)
+	err = fmt.Errorf("parse %s to time failed, layout is not supported", value)
 	return
 }

@@ -16,14 +16,14 @@
 
 package fns
 
+import "strings"
 
-type Service interface {
-	Name() (name string)
-	//Index asc sort key
-	Index() (idx int)
-	Start(context Context, env Environment) (err error)
-	Stop(context Context) (err error)
-
+func TrimRCFilepath(filePath string) (tfp string) {
+	idx := strings.Index(filePath, "/src/")
+	if idx < 1 {
+		tfp = filePath
+		return
+	}
+	tfp = filePath[idx+5:]
+	return
 }
-
-// +-------------------------------------------------------------------------------------------------------------------+

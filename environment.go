@@ -18,29 +18,30 @@ package fns
 
 import (
 	"fmt"
-	"github.com/aacfactory/cluster"
 )
 
 type Environment interface {
 	ClusterMode() (ok bool)
 	Config() (config Config)
-	Discovery() (discovery cluster.ServiceDiscovery)
+	Discovery() (dc Discovery)
 }
 
-func newFnsEnvironment(config Config, discovery cluster.ServiceDiscovery) Environment {
+func newFnsEnvironment(config Config, dc Discovery) Environment {
 	return &fnsEnvironment{
-		config:    config,
-		discovery: discovery,
+		clusterMode: dc != nil,
+		config:      config,
+		discovery:   dc,
 	}
 }
 
 type fnsEnvironment struct {
-	config    Config
-	discovery cluster.ServiceDiscovery
+	clusterMode bool
+	config      Config
+	discovery   Discovery
 }
 
 func (env *fnsEnvironment) ClusterMode() (ok bool) {
-	ok = env.discovery != nil
+	ok = env.clusterMode
 	return
 }
 
@@ -49,10 +50,10 @@ func (env *fnsEnvironment) Config() (config Config) {
 	return
 }
 
-func (env *fnsEnvironment) Discovery() (discovery cluster.ServiceDiscovery) {
-	if env.discovery == nil {
+func (env *fnsEnvironment) Discovery() (dc Discovery) {
+	if !env.ClusterMode() {
 		panic(fmt.Errorf("fns is not in cluster mode"))
 	}
-	discovery = env.discovery
+	dc = env.discovery
 	return
 }

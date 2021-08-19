@@ -31,6 +31,8 @@ const (
 	forbiddenErrorCode                        = "***FORBIDDEN***"
 	notFoundErrorFailureCodeCode              = 404
 	notFoundErrorCode                         = "***NOT FOUND***"
+	timoutErrorFailureCodeCode                = 408
+	timoutErrorCode                           = "***TIMEOUT***"
 	serviceErrorFailureCodeCode               = 500
 	serviceErrorCode                          = "***SERVICE EXECUTE FAILED***"
 	serviceNotImplementedErrorFailureCodeCode = 501
@@ -161,6 +163,10 @@ func NotFoundError(message string) CodeError {
 	return newCodeErrorWithDepth(notFoundErrorFailureCodeCode, notFoundErrorCode, message, 3)
 }
 
+func TimeoutError(message string) CodeError {
+	return newCodeErrorWithDepth(timoutErrorFailureCodeCode, timoutErrorCode, message, 3)
+}
+
 func ServiceError(message string) CodeError {
 	return newCodeErrorWithDepth(serviceErrorFailureCodeCode, serviceErrorCode, message, 3)
 }
@@ -228,7 +234,7 @@ func newStacktrace(skip int) stacktrace {
 	fn := runtime.FuncForPC(pc)
 	return stacktrace{
 		Fn:   fn.Name(),
-		File: fileNameSubGoPath(file),
+		File: TrimRCFilepath(file),
 		Line: line,
 	}
 }

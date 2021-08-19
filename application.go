@@ -20,7 +20,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/cluster"
+	"github.com/aacfactory/discovery"
 	"github.com/aacfactory/eventbus"
+	"github.com/valyala/fasthttp"
+	"golang.org/x/crypto/acme/autocert"
 	"os"
 	"os/signal"
 	"sort"
@@ -60,7 +63,6 @@ var (
 type Options struct {
 	Config   ConfigRetrieverOption
 	Log      Logs
-	Eventbus eventbus.Eventbus
 }
 
 func CustomizeLog(logs Logs) Option {
@@ -69,16 +71,6 @@ func CustomizeLog(logs Logs) Option {
 			return fmt.Errorf("fns create failed, customize log is nil")
 		}
 		o.Log = logs
-		return nil
-	}
-}
-
-func CustomizeEventbus(eventbus eventbus.Eventbus) Option {
-	return func(o *Options) error {
-		if eventbus == nil {
-			return fmt.Errorf("fns create failed, customize eventbus is nil")
-		}
-		o.Eventbus = eventbus
 		return nil
 	}
 }
@@ -182,17 +174,7 @@ func New(options ...Option) (a Application, err error) {
 		}
 		app0.cluster = c
 	}
-	// eventbus
-	if opt.Eventbus == nil {
-		bus, busErr := newEventBus(app0.cluster, appConfig.EventBus)
-		if busErr != nil {
-			err = fmt.Errorf("fns create failed, create eventbus failed, %v", busErr)
-			return
-		}
-		app0.eventbus = bus
-	} else {
-		app0.eventbus = opt.Eventbus
-	}
+
 
 	// succeed
 	a = app0
@@ -205,11 +187,10 @@ type app struct {
 	tags         []string
 	config       Config
 	clusterMode  bool
-	cluster      cluster.Cluster
+	dc      discovery.Discovery
 	servicesLock sync.Mutex
 	services     []Service
 	log          Logs
-	eventbus     eventbus.Eventbus
 }
 
 func (a *app) Deploy(services ...Service) {
@@ -237,19 +218,11 @@ func (a *app) Run(ctx context.Context) (err error) {
 		err = servicesErr
 		return
 	}
-	// join into cluster
-	if a.clusterMode {
-		joinErr := a.cluster.Join()
-		if joinErr != nil {
-			err = fmt.Errorf("fns run failed, join into cluster failed, %v", joinErr)
-			return
-		}
-	}
 	// start services
 	services := a.services
 	failed := false
 	var cause error
-	env := newFnsEnvironment(a.config, a.cluster)
+	env := newFnsEnvironment(a.config, a.dc)
 	for _, service := range services {
 		serviceName := service.Name()
 		serviceLog := LogWith(a.log, LogF("service", serviceName))
@@ -262,17 +235,30 @@ func (a *app) Run(ctx context.Context) (err error) {
 		}
 	}
 	if failed {
-		_ = a.Close(ctx)
+		_ = a.stop(ctx)
 		err = fmt.Errorf("fns run failed, %v", cause)
 		return
 	}
 	// ...
+	s := &fasthttp.Server{
+		Handler: a.handleHttpRequest,
+
+		// Every response will contain 'Server: My super server' header.
+		Name: a.name,
+
+		// Other Server settings may be set here.
+	}
+	s.Serve()
 
 	return
 }
 
+func (a *app) handleHttpRequest(request *fasthttp.RequestCtx)  {
+
+}
+
 func (a *app) Sync(ctx context.Context) (err error) {
-	err = a.SyncWithTimeout(ctx, 10*time.Second)
+	err = a.SyncWithTimeout(ctx, 10*time.Minute)
 	return
 }
 
@@ -292,7 +278,7 @@ func (a *app) SyncWithTimeout(ctx context.Context, timeout time.Duration) (err e
 		cancelCTX, cancel := context.WithTimeout(ctx, timeout)
 		closeCh := make(chan struct{}, 1)
 		go func(ctx context.Context, a *app, closeCh chan struct{}) {
-			_ = a.Close(ctx)
+			_ = a.stop(ctx)
 			closeCh <- struct{}{}
 			close(closeCh)
 		}(cancelCTX, a, closeCh)
@@ -343,14 +329,7 @@ func (a *app) checkService() (err error) {
 	return
 }
 
-func (a *app) Close(ctx context.Context) (err error) {
-	// leave into cluster
-	if a.clusterMode {
-		leaveErr := a.cluster.Leave()
-		if leaveErr != nil {
-			a.log.Warnf("fns leave from cluster failed, %v", leaveErr)
-		}
-	}
+func (a *app) stop(ctx context.Context) (err error) {
 	services := a.services
 	for _, service := range services {
 		serviceName := service.Name()

@@ -32,11 +32,39 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ApplicationConfig struct {
-	Name     string         `json:"name,omitempty"`
-	Tags     []string       `json:"tags,omitempty"`
-	Log      LogConfig      `json:"log,omitempty"`
-	Cluster  ClusterConfig  `json:"cluster,omitempty"`
-	EventBus EventbusConfig `json:"eventBus,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Http      HttpConfig      `json:"http,omitempty"`
+	Work      WorkConfig      `json:"work,omitempty"`
+	Log       LogConfig       `json:"log,omitempty"`
+	Discovery DiscoveryConfig `json:"discovery,omitempty"`
+}
+
+type HttpConfig struct {
+	Host                     string    `json:"host,omitempty"`
+	Port                     int       `json:"port,omitempty"`
+	PublicHost               string    `json:"publicHost,omitempty"`
+	PublicPort               int       `json:"publicPort,omitempty"`
+	MaxRequestBodySizeKB     int       `json:"maxRequestBodySizeKB,omitempty"`
+	MaxRequestFileSizeMB     int       `json:"maxRequestFileSizeMB,omitempty"`
+	MaxConnectionsPerIP      int       `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int       `json:"maxRequestsPerConnection,omitempty"`
+	RequestTimeoutSeconds    int       `json:"requestTimeoutSeconds,omitempty"`
+	WhiteCIDR                []string  `json:"whiteCIDR,omitempty"`
+	SSL                      ServerTLS `json:"ssl,omitempty"`
+}
+
+type WorkConfig struct {
+	Concurrency       int `json:"concurrency,omitempty"`
+	MaxIdleTimeSecond int `json:"maxIdleTimeSecond,omitempty"`
+	// Aggressively reduces memory usage at the cost of higher CPU usage
+	// if set to true.
+	//
+	// Try enabling this option only if the server consumes too much memory
+	// serving mostly idle keep-alive connections. This may reduce memory
+	// usage by more than 50%.
+	//
+	// Aggressive memory usage reduction is disabled by default.
+	ReduceMemoryUsage bool `json:"reduceMemoryUsage,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

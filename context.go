@@ -19,23 +19,19 @@ package fns
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/cluster"
-	"github.com/aacfactory/eventbus"
+	"github.com/tidwall/gjson"
+	"strings"
 	"time"
 )
 
 type Context interface {
 	context.Context
-	Log() (log Logs)
 	Meta() (meta ContextMeta)
-	Eventbus() (bus eventbus.Eventbus)
-	Shared() (shared ContextShared)
-}
-
-type ContextShared interface {
-	Map(name string) (sm cluster.SharedMap)
-	Counter(name string) (counter cluster.SharedCounter, err error)
-	Locker(name string, timeout time.Duration) (locker cluster.SharedLocker)
+	Log() (log Logs)
+	Bus() (bus FnBus)
+	Timeout() (has bool)
+	WithFnRequest(namespace string, fnName string, requestId string) (ctx Context)
+	WithFnFork(namespace string, fnName string) (ctx Context)
 }
 
 type ContextMeta interface {
@@ -52,34 +48,34 @@ type ContextMeta interface {
 	GetBytes(key string) (value []byte, has bool)
 	GetTime(key string) (value time.Time, has bool)
 	GetDuration(key string) (value time.Duration, has bool)
-}
-
-type FnContext interface {
-	Context
+	Namespace() (ns string)
+	FnName() (name string)
 	RequestId() (id string)
-	FnAddress() (addr string)
+	PutAuthorization(value string)
+	Authorization() (value string)
+	PutUser(user User)
 	User() (user User, has bool)
-	SetUser(user User)
+	Values() (values map[string]interface{})
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newFnsContext(ctx context.Context, log Logs, bus eventbus.Eventbus, c cluster.Cluster) Context {
+func newFnsContext(ctx context.Context, log Logs, bus FnBus) Context {
 	return &fnsContext{
 		Context: ctx,
-		log:     log,
+		parent:  nil,
 		meta:    newFnsContextMeta(),
+		log:     log,
 		bus:     bus,
-		cluster: c,
 	}
 }
 
 type fnsContext struct {
 	context.Context
-	log     Logs
-	meta    ContextMeta
-	bus     eventbus.Eventbus
-	cluster cluster.Cluster
+	parent *fnsContext
+	log    Logs
+	meta   ContextMeta
+	bus    FnBus
 }
 
 func (ctx *fnsContext) Log() (log Logs) {
@@ -92,37 +88,78 @@ func (ctx *fnsContext) Meta() (meta ContextMeta) {
 	return
 }
 
-func (ctx *fnsContext) Eventbus() (bus eventbus.Eventbus) {
+func (ctx *fnsContext) Bus() (bus FnBus) {
 	bus = ctx.bus
 	return
 }
 
-func (ctx *fnsContext) Shared() (shared ContextShared) {
-	if ctx.cluster == nil {
-		panic(fmt.Errorf("fns is not in cluster mode"))
+func (ctx *fnsContext) Timeout() (has bool) {
+	deadline, hasDeadline := ctx.Deadline()
+	if !hasDeadline {
+		return
 	}
-	shared = &fnsContextShared{
-		cluster: ctx.cluster,
+	has = deadline.Before(time.Now())
+	return
+}
+
+func (ctx *fnsContext) WithFnRequest(namespace string, fnName string, requestId string) (fnContext Context) {
+	if ctx.meta.Exists(contextMetaFnRequestIdKey) {
+		panic("context can not with fn request again")
+		return
+	}
+	meta := newFnsContextMetaFromMeta(ctx.meta)
+	meta.Put(contextMetaNamespaceKey, namespace)
+	meta.Put(contextMetaFnNameKey, fnName)
+	meta.Put(contextMetaFnRequestIdKey, requestId)
+	log := LogWith(ctx.Log(), LogF("ns", namespace), LogF("fn", fnName), LogF("rid", requestId))
+	fnContext = &fnsContext{
+		Context: ctx.Context,
+		parent:  ctx,
+		meta:    meta,
+		log:     log,
+		bus:     ctx.bus,
 	}
 	return
 }
 
-type fnsContextShared struct {
-	cluster cluster.Cluster
-}
-
-func (shared *fnsContextShared) Map(name string) (sm cluster.SharedMap) {
-	sm = shared.cluster.GetMap(name)
+func (ctx *fnsContext) WithFnFork(namespace string, fnName string) (forked Context) {
+	if !ctx.meta.Exists(contextMetaFnRequestIdKey) || ctx.parent == nil {
+		panic("context can not with fn fork, cause no fn request id")
+		return
+	}
+	meta := newFnsContextMetaFromMeta(ctx.meta)
+	meta.Put(contextMetaNamespaceKey, namespace)
+	meta.Put(contextMetaFnNameKey, fnName)
+	log := LogWith(ctx.parent.Log(), LogF("ns", namespace), LogF("fn", fnName), LogF("rid", meta.RequestId()))
+	forked = &fnsContext{
+		Context: ctx.Context,
+		parent:  ctx,
+		meta:    meta,
+		log:     log,
+		bus:     ctx.bus,
+	}
 	return
 }
 
-func (shared *fnsContextShared) Counter(name string) (counter cluster.SharedCounter, err error) {
-	counter, err = shared.cluster.Counter(name)
-	return
-}
+// +-------------------------------------------------------------------------------------------------------------------+
 
-func (shared *fnsContextShared) Locker(name string, timeout time.Duration) (locker cluster.SharedLocker) {
-	locker = shared.cluster.GetLock(name, timeout)
+const (
+	contextMetaNamespaceKey     = "__ns"
+	contextMetaFnNameKey        = "__fn"
+	contextMetaFnRequestIdKey   = "__rid"
+	contextMetaUserKey          = "__user"
+	contextMetaAuthorizationKey = "__auth"
+)
+
+func newFnsContextMetaFromMeta(meta ContextMeta) (nm *fnsContextMeta) {
+	values := meta.Values()
+	copied := make(map[string]interface{})
+	for k, v := range values {
+		copied[k] = v
+	}
+	nm = &fnsContextMeta{
+		values: copied,
+	}
 	return
 }
 
@@ -240,82 +277,105 @@ func (meta *fnsContextMeta) GetDuration(key string) (value time.Duration, has bo
 	return
 }
 
-func newFnsFnContext(fnAddr string, requestId string, ctx Context, clusterMode bool) FnContext {
-	var shared ContextShared = nil
-	if clusterMode {
-		shared = ctx.Shared()
-	}
-	subLog := LogWith(ctx.Log(), LogF("fn", fnAddr), LogF("rid", requestId))
-	return &fnsFnContext{
-		Context:   context.TODO(),
-		log:       subLog,
-		meta:      newFnsContextMeta(),
-		bus:       ctx.Eventbus(),
-		shared:    shared,
-		requestId: requestId,
-		fnAddress: fnAddr,
-		user:      nil,
-	}
-}
-
-type fnsFnContext struct {
-	context.Context
-	log       Logs
-	meta      ContextMeta
-	bus       eventbus.Eventbus
-	shared    ContextShared
-	requestId string
-	fnAddress string
-	user      User
-}
-
-func (ctx *fnsFnContext) Log() (log Logs) {
-	log = ctx.log
+func (meta *fnsContextMeta) Namespace() (ns string) {
+	ns, _ = meta.GetString(contextMetaNamespaceKey)
 	return
 }
 
-func (ctx *fnsFnContext) Meta() (meta ContextMeta) {
-	meta = ctx.meta
+func (meta *fnsContextMeta) FnName() (name string) {
+	name, _ = meta.GetString(contextMetaFnNameKey)
 	return
 }
 
-func (ctx *fnsFnContext) Eventbus() (bus eventbus.Eventbus) {
-	bus = ctx.bus
+func (meta *fnsContextMeta) RequestId() (id string) {
+	id, _ = meta.GetString(contextMetaFnRequestIdKey)
 	return
 }
 
-func (ctx *fnsFnContext) Shared() (shared ContextShared) {
-	if ctx.shared == nil {
-		panic(fmt.Errorf("fns is not in cluster mode"))
-	}
-	shared = ctx.shared
-	return
-}
-
-func (ctx *fnsFnContext) RequestId() (id string) {
-	id = ctx.requestId
-	return
-}
-
-func (ctx *fnsFnContext) FnAddress() (addr string) {
-	addr = ctx.fnAddress
-	return
-}
-
-func (ctx *fnsFnContext) setUser(user User) {
-	ctx.user = user
-}
-
-func (ctx *fnsFnContext) User() (user User, has bool) {
-	if ctx.user != nil {
-		user = ctx.user
-		has = true
+func (meta *fnsContextMeta) PutAuthorization(value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
 		return
 	}
+	meta.Put(contextMetaAuthorizationKey, value)
+}
+
+func (meta *fnsContextMeta) Authorization() (value string) {
+	value, _ = meta.GetString(contextMetaAuthorizationKey)
 	return
 }
 
-func (ctx *fnsFnContext) SetUser(user User) {
-	ctx.user = user
+func (meta *fnsContextMeta) PutUser(user User) {
+	if user == nil {
+		return
+	}
+	meta.Put(contextMetaUserKey, user)
 	return
+}
+
+func (meta *fnsContextMeta) User() (user User, has bool) {
+	value0, has0 := meta.values[contextMetaUserKey]
+	if !has0 {
+		return
+	}
+	user, has = value0.(User)
+	return
+}
+
+func (meta *fnsContextMeta) Values() (values map[string]interface{}) {
+	values = meta.values
+	return
+}
+
+func newContextMetaFromJson(data []byte) (meta ContextMeta) {
+	meta = newFnsContextMeta()
+	result := gjson.ParseBytes(data)
+	if !result.Exists() {
+		return
+	}
+	resultMap := result.Map()
+	for key, value := range resultMap {
+		if key == contextMetaNamespaceKey {
+			meta.Put(contextMetaNamespaceKey, value.String())
+			continue
+		}
+		if key == contextMetaFnNameKey {
+			meta.Put(contextMetaFnNameKey, value.String())
+			continue
+		}
+		if key == contextMetaFnRequestIdKey {
+			meta.Put(contextMetaFnRequestIdKey, value.String())
+			continue
+		}
+		if key == contextMetaUserKey {
+			user := NewUser()
+			userErr := user.UnmarshalJSON([]byte(value.Raw))
+			if userErr != nil {
+				panic(fmt.Errorf("decode context user failed, %s, %v", string(value.Raw), userErr))
+			}
+			meta.Put(contextMetaUserKey, user)
+			continue
+		}
+		if key == contextMetaAuthorizationKey {
+			meta.Put(contextMetaAuthorizationKey, value.String())
+			continue
+		}
+		switch value.Type {
+		case gjson.String:
+			meta.Put(key, value.String())
+		case gjson.Number:
+			if strings.Index(value.Raw, ".") > 0 {
+				meta.Put(key, value.Float())
+			} else {
+				meta.Put(key, value.Int())
+			}
+		case gjson.False:
+			meta.Put(key, false)
+		case gjson.True:
+			meta.Put(key, true)
+		default:
+
+		}
+	}
+	return meta
 }

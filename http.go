@@ -17,298 +17,155 @@
 package fns
 
 import (
-	"crypto/tls"
+	"encoding/json"
 	"fmt"
-	"github.com/aacfactory/cluster"
-	"github.com/aacfactory/eventbus"
-	"github.com/rs/xid"
+	"github.com/valyala/fasthttp"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 )
 
-var (
-	HttpMaxRequestBodySize = int64(32 * MB)
-)
-
-type HttpServiceConfig struct {
-	Name       string              `json:"name,omitempty"`
-	Host       string              `json:"host,omitempty"`
-	Port       int                 `json:"port,omitempty"`
-	PublicHost string              `json:"publicHost,omitempty"`
-	PublicPort int                 `json:"publicPort,omitempty"`
-	TLS        cluster.ServiceTLS  `json:"tls,omitempty"`
-	Tags       []string            `json:"tags,omitempty"`
-	Meta       cluster.ServiceMeta `json:"meta,omitempty"`
+type fnRemoteBody struct {
+	Meta ContextMeta     `json:"meta,omitempty"`
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
-func NewHttpServiceFnRegister() *HttpServiceFnRegister {
-	return &HttpServiceFnRegister{
-		lock:       sync.Mutex{},
-		fnProxyMap: make(map[string]FnProxy),
+type FnHttpClient interface {
+	Request(ctx Context, arg Argument) (response []byte, err error)
+}
+
+func newFastHttpLBFnHttpClient(lb *fasthttp.LBClient) FnHttpClient {
+	return &fastHttpLBFnHttpClient{
+		lb: lb,
 	}
 }
 
-type HttpServiceFnRegister struct {
-	lock       sync.Mutex
-	fnProxyMap map[string]FnProxy
+type fastHttpLBFnHttpClient struct {
+	lb *fasthttp.LBClient
 }
 
-func (r *HttpServiceFnRegister) Add(fnAddr string, proxy FnProxy) (err error) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	fnAddr = strings.TrimSpace(fnAddr)
-	if fnAddr == "" {
-		err = fmt.Errorf("fns register fn failed, fn addr is empty")
+func (c *fastHttpLBFnHttpClient) Request(ctx Context, arg Argument) (data []byte, err error) {
+	namespace := ctx.Meta().Namespace()
+	fnName := ctx.Meta().FnName()
+
+	// request
+	request := &fasthttp.Request{}
+	request.Header.Set("Fns-Namespace", namespace)
+	request.Header.Set("Fns-Name", fnName)
+	request.Header.Set("Fns-Request-Id", ctx.Meta().RequestId())
+	bodyMap := fnRemoteBody{
+		Meta: ctx.Meta(),
+		Data: arg.Data(),
+	}
+	body, bodyEncodeErr := JsonAPI().Marshal(bodyMap)
+	if bodyEncodeErr != nil {
+		err = ServiceError(fmt.Sprintf("call remote %s/%s failed, %v", namespace, fnName, bodyEncodeErr))
 		return
 	}
-	if proxy == nil {
-		err = fmt.Errorf("fns register fn failed, proxy is nil")
+	request.SetBody(body)
+
+	// response
+	response := &fasthttp.Response{}
+
+	remoteErr := c.lb.Do(request, response)
+	if remoteErr != nil {
+		err = ServiceError(fmt.Sprintf("call remote %s/%s failed, %v", namespace, fnName, remoteErr))
 		return
 	}
-	_, has := r.fnProxyMap[fnAddr]
-	if has {
-		err = fmt.Errorf("fns register fn failed, %s proxy exists", fnAddr)
-		return
-	}
-	r.fnProxyMap[fnAddr] = proxy
-	return
-}
-
-func NewHttpService(register *HttpServiceFnRegister) (service Service) {
-
-	if register == nil || len(register.fnProxyMap) == 0 {
-		panic(fmt.Errorf("fns create http service failed, no fn registered"))
-	}
-
-	service = &httpService{
-		fnProxyMap: register.fnProxyMap,
-	}
-
-	return
-}
-
-type httpService struct {
-	name         string
-	port         int
-	ln           net.Listener
-	fnProxyMap   map[string]FnProxy
-	log          Logs
-	eventbus     eventbus.Eventbus
-	clusterMode  bool
-	cluster      cluster.Cluster
-	registration cluster.Registration
-}
-
-func (service *httpService) Name() (name string) {
-	name = service.name
-	return
-}
-
-func (service *httpService) Index() (idx int) {
-	idx = 80000
-	return
-}
-
-func (service *httpService) Start(context Context, env Environment) (err error) {
-	config := &HttpServiceConfig{}
-	configErr := env.Config().Get("http", config)
-	if configErr != nil {
-		err = fmt.Errorf("fns start http service failed, read http config failed, %v", configErr)
-		return
-	}
-	name := strings.TrimSpace(config.Name)
-	if name == "" {
-		err = fmt.Errorf("fns start http service failed, no name in http config")
-		return
-	}
-
-	publicHost := strings.TrimSpace(config.PublicHost)
-	host := strings.TrimSpace(config.Host)
-	if publicHost == "" {
-		if host == "" {
-			hostIp, hostIpErr := IpFromHostname(false)
-			if hostIpErr != nil || hostIp == "" {
-				err = fmt.Errorf("fns create http failed, can not get ip from hostname, please set public host in config, %v", hostIpErr)
-				return
-			}
-			publicHost = hostIp
-		}
-	}
-	if host == "" {
-		host = "0.0.0.0"
-	}
-	port := config.Port
-	if port < 1 || port > 65535 {
-		err = fmt.Errorf("fns create http failed, port is invalied")
-		return
-	}
-	service.port = port
-	publicPort := config.PublicPort
-	if publicPort == 0 {
-		publicPort = port
-	}
-	if publicPort < 1 || publicPort > 65535 {
-		err = fmt.Errorf("fns create http failed, public port is invalied")
-		return
-	}
-	protocol := "http"
-	var serverTLSConfig *tls.Config
-	serviceTLS := config.TLS
-	if serviceTLS.Enable() {
-		serverTLSConfig0, tlsErr := serviceTLS.ToServerTLSConfig()
-		if tlsErr != nil {
-			err = fmt.Errorf("fns create http failed, tls is enabled, but build tls config failed, %v", tlsErr)
-			return
-		}
-		serverTLSConfig = serverTLSConfig0
-		protocol = "https"
-	}
-
-	if serverTLSConfig != nil {
-		ln, lnErr := tls.Listen("tcp", fmt.Sprintf("%s:%d", host, port), serverTLSConfig)
-		if lnErr != nil {
-			err = fmt.Errorf("fns create http failed, tls is enabled, but listen failed, %v", lnErr)
-			return
-		}
-		service.ln = ln
-	} else {
-		ln, lnErr := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
-		if lnErr != nil {
-			err = fmt.Errorf("fns create http failed, listen failed, %v", lnErr)
-			return
-		}
-		service.ln = ln
-	}
-
-	tags := config.Tags
-	if tags == nil {
-		tags = make([]string, 0, 1)
-	}
-	meta := config.Meta
-	if meta == nil {
-		meta = cluster.NewServiceMeta()
-	}
-
-	httpLog := LogWith(context.Log(), LogF("http", service.name))
-	service.log = httpLog
-
-	service.serve(context)
-	time.Sleep(1 * time.Second)
-	if env.ClusterMode() {
-		registration, publishErr := env.Discovery().Publish("http", service.name, protocol, fmt.Sprintf("%s:%d", publicHost, publicPort), tags, meta, serviceTLS)
-		if publishErr != nil {
-			err = fmt.Errorf("fns create http service failed, publish http service failed, %v", publishErr)
-			_ = service.ln.Close()
-			return
-		}
-		service.registration = registration
-	}
-
-	return
-}
-
-func (service *httpService) Stop(context Context) (err error) {
-	service.log.Debugf("fns http service begin to stop")
-	if service.clusterMode {
-		service.log.Debugf("fns http service begin to un publish service")
-		unPublishErr := service.cluster.UnPublish(service.registration)
-		if unPublishErr != nil {
-			service.log.Warnf("fns http service un publish service failed, %v", unPublishErr)
-		}
-		service.log.Debugf("fns http service un publish service is finished")
-	}
-	_ = service.ln.Close()
-	service.log.Debugf("fns http service stopped")
-	return
-}
-
-func (service *httpService) serve(context Context) {
-	mux := service.httpServiceRegisterFnHandle(context)
-	go func(ln net.Listener, mux *http.ServeMux) {
-		service.log.Debugf("fns http service listen at %d", service.port)
-		err := http.Serve(ln, mux)
+	contentEncoding := response.Header.Peek("Content-Encoding")
+	if contentEncoding == nil || len(contentEncoding) == 0 {
+		data = response.Body()
+	} else if string(contentEncoding) == "gzip" {
+		data, err = response.BodyGunzip()
 		if err != nil {
-			service.log.Errorf("fns serve http failed, %v", err)
+			err = ServiceError(fmt.Sprintf("call remote %s/%s failed, %v", namespace, fnName, err))
+			return
 		}
-	}(service.ln, mux)
-}
-
-func (service *httpService) httpServiceRegisterFnHandle(context Context) (mux *http.ServeMux) {
-
-	mux = http.NewServeMux()
-
-	for fnAddr, proxy := range service.fnProxyMap {
-		handler := newFnHttpHandler(context, fnAddr, proxy)
-		mux.Handle(fmt.Sprintf("_fn_/%s", fnAddr), handler)
+	} else if string(contentEncoding) == "deflate" {
+		data, err = response.BodyInflate()
+		if err != nil {
+			err = ServiceError(fmt.Sprintf("call remote %s/%s failed, %v", namespace, fnName, err))
+			return
+		}
+	} else if string(contentEncoding) == "br" {
+		data, err = response.BodyUnbrotli()
+		if err != nil {
+			err = ServiceError(fmt.Sprintf("call remote %s/%s failed, %v", namespace, fnName, err))
+			return
+		}
+	} else {
+		err = ServiceError(fmt.Sprintf("call remote %s/%s failed, content encoding %s is not supported", namespace, fnName, string(contentEncoding)))
+		return
 	}
 
 	return
 }
 
-func newFnHttpHandler(context Context, fnAddr string, fnProxy FnProxy) (h *fnHttpHandler) {
-	h = &fnHttpHandler{
-		fnAddr:  fnAddr,
-		context: context,
-		fnProxy: fnProxy,
+func NewWhiteList(cidr []string) (w *WhiteList, err error) {
+	if cidr == nil || len(cidr) == 0 {
+		err = fmt.Errorf("new white list failed, cidr is nil")
+		return
+	}
+	w = &WhiteList{Ips: make([]*net.IPNet, 0, 1), wg: &sync.WaitGroup{}}
+	wErr := w.ReWriteIpList(cidr)
+	if wErr != nil {
+		err = wErr
+		w = nil
+		return
 	}
 	return
 }
 
-type fnHttpHandler struct {
-	context     Context
-	clusterMode bool
-	fnAddr      string
-	fnProxy     FnProxy
+type WhiteList struct {
+	Ips []*net.IPNet
+	wg  *sync.WaitGroup
 }
 
-func (h *fnHttpHandler) tags(r *http.Request) (tags []string) {
-	tags = r.Header.Values("X-Fns-Tags")
-	if tags == nil {
-		tags = make([]string, 0, 1)
+func (w *WhiteList) ReWriteIpList(netIps []string) (err error) {
+	w.wg.Add(1)
+	defer w.wg.Done()
+	for _, netIp0 := range netIps {
+		netIp0 = strings.TrimSpace(netIp0)
+		if netIp0 == "" {
+			err = fmt.Errorf("net ip is bad")
+			return
+		}
+
+		_, ipn, parseErr := net.ParseCIDR(netIp0)
+		if parseErr != nil {
+			err = fmt.Errorf("make white list failed, bad net ip, %s", netIp0)
+			return
+		}
+		w.Ips = append(w.Ips, ipn)
 	}
 	return
 }
 
-func (h *fnHttpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-
-	if r.Method != "POST" {
-		rw.WriteHeader(405)
-		_, _ = rw.Write(JsonEncode(map[string]string{"Error": "http method is not supported, please use POST!"}))
+func (w *WhiteList) Contains(requestIp0 string) (succeed bool, err error) {
+	w.wg.Wait()
+	if requestIp0 == "" {
+		err = fmt.Errorf("check white list failed, request ip is bad")
 		return
 	}
 
-	rid := xid.New().String()
+	requestIp := net.ParseIP(requestIp0)
 
-	fc := newFnsFnContext(h.fnAddr, rid, h.context, h.clusterMode)
-
-	arguments := newFnHttpRequestArguments(r)
-
-	tags := h.tags(r)
-
-	result, proxyErr := h.fnProxy(fc, arguments, tags...)
-	if proxyErr != nil {
-		codeErr := MapError(proxyErr)
-		rw.WriteHeader(codeErr.FailureCode())
-		_, _ = rw.Write(codeErr.ToJson())
+	if requestIp == nil {
+		err = fmt.Errorf("check white list failed, request ip is bad")
 		return
 	}
 
-	if result == nil {
+	if w.Ips == nil || len(w.Ips) == 0 {
+		err = fmt.Errorf("no ips in white list")
 		return
 	}
 
-	data, encodeErr := JsonAPI().Marshal(result)
-	if encodeErr != nil {
-		codeErr := MapError(encodeErr)
-		rw.WriteHeader(codeErr.FailureCode())
-		_, _ = rw.Write(codeErr.ToJson())
-		return
+	for _, ip := range w.Ips {
+		if ip.Contains(requestIp) {
+			succeed = true
+			break
+		}
 	}
 
-	rw.WriteHeader(200)
-	_, _ = rw.Write(data)
 	return
 }

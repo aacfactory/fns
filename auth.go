@@ -33,7 +33,7 @@ type AuthInterceptorBuild func(ctx Context, config Config) (interceptor AuthInte
 // AuthInterceptor
 // todo 当service的 内置FN做，或者单独一个service + fn proxy
 type AuthInterceptor interface {
-	Check(ctx FnContext, authorization string) (ok bool)
+	Check(ctx Context, authorization string) (ok bool)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

@@ -19,11 +19,72 @@ package fns
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
+
+type HttpRequestConfig struct {
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	RequestBodyMaxSize int
+}
+
+type HttpRequestConfigBuilder interface {
+	Build(contentType string, namespace string, fnName string) (config HttpRequestConfig)
+}
+
+type fnHttpRequestConfigBuilder struct {}
+
+func (b *fnHttpRequestConfigBuilder) Build(contentType string, namespace string, fnName string) (config HttpRequestConfig) {
+	if contentType == "multipart/form-data" {
+		config.RequestBodyMaxSize = 512 * MB
+		config.ReadTimeout = 10 * time.Minute
+		config.WriteTimeout = 10 * time.Minute
+	} else {
+		config.RequestBodyMaxSize = 2 * MB
+		config.ReadTimeout = 10 * time.Second
+		config.WriteTimeout = 10 * time.Second
+	}
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func discoveryRegistrationMapToHttpClient(registrations []Registration) (client FnHttpClient, err error) {
+	lb := &fasthttp.LBClient{
+		Clients: make([]fasthttp.BalancingClient, 0, len(registrations)),
+		Timeout: 30 * time.Second,
+		HealthCheck: func(req *fasthttp.Request, resp *fasthttp.Response, err error) (ok bool) {
+			if err != nil && err == fasthttp.ErrTimeout {
+				ok = false
+				return
+			}
+			ok = true
+			return
+		},
+	}
+	for _, registration := range registrations {
+		hostClient := &fasthttp.HostClient{
+			Addr: registration.Address,
+		}
+		if registration.ClientTLS.Enable {
+			hostClient.IsTLS = true
+			tlsConfig, tlcConfigErr := registration.ClientTLS.Config()
+			if tlcConfigErr != nil {
+				err = fmt.Errorf("make client tls config failed, namespace is %s, address is %s", registration.Name, registration.Address)
+				return
+			}
+			hostClient.TLSConfig = tlsConfig
+		}
+		lb.Clients = append(lb.Clients, hostClient)
+	}
+	client = newFastHttpLBFnHttpClient(lb)
+	return
+}
 
 type fnRemoteBody struct {
 	Meta ContextMeta     `json:"meta,omitempty"`
@@ -50,6 +111,7 @@ func (c *fastHttpLBFnHttpClient) Request(ctx Context, arg Argument) (data []byte
 
 	// request
 	request := &fasthttp.Request{}
+	request.SetRequestURI("/fc")
 	request.Header.Set("Fns-Namespace", namespace)
 	request.Header.Set("Fns-Name", fnName)
 	request.Header.Set("Fns-Request-Id", ctx.Meta().RequestId())
@@ -97,7 +159,15 @@ func (c *fastHttpLBFnHttpClient) Request(ctx Context, arg Argument) (data []byte
 		err = ServiceError(fmt.Sprintf("call remote %s/%s failed, content encoding %s is not supported", namespace, fnName, string(contentEncoding)))
 		return
 	}
-
+	buf := bytebufferpool.Get()
+	if response.StatusCode() == 200 {
+		_ = buf.WriteByte('1')
+	} else {
+		_ = buf.WriteByte('0')
+	}
+	_, _ = buf.Write(data)
+	data = buf.Bytes()
+	bytebufferpool.Put(buf)
 	return
 }
 

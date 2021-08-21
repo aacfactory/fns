@@ -17,6 +17,7 @@
 package fns
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -28,12 +29,22 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type AuthInterceptorBuild func(ctx Context, config Config) (interceptor AuthInterceptor, err error)
+type AuthorizationCredentialsRetriever func(header RequestHeader) (credentials AuthCredentials, has bool)
 
-// AuthInterceptor
-// todo 当service的 内置FN做，或者单独一个service + fn proxy
-type AuthInterceptor interface {
-	Check(ctx Context, authorization string) (ok bool)
+var BearerAuthorizationCredentialsRetriever = func(header RequestHeader) (credentials AuthCredentials, has bool) {
+	value, exist := header.Get(httpHeaderAuthorization)
+	if !exist {
+		return
+	}
+	credentials = NewTokenCredentials(value)
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type AuthorizationValidator interface {
+	Build(config Config, log Logs)
+	Handle(authorization string) (user User, err CodeError)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -108,7 +119,7 @@ func NewTokenCredentialsFromHttpAuthorization(authorization string) (credentials
 		return
 	}
 	spc := strings.IndexByte(authorization, ' ')
-	if "bearer" != strings.ToLower(authorization[0:spc]) {
+	if "Bearer" != strings.ToLower(authorization[0:spc]) {
 		err = fmt.Errorf("create token credentials from http authorization failed, authorization is invalid")
 		return
 	}
@@ -163,11 +174,14 @@ func (credentials *TokenCredentials) ToHttpAuthorization() (v string) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type User interface {
-	Exists() (ok bool)
-	Attributes() (attributes UserAttributes)
-	Principal() (principal UserPrincipal)
 	json.Marshaler
 	json.Unmarshaler
+	Exists() (ok bool)
+	Id() (id string)
+	Attributes() (attributes UserAttributes)
+	Principal() (principal UserPrincipal)
+	Encode() (value []byte)
+	Decode(value []byte) (ok bool)
 }
 
 func NewUser() User {
@@ -184,6 +198,24 @@ type fnsUser struct {
 
 func (u *fnsUser) Exists() (ok bool) {
 	ok = !u.principal.Empty() || !u.attributes.Empty()
+	return
+}
+
+func (u *fnsUser) Id() (id string) {
+	if u.Principal().Contains("sub") {
+		sub, subErr := u.Principal().GetString("sub")
+		if subErr == nil {
+			id = sub
+			return
+		}
+	}
+	if u.Attributes().Contains("id") {
+		id0, idErr := u.Principal().GetString("id")
+		if idErr == nil {
+			id = id0
+			return
+		}
+	}
 	return
 }
 
@@ -268,6 +300,26 @@ func (u *fnsUser) UnmarshalJSON(content []byte) (err error) {
 			return
 		}
 	}
+	return
+}
+
+func (u *fnsUser) Encode() (value []byte) {
+	data, _ := u.MarshalJSON()
+	value = Sign(data)
+	return
+}
+
+func (u *fnsUser) Decode(value []byte) (ok bool) {
+	if !Verify(value) {
+		return
+	}
+	idx := bytes.LastIndexByte(value, '.')
+	src := value[:idx]
+	decodeErr := u.UnmarshalJSON(src)
+	if decodeErr != nil {
+		return
+	}
+	ok = true
 	return
 }
 

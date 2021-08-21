@@ -44,10 +44,10 @@ type HttpConfig struct {
 	Port                     int       `json:"port,omitempty"`
 	PublicHost               string    `json:"publicHost,omitempty"`
 	PublicPort               int       `json:"publicPort,omitempty"`
-	MaxRequestBodySizeKB     int       `json:"maxRequestBodySizeKB,omitempty"`
-	MaxRequestFileSizeMB     int       `json:"maxRequestFileSizeMB,omitempty"`
 	MaxConnectionsPerIP      int       `json:"maxConnectionsPerIp,omitempty"`
 	MaxRequestsPerConnection int       `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool      `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int       `json:"keepalivePeriodSecond,omitempty"`
 	RequestTimeoutSeconds    int       `json:"requestTimeoutSeconds,omitempty"`
 	WhiteCIDR                []string  `json:"whiteCIDR,omitempty"`
 	SSL                      ServerTLS `json:"ssl,omitempty"`
@@ -71,7 +71,7 @@ type WorkConfig struct {
 
 type Config interface {
 	As(v interface{}) (err error)
-	Get(path string, v interface{}) (err error)
+	Get(path string, v interface{}) (has bool, err error)
 	Raw() (raw []byte)
 }
 
@@ -87,16 +87,17 @@ func (config *JsonConfig) As(v interface{}) (err error) {
 	return
 }
 
-func (config *JsonConfig) Get(path string, v interface{}) (err error) {
+func (config *JsonConfig) Get(path string, v interface{}) (has bool, err error) {
 	result := gjson.GetBytes(config.raw, path)
 	if !result.Exists() {
-		err = fmt.Errorf("fns config get %s failed, not exists", path)
 		return
 	}
 	decodeErr := JsonAPI().UnmarshalFromString(result.Raw, v)
 	if decodeErr != nil {
 		err = fmt.Errorf("fns config get %s failed, %v", path, decodeErr)
+		return
 	}
+	has = true
 	return
 }
 
@@ -117,15 +118,17 @@ func (config *YamlConfig) As(v interface{}) (err error) {
 	return
 }
 
-func (config *YamlConfig) Get(path string, v interface{}) (err error) {
+func (config *YamlConfig) Get(path string, v interface{}) (has bool, err error) {
 	yamlPath, pathErr := yaml.PathString(path)
 	if pathErr != nil {
-		err = fmt.Errorf("fns config get %s failed, bad path, %v", path, pathErr)
+		return
 	}
 	readErr := yamlPath.Read(bytes.NewReader(config.raw), v)
 	if readErr != nil {
 		err = fmt.Errorf("fns config get %s failed, %v", path, readErr)
+		return
 	}
+	has = true
 	return
 }
 

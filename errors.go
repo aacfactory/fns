@@ -31,6 +31,8 @@ const (
 	forbiddenErrorCode                        = "***FORBIDDEN***"
 	notFoundErrorFailureCodeCode              = 404
 	notFoundErrorCode                         = "***NOT FOUND***"
+	notAcceptableErrorFailureCodeCode         = 406
+	notAcceptableErrorCode                    = "***NOT ACCEPTABLE***"
 	timoutErrorFailureCodeCode                = 408
 	timoutErrorCode                           = "***TIMEOUT***"
 	serviceErrorFailureCodeCode               = 500
@@ -161,6 +163,10 @@ func ForbiddenErrorWithReason(message string, role string, resource ...string) C
 
 func NotFoundError(message string) CodeError {
 	return newCodeErrorWithDepth(notFoundErrorFailureCodeCode, notFoundErrorCode, message, 3)
+}
+
+func NotAcceptableArgumentError(message string) CodeError {
+	return newCodeErrorWithDepth(notAcceptableErrorFailureCodeCode, notAcceptableErrorCode, message, 3)
 }
 
 func TimeoutError(message string) CodeError {

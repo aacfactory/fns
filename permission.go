@@ -16,6 +16,17 @@
 
 package fns
 
-type FnWorkers interface {
-	Execute(namespace string, name string, arg interface{})
+type PermissionValidator interface {
+	Handle(ctx Context, user User) (err CodeError)
+}
+
+/*
+ * rbacPermissionValidator
+ * resource is namespace/fn
+ */
+type rbacPermissionValidator struct {
+}
+
+func (p *rbacPermissionValidator) Handle(ctx Context, user User) (err CodeError) {
+	panic("implement me")
 }

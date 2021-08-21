@@ -17,27 +17,36 @@
 package fns
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/tidwall/gjson"
-	"strings"
 	"time"
 )
 
 type Context interface {
 	context.Context
+	Namespace() (ns string)
+	FnName() (name string)
+	RequestId() (id string)
+	Authorization() (value string)
+	PutUser(user User)
+	User() (user User, has bool)
 	Meta() (meta ContextMeta)
 	Log() (log Logs)
-	Bus() (bus FnBus)
+	Discovery() (discovery Discovery)
 	Timeout() (has bool)
-	WithFnRequest(namespace string, fnName string, requestId string) (ctx Context)
-	WithFnFork(namespace string, fnName string) (ctx Context)
+	// Warp
+	// 在已执行的FN中调用另一个FN时进行Context转换
+	Warp(namespace string, fnName string) (ctx Context)
 }
 
 type ContextMeta interface {
+	json.Marshaler
+	json.Unmarshaler
 	Exists(key string) (has bool)
 	Put(key string, value interface{})
-	Get(key string) (value interface{}, has bool)
+	Get(key string, value interface{}) (err error)
 	GetString(key string) (value string, has bool)
 	GetInt(key string) (value int, has bool)
 	GetInt32(key string) (value int32, has bool)
@@ -45,55 +54,93 @@ type ContextMeta interface {
 	GetFloat32(key string) (value float32, has bool)
 	GetFloat64(key string) (value float64, has bool)
 	GetBool(key string) (value bool, has bool)
-	GetBytes(key string) (value []byte, has bool)
 	GetTime(key string) (value time.Time, has bool)
 	GetDuration(key string) (value time.Duration, has bool)
-	Namespace() (ns string)
-	FnName() (name string)
-	RequestId() (id string)
-	PutAuthorization(value string)
-	Authorization() (value string)
-	PutUser(user User)
-	User() (user User, has bool)
-	Values() (values map[string]interface{})
+	Encode() (value []byte)
+	Decode(value []byte) (ok bool)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newFnsContext(ctx context.Context, log Logs, bus FnBus) Context {
-	return &fnsContext{
-		Context: ctx,
-		parent:  nil,
-		meta:    newFnsContextMeta(),
-		log:     log,
-		bus:     bus,
+func newContext(ctx context.Context, log Logs, discovery Discovery, namespace string, fnName string, authorization string, requestId string) Context {
+	return &fnContext{
+		Context:       ctx,
+		namespace:     namespace,
+		fnName:        fnName,
+		requestId:     requestId,
+		authorization: authorization,
+		user:          nil,
+		log:           log,
+		meta:          newFnsContextMeta(),
+		discovery:     discovery,
 	}
 }
 
-type fnsContext struct {
+type fnContext struct {
 	context.Context
-	parent *fnsContext
-	log    Logs
-	meta   ContextMeta
-	bus    FnBus
+	namespace     string
+	fnName        string
+	requestId     string
+	authorization string
+	user          User
+	meta          ContextMeta
+	log           Logs
+	discovery     Discovery
 }
 
-func (ctx *fnsContext) Log() (log Logs) {
+func (ctx *fnContext) Namespace() (ns string) {
+	ns = ctx.namespace
+	return
+}
+
+func (ctx *fnContext) FnName() (name string) {
+	name = ctx.fnName
+	return
+}
+
+func (ctx *fnContext) RequestId() (id string) {
+	id = ctx.requestId
+	return
+}
+
+func (ctx *fnContext) Authorization() (value string) {
+	value = ctx.authorization
+	return
+}
+
+func (ctx *fnContext) PutUser(user User) {
+	if user == nil {
+		return
+	}
+	ctx.user = user
+	return
+}
+
+func (ctx *fnContext) User() (user User, has bool) {
+	if ctx.user == nil {
+		return
+	}
+	user = ctx.user
+	has = true
+	return
+}
+
+func (ctx *fnContext) Log() (log Logs) {
 	log = ctx.log
 	return
 }
 
-func (ctx *fnsContext) Meta() (meta ContextMeta) {
+func (ctx *fnContext) Meta() (meta ContextMeta) {
 	meta = ctx.meta
 	return
 }
 
-func (ctx *fnsContext) Bus() (bus FnBus) {
-	bus = ctx.bus
+func (ctx *fnContext) Discovery() (discovery Discovery) {
+	discovery = ctx.discovery
 	return
 }
 
-func (ctx *fnsContext) Timeout() (has bool) {
+func (ctx *fnContext) Timeout() (has bool) {
 	deadline, hasDeadline := ctx.Deadline()
 	if !hasDeadline {
 		return
@@ -102,280 +149,200 @@ func (ctx *fnsContext) Timeout() (has bool) {
 	return
 }
 
-func (ctx *fnsContext) WithFnRequest(namespace string, fnName string, requestId string) (fnContext Context) {
-	if ctx.meta.Exists(contextMetaFnRequestIdKey) {
-		panic("context can not with fn request again")
+func (ctx *fnContext) Warp(namespace string, fnName string) (forked Context) {
+	if ctx.requestId == "" {
+		panic("context can not warp, cause no fn request id")
 		return
 	}
-	meta := newFnsContextMetaFromMeta(ctx.meta)
-	meta.Put(contextMetaNamespaceKey, namespace)
-	meta.Put(contextMetaFnNameKey, fnName)
-	meta.Put(contextMetaFnRequestIdKey, requestId)
-	log := LogWith(ctx.Log(), LogF("ns", namespace), LogF("fn", fnName), LogF("rid", requestId))
-	fnContext = &fnsContext{
-		Context: ctx.Context,
-		parent:  ctx,
-		meta:    meta,
-		log:     log,
-		bus:     ctx.bus,
-	}
-	return
-}
-
-func (ctx *fnsContext) WithFnFork(namespace string, fnName string) (forked Context) {
-	if !ctx.meta.Exists(contextMetaFnRequestIdKey) || ctx.parent == nil {
-		panic("context can not with fn fork, cause no fn request id")
-		return
-	}
-	meta := newFnsContextMetaFromMeta(ctx.meta)
-	meta.Put(contextMetaNamespaceKey, namespace)
-	meta.Put(contextMetaFnNameKey, fnName)
-	log := LogWith(ctx.parent.Log(), LogF("ns", namespace), LogF("fn", fnName), LogF("rid", meta.RequestId()))
-	forked = &fnsContext{
-		Context: ctx.Context,
-		parent:  ctx,
-		meta:    meta,
-		log:     log,
-		bus:     ctx.bus,
+	log := LogWith(ctx.log, LogF("ns", namespace), LogF("fn", fnName), LogF("rid", ctx.RequestId()))
+	forked = &fnContext{
+		Context:       ctx.Context,
+		namespace:     namespace,
+		fnName:        fnName,
+		requestId:     ctx.requestId,
+		authorization: ctx.authorization,
+		user:          ctx.user,
+		log:           log,
+		meta:          newFnsContextMetaFromMeta(ctx.meta),
+		discovery:     ctx.discovery,
 	}
 	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-const (
-	contextMetaNamespaceKey     = "__ns"
-	contextMetaFnNameKey        = "__fn"
-	contextMetaFnRequestIdKey   = "__rid"
-	contextMetaUserKey          = "__user"
-	contextMetaAuthorizationKey = "__auth"
-)
-
 func newFnsContextMetaFromMeta(meta ContextMeta) (nm *fnsContextMeta) {
-	values := meta.Values()
-	copied := make(map[string]interface{})
-	for k, v := range values {
-		copied[k] = v
-	}
+	data, _ := meta.MarshalJSON()
 	nm = &fnsContextMeta{
-		values: copied,
+		obj: NewJsonObjectFromBytes(data),
 	}
 	return
 }
 
 func newFnsContextMeta() ContextMeta {
 	return &fnsContextMeta{
-		values: make(map[string]interface{}),
+		obj: NewJsonObject(),
 	}
 }
 
 type fnsContextMeta struct {
-	values map[string]interface{}
+	obj *JsonObject
 }
 
 func (meta *fnsContextMeta) Exists(key string) (has bool) {
-	_, has = meta.values[key]
+	has = meta.obj.Contains(key)
 	return
 }
 
 func (meta *fnsContextMeta) Put(key string, value interface{}) {
-	meta.values[key] = value
+	if key == "" || value == nil {
+		return
+	}
+	_ = meta.obj.Put(key, value)
 }
 
-func (meta *fnsContextMeta) Get(key string) (value interface{}, has bool) {
-	value, has = meta.values[key]
+func (meta *fnsContextMeta) Get(key string, value interface{}) (err error) {
+	if !meta.Exists(key) {
+		err = fmt.Errorf("%s was not found", key)
+		return
+	}
+	getErr := meta.obj.Get(key, value)
+	if getErr != nil {
+		err = fmt.Errorf("get %s failed", key)
+	}
 	return
 }
 
 func (meta *fnsContextMeta) GetString(key string) (value string, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(string)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetInt(key string) (value int, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(int)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetInt32(key string) (value int32, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(int32)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetInt64(key string) (value int64, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(int64)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetFloat32(key string) (value float32, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(float32)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetFloat64(key string) (value float64, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(float64)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetBool(key string) (value bool, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(bool)
-	return
-}
-
-func (meta *fnsContextMeta) GetBytes(key string) (value []byte, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
 		return
 	}
-	value, has = value0.([]byte)
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetTime(key string) (value time.Time, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(time.Time)
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
+		return
+	}
+	has = true
 	return
 }
 
 func (meta *fnsContextMeta) GetDuration(key string) (value time.Duration, has bool) {
-	value0, has0 := meta.values[key]
-	if !has0 {
+	if !meta.Exists(key) {
 		return
 	}
-	value, has = value0.(time.Duration)
-	return
-}
-
-func (meta *fnsContextMeta) Namespace() (ns string) {
-	ns, _ = meta.GetString(contextMetaNamespaceKey)
-	return
-}
-
-func (meta *fnsContextMeta) FnName() (name string) {
-	name, _ = meta.GetString(contextMetaFnNameKey)
-	return
-}
-
-func (meta *fnsContextMeta) RequestId() (id string) {
-	id, _ = meta.GetString(contextMetaFnRequestIdKey)
-	return
-}
-
-func (meta *fnsContextMeta) PutAuthorization(value string) {
-	value = strings.TrimSpace(value)
-	if value == "" {
+	getErr := meta.obj.Get(key, &value)
+	if getErr != nil {
 		return
 	}
-	meta.Put(contextMetaAuthorizationKey, value)
-}
-
-func (meta *fnsContextMeta) Authorization() (value string) {
-	value, _ = meta.GetString(contextMetaAuthorizationKey)
+	has = true
 	return
 }
 
-func (meta *fnsContextMeta) PutUser(user User) {
-	if user == nil {
+func (meta *fnsContextMeta) MarshalJSON() (b []byte, err error) {
+	b = meta.obj.raw
+	return
+}
+
+func (meta *fnsContextMeta) UnmarshalJSON(b []byte) (err error) {
+	meta.obj = NewJsonObjectFromBytes(b)
+	return
+}
+
+func (meta *fnsContextMeta) Encode() (value []byte) {
+	value = Sign(meta.obj.raw)
+	return
+}
+
+func (meta *fnsContextMeta) Decode(value []byte) (ok bool) {
+	if !Verify(value) {
 		return
 	}
-	meta.Put(contextMetaUserKey, user)
+	idx := bytes.LastIndexByte(value, '.')
+	src := value[:idx]
+	meta.obj = NewJsonObjectFromBytes(src)
+	ok = true
 	return
-}
-
-func (meta *fnsContextMeta) User() (user User, has bool) {
-	value0, has0 := meta.values[contextMetaUserKey]
-	if !has0 {
-		return
-	}
-	user, has = value0.(User)
-	return
-}
-
-func (meta *fnsContextMeta) Values() (values map[string]interface{}) {
-	values = meta.values
-	return
-}
-
-func newContextMetaFromJson(data []byte) (meta ContextMeta) {
-	meta = newFnsContextMeta()
-	result := gjson.ParseBytes(data)
-	if !result.Exists() {
-		return
-	}
-	resultMap := result.Map()
-	for key, value := range resultMap {
-		if key == contextMetaNamespaceKey {
-			meta.Put(contextMetaNamespaceKey, value.String())
-			continue
-		}
-		if key == contextMetaFnNameKey {
-			meta.Put(contextMetaFnNameKey, value.String())
-			continue
-		}
-		if key == contextMetaFnRequestIdKey {
-			meta.Put(contextMetaFnRequestIdKey, value.String())
-			continue
-		}
-		if key == contextMetaUserKey {
-			user := NewUser()
-			userErr := user.UnmarshalJSON([]byte(value.Raw))
-			if userErr != nil {
-				panic(fmt.Errorf("decode context user failed, %s, %v", string(value.Raw), userErr))
-			}
-			meta.Put(contextMetaUserKey, user)
-			continue
-		}
-		if key == contextMetaAuthorizationKey {
-			meta.Put(contextMetaAuthorizationKey, value.String())
-			continue
-		}
-		switch value.Type {
-		case gjson.String:
-			meta.Put(key, value.String())
-		case gjson.Number:
-			if strings.Index(value.Raw, ".") > 0 {
-				meta.Put(key, value.Float())
-			} else {
-				meta.Put(key, value.Int())
-			}
-		case gjson.False:
-			meta.Put(key, false)
-		case gjson.True:
-			meta.Put(key, true)
-		default:
-
-		}
-	}
-	return meta
 }

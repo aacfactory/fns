@@ -18,17 +18,14 @@ package fns
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/cluster"
-	"github.com/aacfactory/discovery"
-	"github.com/aacfactory/eventbus"
 	"github.com/valyala/fasthttp"
-	"golang.org/x/crypto/acme/autocert"
+	"net"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -46,8 +43,8 @@ const (
 type Application interface {
 	Deploy(service ...Service)
 	Run(ctx context.Context) (err error)
-	Sync(ctx context.Context) (err error)
-	SyncWithTimeout(ctx context.Context, timeout time.Duration) (err error)
+	Sync()
+	SyncWithTimeout(timeout time.Duration)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -56,13 +53,18 @@ type Option func(*Options) error
 
 var (
 	defaultOptions = &Options{
-		Config: defaultConfigRetrieverOption,
+		Config:         defaultConfigRetrieverOption,
+		RequestHandler: newMappedServiceRequestHandler(),
 	}
 )
 
 type Options struct {
-	Config   ConfigRetrieverOption
-	Log      Logs
+	Config                   ConfigRetrieverOption
+	Log                      Logs
+	HttpRequestConfigBuilder HttpRequestConfigBuilder
+	RequestHandler           ServiceRequestHandler
+	AuthorizationValidator   AuthorizationValidator
+	PermissionValidator      PermissionValidator
 }
 
 func CustomizeLog(logs Logs) Option {
@@ -89,6 +91,46 @@ func FileConfig(path string, format string, active string) Option {
 			Format: format,
 			Store:  store,
 		}
+		return nil
+	}
+}
+
+func CustomizeHttpRequestConfigBuilder(builder HttpRequestConfigBuilder) Option {
+	return func(o *Options) error {
+		if builder == nil {
+			return fmt.Errorf("fns create failed, customize http request config builder is nil")
+		}
+		o.HttpRequestConfigBuilder = builder
+		return nil
+	}
+}
+
+func CustomizeServiceRequestHandler(requestHandler ServiceRequestHandler) Option {
+	return func(o *Options) error {
+		if requestHandler == nil {
+			return fmt.Errorf("fns create failed, customize service request handler is nil")
+		}
+		o.RequestHandler = requestHandler
+		return nil
+	}
+}
+
+func CustomizeAuthorizationValidator(validator AuthorizationValidator) Option {
+	return func(o *Options) error {
+		if validator == nil {
+			return fmt.Errorf("fns create failed, customize authorization validator is nil")
+		}
+		o.AuthorizationValidator = validator
+		return nil
+	}
+}
+
+func CustomizePermissionValidator(validator PermissionValidator) Option {
+	return func(o *Options) error {
+		if validator == nil {
+			return fmt.Errorf("fns create failed, customize permission validator is nil")
+		}
+		o.PermissionValidator = validator
 		return nil
 	}
 }
@@ -126,55 +168,40 @@ func New(options ...Option) (a Application, err error) {
 		return
 	}
 
-	app0 := &app{
-		config:       config,
-		servicesLock: sync.Mutex{},
-		services:     make([]Service, 0, 1),
-	}
-
 	// name
 	name := strings.TrimSpace(appConfig.Name)
 	if name == "" {
 		err = fmt.Errorf("fns create failed, no name in config")
 		return
 	}
-	app0.name = name
-	// tags
-	tags := appConfig.Tags
-	if tags == nil {
-		tags = make([]string, 0, 1)
-	}
-	app0.tags = tags
 
 	// logs
+	var log Logs
 	if opt.Log == nil {
-		log := newLogs(name, appConfig.Log)
-		app0.log = log
+		log = newLogs(name, appConfig.Log)
 	} else {
-		app0.log = opt.Log
+		log = opt.Log
 	}
 
-	// cluster
-	clusterEnabled := appConfig.Cluster.Enable
-	app0.clusterMode = clusterEnabled
-	if clusterEnabled {
-		if clusterRetriever == nil {
-			err = fmt.Errorf("fns create failed, cluster mode is enabled, but cluster retriever was not registered")
-			return
-		}
-		clusterConfig := appConfig.Cluster.Config
-		if clusterConfig == nil || len(clusterConfig) <= 2 {
-			err = fmt.Errorf("fns create failed, cluster mode is enabled, no config of cluster in config")
-			return
-		}
-		c, clusterErr := clusterRetriever(name, tags, clusterConfig)
-		if clusterErr != nil {
-			err = fmt.Errorf("fns create failed, create cluster from retriever failed, %v", clusterErr)
-			return
-		}
-		app0.cluster = c
+	app0 := &app{
+		name:                   name,
+		running:                0,
+		config:                 config,
+		log:                    log,
+		serviceRegistrations:   make(map[string]string),
+		serviceMap:             make(map[string]Service),
+		requestConfigBuilder:   opt.HttpRequestConfigBuilder,
+		requestHandler:         opt.RequestHandler,
+		authorizationValidator: opt.AuthorizationValidator,
+		permissionValidator:    opt.PermissionValidator,
 	}
 
+	// build
+	buildErr := app0.build()
+	if buildErr != nil {
+		err = buildErr
+		return
+	}
 
 	// succeed
 	a = app0
@@ -183,86 +210,321 @@ func New(options ...Option) (a Application, err error) {
 }
 
 type app struct {
-	name         string
-	tags         []string
-	config       Config
-	clusterMode  bool
-	dc      discovery.Discovery
-	servicesLock sync.Mutex
-	services     []Service
-	log          Logs
+	name                   string
+	running                int64
+	config                 Config
+	log                    Logs
+	discovery              Discovery
+	serviceRegistrations   map[string]string
+	serviceMap             map[string]Service
+	ln                     net.Listener
+	server                 *fasthttp.Server
+	requestConfigBuilder   HttpRequestConfigBuilder
+	requestHandler         ServiceRequestHandler
+	authorizationValidator AuthorizationValidator
+	permissionValidator    PermissionValidator
 }
 
 func (a *app) Deploy(services ...Service) {
 	if services == nil || len(services) == 0 {
 		return
 	}
-	a.servicesLock.Lock()
-	defer a.servicesLock.Unlock()
-
 	for _, service := range services {
 		if service == nil {
 			continue
 		}
-		if a.services == nil {
-			a.services = make([]Service, 0, 1)
+		_, has := a.serviceMap[service.Namespace()]
+		if has {
+			panic(fmt.Sprintf("fns deploy service failed for service %s is duplicated", service.Namespace()))
+			return
 		}
-		a.services = append(a.services, service)
+		a.serviceMap[service.Namespace()] = service
 	}
 	return
 }
 
 func (a *app) Run(ctx context.Context) (err error) {
-	servicesErr := a.checkService()
-	if servicesErr != nil {
-		err = servicesErr
-		return
-	}
-	// start services
-	services := a.services
-	failed := false
-	var cause error
-	env := newFnsEnvironment(a.config, a.dc)
-	for _, service := range services {
-		serviceName := service.Name()
-		serviceLog := LogWith(a.log, LogF("service", serviceName))
-		fnsCTX := newFnsContext(ctx, serviceLog, a.eventbus, a.cluster)
-		serviceErr := service.Start(fnsCTX, env)
+
+	// build services
+	for _, service := range a.serviceMap {
+		serviceErr := service.Build(ctx, a.config, a.log)
 		if serviceErr != nil {
-			cause = serviceErr
-			failed = true
-			break
+			err = fmt.Errorf("fns build %s service failed, %v", service.Namespace(), serviceErr)
+			return
 		}
 	}
-	if failed {
-		_ = a.stop(ctx)
-		err = fmt.Errorf("fns run failed, %v", cause)
+	// serve http
+	serveErr := a.serve()
+	if serveErr != nil {
+		err = serveErr
 		return
 	}
-	// ...
-	s := &fasthttp.Server{
-		Handler: a.handleHttpRequest,
-
-		// Every response will contain 'Server: My super server' header.
-		Name: a.name,
-
-		// Other Server settings may be set here.
+	atomic.StoreInt64(&a.running, int64(1))
+	// discovery publish service
+	if a.discovery != nil {
+		for namespace := range a.serviceMap {
+			registrationId, pubErr := a.discovery.Publish(namespace)
+			if pubErr != nil {
+				err = fmt.Errorf("fns publish %s service failed, %v", namespace, pubErr)
+				a.stop(10 * time.Second)
+				return
+			}
+			a.serviceRegistrations[namespace] = registrationId
+		}
 	}
-	s.Serve()
 
 	return
 }
 
-func (a *app) handleHttpRequest(request *fasthttp.RequestCtx)  {
-
-}
-
-func (a *app) Sync(ctx context.Context) (err error) {
-	err = a.SyncWithTimeout(ctx, 10*time.Minute)
+func (a *app) build() (err error) {
+	err = a.buildDiscovery()
+	if err != nil {
+		return
+	}
+	err = a.buildListener()
+	if err != nil {
+		return
+	}
+	err = a.buildHttpServer()
+	if err != nil {
+		return
+	}
 	return
 }
 
-func (a *app) SyncWithTimeout(ctx context.Context, timeout time.Duration) (err error) {
+func (a *app) buildDiscovery() (err error) {
+	// config
+	discoveryConfig := DiscoveryConfig{}
+	hasDiscovery, discoveryConfigErr := a.config.Get("discovery", &discoveryConfig)
+	if !hasDiscovery {
+		return
+	}
+	if discoveryConfigErr != nil {
+		err = fmt.Errorf("fns get discovery config failed, %v", discoveryConfigErr)
+		return
+	}
+
+	if !discoveryConfig.Enable {
+		return
+	}
+
+	retriever, hasRetriever := discoveryRetrieverMap[strings.TrimSpace(discoveryConfig.Kind)]
+	if !hasRetriever || retriever == nil {
+		err = fmt.Errorf("fns build discovery failed for %s kind retriever was not found", discoveryConfig.Kind)
+		return
+	}
+
+	httpConfig := HttpConfig{}
+	hasHttp, httpConfigGetErr := a.config.Get("http", &httpConfig)
+	if !hasHttp {
+		err = fmt.Errorf("fns get http config failed, http was not found")
+		return
+	}
+	if httpConfigGetErr != nil {
+		err = fmt.Errorf("fns get http config failed, %v", httpConfigGetErr)
+		return
+	}
+
+	serverPublicHost := strings.TrimSpace(httpConfig.PublicHost)
+	if serverPublicHost == "" {
+		serverHost := strings.TrimSpace(httpConfig.Host)
+		if serverHost == "" {
+			hostnameIp, getIpErr := IpFromHostname(false)
+			if getIpErr != nil {
+				err = fmt.Errorf("fns get http config failed for can not get ipv4 from hostname, %v", getIpErr)
+				return
+			}
+			serverPublicHost = hostnameIp
+		} else {
+			serverPublicHost = serverHost
+		}
+	}
+	serverPublicPort := httpConfig.PublicPort
+	if serverPublicPort <= 0 {
+		serverPort := httpConfig.Port
+		if serverPort <= 0 {
+			serverPort = 80
+		}
+		serverPublicPort = serverPort
+	}
+	if serverPublicPort < 1 || serverPublicPort > 65535 {
+		err = fmt.Errorf("fns get http config failed for bad public port, %v", serverPublicPort)
+		return
+	}
+	serverPublicAddr := fmt.Sprintf("%s:%d", serverPublicHost, serverPublicPort)
+
+	if httpConfig.SSL.Enable && httpConfig.SSL.Client.Enable {
+		_, clientTLSErr := httpConfig.SSL.Client.Config()
+		if clientTLSErr != nil {
+			err = fmt.Errorf("fns get http config failed for client ssl, %v", clientTLSErr)
+			return
+		}
+	}
+
+	discovery, buildErr := retriever(DiscoveryOption{
+		Address:   serverPublicAddr,
+		ClientTLS: httpConfig.SSL.Client,
+		Config:    discoveryConfig.Config,
+	})
+
+	if buildErr != nil {
+		err = fmt.Errorf("fns build discovery failed, %v", buildErr)
+		return
+	}
+
+	a.discovery = discovery
+
+	return
+}
+
+func (a *app) buildListener() (err error) {
+	// config
+	httpConfig := HttpConfig{}
+	hasHttp, httpConfigGetErr := a.config.Get("http", &httpConfig)
+	if !hasHttp {
+		err = fmt.Errorf("fns get http config failed, http was not found")
+		return
+	}
+	if httpConfigGetErr != nil {
+		err = fmt.Errorf("fns get http config failed, %v", httpConfigGetErr)
+		return
+	}
+	var serverTLS *tls.Config
+	if httpConfig.SSL.Enable {
+		serverTLS, err = httpConfig.SSL.Config()
+		if err != nil {
+			err = fmt.Errorf("fns get http config failed for server ssl, %v", err)
+			return
+		}
+		if httpConfig.SSL.Client.Enable {
+			_, clientTLSErr := httpConfig.SSL.Client.Config()
+			if clientTLSErr != nil {
+				err = fmt.Errorf("fns get http config failed for client ssl, %v", clientTLSErr)
+				return
+			}
+		}
+	}
+	serverHost := strings.TrimSpace(httpConfig.Host)
+	if serverHost == "" {
+		serverHost = "0.0.0.0"
+	}
+	serverPort := httpConfig.Port
+	if serverPort <= 0 {
+		serverPort = 80
+	}
+	if serverPort < 1 || serverPort > 65535 {
+		err = fmt.Errorf("fns get http config failed for bad port, %v", serverPort)
+		return
+	}
+	serverAddr := fmt.Sprintf("%s:%d", serverHost, serverPort)
+
+	var ln net.Listener
+	if serverTLS != nil {
+		ln, err = tls.Listen("tcp", serverAddr, serverTLS)
+	} else {
+		ln, err = net.Listen("tcp", serverAddr)
+	}
+	if err != nil {
+		err = fmt.Errorf("fns build http server failed, %v", err)
+		return
+	}
+
+	a.ln = ln
+	return
+}
+
+func (a *app) buildHttpServer() (err error) {
+	// config
+	httpConfig := HttpConfig{}
+	hasHttp, httpConfigGetErr := a.config.Get("http", &httpConfig)
+	if !hasHttp {
+		err = fmt.Errorf("fns get http config failed, http was not found")
+		return
+	}
+	if httpConfigGetErr != nil {
+		err = fmt.Errorf("fns get http config failed, %v", httpConfigGetErr)
+		return
+	}
+
+	workConfig := WorkConfig{}
+	hasWork, workConfigGetErr := a.config.Get("work", &workConfig)
+	if !hasWork {
+		err = fmt.Errorf("fns get work config failed, work was not found")
+		return
+	}
+	if workConfigGetErr != nil {
+		err = fmt.Errorf("fns get work config failed, %v", workConfigGetErr)
+		return
+	}
+	// server
+	fasthttp.TimeoutHandler()
+	a.server = &fasthttp.Server{
+		Handler:      fasthttp.CompressHandler(a.handleHttpRequest),
+		ReadBufferSize: 64 * KB,
+		ErrorHandler: nil,
+		HeaderReceived: func(header *fasthttp.RequestHeader) (requestConfig fasthttp.RequestConfig) {
+			contentType := string(header.ContentType())
+			namespace := string(header.Peek(httpHeaderNamespace))
+			name := string(header.Peek(httpHeaderFnName))
+			config := a.requestConfigBuilder.Build(contentType, namespace, name)
+			requestConfig.MaxRequestBodySize = config.RequestBodyMaxSize
+			requestConfig.ReadTimeout = config.ReadTimeout
+			requestConfig.WriteTimeout = config.WriteTimeout
+			return
+		},
+		ContinueHandler: nil,
+		Name:                               "FNS",
+		Concurrency:                        workConfig.Concurrency,
+		IdleTimeout:                        time.Duration(workConfig.MaxIdleTimeSecond) * time.Second,
+		MaxConnsPerIP:                      httpConfig.MaxConnectionsPerIP,
+		MaxRequestsPerConn:                 httpConfig.MaxRequestsPerConnection,
+		TCPKeepalive:                       httpConfig.KeepAlive,
+		TCPKeepalivePeriod:                 time.Duration(httpConfig.KeepalivePeriodSecond) * time.Second,
+		ReduceMemoryUsage:                  workConfig.ReduceMemoryUsage,
+		DisablePreParseMultipartForm:       true,
+		SleepWhenConcurrencyLimitsExceeded: 0,
+		NoDefaultDate:                      true,
+		NoDefaultContentType:               true,
+	}
+	return
+}
+
+func (a *app) serve() (err error) {
+
+	errCh := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+
+	go func(a *app, errCh chan error) {
+		serveErr := a.server.Serve(a.ln)
+		if serveErr != nil {
+			errCh <- fmt.Errorf("fns http serve failed, %v", serveErr)
+			close(errCh)
+			a.stop(10 * time.Second)
+		}
+	}(a, errCh)
+	select {
+	case <-ctx.Done():
+		cancel()
+		return
+	case serveErr := <-errCh:
+		cancel()
+		err = serveErr
+		return
+	}
+}
+
+func (a *app) handleHttpRequest(request *fasthttp.RequestCtx) {
+	request.Time()
+
+
+}
+
+func (a *app) Sync() {
+	a.SyncWithTimeout(10 * time.Second)
+	return
+}
+
+func (a *app) SyncWithTimeout(timeout time.Duration) {
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch,
@@ -272,73 +534,42 @@ func (a *app) SyncWithTimeout(ctx context.Context, timeout time.Duration) (err e
 		syscall.SIGKILL,
 		syscall.SIGTERM,
 	)
+	a.stop(timeout)
+	return
+}
 
-	select {
-	case <-ch:
-		cancelCTX, cancel := context.WithTimeout(ctx, timeout)
-		closeCh := make(chan struct{}, 1)
-		go func(ctx context.Context, a *app, closeCh chan struct{}) {
-			_ = a.stop(ctx)
-			closeCh <- struct{}{}
-			close(closeCh)
-		}(cancelCTX, a, closeCh)
-		select {
-		case <-closeCh:
-			cancel()
-			return
-		case <-cancelCTX.Done():
-			err = fmt.Errorf("fns sync timeout")
-			cancel()
-			return
+func (a *app) stop(timeout time.Duration) {
+	if timeout < 10*time.Second {
+		timeout = 10 * time.Second
+	}
+	cancelCTX, cancel := context.WithTimeout(context.TODO(), timeout)
+	closeCh := make(chan struct{}, 1)
+	go func(ctx context.Context, a *app, closeCh chan struct{}) {
+		atomic.StoreInt64(&a.running, int64(0))
+		// un publish
+		if a.discovery != nil {
+			for _, registrationId := range a.serviceRegistrations {
+				_ = a.discovery.UnPublish(registrationId)
+			}
+			a.discovery.Close()
 		}
-	case <-ctx.Done():
+		// http close
+		_ = a.server.Shutdown()
+		// server close
+		for _, service := range a.serviceMap {
+			_ = service.Close(ctx)
+		}
+		// log sync
+		_ = a.log.Sync()
+		closeCh <- struct{}{}
+		close(closeCh)
+	}(cancelCTX, a, closeCh)
+	select {
+	case <-closeCh:
+		cancel()
+		break
+	case <-cancelCTX.Done():
+		cancel()
 		break
 	}
-
-	return
-}
-
-func (a *app) checkService() (err error) {
-	services := a.services
-	if services == nil || len(services) == 0 {
-		err = fmt.Errorf("fns create failed, services is empty")
-		return
-	}
-	for _, s1 := range services {
-		s1Name := strings.TrimSpace(s1.Name())
-		if s1Name == "" {
-			err = fmt.Errorf("fns create failed, has no named service")
-			return
-		}
-		duplicated := false
-		for _, s2 := range services {
-			if s1.Name() == s2.Name() {
-				duplicated = true
-				break
-			}
-		}
-		if duplicated {
-			err = fmt.Errorf("fns run failed, service %s is duplicated", s1.Name())
-		}
-	}
-	// services sort
-	sort.Slice(services, func(i, j int) bool {
-		return services[i].Index() < services[j].Index()
-	})
-	a.services = services
-	return
-}
-
-func (a *app) stop(ctx context.Context) (err error) {
-	services := a.services
-	for _, service := range services {
-		serviceName := service.Name()
-		serviceLog := LogWith(a.log, LogF("service", serviceName))
-		fnsCTX := newFnsContext(ctx, serviceLog, a.eventbus, a.cluster)
-		serviceErr := service.Stop(fnsCTX)
-		if serviceErr != nil {
-			a.log.Warnf("fns stop service %s failed, %v", serviceName, serviceErr)
-		}
-	}
-	return
 }

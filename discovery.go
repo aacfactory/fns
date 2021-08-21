@@ -18,9 +18,6 @@ package fns
 
 import (
 	"encoding/json"
-	"fmt"
-	"github.com/valyala/fasthttp"
-	"time"
 )
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -77,28 +74,4 @@ type Discovery interface {
 	// Close
 	// 关闭
 	Close()
-}
-
-func discoveryRegistrationMapToHttpClient(registrations []Registration) (client FnHttpClient, err error) {
-	lb := &fasthttp.LBClient{
-		Clients: make([]fasthttp.BalancingClient, 0, len(registrations)),
-		Timeout: 30 * time.Second,
-	}
-	for _, registration := range registrations {
-		hostClient := &fasthttp.HostClient{
-			Addr: registration.Address,
-		}
-		if registration.ClientTLS.Enable {
-			hostClient.IsTLS = true
-			tlsConfig, tlcConfigErr := registration.ClientTLS.Config()
-			if tlcConfigErr != nil {
-				err = fmt.Errorf("make client tls config failed, namespace is %s, address is %s", registration.Name, registration.Address)
-				return
-			}
-			hostClient.TLSConfig = tlsConfig
-		}
-		lb.Clients = append(lb.Clients, hostClient)
-	}
-	client = newFastHttpLBFnHttpClient(lb)
-	return
 }

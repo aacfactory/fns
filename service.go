@@ -16,14 +16,57 @@
 
 package fns
 
+import (
+	"context"
+	"fmt"
+)
+
+type ServiceRequestHandler interface {
+	Build(services []Service) (err error)
+	Handle(ctx Context, arg Argument) (result interface{}, err CodeError)
+}
+
+func newMappedServiceRequestHandler() ServiceRequestHandler {
+	return &mappedServiceRequestHandler{
+		serviceMap: make(map[string]Service),
+	}
+}
+
+type mappedServiceRequestHandler struct {
+	serviceMap map[string]Service
+}
+
+func (h *mappedServiceRequestHandler) Build(services []Service) (err error) {
+	if services == nil || len(services) == 0 {
+		err = fmt.Errorf("service request handler build failed for empty services")
+		return
+	}
+	for _, service := range services {
+		if service == nil {
+			continue
+		}
+		h.serviceMap[service.Namespace()] = service
+	}
+	return
+}
+
+func (h *mappedServiceRequestHandler) Handle(ctx Context, arg Argument) (result interface{}, err CodeError) {
+	service, has := h.serviceMap[ctx.Namespace()]
+	if !has {
+		err = NotFoundError(fmt.Sprintf("%s/%s was not found", ctx.Namespace(), ctx.FnName()))
+		return
+	}
+	result, err = service.Handle(ctx, arg)
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 type Service interface {
-	Name() (name string)
-	//Index asc sort key
-	Index() (idx int)
-	Start(context Context, env Environment) (err error)
-	Stop(context Context) (err error)
-
+	Namespace() (namespace string)
+	Build(context context.Context, config Config, log Logs) (err error)
+	Handle(context Context, argument Argument) (result interface{}, err CodeError)
+	Close(context context.Context) (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

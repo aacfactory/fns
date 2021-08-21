@@ -18,6 +18,7 @@ package fns
 
 import (
 	"fmt"
+	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
 	"io/ioutil"
 	"net/http"
@@ -28,9 +29,32 @@ import (
 	"time"
 )
 
+const (
+	httpHeaderNamespace     = "X-Fns-Namespace"
+	httpHeaderFnName        = "X-Fns-Name"
+	httpHeaderRequestId     = "X-Fns-Request-Id"
+	httpHeaderAuthorization = "Authorization"
+)
+
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type FnRequestHandle func(ctx Context, arg Argument) (result interface{}, err error)
+type RequestHeader interface {
+	Get(name string) (value string, has bool)
+}
+
+type httpRequestHeader struct {
+	header *fasthttp.RequestHeader
+}
+
+func (h *httpRequestHeader) Get(name string) (value string, has bool) {
+	v := h.header.Peek(name)
+	if v == nil || len(v) == 0 {
+		return
+	}
+	value = string(v)
+	has = true
+	return
+}
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
@@ -63,10 +87,10 @@ func NewArgument(v interface{}) (arg Argument) {
 	return
 }
 
-func newArgumentFromHttpRequest(request *fasthttp.RequestCtx) (arg Argument, err error) {
-	requestContentType := strings.ToLower(strings.TrimSpace(string(request.Request.Header.ContentType())))
+func newArgumentFromHttpRequest(request *fasthttp.Request) (arg Argument, err error) {
+	requestContentType := strings.ToLower(strings.TrimSpace(string(request.Header.ContentType())))
 	if requestContentType == "application/json" {
-		raw := request.PostBody()
+		raw := request.Body()
 		if !JsonAPI().Valid(raw) {
 			err = fmt.Errorf("request body is not json")
 			return
@@ -600,7 +624,8 @@ func setFnHttpRequestArgumentsFieldWithForm(values []string, field fnArgumentsFi
 
 type Result interface {
 	Scan(v interface{}) (err CodeError)
-	Set(v interface{})
+	Succeed(v interface{})
+	Failed(err CodeError)
 }
 
 func NewResult() (result Result) {
@@ -615,12 +640,21 @@ type futureResult struct {
 }
 
 func (r *futureResult) Scan(v interface{}) (err CodeError) {
+	if v == nil {
+		err = ServiceError("result scan failed for target is nil")
+		return
+	}
+	if reflect.TypeOf(v).Kind() != reflect.Ptr {
+		err = ServiceError("result scan failed for type kind of target is not ptr")
+		return
+	}
+
 	data, ok := <-r.ch
 	if !ok {
 		return
 	}
 
-	if data[0] == '0' {
+	if data[0] == 0 {
 		codeErr, decodeOk := DecodeErrorFromJson(data[1:])
 		if !decodeOk {
 			codeErr = ServiceError("decode code error from result failed")
@@ -636,28 +670,51 @@ func (r *futureResult) Scan(v interface{}) (err CodeError) {
 	return
 }
 
-func (r *futureResult) Set(v interface{}) {
+func (r *futureResult) Succeed(v interface{}) {
 	if v == nil {
 		close(r.ch)
 		return
 	}
-	data := make([]byte, 0, 1)
+	buf := bytebufferpool.Get()
+
 	switch v.(type) {
-	case error:
-		data = append(data, '0')
-		err := v.(error)
-		body := JsonEncode(MapError(err))
-		data = append(data, body...)
-	case CodeError:
-		data = append(data, '0')
-		err := v.(CodeError)
-		body := err.ToJson()
-		data = append(data, body...)
+	case []byte:
+		data := v.([]byte)
+		if len(data) > 0 {
+			_ = buf.WriteByte(1)
+			_, _ = buf.Write(data)
+		} else {
+			_ = buf.WriteByte(0)
+			_, _ = buf.Write(JsonEncode(ServiceError("empty result")))
+		}
 	default:
-		data = append(data, '1')
-		body := JsonEncode(v)
-		data = append(data, body...)
+		data, encodeErr := JsonAPI().Marshal(v)
+		if encodeErr != nil {
+			_ = buf.WriteByte(0)
+			_, _ = buf.Write(JsonEncode(ServiceError("empty result")))
+		} else {
+			_ = buf.WriteByte(1)
+			_, _ = buf.Write(data)
+		}
 	}
-	r.ch <- data
+	r.ch <- buf.Bytes()
 	close(r.ch)
+
+	bytebufferpool.Put(buf)
+}
+
+func (r *futureResult) Failed(err CodeError) {
+	if err == nil {
+		close(r.ch)
+		return
+	}
+	buf := bytebufferpool.Get()
+
+	_ = buf.WriteByte(0)
+	_, _ = buf.Write(JsonEncode(err))
+
+	r.ch <- buf.Bytes()
+	close(r.ch)
+
+	bytebufferpool.Put(buf)
 }

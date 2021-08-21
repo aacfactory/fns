@@ -187,12 +187,9 @@ func (object *JsonObject) Put(path string, v interface{}) (err error) {
 		err = fmt.Errorf("json object set %s failed, value is nil", path)
 		return
 	}
-	raw, encodeErr := JsonAPI().Marshal(v)
-	if encodeErr != nil {
-		err = fmt.Errorf("json object set %s failed, encode value failed", path)
-		return
-	}
-	affected, setErr := sjson.SetRawBytes(object.raw, path, raw)
+
+	affected, setErr := sjson.SetBytes(object.raw, path, v)
+
 	if setErr != nil {
 		err = fmt.Errorf("json object set %s failed", path)
 		return

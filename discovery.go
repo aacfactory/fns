@@ -57,7 +57,7 @@ type DiscoveryOption struct {
 }
 
 // Discovery
-// Fn的注册与发现
+// Fn的注册与发现 rename to ServiceRegister
 type Discovery interface {
 	// Publish
 	// 注册Fn

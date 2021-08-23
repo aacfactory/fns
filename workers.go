@@ -101,7 +101,7 @@ func (handler *fnWorkersUnitHandler) Handle(action string, _payload interface{})
 		}
 		return
 	}
-	// user -> header: X-Fns-User user.Encode()
+	// user -> header: httpHeaderAuthorization
 	// meta -> header: X-Fns-Meta meta.Encode()
 	authorization := strings.TrimSpace(string(request.Header.Peek(httpHeaderAuthorization)))
 

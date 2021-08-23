@@ -33,6 +33,7 @@ import (
 
 type ApplicationConfig struct {
 	Name      string          `json:"name,omitempty"`
+	SecretKey string          `json:"secretKey,omitempty"`
 	Http      HttpConfig      `json:"http,omitempty"`
 	Work      WorkConfig      `json:"work,omitempty"`
 	Log       LogConfig       `json:"log,omitempty"`

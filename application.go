@@ -514,7 +514,7 @@ func (a *app) serve() (err error) {
 }
 
 func (a *app) handleHttpRequest(request *fasthttp.RequestCtx) {
-	request.Time()
+
 
 
 }

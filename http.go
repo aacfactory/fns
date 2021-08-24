@@ -27,30 +27,6 @@ import (
 	"time"
 )
 
-type HttpRequestConfig struct {
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	RequestBodyMaxSize int
-}
-
-type HttpRequestConfigBuilder interface {
-	Build(contentType string, namespace string, fnName string) (config HttpRequestConfig)
-}
-
-type fnHttpRequestConfigBuilder struct {}
-
-func (b *fnHttpRequestConfigBuilder) Build(contentType string, namespace string, fnName string) (config HttpRequestConfig) {
-	if contentType == "multipart/form-data" {
-		config.RequestBodyMaxSize = 512 * MB
-		config.ReadTimeout = 10 * time.Minute
-		config.WriteTimeout = 10 * time.Minute
-	} else {
-		config.RequestBodyMaxSize = 2 * MB
-		config.ReadTimeout = 10 * time.Second
-		config.WriteTimeout = 10 * time.Second
-	}
-	return
-}
 
 // +-------------------------------------------------------------------------------------------------------------------+
 

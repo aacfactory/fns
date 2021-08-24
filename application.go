@@ -17,9 +17,11 @@
 package fns
 
 import (
-	"context"
+	sc "context"
 	"crypto/tls"
 	"fmt"
+	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
 	"net"
 	"os"
@@ -42,102 +44,14 @@ const (
 
 type Application interface {
 	Deploy(service ...Service)
-	Run(ctx context.Context) (err error)
+	Run(ctx sc.Context) (err error)
 	Sync()
 	SyncWithTimeout(timeout time.Duration)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type Option func(*Options) error
-
-var (
-	defaultOptions = &Options{
-		Config:         defaultConfigRetrieverOption,
-		RequestHandler: newMappedServiceRequestHandler(),
-	}
-)
-
-type Options struct {
-	Config                   ConfigRetrieverOption
-	Log                      Logs
-	HttpRequestConfigBuilder HttpRequestConfigBuilder
-	RequestHandler           ServiceRequestHandler
-	AuthorizationValidator   AuthorizationValidator
-	PermissionValidator      PermissionValidator
-}
-
-func CustomizeLog(logs Logs) Option {
-	return func(o *Options) error {
-		if logs == nil {
-			return fmt.Errorf("fns create failed, customize log is nil")
-		}
-		o.Log = logs
-		return nil
-	}
-}
-
-func FileConfig(path string, format string, active string) Option {
-	return func(o *Options) error {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			return fmt.Errorf("fns create file config failed, path is empty")
-		}
-		active = strings.TrimSpace(active)
-		format = strings.ToUpper(strings.TrimSpace(format))
-		store := NewConfigFileStore(path)
-		o.Config = ConfigRetrieverOption{
-			Active: active,
-			Format: format,
-			Store:  store,
-		}
-		return nil
-	}
-}
-
-func CustomizeHttpRequestConfigBuilder(builder HttpRequestConfigBuilder) Option {
-	return func(o *Options) error {
-		if builder == nil {
-			return fmt.Errorf("fns create failed, customize http request config builder is nil")
-		}
-		o.HttpRequestConfigBuilder = builder
-		return nil
-	}
-}
-
-func CustomizeServiceRequestHandler(requestHandler ServiceRequestHandler) Option {
-	return func(o *Options) error {
-		if requestHandler == nil {
-			return fmt.Errorf("fns create failed, customize service request handler is nil")
-		}
-		o.RequestHandler = requestHandler
-		return nil
-	}
-}
-
-func CustomizeAuthorizationValidator(validator AuthorizationValidator) Option {
-	return func(o *Options) error {
-		if validator == nil {
-			return fmt.Errorf("fns create failed, customize authorization validator is nil")
-		}
-		o.AuthorizationValidator = validator
-		return nil
-	}
-}
-
-func CustomizePermissionValidator(validator PermissionValidator) Option {
-	return func(o *Options) error {
-		if validator == nil {
-			return fmt.Errorf("fns create failed, customize permission validator is nil")
-		}
-		o.PermissionValidator = validator
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func New(options ...Option) (a Application, err error) {
+func New(options ...Option) (app Application, err error) {
 	opt := defaultOptions
 	if options != nil {
 		for _, option := range options {
@@ -149,7 +63,7 @@ func New(options ...Option) (a Application, err error) {
 		}
 	}
 
-	configRetriever, configRetrieverErr := NewConfigRetriever(opt.Config)
+	configRetriever, configRetrieverErr := NewConfigRetriever(opt.ConfigRetrieverOption)
 	if configRetrieverErr != nil {
 		err = configRetrieverErr
 		return
@@ -204,19 +118,17 @@ func New(options ...Option) (a Application, err error) {
 	}
 
 	// succeed
-	a = app0
+	app = app0
 
 	return
 }
 
-type app struct {
+type application struct {
 	name                   string
 	running                int64
-	config                 Config
-	log                    Logs
-	discovery              Discovery
-	serviceRegistrations   map[string]string
-	serviceMap             map[string]Service
+	config                 configuares.Config
+	log                    logs.Logger
+	serviceCenter          ServiceCenter
 	ln                     net.Listener
 	server                 *fasthttp.Server
 	requestConfigBuilder   HttpRequestConfigBuilder
@@ -225,7 +137,7 @@ type app struct {
 	permissionValidator    PermissionValidator
 }
 
-func (a *app) Deploy(services ...Service) {
+func (app *application) Deploy(services ...Service) {
 	if services == nil || len(services) == 0 {
 		return
 	}
@@ -233,69 +145,69 @@ func (a *app) Deploy(services ...Service) {
 		if service == nil {
 			continue
 		}
-		_, has := a.serviceMap[service.Namespace()]
+		_, has := app.serviceMap[service.Namespace()]
 		if has {
 			panic(fmt.Sprintf("fns deploy service failed for service %s is duplicated", service.Namespace()))
 			return
 		}
-		a.serviceMap[service.Namespace()] = service
+		app.serviceMap[service.Namespace()] = service
 	}
 	return
 }
 
-func (a *app) Run(ctx context.Context) (err error) {
+func (app *application) Run(ctx sc.Context) (err error) {
 
 	// build services
-	for _, service := range a.serviceMap {
-		serviceErr := service.Build(ctx, a.config, a.log)
+	for _, service := range app.serviceMap {
+		serviceErr := service.Build(ctx, app.config, app.log)
 		if serviceErr != nil {
 			err = fmt.Errorf("fns build %s service failed, %v", service.Namespace(), serviceErr)
 			return
 		}
 	}
 	// serve http
-	serveErr := a.serve()
+	serveErr := app.serve()
 	if serveErr != nil {
 		err = serveErr
 		return
 	}
-	atomic.StoreInt64(&a.running, int64(1))
+	atomic.StoreInt64(&app.running, int64(1))
 	// discovery publish service
-	if a.discovery != nil {
-		for namespace := range a.serviceMap {
-			registrationId, pubErr := a.discovery.Publish(namespace)
+	if app.discovery != nil {
+		for namespace := range app.serviceMap {
+			registrationId, pubErr := app.discovery.Publish(namespace)
 			if pubErr != nil {
 				err = fmt.Errorf("fns publish %s service failed, %v", namespace, pubErr)
-				a.stop(10 * time.Second)
+				app.stop(10 * time.Second)
 				return
 			}
-			a.serviceRegistrations[namespace] = registrationId
+			app.serviceRegistrations[namespace] = registrationId
 		}
 	}
 
 	return
 }
 
-func (a *app) build() (err error) {
-	err = a.buildDiscovery()
+func (app *application) build() (err error) {
+	err = app.buildDiscovery()
 	if err != nil {
 		return
 	}
-	err = a.buildListener()
+	err = app.buildListener()
 	if err != nil {
 		return
 	}
-	err = a.buildHttpServer()
+	err = app.buildHttpServer()
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (a *app) buildDiscovery() (err error) {
+func (app *application) buildDiscovery() (err error) {
 	// config
 	discoveryConfig := DiscoveryConfig{}
-	hasDiscovery, discoveryConfigErr := a.config.Get("discovery", &discoveryConfig)
+	hasDiscovery, discoveryConfigErr := app.config.Get("discovery", &discoveryConfig)
 	if !hasDiscovery {
 		return
 	}
@@ -315,7 +227,7 @@ func (a *app) buildDiscovery() (err error) {
 	}
 
 	httpConfig := HttpConfig{}
-	hasHttp, httpConfigGetErr := a.config.Get("http", &httpConfig)
+	hasHttp, httpConfigGetErr := app.config.Get("http", &httpConfig)
 	if !hasHttp {
 		err = fmt.Errorf("fns get http config failed, http was not found")
 		return
@@ -372,15 +284,15 @@ func (a *app) buildDiscovery() (err error) {
 		return
 	}
 
-	a.discovery = discovery
+	app.discovery = discovery
 
 	return
 }
 
-func (a *app) buildListener() (err error) {
+func (app *application) buildListener() (err error) {
 	// config
 	httpConfig := HttpConfig{}
-	hasHttp, httpConfigGetErr := a.config.Get("http", &httpConfig)
+	hasHttp, httpConfigGetErr := app.config.Get("http", &httpConfig)
 	if !hasHttp {
 		err = fmt.Errorf("fns get http config failed, http was not found")
 		return
@@ -429,14 +341,14 @@ func (a *app) buildListener() (err error) {
 		return
 	}
 
-	a.ln = ln
+	app.ln = ln
 	return
 }
 
-func (a *app) buildHttpServer() (err error) {
+func (app *application) buildHttpServer() (err error) {
 	// config
 	httpConfig := HttpConfig{}
-	hasHttp, httpConfigGetErr := a.config.Get("http", &httpConfig)
+	hasHttp, httpConfigGetErr := app.config.Get("http", &httpConfig)
 	if !hasHttp {
 		err = fmt.Errorf("fns get http config failed, http was not found")
 		return
@@ -447,7 +359,7 @@ func (a *app) buildHttpServer() (err error) {
 	}
 
 	workConfig := WorkConfig{}
-	hasWork, workConfigGetErr := a.config.Get("work", &workConfig)
+	hasWork, workConfigGetErr := app.config.Get("work", &workConfig)
 	if !hasWork {
 		err = fmt.Errorf("fns get work config failed, work was not found")
 		return
@@ -458,21 +370,21 @@ func (a *app) buildHttpServer() (err error) {
 	}
 	// server
 	fasthttp.TimeoutHandler()
-	a.server = &fasthttp.Server{
-		Handler:      fasthttp.CompressHandler(a.handleHttpRequest),
+	app.server = &fasthttp.Server{
+		Handler:        fasthttp.CompressHandler(app.handleHttpRequest),
 		ReadBufferSize: 64 * KB,
-		ErrorHandler: nil,
+		ErrorHandler:   nil,
 		HeaderReceived: func(header *fasthttp.RequestHeader) (requestConfig fasthttp.RequestConfig) {
 			contentType := string(header.ContentType())
 			namespace := string(header.Peek(httpHeaderNamespace))
 			name := string(header.Peek(httpHeaderFnName))
-			config := a.requestConfigBuilder.Build(contentType, namespace, name)
+			config := app.requestConfigBuilder.Build(contentType, namespace, name)
 			requestConfig.MaxRequestBodySize = config.RequestBodyMaxSize
 			requestConfig.ReadTimeout = config.ReadTimeout
 			requestConfig.WriteTimeout = config.WriteTimeout
 			return
 		},
-		ContinueHandler: nil,
+		ContinueHandler:                    nil,
 		Name:                               "FNS",
 		Concurrency:                        workConfig.Concurrency,
 		IdleTimeout:                        time.Duration(workConfig.MaxIdleTimeSecond) * time.Second,
@@ -489,7 +401,7 @@ func (a *app) buildHttpServer() (err error) {
 	return
 }
 
-func (a *app) serve() (err error) {
+func (app *application) serve() (err error) {
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
@@ -501,7 +413,7 @@ func (a *app) serve() (err error) {
 			close(errCh)
 			a.stop(10 * time.Second)
 		}
-	}(a, errCh)
+	}(app, errCh)
 	select {
 	case <-ctx.Done():
 		cancel()
@@ -513,18 +425,16 @@ func (a *app) serve() (err error) {
 	}
 }
 
-func (a *app) handleHttpRequest(request *fasthttp.RequestCtx) {
-
-
+func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 
 }
 
-func (a *app) Sync() {
-	a.SyncWithTimeout(10 * time.Second)
+func (app *application) Sync() {
+	app.SyncWithTimeout(10 * time.Second)
 	return
 }
 
-func (a *app) SyncWithTimeout(timeout time.Duration) {
+func (app *application) SyncWithTimeout(timeout time.Duration) {
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch,
@@ -534,17 +444,17 @@ func (a *app) SyncWithTimeout(timeout time.Duration) {
 		syscall.SIGKILL,
 		syscall.SIGTERM,
 	)
-	a.stop(timeout)
+	app.stop(timeout)
 	return
 }
 
-func (a *app) stop(timeout time.Duration) {
+func (app *application) stop(timeout time.Duration) {
 	if timeout < 10*time.Second {
 		timeout = 10 * time.Second
 	}
-	cancelCTX, cancel := context.WithTimeout(context.TODO(), timeout)
+	cancelCTX, cancel := sc.WithTimeout(sc.TODO(), timeout)
 	closeCh := make(chan struct{}, 1)
-	go func(ctx context.Context, a *app, closeCh chan struct{}) {
+	go func(ctx sc.Context, a *application, closeCh chan struct{}) {
 		atomic.StoreInt64(&a.running, int64(0))
 		// un publish
 		if a.discovery != nil {
@@ -563,7 +473,7 @@ func (a *app) stop(timeout time.Duration) {
 		_ = a.log.Sync()
 		closeCh <- struct{}{}
 		close(closeCh)
-	}(cancelCTX, a, closeCh)
+	}(cancelCTX, app, closeCh)
 	select {
 	case <-closeCh:
 		cancel()

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-package fns
+package commons
+
 
 import (
 	"fmt"
@@ -49,10 +50,17 @@ func ParseTime(value string) (result time.Time, err error) {
 		return
 	}
 	if len(value) > 19 && strings.IndexByte(value, 'T') > 0 && strings.IndexByte(value, 'Z') > 0 {
-		// ISO8601
-		result, err = time.Parse("2006-01-02T15:04:05.000Z0700", value)
+		if strings.IndexByte(value, 'T') > 0 && strings.IndexByte(value, 'Z') > 0 {
+			// ISO8601
+			result, err = time.Parse("2006-01-02T15:04:05.000Z0700", value)
+		} else {
+			result, err = time.Parse("2006-01-02 15:04:05.999999999-07:00", value)
+
+		}
 		return
 	}
+
 	err = fmt.Errorf("parse %s to time failed, layout is not supported", value)
+
 	return
 }

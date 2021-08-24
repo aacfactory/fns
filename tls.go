@@ -23,6 +23,9 @@ import (
 	"fmt"
 )
 
+
+// todo: move into app config
+
 // ClientTLS
 // Fn的客户端TLS信息
 type ClientTLS struct {

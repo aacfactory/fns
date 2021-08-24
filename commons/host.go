@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package fns
+package commons
 
 import (
 	"fmt"
@@ -22,7 +22,8 @@ import (
 	"os"
 )
 
-//IpFromHostname 通过host获取ip列表中的第一个
+// IpFromHostname
+// 通过host获取ip列表中的第一个
 func IpFromHostname(enableIpV6 bool) (ip string, err error) {
 	hostname, has := os.LookupEnv("HOSTNAME")
 	if !has {

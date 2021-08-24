@@ -16,28 +16,22 @@
 
 package fns
 
-import "sync"
+import (
+	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/errors"
+	"time"
+)
 
-func NewSyncBool() *SyncBool {
-	return &SyncBool{
-		lock: sync.RWMutex{},
-		v:    false,
-	}
+type HookUnit struct {
+	Namespace    string
+	FnName       string
+	RequestSize  int64
+	ResponseSize int64
+	Latency      time.Duration
+	Error        errors.CodeError
 }
 
-type SyncBool struct {
-	lock sync.RWMutex
-	v    bool
-}
-
-func (s *SyncBool) Set(v bool) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.v = v
-}
-
-func (s *SyncBool) Get() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.v
+type Hook interface {
+	Build(config configuares.Config) (err error)
+	Handle(unit HookUnit) (err error)
 }

@@ -17,7 +17,6 @@
 package fns
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"os"
@@ -49,44 +48,59 @@ func defaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ApplicationConfig struct {
-	Name      string          `json:"name,omitempty"`
-	SecretKey string          `json:"secretKey,omitempty"`
-	Http      HttpConfig      `json:"http,omitempty"`
-	Workers   WorkersConfig   `json:"workers,omitempty"`
-	Log       LogConfig       `json:"log,omitempty"`
-	Discovery DiscoveryConfig `json:"discovery,omitempty"`
+	Name      string         `json:"name,omitempty"`
+	SecretKey string         `json:"secretKey,omitempty"`
+	Http      HttpConfig     `json:"http,omitempty"`
+	Log       LogConfig      `json:"log,omitempty"`
+	Services  ServicesConfig `json:"services,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HttpConfig struct {
-	Host                     string    `json:"host,omitempty"`
-	Port                     int       `json:"port,omitempty"`
-	PublicHost               string    `json:"publicHost,omitempty"`
-	PublicPort               int       `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int       `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int       `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool      `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int       `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int       `json:"requestTimeoutSeconds,omitempty"`
-	WhiteCIDR                []string  `json:"whiteCIDR,omitempty"`
-	SSL                      ServerTLS `json:"ssl,omitempty"`
+	Host                     string   `json:"host,omitempty"`
+	Port                     int      `json:"port,omitempty"`
+	PublicHost               string   `json:"publicHost,omitempty"`
+	PublicPort               int      `json:"publicPort,omitempty"`
+	MaxConnectionsPerIP      int      `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int      `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool     `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int      `json:"keepalivePeriodSecond,omitempty"`
+	RequestTimeoutSeconds    int      `json:"requestTimeoutSeconds,omitempty"`
+	WhiteCIDR                []string `json:"whiteCIDR,omitempty"`
+	requestConfigBuilder     ServiceRequestConfigBuilder
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type WorkersConfig struct {
-	Concurrency       int `json:"concurrency,omitempty"`
-	MaxIdleTimeSecond int `json:"maxIdleTimeSecond,omitempty"`
-	// Aggressively reduces memory usage at the cost of higher CPU usage
-	// if set to true.
-	//
-	// Try enabling this option only if the server consumes too much memory
-	// serving mostly idle keep-alive connections. This may reduce memory
-	// usage by more than 50%.
-	//
-	// Aggressive memory usage reduction is disabled by default.
-	ReduceMemoryUsage bool `json:"reduceMemoryUsage,omitempty"`
+type ServicesConfig struct {
+	Concurrency       int                  `json:"concurrency,omitempty"`
+	MaxIdleTimeSecond int                  `json:"maxIdleTimeSecond,omitempty"`
+	ReduceMemoryUsage bool                 `json:"reduceMemoryUsage,omitempty"`
+	Discovery         DiscoveryConfig      `json:"discovery,omitempty"`
+	Authorization     AuthorizationsConfig `json:"authorization,omitempty"`
+	Permission        PermissionsConfig    `json:"permission,omitempty"`
+	serverId          string
+	address           string
+	version           string
+}
+
+type DiscoveryConfig struct {
+	Enable bool            `json:"enable,omitempty"`
+	Kind   string          `json:"kind,omitempty"`
+	Config configuares.Raw `json:"config,omitempty"`
+}
+
+type AuthorizationsConfig struct {
+	Enable bool            `json:"enable,omitempty"`
+	Kind   string          `json:"kind,omitempty"`
+	Config configuares.Raw `json:"config,omitempty"`
+}
+
+type PermissionsConfig struct {
+	Enable bool            `json:"enable,omitempty"`
+	Kind   string          `json:"kind,omitempty"`
+	Config configuares.Raw `json:"config,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -94,12 +108,5 @@ type WorkersConfig struct {
 type LogConfig struct {
 	Level     string `json:"level,omitempty"`
 	Formatter string `json:"formatter,omitempty"`
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type DiscoveryConfig struct {
-	Enable bool            `json:"enable,omitempty"`
-	Kind   string          `json:"kind,omitempty"`
-	Config json.RawMessage `json:"config,omitempty"`
+	Color     bool   `json:"color,omitempty"`
 }

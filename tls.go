@@ -23,8 +23,7 @@ import (
 	"fmt"
 )
 
-
-// todo: move into app config
+// todo: move into project fnp
 
 // ClientTLS
 // Fn的客户端TLS信息

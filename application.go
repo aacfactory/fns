@@ -18,9 +18,10 @@ package fns
 
 import (
 	sc "context"
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
 	"net"
@@ -63,7 +64,7 @@ func New(options ...Option) (app Application, err error) {
 		}
 	}
 
-	configRetriever, configRetrieverErr := NewConfigRetriever(opt.ConfigRetrieverOption)
+	configRetriever, configRetrieverErr := configuares.NewRetriever(opt.ConfigRetrieverOption)
 	if configRetrieverErr != nil {
 		err = configRetrieverErr
 		return
@@ -75,8 +76,8 @@ func New(options ...Option) (app Application, err error) {
 		return
 	}
 
-	appConfig := &ApplicationConfig{}
-	mappingErr := config.As(appConfig)
+	appConfig := ApplicationConfig{}
+	mappingErr := config.As(&appConfig)
 	if mappingErr != nil {
 		err = mappingErr
 		return
@@ -90,28 +91,52 @@ func New(options ...Option) (app Application, err error) {
 	}
 
 	// logs
-	var log Logs
-	if opt.Log == nil {
-		log = newLogs(name, appConfig.Log)
-	} else {
-		log = opt.Log
+	logFormatter := logs.ConsoleFormatter
+	logFormatterValue := strings.ToLower(strings.TrimSpace(appConfig.Log.Formatter))
+	if logFormatterValue == "json" {
+		logFormatter = logs.JsonFormatter
+	}
+	logLevel := logs.InfoLevel
+	logLevelValue := strings.ToLower(strings.TrimSpace(appConfig.Log.Level))
+	if logLevelValue == "debug" {
+		logLevel = logs.DebugLevel
+	} else if logLevelValue == "info" {
+		logLevel = logs.InfoLevel
+	} else if logLevelValue == "warn" {
+		logLevel = logs.WarnLevel
+	} else if logLevelValue == "error" {
+		logLevel = logs.ErrorLevel
 	}
 
-	app0 := &app{
-		name:                   name,
-		running:                0,
-		config:                 config,
-		log:                    log,
-		serviceRegistrations:   make(map[string]string),
-		serviceMap:             make(map[string]Service),
-		requestConfigBuilder:   opt.HttpRequestConfigBuilder,
-		requestHandler:         opt.RequestHandler,
-		authorizationValidator: opt.AuthorizationValidator,
-		permissionValidator:    opt.PermissionValidator,
+	log, logErr := logs.New(
+		logs.WithFormatter(logFormatter),
+		logs.Name(name),
+		logs.WithLevel(logLevel),
+		logs.Writer(os.Stdout),
+		logs.Color(appConfig.Log.Color),
+	)
+
+	if logErr != nil {
+		err = logErr
+		return
+	}
+
+	app0 := &application{
+		id:         UID(),
+		name:       name,
+		version:    opt.Version,
+		address:    "",
+		running:    0,
+		config:     config,
+		log:        log,
+		serviceMap: make(map[string]Service),
+		svc:        nil,
+		ln:         nil,
+		server:     nil,
 	}
 
 	// build
-	buildErr := app0.build()
+	buildErr := app0.build(appConfig)
 	if buildErr != nil {
 		err = buildErr
 		return
@@ -124,17 +149,17 @@ func New(options ...Option) (app Application, err error) {
 }
 
 type application struct {
-	name                   string
-	running                int64
-	config                 configuares.Config
-	log                    logs.Logger
-	serviceCenter          ServiceCenter
-	ln                     net.Listener
-	server                 *fasthttp.Server
-	requestConfigBuilder   HttpRequestConfigBuilder
-	requestHandler         ServiceRequestHandler
-	authorizationValidator AuthorizationValidator
-	permissionValidator    PermissionValidator
+	id         string
+	name       string
+	version    string
+	address    string
+	running    int64
+	config     configuares.Config
+	log        logs.Logger
+	serviceMap map[string]Service
+	svc        Services
+	ln         net.Listener
+	server     *fasthttp.Server
 }
 
 func (app *application) Deploy(services ...Service) {
@@ -159,9 +184,9 @@ func (app *application) Run(ctx sc.Context) (err error) {
 
 	// build services
 	for _, service := range app.serviceMap {
-		serviceErr := service.Build(ctx, app.config, app.log)
+		serviceErr := service.Build(app.config)
 		if serviceErr != nil {
-			err = fmt.Errorf("fns build %s service failed, %v", service.Namespace(), serviceErr)
+			err = fmt.Errorf("fns Run: build %s service failed, %v", service.Namespace(), serviceErr)
 			return
 		}
 	}
@@ -169,153 +194,68 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	serveErr := app.serve()
 	if serveErr != nil {
 		err = serveErr
+		err = fmt.Errorf("fns Run: start http server failed, %v", serveErr)
 		return
+	}
+	// mount
+	for _, service := range app.serviceMap {
+		mountErr := app.svc.Mount(service)
+		if mountErr != nil {
+			err = fmt.Errorf("fns Run: mount %s service failed, %v", service.Namespace(), mountErr)
+			app.stop(10 * time.Second)
+			return
+		}
+		delete(app.serviceMap, service.Namespace())
 	}
 	atomic.StoreInt64(&app.running, int64(1))
-	// discovery publish service
-	if app.discovery != nil {
-		for namespace := range app.serviceMap {
-			registrationId, pubErr := app.discovery.Publish(namespace)
-			if pubErr != nil {
-				err = fmt.Errorf("fns publish %s service failed, %v", namespace, pubErr)
-				app.stop(10 * time.Second)
-				return
-			}
-			app.serviceRegistrations[namespace] = registrationId
-		}
+
+	return
+}
+
+func (app *application) build(config ApplicationConfig) (err error) {
+
+	err = app.buildListener(config)
+	if err != nil {
+		return
+	}
+
+	err = app.buildHttpServer(config)
+	if err != nil {
+		return
+	}
+
+	err = app.buildServices(config)
+	if err != nil {
+		return
 	}
 
 	return
 }
 
-func (app *application) build() (err error) {
-	err = app.buildDiscovery()
-	if err != nil {
-		return
-	}
-	err = app.buildListener()
-	if err != nil {
-		return
-	}
-	err = app.buildHttpServer()
-	if err != nil {
-		return
-	}
-	return
-}
+func (app *application) buildServices(_config ApplicationConfig) (err error) {
 
-func (app *application) buildDiscovery() (err error) {
-	// config
-	discoveryConfig := DiscoveryConfig{}
-	hasDiscovery, discoveryConfigErr := app.config.Get("discovery", &discoveryConfig)
-	if !hasDiscovery {
-		return
-	}
-	if discoveryConfigErr != nil {
-		err = fmt.Errorf("fns get discovery config failed, %v", discoveryConfigErr)
-		return
-	}
+	config := _config.Services
+	config.serverId = app.id
+	config.address = app.address
+	config.version = app.version
 
-	if !discoveryConfig.Enable {
-		return
-	}
+	svc := &services{}
 
-	retriever, hasRetriever := discoveryRetrieverMap[strings.TrimSpace(discoveryConfig.Kind)]
-	if !hasRetriever || retriever == nil {
-		err = fmt.Errorf("fns build discovery failed for %s kind retriever was not found", discoveryConfig.Kind)
-		return
-	}
-
-	httpConfig := HttpConfig{}
-	hasHttp, httpConfigGetErr := app.config.Get("http", &httpConfig)
-	if !hasHttp {
-		err = fmt.Errorf("fns get http config failed, http was not found")
-		return
-	}
-	if httpConfigGetErr != nil {
-		err = fmt.Errorf("fns get http config failed, %v", httpConfigGetErr)
-		return
-	}
-
-	serverPublicHost := strings.TrimSpace(httpConfig.PublicHost)
-	if serverPublicHost == "" {
-		serverHost := strings.TrimSpace(httpConfig.Host)
-		if serverHost == "" {
-			hostnameIp, getIpErr := IpFromHostname(false)
-			if getIpErr != nil {
-				err = fmt.Errorf("fns get http config failed for can not get ipv4 from hostname, %v", getIpErr)
-				return
-			}
-			serverPublicHost = hostnameIp
-		} else {
-			serverPublicHost = serverHost
-		}
-	}
-	serverPublicPort := httpConfig.PublicPort
-	if serverPublicPort <= 0 {
-		serverPort := httpConfig.Port
-		if serverPort <= 0 {
-			serverPort = 80
-		}
-		serverPublicPort = serverPort
-	}
-	if serverPublicPort < 1 || serverPublicPort > 65535 {
-		err = fmt.Errorf("fns get http config failed for bad public port, %v", serverPublicPort)
-		return
-	}
-	serverPublicAddr := fmt.Sprintf("%s:%d", serverPublicHost, serverPublicPort)
-
-	if httpConfig.SSL.Enable && httpConfig.SSL.Client.Enable {
-		_, clientTLSErr := httpConfig.SSL.Client.Config()
-		if clientTLSErr != nil {
-			err = fmt.Errorf("fns get http config failed for client ssl, %v", clientTLSErr)
-			return
-		}
-	}
-
-	discovery, buildErr := retriever(DiscoveryOption{
-		Address:   serverPublicAddr,
-		ClientTLS: httpConfig.SSL.Client,
-		Config:    discoveryConfig.Config,
-	})
-
+	buildErr := svc.Build(config)
 	if buildErr != nil {
-		err = fmt.Errorf("fns build discovery failed, %v", buildErr)
+		err = buildErr
 		return
 	}
 
-	app.discovery = discovery
+	app.svc = svc
 
 	return
 }
 
-func (app *application) buildListener() (err error) {
+func (app *application) buildListener(_config ApplicationConfig) (err error) {
 	// config
-	httpConfig := HttpConfig{}
-	hasHttp, httpConfigGetErr := app.config.Get("http", &httpConfig)
-	if !hasHttp {
-		err = fmt.Errorf("fns get http config failed, http was not found")
-		return
-	}
-	if httpConfigGetErr != nil {
-		err = fmt.Errorf("fns get http config failed, %v", httpConfigGetErr)
-		return
-	}
-	var serverTLS *tls.Config
-	if httpConfig.SSL.Enable {
-		serverTLS, err = httpConfig.SSL.Config()
-		if err != nil {
-			err = fmt.Errorf("fns get http config failed for server ssl, %v", err)
-			return
-		}
-		if httpConfig.SSL.Client.Enable {
-			_, clientTLSErr := httpConfig.SSL.Client.Config()
-			if clientTLSErr != nil {
-				err = fmt.Errorf("fns get http config failed for client ssl, %v", clientTLSErr)
-				return
-			}
-		}
-	}
+	httpConfig := _config.Http
+
 	serverHost := strings.TrimSpace(httpConfig.Host)
 	if serverHost == "" {
 		serverHost = "0.0.0.0"
@@ -330,83 +270,60 @@ func (app *application) buildListener() (err error) {
 	}
 	serverAddr := fmt.Sprintf("%s:%d", serverHost, serverPort)
 
-	var ln net.Listener
-	if serverTLS != nil {
-		ln, err = tls.Listen("tcp", serverAddr, serverTLS)
-	} else {
-		ln, err = net.Listen("tcp", serverAddr)
-	}
-	if err != nil {
-		err = fmt.Errorf("fns build http server failed, %v", err)
+	ln, lnErr := net.Listen("tcp", serverAddr)
+	if lnErr != nil {
+		err = fmt.Errorf("fns build http server failed, %v", lnErr)
 		return
 	}
 
 	app.ln = ln
+	app.address = serverAddr
+
 	return
 }
 
-func (app *application) buildHttpServer() (err error) {
+func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	// config
-	httpConfig := HttpConfig{}
-	hasHttp, httpConfigGetErr := app.config.Get("http", &httpConfig)
-	if !hasHttp {
-		err = fmt.Errorf("fns get http config failed, http was not found")
-		return
-	}
-	if httpConfigGetErr != nil {
-		err = fmt.Errorf("fns get http config failed, %v", httpConfigGetErr)
-		return
-	}
+	config := _config.Http
+	concurrency := _config.Services.Concurrency
+	reduceMemoryUsage := _config.Services.ReduceMemoryUsage
+	maxIdleTimeSecond := _config.Services.MaxIdleTimeSecond
 
-	workConfig := WorkConfig{}
-	hasWork, workConfigGetErr := app.config.Get("work", &workConfig)
-	if !hasWork {
-		err = fmt.Errorf("fns get work config failed, work was not found")
-		return
-	}
-	if workConfigGetErr != nil {
-		err = fmt.Errorf("fns get work config failed, %v", workConfigGetErr)
-		return
-	}
 	// server
-	fasthttp.TimeoutHandler()
 	app.server = &fasthttp.Server{
 		Handler:        fasthttp.CompressHandler(app.handleHttpRequest),
 		ReadBufferSize: 64 * KB,
-		ErrorHandler:   nil,
-		HeaderReceived: func(header *fasthttp.RequestHeader) (requestConfig fasthttp.RequestConfig) {
-			contentType := string(header.ContentType())
-			namespace := string(header.Peek(httpHeaderNamespace))
-			name := string(header.Peek(httpHeaderFnName))
-			config := app.requestConfigBuilder.Build(contentType, namespace, name)
-			requestConfig.MaxRequestBodySize = config.RequestBodyMaxSize
-			requestConfig.ReadTimeout = config.ReadTimeout
-			requestConfig.WriteTimeout = config.WriteTimeout
-			return
+		ErrorHandler: func(ctx *fasthttp.RequestCtx, err error) {
+			ctx.ResetBody()
+			ctx.SetStatusCode(555)
+			p, _ := json.Marshal(errors.New(555, "***NON EXHAUSTIVE***", err.Error()))
+			ctx.SetBody(p)
 		},
 		ContinueHandler:                    nil,
 		Name:                               "FNS",
-		Concurrency:                        workConfig.Concurrency,
-		IdleTimeout:                        time.Duration(workConfig.MaxIdleTimeSecond) * time.Second,
-		MaxConnsPerIP:                      httpConfig.MaxConnectionsPerIP,
-		MaxRequestsPerConn:                 httpConfig.MaxRequestsPerConnection,
-		TCPKeepalive:                       httpConfig.KeepAlive,
-		TCPKeepalivePeriod:                 time.Duration(httpConfig.KeepalivePeriodSecond) * time.Second,
-		ReduceMemoryUsage:                  workConfig.ReduceMemoryUsage,
+		Concurrency:                        concurrency,
+		IdleTimeout:                        time.Duration(maxIdleTimeSecond) * time.Second,
+		MaxConnsPerIP:                      config.MaxConnectionsPerIP,
+		MaxRequestsPerConn:                 config.MaxRequestsPerConnection,
+		TCPKeepalive:                       config.KeepAlive,
+		TCPKeepalivePeriod:                 time.Duration(config.KeepalivePeriodSecond) * time.Second,
+		ReduceMemoryUsage:                  reduceMemoryUsage,
 		DisablePreParseMultipartForm:       true,
 		SleepWhenConcurrencyLimitsExceeded: 0,
 		NoDefaultDate:                      true,
 		NoDefaultContentType:               true,
+		ReadTimeout:                        30 * time.Second,
 	}
+
 	return
 }
 
 func (app *application) serve() (err error) {
 
 	errCh := make(chan error, 1)
-	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+	ctx, cancel := sc.WithTimeout(sc.TODO(), 3*time.Second)
 
-	go func(a *app, errCh chan error) {
+	go func(a *application, errCh chan error) {
 		serveErr := a.server.Serve(a.ln)
 		if serveErr != nil {
 			errCh <- fmt.Errorf("fns http serve failed, %v", serveErr)
@@ -414,6 +331,7 @@ func (app *application) serve() (err error) {
 			a.stop(10 * time.Second)
 		}
 	}(app, errCh)
+
 	select {
 	case <-ctx.Done():
 		cancel()
@@ -425,8 +343,15 @@ func (app *application) serve() (err error) {
 	}
 }
 
-func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
+func parseHttpRequestURL(uri []byte) (namespace string, fn string, ok bool) {
+	// todo
+	return
+}
 
+func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
+	// todo white list NOT ACCEPTED
+
+	// todo timeout
 }
 
 func (app *application) Sync() {
@@ -454,23 +379,14 @@ func (app *application) stop(timeout time.Duration) {
 	}
 	cancelCTX, cancel := sc.WithTimeout(sc.TODO(), timeout)
 	closeCh := make(chan struct{}, 1)
-	go func(ctx sc.Context, a *application, closeCh chan struct{}) {
-		atomic.StoreInt64(&a.running, int64(0))
-		// un publish
-		if a.discovery != nil {
-			for _, registrationId := range a.serviceRegistrations {
-				_ = a.discovery.UnPublish(registrationId)
-			}
-			a.discovery.Close()
-		}
+	go func(ctx sc.Context, app *application, closeCh chan struct{}) {
+		atomic.StoreInt64(&app.running, int64(0))
+		// unmount services
+		app.svc.Close()
+
 		// http close
-		_ = a.server.Shutdown()
-		// server close
-		for _, service := range a.serviceMap {
-			_ = service.Close(ctx)
-		}
-		// log sync
-		_ = a.log.Sync()
+		_ = app.server.Shutdown()
+
 		closeCh <- struct{}{}
 		close(closeCh)
 	}(cancelCTX, app, closeCh)

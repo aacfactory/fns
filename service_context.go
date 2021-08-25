@@ -34,28 +34,40 @@ func WithNamespace(ctx Context, namespace string) Context {
 		authorization: ctx0.Authorization(),
 		user:          ctx0.User(),
 		meta:          ctx0.meta.fork(),
-		log:           ctx0.Log().With("namespace", namespace),
+		log:           ctx0.Log().With("namespace", namespace).With("fn", ""),
 		discovery:     ctx0.discovery,
 	}
 }
 
 func WithFn(ctx Context, fnName string) Context {
 	ctx0 := ctx.(*context)
+	ctx0.log = ctx0.Log().With("fn", fnName)
+	return ctx0
+}
+
+func withDiscovery(ctx Context, discovery ServiceDiscovery) Context {
+	ctx.(*context).discovery = discovery
+	return ctx
+}
+
+func withLog(ctx Context, log logs.Logger) Context {
+	ctx.(*context).log = log
+	return ctx
+}
+
+func newContext(ctx sc.Context, id string) Context {
 	return &context{
-		Context:       ctx0,
-		id:            ctx0.RequestId(),
-		authorization: ctx0.Authorization(),
-		user:          ctx0.User(),
-		meta:          ctx0.meta.fork(),
-		log:           ctx0.Log().With("fn", fnName),
-		discovery:     ctx0.discovery,
+		Context: ctx,
+		id: id,
+		user:    newUser(),
+		meta:    newContextMeta(),
 	}
 }
 
 type context struct {
 	sc.Context
 	id            string
-	authorization string
+	authorization []byte
 	user          User
 	meta          *contextMeta
 	log           logs.Logger
@@ -67,7 +79,7 @@ func (ctx *context) RequestId() (id string) {
 	return
 }
 
-func (ctx *context) Authorization() (value string) {
+func (ctx *context) Authorization() (value []byte) {
 	value = ctx.authorization
 	return
 }
@@ -99,6 +111,12 @@ func (ctx *context) Timeout() (has bool) {
 	}
 	has = deadline.Before(time.Now())
 	return
+}
+
+func newContextMeta() *contextMeta {
+	return &contextMeta{
+		obj: json.NewObject(),
+	}
 }
 
 type contextMeta struct {

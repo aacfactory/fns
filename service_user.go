@@ -21,11 +21,10 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func newUser(auth Authorizations) (u User) {
+func newUser() (u User) {
 	u = &user{
 		attributes: json.NewObject(),
 		principals: json.NewObject(),
-		auth:       auth,
 	}
 	return
 }

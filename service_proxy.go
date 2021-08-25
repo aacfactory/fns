@@ -21,7 +21,7 @@ type localedServiceProxy struct {
 }
 
 func (proxy *localedServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
-	result = syncResult()
+	result = SyncResult()
 	v, err := proxy.service.Handle(WithNamespace(ctx, proxy.service.Namespace()), fn, argument)
 	if err != nil {
 		result.Failed(err)

@@ -16,6 +16,18 @@
 
 package fns
 
-type FnWorkers interface {
-	Execute(namespace string, name string, arg interface{})
+import "github.com/valyala/fasthttp"
+
+type httpRequestHeader struct {
+	header *fasthttp.RequestHeader
+}
+
+func (h *httpRequestHeader) Get(name string) (value []byte, has bool) {
+	p := h.header.Peek(name)
+	if p == nil {
+		return
+	}
+	value = p
+	has = true
+	return
 }

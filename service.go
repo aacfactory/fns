@@ -28,7 +28,7 @@ import (
 type Context interface {
 	sc.Context
 	RequestId() (id string)
-	Authorization() (value string)
+	Authorization() (value []byte)
 	User() (user User)
 	Meta() (meta ContextMeta)
 	Log() (log logs.Logger)
@@ -57,11 +57,15 @@ type ContextMeta interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-// ServiceCenter
+// Services
 // 管理 Service，具备 Service 的注册与发现
-type ServiceCenter interface {
-	Build(config configuares.Config) (err error)
+type Services interface {
+	Build(config ServicesConfig) (err error)
 	Mount(service Service) (err error)
+	Exist(namespace string) (ok bool)
+	Description(namespace string) (description []byte)
+	DecodeAuthorization(ctx Context, value []byte) (err errors.CodeError)
+	PermissionAllow(ctx Context, namespace string, fn string) (err errors.CodeError)
 	Request(ctx Context, namespace string, fn string, argument Argument) (result Result)
 	Close()
 }
@@ -73,6 +77,7 @@ type ServiceCenter interface {
 type Service interface {
 	Namespace() (namespace string)
 	Build(config configuares.Config) (err error)
+	Description() (description []byte)
 	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
 	Close() (err error)
 }
@@ -95,18 +100,6 @@ type Result interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type ServiceRequestConfig struct {
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	RequestBodyMaxSize int
-}
-
-type ServiceRequestConfigBuilder interface {
-	Build(namespace string, fnName string, header ServiceRequestHeader) (config ServiceRequestConfig)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 type ServiceRequestHeader interface {
 	Get(name string) (value []byte, has bool)
 }
@@ -115,7 +108,7 @@ type ServiceRequestHeader interface {
 
 var authorizationsRetrieverMap map[string]AuthorizationsRetriever = nil
 
-type AuthorizationsRetriever func(options AuthorizationsOption) (authorizations Authorizations, err error)
+type AuthorizationsRetriever func(config configuares.Raw) (authorizations Authorizations, err error)
 
 // RegisterAuthorizationsRetriever
 // 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
@@ -124,11 +117,6 @@ func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetrie
 		authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
 	}
 	authorizationsRetrieverMap[kind] = retriever
-}
-
-type AuthorizationsOption struct {
-	Config    []byte
-	UserStore UserStore
 }
 
 type Authorizations interface {
@@ -140,9 +128,10 @@ type Authorizations interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+// todo: move into jwt Authorizations
 var userStoreRetrieverMap map[string]UserStoreRetriever = nil
 
-type UserStoreRetriever func(options UserStoreOption) (store UserStore, err error)
+type UserStoreRetriever func(config configuares.Raw) (store UserStore, err error)
 
 // RegisterUserStoreRetriever
 // 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
@@ -151,10 +140,6 @@ func RegisterUserStoreRetriever(kind string, retriever UserStoreRetriever) {
 		userStoreRetrieverMap = make(map[string]UserStoreRetriever)
 	}
 	userStoreRetrieverMap[kind] = retriever
-}
-
-type UserStoreOption struct {
-	Config []byte
 }
 
 type UserStore interface {
@@ -180,7 +165,7 @@ type User interface {
 
 var permissionsRetrieverMap map[string]PermissionsRetriever = nil
 
-type PermissionsRetriever func(options PermissionsOption) (permission Permissions, err error)
+type PermissionsRetriever func(config configuares.Raw) (permission Permissions, err error)
 
 // RegisterPermissionsRetriever
 // 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
@@ -191,12 +176,8 @@ func RegisterPermissionsRetriever(kind string, retriever PermissionsRetriever) {
 	permissionsRetrieverMap[kind] = retriever
 }
 
-type PermissionsOption struct {
-	Config []byte
-}
-
 type Permissions interface {
-	Validate(ctx Context, namespace string, fnName string, user User) (err errors.CodeError)
+	Validate(ctx Context, namespace string, fnName string, user User) (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -223,16 +204,94 @@ func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRe
 }
 
 type ServiceDiscoveryOption struct {
-	ServerId  string
-	Address   string
-	ClientTLS ClientTLS
-	Config    []byte
+	ServerId string
+	Address  string
+	Config   []byte
 }
 
 type ServiceDiscovery interface {
 	Publish(service Service) (err error)
-	Proxy(namespace string) (proxy ServiceProxy, err error)
+	IsLocal(namespace string) (ok bool)
+	Proxy(namespace string) (proxy ServiceProxy, err errors.CodeError)
 	Close()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
+
+func NewServiceDescription(namespace string, description string) (d *ServiceDescription) {
+	d = &ServiceDescription{}
+	return
+}
+
+// ServiceDescription open api struct
+type ServiceDescription struct {
+	// todo json.RawMessage from swagger
+	Info ServiceDescriptionInfo
+	// todo json.RawMessage from swagger
+	Paths map[string]map[string]ServiceDescriptionPath
+	// todo json.RawMessage from swagger
+	Definitions map[string]ServiceDescriptionDefinition
+}
+
+func (d *ServiceDescription) AppendPath(uri string, operationId string, summary string, description string, needAuth bool, paramName string, resultName string) {
+	p := ServiceDescriptionPath{}
+	// todo
+	d.Paths[uri] = map[string]ServiceDescriptionPath{"post": p}
+}
+
+func (d *ServiceDescription) AppendDefinition(name string, definition ServiceDescriptionDefinition) {
+	d.Definitions[name] = definition
+}
+
+type ServiceDescriptionInfo struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	// todo sjson.Put
+	Version string `json:"version,omitempty"`
+}
+
+type ServiceDescriptionPath struct {
+	OperationId string
+	Summary     string
+	Description string
+	Consumes    []string
+	Produces    []string
+	Parameters  []ServiceDescriptionPathParam
+	Responses   map[string]ServiceDescriptionPathResponse
+}
+
+type ServiceDescriptionPathParam struct {
+	Name        string            `json:"name,omitempty"`
+	Description string            `json:"description,omitempty"`
+	In          string            `json:"in,omitempty"`
+	Required    bool              `json:"required"`
+	Type        string            `json:"type,omitempty"`
+	Schema      map[string]string `json:"schema,omitempty"`
+}
+
+type ServiceDescriptionPathResponse struct {
+	Description string            `json:"description,omitempty"`
+	Schema      map[string]string `json:"schema,omitempty"`
+}
+
+type ServiceDescriptionDefinition struct {
+	// object array
+	Type       string                                          `json:"type,omitempty"`
+	Required   []string                                        `json:"required,omitempty"`
+	Items      map[string]string                               `json:"items,omitempty"`
+	Properties map[string]ServiceDescriptionDefinitionProperty `json:"properties,omitempty"`
+}
+
+type ServiceDescriptionDefinitionProperty struct {
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+	Ref         string `json:"$ref,omitempty"`
+	Items       map[string]string
+	Enum        []string    `json:"enum,omitempty"`
+	Default     interface{} `json:"default,omitempty"`
+	Maximum     int         `json:"maximum,omitempty"`
+	Minimum     int         `json:"minimum,omitempty"`
+	MaxLength   int         `json:"maxLength,omitempty"`
+	MinLength   int         `json:"minLength,omitempty"`
+	Pattern     string      `json:"pattern,omitempty"`
+}

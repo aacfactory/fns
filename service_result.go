@@ -21,7 +21,7 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func asyncResult() Result {
+func AsyncResult() Result {
 	return &futureResult{
 		ch: make(chan []byte, 1),
 	}
@@ -86,7 +86,7 @@ func (r *futureResult) Get(v interface{}) (err errors.CodeError) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func syncResult() Result {
+func SyncResult() Result {
 	return &result{
 		data: nil,
 		err:  nil,

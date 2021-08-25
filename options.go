@@ -29,14 +29,15 @@ type Option func(*Options) error
 var (
 	defaultOptions = &Options{
 		ConfigRetrieverOption: defaultConfigRetrieverOption(),
+		Version:               "x.y.z",
 	}
 	secretKey = []byte("+-fns")
 )
 
 type Options struct {
 	ConfigRetrieverOption configuares.RetrieverOption
-	RequestConfigBuilder  ServiceRequestConfigBuilder
 	Hooks                 []Hook
+	Version               string
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -59,16 +60,6 @@ func ConfigRetriever(path string, format string, active string, prefix string, s
 	}
 }
 
-func CustomizeRequestConfigBuilder(builder ServiceRequestConfigBuilder) Option {
-	return func(o *Options) error {
-		if builder == nil {
-			return fmt.Errorf("customize request config builder is nil")
-		}
-		o.RequestConfigBuilder = builder
-		return nil
-	}
-}
-
 func Hooks(hooks ...Hook) Option {
 	return func(o *Options) error {
 		if hooks == nil || len(hooks) == 0 {
@@ -79,4 +70,13 @@ func Hooks(hooks ...Hook) Option {
 	}
 }
 
-
+func Version(version string) Option {
+	return func(options *Options) error {
+		version = strings.TrimSpace(version)
+		if version == "" {
+			return fmt.Errorf("set version failed for empty")
+		}
+		options.Version = version
+		return nil
+	}
+}

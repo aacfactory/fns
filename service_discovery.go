@@ -52,7 +52,12 @@ func (discovery *standaloneServiceDiscovery) Publish(service Service) (err error
 	return
 }
 
-func (discovery *standaloneServiceDiscovery) Proxy(namespace string) (proxy ServiceProxy, err error) {
+func (discovery *standaloneServiceDiscovery) IsLocal(namespace string) (ok bool) {
+	_, ok = discovery.serviceMap[namespace]
+	return
+}
+
+func (discovery *standaloneServiceDiscovery) Proxy(namespace string) (proxy ServiceProxy, err errors.CodeError) {
 	service, has := discovery.serviceMap[namespace]
 	if has || service == nil {
 		err = errors.NotFound(fmt.Sprintf("%s service was not found", namespace))

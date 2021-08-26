@@ -10,15 +10,15 @@ require (
 	github.com/aacfactory/workers v1.2.0
 	github.com/rs/xid v1.3.0
 	github.com/tidwall/sjson v1.1.7
-	github.com/valyala/fasthttp v1.28.0
+	github.com/valyala/fasthttp v1.29.0
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.2 // indirect
+	github.com/andybalholm/brotli v1.0.3 // indirect
 	github.com/fatih/color v1.12.0 // indirect
 	github.com/goccy/go-yaml v1.9.2 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
-	github.com/klauspost/compress v1.12.2 // indirect
+	github.com/klauspost/compress v1.13.4 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect

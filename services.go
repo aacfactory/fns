@@ -234,12 +234,11 @@ func (s *services) Handle(action string, _payload interface{}) {
 		return
 	}
 
-	ctx := WithNamespace(payload.ctx, payload.namespace)
-	ctx = withDiscovery(ctx, s.discovery)
+	ctx := withDiscovery(payload.ctx, s.discovery)
 
 	r := proxy.Request(ctx, payload.fn, payload.argument)
 	raw := json.RawMessage{}
-	err := r.Get(&raw)
+	err := r.Get(ctx, &raw)
 	if err != nil {
 		payload.result.Failed(err)
 	} else {

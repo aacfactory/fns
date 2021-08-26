@@ -95,7 +95,7 @@ type Argument interface {
 type Result interface {
 	Succeed(v interface{})
 	Failed(err errors.CodeError)
-	Get(v interface{}) (err errors.CodeError)
+	Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

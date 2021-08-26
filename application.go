@@ -17,6 +17,7 @@
 package fns
 
 import (
+	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/configuares"
@@ -90,6 +91,11 @@ func New(options ...Option) (app Application, err error) {
 		return
 	}
 
+	// secret key
+	if appConfig.SecretKey != "" {
+		secretKey = []byte(appConfig.SecretKey)
+	}
+
 	// logs
 	logFormatter := logs.ConsoleFormatter
 	logFormatterValue := strings.ToLower(strings.TrimSpace(appConfig.Log.Formatter))
@@ -121,18 +127,29 @@ func New(options ...Option) (app Application, err error) {
 		return
 	}
 
+	// timeout
+	handleTimeout := 30 * time.Second
+	if appConfig.Services.HandleTimeoutSecond > 0 {
+		handleTimeout = time.Duration(appConfig.Services.HandleTimeoutSecond) * time.Second
+	}
+
 	app0 := &application{
-		id:         UID(),
-		name:       name,
-		version:    opt.Version,
-		address:    "",
-		running:    0,
-		config:     config,
-		log:        log,
-		serviceMap: make(map[string]Service),
-		svc:        nil,
-		ln:         nil,
-		server:     nil,
+		id:              UID(),
+		name:            name,
+		version:         opt.Version,
+		address:         "",
+		running:         0,
+		config:          config,
+		log:             log,
+		serviceMap:      make(map[string]Service),
+		svc:             nil,
+		fnHandleTimeout: handleTimeout,
+		ln:              nil,
+		server:          nil,
+		hasHook:         false,
+		hookUnitCh:      nil,
+		hookStopCh:      nil,
+		hooks:           opt.Hooks,
 	}
 
 	// build
@@ -149,17 +166,22 @@ func New(options ...Option) (app Application, err error) {
 }
 
 type application struct {
-	id         string
-	name       string
-	version    string
-	address    string
-	running    int64
-	config     configuares.Config
-	log        logs.Logger
-	serviceMap map[string]Service
-	svc        Services
-	ln         net.Listener
-	server     *fasthttp.Server
+	id              string
+	name            string
+	version         string
+	address         string
+	running         int64
+	config          configuares.Config
+	log             logs.Logger
+	serviceMap      map[string]Service
+	svc             Services
+	fnHandleTimeout time.Duration
+	ln              net.Listener
+	server          *fasthttp.Server
+	hasHook         bool
+	hookUnitCh      chan *HookUnit
+	hookStopCh      chan struct{}
+	hooks           []Hook
 }
 
 func (app *application) Deploy(services ...Service) {
@@ -183,6 +205,10 @@ func (app *application) Deploy(services ...Service) {
 func (app *application) Run(ctx sc.Context) (err error) {
 
 	// build services
+	if len(app.serviceMap) == 0 {
+		err = fmt.Errorf("fns Run: no services")
+		return
+	}
 	for _, service := range app.serviceMap {
 		serviceErr := service.Build(app.config)
 		if serviceErr != nil {
@@ -213,6 +239,11 @@ func (app *application) Run(ctx sc.Context) (err error) {
 }
 
 func (app *application) build(config ApplicationConfig) (err error) {
+
+	err = app.mountHooks()
+	if err != nil {
+		return
+	}
 
 	err = app.buildListener(config)
 	if err != nil {
@@ -290,8 +321,13 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	maxIdleTimeSecond := _config.Services.MaxIdleTimeSecond
 
 	// server
+	requestHandler := fasthttp.CompressHandler(app.handleHttpRequest)
+	if config.Cors != nil {
+		config.Cors.fill()
+		requestHandler = newCors(config.Cors).handler(requestHandler)
+	}
 	app.server = &fasthttp.Server{
-		Handler:        fasthttp.CompressHandler(app.handleHttpRequest),
+		Handler:        requestHandler,
 		ReadBufferSize: 64 * KB,
 		ErrorHandler: func(ctx *fasthttp.RequestCtx, err error) {
 			ctx.ResetBody()
@@ -343,15 +379,203 @@ func (app *application) serve() (err error) {
 	}
 }
 
-func parseHttpRequestURL(uri []byte) (namespace string, fn string, ok bool) {
-	// todo
-	return
+func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
+	if request.IsGet() {
+		uri := request.URI()
+		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
+			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			return
+		}
+		p := uri.Path()
+		// health check
+		if string(p) == healthCheckPath {
+			request.SetStatusCode(200)
+			request.SetContentTypeBytes(jsonContentType)
+			request.SetBody(emptyBody)
+			return
+		}
+		// description
+		items := bytes.Split(p[1:], pathSplitter)
+		if len(items) != 2 {
+			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			return
+		}
+		namespace := string(items[0])
+		if string(items[1]) == descriptionPathItem {
+			description := app.svc.Description(namespace)
+			if description == nil || len(description) == 0 {
+				request.SetStatusCode(200)
+				request.SetContentTypeBytes(jsonContentType)
+				request.SetBody(emptyBody)
+			} else {
+				request.SetStatusCode(200)
+				request.SetContentTypeBytes(jsonContentType)
+				request.SetBody(description)
+			}
+			return
+		} else {
+			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			return
+		}
+	} else if request.IsPost() {
+		uri := request.URI()
+		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
+			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			return
+		}
+		p := uri.Path()
+		items := bytes.Split(p[1:], pathSplitter)
+		if len(items) != 2 {
+			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			return
+		}
+		namespace := string(items[0])
+		if !app.svc.Exist(namespace) {
+			sendError(request, errors.NotFound(fmt.Sprintf("%s was not found", namespace)))
+			return
+		}
+
+		// body
+		arg, argErr := NewArgument(request.PostBody())
+		if argErr != nil {
+			sendError(request, errors.BadRequest("request body must be json content"))
+			return
+		}
+
+		// ctx
+		timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), app.fnHandleTimeout)
+		var ctx *context
+		requestId := request.Request.Header.PeekBytes(requestIdHeader)
+		if requestId != nil && len(requestId) > 0 {
+			ctx = newContext(timeoutCtx, string(requestId))
+			metaValue := request.Request.Header.PeekBytes(requestMetaHeader)
+			if metaValue != nil && len(metaValue) > 0 {
+				if !ctx.Meta().Decode(metaValue) {
+					sendError(request, errors.New(555, "***WARNING***", "meta is invalid"))
+					cancel()
+					return
+				}
+			}
+		} else {
+			ctx = newContext(timeoutCtx, UID())
+		}
+		ctx.log = app.log
+
+		// authorization
+		authorization := request.Request.Header.PeekBytes(authorizationHeader)
+		if authorization != nil && len(authorization) > 0 {
+			decodeErr := app.svc.DecodeAuthorization(ctx, authorization)
+			if decodeErr != nil {
+				sendError(request, decodeErr)
+				cancel()
+				return
+			}
+			ctx.authorization = authorization
+		}
+
+		fn := string(items[1])
+
+		// permission
+		permissionErr := app.svc.PermissionAllow(ctx, namespace, fn)
+		if permissionErr != nil {
+			sendError(request, permissionErr)
+			cancel()
+			return
+		}
+
+		// request
+		handleBeg := time.Now()
+		result := app.svc.Request(ctx, namespace, fn, arg)
+		latency := time.Now().Sub(handleBeg)
+		data := json.RawMessage{}
+		handleErr := result.Get(ctx.Context, &data)
+		if handleErr != nil {
+			sendError(request, handleErr)
+			cancel()
+			return
+		}
+		request.SetStatusCode(200)
+		request.SetContentTypeBytes(jsonContentType)
+		request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
+		request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
+		request.SetBody(data)
+		cancel()
+	} else {
+		sendError(request, errors.New(555, "***WARNING***", "method is invalid"))
+		return
+	}
+
 }
 
-func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
-	// todo white list NOT ACCEPTED
+var (
+	jsonContentType = []byte("application/json")
 
-	// todo timeout
+	emptyBody = []byte("{}")
+
+	healthCheckPath = "/health"
+
+	descriptionPathItem = "description"
+
+	pathSplitter = []byte("/")
+
+	authorizationHeader = []byte("Authorization")
+
+	requestIdHeader = []byte("X-Fns-Request-Id")
+
+	requestMetaHeader = []byte("X-Fns-Meta")
+
+	responseLatencyHeader = []byte("X-Fns-Latency")
+)
+
+func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
+	body, _ := json.Marshal(err)
+	request.SetStatusCode(err.Code())
+	request.SetContentTypeBytes(jsonContentType)
+	request.SetBody(body)
+}
+
+func (app *application) mountHooks() (err error) {
+	if app.hooks == nil {
+		return
+	}
+	for _, hook := range app.hooks {
+		if hook == nil {
+			continue
+		}
+		buildErr := hook.Build(app.config)
+		if buildErr != nil {
+			err = fmt.Errorf("fns build hook failed, %v", buildErr)
+			return
+		}
+	}
+	app.hookUnitCh = make(chan *HookUnit, 256*1024)
+	app.hookStopCh = make(chan struct{}, 1)
+	app.hasHook = true
+	go func(ch chan *HookUnit, stop chan struct{}, hooks []Hook) {
+		for {
+			stopped := false
+			select {
+			case <-stop:
+				stopped = true
+				break
+			case unit, ok := <-ch:
+				if !ok {
+					stopped = true
+					break
+				}
+				for _, hook := range hooks {
+					hook.Handle(*unit)
+				}
+			}
+			if stopped {
+				for _, hook := range hooks {
+					hook.Close()
+				}
+				break
+			}
+		}
+	}(app.hookUnitCh, app.hookStopCh, app.hooks)
+	return
 }
 
 func (app *application) Sync() {
@@ -386,6 +610,12 @@ func (app *application) stop(timeout time.Duration) {
 
 		// http close
 		_ = app.server.Shutdown()
+
+		// hooks
+		if app.hasHook {
+			close(app.hookStopCh)
+			close(app.hookUnitCh)
+		}
 
 		closeCh <- struct{}{}
 		close(closeCh)

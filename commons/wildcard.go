@@ -14,20 +14,15 @@
  * limitations under the License.
  */
 
-package fns
+package commons
 
-import "github.com/valyala/fasthttp"
+import "strings"
 
-type httpRequestHeader struct {
-	header *fasthttp.RequestHeader
+type Wildcard struct {
+	Prefix string
+	Suffix string
 }
 
-func (h *httpRequestHeader) Get(name string) (value []byte, has bool) {
-	p := h.header.Peek(name)
-	if p == nil {
-		return
-	}
-	value = p
-	has = true
-	return
+func (w Wildcard) Match(s string) bool {
+	return len(s) >= len(w.Prefix)+len(w.Suffix) && strings.HasPrefix(s, w.Prefix) && strings.HasSuffix(s, w.Suffix)
 }

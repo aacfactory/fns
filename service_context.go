@@ -28,8 +28,14 @@ import (
 
 func WithNamespace(ctx Context, namespace string) Context {
 	ctx0 := ctx.(*context)
+	if ctx0.namespace == "" {
+		ctx0.namespace = namespace
+		ctx0.log = ctx0.Log().With("namespace", namespace)
+		return ctx0
+	}
 	return &context{
 		Context:       ctx0,
+		namespace:     namespace,
 		id:            ctx0.RequestId(),
 		authorization: ctx0.Authorization(),
 		user:          ctx0.User(),
@@ -50,15 +56,10 @@ func withDiscovery(ctx Context, discovery ServiceDiscovery) Context {
 	return ctx
 }
 
-func withLog(ctx Context, log logs.Logger) Context {
-	ctx.(*context).log = log
-	return ctx
-}
-
-func newContext(ctx sc.Context, id string) Context {
+func newContext(ctx sc.Context, id string) *context {
 	return &context{
 		Context: ctx,
-		id: id,
+		id:      id,
 		user:    newUser(),
 		meta:    newContextMeta(),
 	}
@@ -66,6 +67,7 @@ func newContext(ctx sc.Context, id string) Context {
 
 type context struct {
 	sc.Context
+	namespace     string
 	id            string
 	authorization []byte
 	user          User

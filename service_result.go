@@ -17,6 +17,7 @@
 package fns
 
 import (
+	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 )
@@ -61,25 +62,30 @@ func (r *futureResult) Failed(err errors.CodeError) {
 	close(r.ch)
 }
 
-func (r *futureResult) Get(v interface{}) (err errors.CodeError) {
-	data := <-r.ch
-	if data[0] == '-' {
-		err = errors.ServiceError("")
-		decodeErr := json.Unmarshal(data[1:], &err)
+func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError) {
+	select {
+	case <-ctx.Done():
+		err = errors.Timeout("timeout")
+		return
+	case data := <-r.ch:
+		if data[0] == '-' {
+			err = errors.ServiceError("")
+			decodeErr := json.Unmarshal(data[1:], &err)
+			if decodeErr != nil {
+				err = errors.Map(decodeErr)
+				return
+			}
+			return
+		}
+		if len(data) == 1 {
+			// empty
+			return
+		}
+		decodeErr := json.Unmarshal(data[1:], v)
 		if decodeErr != nil {
 			err = errors.Map(decodeErr)
 			return
 		}
-		return
-	}
-	if len(data) == 1 {
-		// empty
-		return
-	}
-	decodeErr := json.Unmarshal(data[1:], v)
-	if decodeErr != nil {
-		err = errors.Map(decodeErr)
-		return
 	}
 	return
 }
@@ -87,18 +93,18 @@ func (r *futureResult) Get(v interface{}) (err errors.CodeError) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 func SyncResult() Result {
-	return &result{
+	return &syncResult{
 		data: nil,
 		err:  nil,
 	}
 }
 
-type result struct {
+type syncResult struct {
 	data []byte
 	err  errors.CodeError
 }
 
-func (r *result) Succeed(v interface{}) {
+func (r *syncResult) Succeed(v interface{}) {
 	if v == nil {
 		return
 	}
@@ -110,11 +116,11 @@ func (r *result) Succeed(v interface{}) {
 	r.data = p
 }
 
-func (r *result) Failed(err errors.CodeError) {
+func (r *syncResult) Failed(err errors.CodeError) {
 	r.err = err
 }
 
-func (r *result) Get(v interface{}) (err errors.CodeError) {
+func (r *syncResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError) {
 	if r.err != nil {
 		err = r.err
 		return

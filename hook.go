@@ -33,5 +33,6 @@ type HookUnit struct {
 
 type Hook interface {
 	Build(config configuares.Config) (err error)
-	Handle(unit HookUnit) (err error)
+	Handle(unit HookUnit)
+	Close()
 }

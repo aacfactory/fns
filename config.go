@@ -58,31 +58,66 @@ type ApplicationConfig struct {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HttpConfig struct {
-	Host                     string   `json:"host,omitempty"`
-	Port                     int      `json:"port,omitempty"`
-	PublicHost               string   `json:"publicHost,omitempty"`
-	PublicPort               int      `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int      `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int      `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool     `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int      `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int      `json:"requestTimeoutSeconds,omitempty"`
-	WhiteCIDR                []string `json:"whiteCIDR,omitempty"`
-	requestConfigBuilder     ServiceRequestConfigBuilder
+	Host                     string      `json:"host,omitempty"`
+	Port                     int         `json:"port,omitempty"`
+	PublicHost               string      `json:"publicHost,omitempty"`
+	PublicPort               int         `json:"publicPort,omitempty"`
+	MaxConnectionsPerIP      int         `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int         `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool        `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int         `json:"keepalivePeriodSecond,omitempty"`
+	RequestTimeoutSeconds    int         `json:"requestTimeoutSeconds,omitempty"`
+	Cors                     *CorsConfig `json:"cors,omitempty"`
+	WhiteCIDR                []string    `json:"whiteCIDR,omitempty"`
+}
+
+type CorsConfig struct {
+	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`
+	AllowedMethods   []string `json:"allowedMethods,omitempty"`
+	AllowedHeaders   []string `json:"allowedHeaders,omitempty"`
+	ExposedHeaders   []string `json:"exposedHeaders,omitempty"`
+	AllowCredentials bool     `json:"allowCredentials,omitempty"`
+	MaxAge           int      `json:"maxAge,omitempty"`
+}
+
+func (cors *CorsConfig) fill() {
+	if cors.ExposedHeaders == nil || len(cors.ExposedHeaders) == 0 {
+		cors.ExposedHeaders = make([]string, 0, 1)
+	}
+	cors.ExposedHeaders = append(cors.ExposedHeaders, string(requestIdHeader))
+	cors.ExposedHeaders = append(cors.ExposedHeaders, string(responseLatencyHeader))
+	cors.ExposedHeaders = append(cors.ExposedHeaders, "Server")
+	return
+}
+
+func (cors *CorsConfig) originAllowed(origin string) (ok bool) {
+	origin = strings.ToLower(origin)
+	for _, allowedOrigin := range cors.AllowedOrigins {
+		if allowedOrigin == "*" {
+			ok = true
+			return
+		}
+		if allowedOrigin == origin {
+			ok = true
+			return
+		}
+	}
+	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ServicesConfig struct {
-	Concurrency       int                  `json:"concurrency,omitempty"`
-	MaxIdleTimeSecond int                  `json:"maxIdleTimeSecond,omitempty"`
-	ReduceMemoryUsage bool                 `json:"reduceMemoryUsage,omitempty"`
-	Discovery         DiscoveryConfig      `json:"discovery,omitempty"`
-	Authorization     AuthorizationsConfig `json:"authorization,omitempty"`
-	Permission        PermissionsConfig    `json:"permission,omitempty"`
-	serverId          string
-	address           string
-	version           string
+	Concurrency         int                  `json:"concurrency,omitempty"`
+	HandleTimeoutSecond int                  `json:"handleTimeoutSecond,omitempty"`
+	MaxIdleTimeSecond   int                  `json:"maxIdleTimeSecond,omitempty"`
+	ReduceMemoryUsage   bool                 `json:"reduceMemoryUsage,omitempty"`
+	Discovery           DiscoveryConfig      `json:"discovery,omitempty"`
+	Authorization       AuthorizationsConfig `json:"authorization,omitempty"`
+	Permission          PermissionsConfig    `json:"permission,omitempty"`
+	serverId            string
+	address             string
+	version             string
 }
 
 type DiscoveryConfig struct {

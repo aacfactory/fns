@@ -107,16 +107,13 @@ type ServiceRequestHeader interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-var authorizationsRetrieverMap map[string]AuthorizationsRetriever = nil
+var authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
 
 type AuthorizationsRetriever func(config configuares.Raw) (authorizations Authorizations, err error)
 
 // RegisterAuthorizationsRetriever
 // 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
 func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetriever) {
-	if authorizationsRetrieverMap == nil {
-		authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
-	}
 	authorizationsRetrieverMap[kind] = retriever
 }
 
@@ -142,16 +139,13 @@ type User interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-var permissionsRetrieverMap map[string]PermissionsRetriever = nil
+var permissionsRetrieverMap = make(map[string]PermissionsRetriever)
 
 type PermissionsRetriever func(config configuares.Raw) (permission Permissions, err error)
 
 // RegisterPermissionsRetriever
 // 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
 func RegisterPermissionsRetriever(kind string, retriever PermissionsRetriever) {
-	if permissionsRetrieverMap == nil {
-		permissionsRetrieverMap = make(map[string]PermissionsRetriever)
-	}
 	permissionsRetrieverMap[kind] = retriever
 }
 

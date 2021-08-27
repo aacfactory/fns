@@ -188,6 +188,13 @@ func (s *services) PermissionAllow(ctx Context, namespace string, fn string) (er
 }
 
 func (s *services) Request(ctx Context, namespace string, fn string, argument Argument) (result Result) {
+
+	if !s.discovery.IsLocal(namespace) {
+		result = SyncResult()
+		result.Failed(errors.NotFound(fmt.Sprintf("%s service was not found", namespace)))
+		return
+	}
+
 	payload := s.payloads.Get().(*servicesRequestPayload)
 	payload.ctx = ctx
 	payload.namespace = namespace

@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	fnRequestWorkHandleAction = "invoke"
+	fnRequestWorkHandleAction = "+"
 )
 
 type services struct {

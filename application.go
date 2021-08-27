@@ -49,7 +49,7 @@ const (
 
 type Application interface {
 	Log() (log logs.Logger)
-	Deploy(service ...Service)
+	Deploy(service ...Service) (err error)
 	Run(ctx sc.Context) (err error)
 	Sync()
 	SyncWithTimeout(timeout time.Duration)
@@ -206,7 +206,7 @@ func (app *application) Log() (log logs.Logger) {
 	return
 }
 
-func (app *application) Deploy(services ...Service) {
+func (app *application) Deploy(services ...Service) (err error) {
 	if services == nil || len(services) == 0 {
 		return
 	}
@@ -216,10 +216,13 @@ func (app *application) Deploy(services ...Service) {
 		}
 		_, has := app.serviceMap[service.Namespace()]
 		if has {
-			panic(fmt.Sprintf("fns deploy service failed for service %s is duplicated", service.Namespace()))
+			err = fmt.Errorf("fns Deploy: service %s is duplicated", service.Namespace())
 			return
 		}
 		app.serviceMap[service.Namespace()] = service
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: deploy %s service succeed", service.Namespace()))
+		}
 	}
 	return
 }
@@ -266,6 +269,10 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	}
 
 	atomic.StoreInt64(&app.running, int64(1))
+
+	if app.Log().DebugEnabled() {
+		app.Log().Debug().Message("fns Run: succeed")
+	}
 
 	return
 }
@@ -430,7 +437,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		if string(p) == healthCheckPath {
 			request.SetStatusCode(200)
 			request.SetContentTypeBytes(jsonUTF8ContentType)
-			request.SetBody(emptyBody)
+			request.SetBody([]byte(fmt.Sprintf("{\"name\": \"%s\", \"version\": \"%s\"}", app.name, app.version)))
 			return
 		}
 		// description
@@ -489,14 +496,17 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		var ctx *context
 		requestId := request.Request.Header.PeekBytes(requestIdHeader)
 		if requestId != nil && len(requestId) > 0 {
-			ctx = newContext(timeoutCtx, string(requestId))
 			metaValue := request.Request.Header.PeekBytes(requestMetaHeader)
-			if metaValue != nil && len(metaValue) > 0 {
-				if !ctx.Meta().Decode(metaValue) {
-					sendError(request, errors.New(555, "***WARNING***", "meta is invalid"))
-					cancel()
-					return
-				}
+			if metaValue == nil || len(metaValue) == 0 {
+				sendError(request, errors.New(555, "***WARNING***", "meta is required in inner request"))
+				cancel()
+				return
+			}
+			ctx = newContext(timeoutCtx, string(requestId))
+			if !ctx.Meta().Decode(metaValue) {
+				sendError(request, errors.New(555, "***WARNING***", "meta is invalid in inner request"))
+				cancel()
+				return
 			}
 		} else {
 			ctx = newContext(timeoutCtx, UID())

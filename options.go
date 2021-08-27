@@ -19,7 +19,12 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configuares"
+	"github.com/go-playground/validator/v10"
 	"strings"
+)
+
+const (
+	defaultVersion = "x.y.z"
 )
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -29,13 +34,14 @@ type Option func(*Options) error
 var (
 	defaultOptions = &Options{
 		ConfigRetrieverOption: defaultConfigRetrieverOption(),
-		Version:               "x.y.z",
+		Version:               defaultVersion,
 	}
 	secretKey = []byte("+-fns")
 )
 
 type Options struct {
 	ConfigRetrieverOption configuares.RetrieverOption
+	Validate              *validator.Validate
 	Hooks                 []Hook
 	Version               string
 }
@@ -77,6 +83,16 @@ func Version(version string) Option {
 			return fmt.Errorf("set version failed for empty")
 		}
 		options.Version = version
+		return nil
+	}
+}
+
+func WithValidate(validate *validator.Validate) Option {
+	return func(options *Options) error {
+		if validate == nil {
+			return fmt.Errorf("set validate failed for nil")
+		}
+		options.Validate = validate
 		return nil
 	}
 }

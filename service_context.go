@@ -20,9 +20,14 @@ import (
 	"bytes"
 	sc "context"
 	"fmt"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons"
 	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/go-playground/validator/v10"
+	"reflect"
+	"strings"
 	"time"
 )
 
@@ -73,6 +78,7 @@ type context struct {
 	user          User
 	meta          *contextMeta
 	log           logs.Logger
+	validate      *validator.Validate
 	discovery     ServiceDiscovery
 }
 
@@ -112,6 +118,38 @@ func (ctx *context) Timeout() (has bool) {
 		return
 	}
 	has = deadline.Before(time.Now())
+	return
+}
+
+func (ctx *context) Validate(v interface{}) (err errors.CodeError) {
+	if ctx.validate == nil {
+		err = errors.NotImplemented("context Validate: not implemented")
+		return
+	}
+	validateErr := ctx.validate.Struct(v)
+	if validateErr == nil {
+		return
+	}
+	validationErrors, ok := validateErr.(validator.ValidationErrors)
+	if !ok {
+		err = errors.ServiceError(fmt.Sprintf("context Validate: %v", validateErr))
+		return
+	}
+	err = errors.BadRequest("argument is invalid")
+	for _, validationError := range validationErrors {
+		sf := validationError.Namespace()
+		exp := sf[strings.Index(sf, ".")+1:]
+		key, message := commons.ValidateFieldMessage(reflect.TypeOf(v), exp)
+		if key == "" {
+			err = errors.ServiceError(fmt.Sprintf("context Validate: json tag of %s was not founed", sf))
+			return
+		}
+		if message == "" {
+			err = errors.ServiceError(fmt.Sprintf("context Validate: message tag of %s was not founed", sf))
+			return
+		}
+		err = err.WithMeta(key, message)
+	}
 	return
 }
 

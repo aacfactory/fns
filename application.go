@@ -22,8 +22,10 @@ import (
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/go-playground/validator/v10"
 	"github.com/valyala/fasthttp"
 	"net"
 	"os"
@@ -127,10 +129,21 @@ func New(options ...Option) (app Application, err error) {
 		return
 	}
 
+	if opt.Version != "" && opt.Version != defaultVersion {
+		log = log.With("ver", opt.Version)
+	}
+
 	// timeout
 	handleTimeout := 30 * time.Second
 	if appConfig.Services.HandleTimeoutSecond > 0 {
 		handleTimeout = time.Duration(appConfig.Services.HandleTimeoutSecond) * time.Second
+	}
+
+	// validate
+	validate := opt.Validate
+	if validate == nil {
+		validate = validator.New()
+		commons.ValidateRegisterRegex(validate)
 	}
 
 	app0 := &application{
@@ -141,6 +154,7 @@ func New(options ...Option) (app Application, err error) {
 		running:         0,
 		config:          config,
 		log:             log,
+		validate:        validate,
 		serviceMap:      make(map[string]Service),
 		svc:             nil,
 		fnHandleTimeout: handleTimeout,
@@ -173,6 +187,7 @@ type application struct {
 	running         int64
 	config          configuares.Config
 	log             logs.Logger
+	validate        *validator.Validate
 	serviceMap      map[string]Service
 	svc             Services
 	fnHandleTimeout time.Duration
@@ -460,6 +475,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			ctx = newContext(timeoutCtx, UID())
 		}
 		ctx.log = app.log
+		ctx.validate = app.validate
 
 		// authorization
 		authorization := request.Request.Header.PeekBytes(authorizationHeader)

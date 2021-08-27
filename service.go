@@ -34,6 +34,7 @@ type Context interface {
 	Log() (log logs.Logger)
 	ServiceProxy(namespace string) (proxy ServiceProxy, err error)
 	Timeout() (has bool)
+	Validate(v interface{}) (err errors.CodeError)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

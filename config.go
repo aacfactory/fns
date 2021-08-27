@@ -67,7 +67,6 @@ type HttpConfig struct {
 	KeepalivePeriodSecond    int        `json:"keepalivePeriodSecond,omitempty"`
 	RequestTimeoutSeconds    int        `json:"requestTimeoutSeconds,omitempty"`
 	Cors                     CorsConfig `json:"cors,omitempty"`
-	WhiteCIDR                []string   `json:"whiteCIDR,omitempty"`
 }
 
 type CorsConfig struct {

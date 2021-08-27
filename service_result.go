@@ -120,7 +120,7 @@ func (r *syncResult) Failed(err errors.CodeError) {
 	r.err = err
 }
 
-func (r *syncResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError) {
+func (r *syncResult) Get(_ sc.Context, v interface{}) (err errors.CodeError) {
 	if r.err != nil {
 		err = r.err
 		return

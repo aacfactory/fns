@@ -74,7 +74,7 @@ type Services interface {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 // Service
-// todo: fnc 生成 service，然后service的函数是代理实际写的函数，并注入参数、用户等前置条件，以及缓存、事件队列等pipeline式的函数。
+// 管理 Fn 的服务
 type Service interface {
 	Namespace() (namespace string)
 	Build(config configuares.Config) (err error)
@@ -125,28 +125,6 @@ type Authorizations interface {
 	Decode(token []byte, user User) (err error)
 	Active(user User) (err error)
 	Revoke(user User) (err error)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-// todo: move into jwt Authorizations
-var userStoreRetrieverMap map[string]UserStoreRetriever = nil
-
-type UserStoreRetriever func(config configuares.Raw) (store UserStore, err error)
-
-// RegisterUserStoreRetriever
-// 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
-func RegisterUserStoreRetriever(kind string, retriever UserStoreRetriever) {
-	if userStoreRetrieverMap == nil {
-		userStoreRetrieverMap = make(map[string]UserStoreRetriever)
-	}
-	userStoreRetrieverMap[kind] = retriever
-}
-
-type UserStore interface {
-	Save(user User) (err error)
-	Contains(user User) (has bool)
-	Remove(user User) (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

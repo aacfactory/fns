@@ -157,6 +157,7 @@ func New(options ...Option) (app Application, err error) {
 		serviceMap:      make(map[string]Service),
 		svc:             nil,
 		fnHandleTimeout: handleTimeout,
+		requestCounter:  sync.WaitGroup{},
 		ln:              nil,
 		server:          nil,
 		hasHook:         false,
@@ -190,6 +191,7 @@ type application struct {
 	serviceMap      map[string]Service
 	svc             Services
 	fnHandleTimeout time.Duration
+	requestCounter  sync.WaitGroup
 	ln              net.Listener
 	server          *fasthttp.Server
 	hasHook         bool
@@ -235,6 +237,9 @@ func (app *application) Run(ctx sc.Context) (err error) {
 			err = fmt.Errorf("fns Run: build %s service failed, %v", service.Namespace(), serviceErr)
 			return
 		}
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.Namespace()))
+		}
 	}
 	// serve http
 	serveErr := app.serve(ctx)
@@ -242,6 +247,9 @@ func (app *application) Run(ctx sc.Context) (err error) {
 		err = serveErr
 		err = fmt.Errorf("fns Run: start http server failed, %v", serveErr)
 		return
+	}
+	if app.Log().DebugEnabled() {
+		app.Log().Debug().Message(fmt.Sprintf("fns Run: listen %s succeed", app.address))
 	}
 	// mount
 	for _, service := range app.serviceMap {
@@ -251,8 +259,12 @@ func (app *application) Run(ctx sc.Context) (err error) {
 			app.stop(10 * time.Second)
 			return
 		}
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message(fmt.Sprintf("fns Run: mount %s service succeed", service.Namespace()))
+		}
 		delete(app.serviceMap, service.Namespace())
 	}
+
 	atomic.StoreInt64(&app.running, int64(1))
 
 	return
@@ -338,7 +350,6 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	config := _config.Http
 	concurrency := _config.Services.Concurrency
 	reduceMemoryUsage := _config.Services.ReduceMemoryUsage
-	maxIdleTimeSecond := _config.Services.MaxIdleTimeSecond
 
 	// server
 	requestHandler := fasthttp.CompressHandler(app.handleHttpRequest)
@@ -358,7 +369,6 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 		ContinueHandler:                    nil,
 		Name:                               "FNS",
 		Concurrency:                        concurrency,
-		IdleTimeout:                        time.Duration(maxIdleTimeSecond) * time.Second,
 		MaxConnsPerIP:                      config.MaxConnectionsPerIP,
 		MaxRequestsPerConn:                 config.MaxRequestsPerConnection,
 		TCPKeepalive:                       config.KeepAlive,
@@ -368,7 +378,7 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 		SleepWhenConcurrencyLimitsExceeded: 0,
 		NoDefaultDate:                      true,
 		NoDefaultContentType:               true,
-		ReadTimeout:                        30 * time.Second,
+		ReadTimeout:                        10 * time.Second,
 	}
 
 	return
@@ -397,16 +407,18 @@ func (app *application) serve(ctx sc.Context) (err error) {
 
 	select {
 	case <-ctx.Done():
-		cancel()
-		return
 	case serveErr := <-errCh:
-		cancel()
 		err = serveErr
-		return
 	}
+	cancel()
+	return
 }
 
 func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
+	if atomic.LoadInt64(&app.running) != int64(1) {
+		sendError(request, errors.New(555, "***WARNING***", "fns is not ready or closing"))
+		return
+	}
 	if request.IsGet() {
 		uri := request.URI()
 		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
@@ -445,6 +457,9 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			return
 		}
 	} else if request.IsPost() {
+		app.requestCounter.Add(1)
+		defer app.requestCounter.Done()
+
 		uri := request.URI()
 		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
 			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
@@ -657,18 +672,31 @@ func (app *application) stop(timeout time.Duration) {
 	cancelCTX, cancel := sc.WithTimeout(sc.TODO(), timeout)
 	closeCh := make(chan struct{}, 1)
 	go func(ctx sc.Context, app *application, closeCh chan struct{}) {
-		atomic.StoreInt64(&app.running, int64(0))
+		// wait remain requests
+		app.requestCounter.Wait()
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message("fns Close: wait for the remaining requests to be processed successfully")
+		}
 		// unmount services
 		app.svc.Close()
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message("fns Close: services close successfully")
+		}
 
 		// http close
-		_ = app.server.Shutdown()
+		_ = app.ln.Close()
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message("fns Close: http server close successfully")
+		}
 
 		// hooks
 		if app.hasHook {
 			hookStopCallBackCh := make(chan struct{}, 1)
 			app.hookStopCh <- hookStopCallBackCh
 			<-hookStopCallBackCh
+		}
+		if app.Log().DebugEnabled() {
+			app.Log().Debug().Message("fns Close: hooks close successfully")
 		}
 
 		closeCh <- struct{}{}

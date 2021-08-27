@@ -46,8 +46,8 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		concurrency = workers.DefaultConcurrency
 	}
 	maxIdleTimeSecond := time.Duration(config.MaxIdleTimeSecond) * time.Second
-	if maxIdleTimeSecond < 50*time.Millisecond {
-		maxIdleTimeSecond = 50 * time.Millisecond
+	if maxIdleTimeSecond == 0 {
+		maxIdleTimeSecond = 10 * time.Second
 	}
 
 	wp, wpErr := workers.New(s, workers.WithConcurrency(concurrency), workers.WithMaxIdleTime(maxIdleTimeSecond))

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/go-playground/validator/v10"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,6 +37,7 @@ var (
 	defaultOptions = &Options{
 		ConfigRetrieverOption: defaultConfigRetrieverOption(),
 		Version:               defaultVersion,
+		SecretKey:             secretKey,
 	}
 	secretKey = []byte("+-fns")
 )
@@ -44,6 +47,7 @@ type Options struct {
 	Validate              *validator.Validate
 	Hooks                 []Hook
 	Version               string
+	SecretKey             []byte
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -76,6 +80,25 @@ func Hooks(hooks ...Hook) Option {
 	}
 }
 
+func SecretKeyFile(path string) Option {
+	return func(options *Options) error {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return fmt.Errorf("set secret key failed for empty path")
+		}
+		p, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("set secret key failed for get absolute representation of path failed")
+		}
+		data, readErr := ioutil.ReadFile(p)
+		if readErr != nil {
+			return fmt.Errorf("set secret key failed for read file failed, %v", readErr)
+		}
+		options.SecretKey = data
+		return nil
+	}
+}
+
 func Version(version string) Option {
 	return func(options *Options) error {
 		version = strings.TrimSpace(version)
@@ -87,7 +110,7 @@ func Version(version string) Option {
 	}
 }
 
-func WithValidate(validate *validator.Validate) Option {
+func CustomizeValidate(validate *validator.Validate) Option {
 	return func(options *Options) error {
 		if validate == nil {
 			return fmt.Errorf("set validate failed for nil")

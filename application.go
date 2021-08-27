@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -47,6 +48,7 @@ const (
 )
 
 type Application interface {
+	Log() (log logs.Logger)
 	Deploy(service ...Service)
 	Run(ctx sc.Context) (err error)
 	Sync()
@@ -66,6 +68,8 @@ func New(options ...Option) (app Application, err error) {
 			}
 		}
 	}
+
+	secretKey = opt.SecretKey
 
 	configRetriever, configRetrieverErr := configuares.NewRetriever(opt.ConfigRetrieverOption)
 	if configRetrieverErr != nil {
@@ -91,11 +95,6 @@ func New(options ...Option) (app Application, err error) {
 	if name == "" {
 		err = fmt.Errorf("fns create failed, no name in config")
 		return
-	}
-
-	// secret key
-	if appConfig.SecretKey != "" {
-		secretKey = []byte(appConfig.SecretKey)
 	}
 
 	// logs
@@ -194,9 +193,15 @@ type application struct {
 	ln              net.Listener
 	server          *fasthttp.Server
 	hasHook         bool
+	hookUnitPool    sync.Pool
 	hookUnitCh      chan *HookUnit
-	hookStopCh      chan struct{}
+	hookStopCh      chan chan struct{}
 	hooks           []Hook
+}
+
+func (app *application) Log() (log logs.Logger) {
+	log = app.log
+	return
 }
 
 func (app *application) Deploy(services ...Service) {
@@ -232,7 +237,7 @@ func (app *application) Run(ctx sc.Context) (err error) {
 		}
 	}
 	// serve http
-	serveErr := app.serve()
+	serveErr := app.serve(ctx)
 	if serveErr != nil {
 		err = serveErr
 		err = fmt.Errorf("fns Run: start http server failed, %v", serveErr)
@@ -337,7 +342,7 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 
 	// server
 	requestHandler := fasthttp.CompressHandler(app.handleHttpRequest)
-	if config.Cors != nil {
+	if config.Cors.Enabled {
 		config.Cors.fill()
 		requestHandler = newCors(config.Cors).handler(requestHandler)
 	}
@@ -369,10 +374,17 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	return
 }
 
-func (app *application) serve() (err error) {
+func (app *application) serve(ctx sc.Context) (err error) {
 
 	errCh := make(chan error, 1)
-	ctx, cancel := sc.WithTimeout(sc.TODO(), 3*time.Second)
+	var cancel sc.CancelFunc
+
+	_, hasDeadline := ctx.Deadline()
+	if !hasDeadline {
+		ctx, cancel = sc.WithTimeout(ctx, 1*time.Second)
+	} else {
+		ctx, cancel = sc.WithCancel(ctx)
+	}
 
 	go func(a *application, errCh chan error) {
 		serveErr := a.server.Serve(a.ln)
@@ -405,7 +417,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		// health check
 		if string(p) == healthCheckPath {
 			request.SetStatusCode(200)
-			request.SetContentTypeBytes(jsonContentType)
+			request.SetContentTypeBytes(jsonUTF8ContentType)
 			request.SetBody(emptyBody)
 			return
 		}
@@ -420,11 +432,11 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			description := app.svc.Description(namespace)
 			if description == nil || len(description) == 0 {
 				request.SetStatusCode(200)
-				request.SetContentTypeBytes(jsonContentType)
+				request.SetContentTypeBytes(jsonUTF8ContentType)
 				request.SetBody(emptyBody)
 			} else {
 				request.SetStatusCode(200)
-				request.SetContentTypeBytes(jsonContentType)
+				request.SetContentTypeBytes(jsonUTF8ContentType)
 				request.SetBody(description)
 			}
 			return
@@ -511,10 +523,23 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			return
 		}
 		request.SetStatusCode(200)
-		request.SetContentTypeBytes(jsonContentType)
+		request.SetContentTypeBytes(jsonUTF8ContentType)
 		request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
 		request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
 		request.SetBody(data)
+
+		// hook
+		if app.hasHook {
+			unit := app.hookUnitPool.Get().(*HookUnit)
+			unit.Namespace = namespace
+			unit.FnName = fn
+			unit.RequestSize = int64(len(request.PostBody()))
+			unit.ResponseSize = int64(len(data))
+			unit.Latency = latency
+			unit.Error = handleErr
+			app.hookUnitCh <- unit
+		}
+
 		cancel()
 	} else {
 		sendError(request, errors.New(555, "***WARNING***", "method is invalid"))
@@ -524,7 +549,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 }
 
 var (
-	jsonContentType = []byte("application/json")
+	jsonUTF8ContentType = []byte("application/json;charset=utf-8")
 
 	emptyBody = []byte("{}")
 
@@ -546,7 +571,7 @@ var (
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
 	body, _ := json.Marshal(err)
 	request.SetStatusCode(err.Code())
-	request.SetContentTypeBytes(jsonContentType)
+	request.SetContentTypeBytes(jsonUTF8ContentType)
 	request.SetBody(body)
 }
 
@@ -564,14 +589,18 @@ func (app *application) mountHooks() (err error) {
 			return
 		}
 	}
+	app.hookUnitPool.New = func() interface{} {
+		return &HookUnit{}
+	}
 	app.hookUnitCh = make(chan *HookUnit, 256*1024)
-	app.hookStopCh = make(chan struct{}, 1)
+	app.hookStopCh = make(chan chan struct{}, 1)
 	app.hasHook = true
-	go func(ch chan *HookUnit, stop chan struct{}, hooks []Hook) {
+	go func(units *sync.Pool, ch chan *HookUnit, stop chan chan struct{}, hooks []Hook) {
 		for {
+			var stopCallbackCh chan struct{}
 			stopped := false
 			select {
-			case <-stop:
+			case stopCallbackCh = <-stop:
 				stopped = true
 				break
 			case unit, ok := <-ch:
@@ -582,15 +611,17 @@ func (app *application) mountHooks() (err error) {
 				for _, hook := range hooks {
 					hook.Handle(*unit)
 				}
+				units.Put(unit)
 			}
 			if stopped {
 				for _, hook := range hooks {
 					hook.Close()
 				}
+				stopCallbackCh <- struct{}{}
 				break
 			}
 		}
-	}(app.hookUnitCh, app.hookStopCh, app.hooks)
+	}(&app.hookUnitPool, app.hookUnitCh, app.hookStopCh, app.hooks)
 	return
 }
 
@@ -609,11 +640,17 @@ func (app *application) SyncWithTimeout(timeout time.Duration) {
 		syscall.SIGKILL,
 		syscall.SIGTERM,
 	)
+	<-ch
+
 	app.stop(timeout)
 	return
 }
 
 func (app *application) stop(timeout time.Duration) {
+	if atomic.LoadInt64(&app.running) == int64(0) {
+		return
+	}
+	atomic.StoreInt64(&app.running, 0)
 	if timeout < 10*time.Second {
 		timeout = 10 * time.Second
 	}
@@ -629,8 +666,9 @@ func (app *application) stop(timeout time.Duration) {
 
 		// hooks
 		if app.hasHook {
-			close(app.hookStopCh)
-			close(app.hookUnitCh)
+			hookStopCallBackCh := make(chan struct{}, 1)
+			app.hookStopCh <- hookStopCallBackCh
+			<-hookStopCallBackCh
 		}
 
 		closeCh <- struct{}{}
@@ -638,10 +676,9 @@ func (app *application) stop(timeout time.Duration) {
 	}(cancelCTX, app, closeCh)
 	select {
 	case <-closeCh:
-		cancel()
 		break
 	case <-cancelCTX.Done():
-		cancel()
 		break
 	}
+	cancel()
 }

@@ -43,8 +43,8 @@ func (r *futureResult) Succeed(v interface{}) {
 		return
 	}
 	data := make([]byte, len(p)+1)
-	data = append(data, '+')
-	data = append(data, p...)
+	data[0] = '+'
+	copy(data[1:], p)
 	r.ch <- data
 	close(r.ch)
 }
@@ -56,8 +56,8 @@ func (r *futureResult) Failed(err errors.CodeError) {
 		return
 	}
 	data := make([]byte, len(p)+1)
-	data = append(data, '-')
-	data = append(data, p...)
+	data[0] = '-'
+	copy(data[1:], p)
 	r.ch <- data
 	close(r.ch)
 }

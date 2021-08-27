@@ -41,7 +41,16 @@ type services struct {
 }
 
 func (s *services) Build(config ServicesConfig) (err error) {
-	wp, wpErr := workers.New(s, workers.WithConcurrency(config.Concurrency), workers.WithMaxIdleTime(time.Duration(config.MaxIdleTimeSecond)*time.Second))
+	concurrency := config.Concurrency
+	if concurrency < 1 {
+		concurrency = workers.DefaultConcurrency
+	}
+	maxIdleTimeSecond := time.Duration(config.MaxIdleTimeSecond) * time.Second
+	if maxIdleTimeSecond < 50*time.Millisecond {
+		maxIdleTimeSecond = 50 * time.Millisecond
+	}
+
+	wp, wpErr := workers.New(s, workers.WithConcurrency(concurrency), workers.WithMaxIdleTime(maxIdleTimeSecond))
 	if wpErr != nil {
 		err = fmt.Errorf("fns Services: Build failed, %v", wpErr)
 		return
@@ -203,7 +212,7 @@ func (s *services) Description(namespace string) (description []byte) {
 	if !has {
 		return
 	}
-	obj := json.NewObjectFromBytes(description)
+	obj := json.NewObjectFromBytes(description0)
 	setErr := obj.Put("info.version", s.version)
 	if setErr != nil {
 		description = description0

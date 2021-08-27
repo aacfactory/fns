@@ -31,7 +31,7 @@ var (
 	requestOriginHeader     = []byte("Origin")
 )
 
-func newCors(config *CorsConfig) *cors {
+func newCors(config CorsConfig) *cors {
 	c := &cors{
 		exposedHeaders:   config.ExposedHeaders,
 		allowCredentials: config.AllowCredentials,

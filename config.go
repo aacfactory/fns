@@ -48,30 +48,30 @@ func defaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ApplicationConfig struct {
-	Name      string         `json:"name,omitempty"`
-	SecretKey string         `json:"secretKey,omitempty"`
-	Http      HttpConfig     `json:"http,omitempty"`
-	Log       LogConfig      `json:"log,omitempty"`
-	Services  ServicesConfig `json:"services,omitempty"`
+	Name     string         `json:"name,omitempty"`
+	Http     HttpConfig     `json:"http,omitempty"`
+	Log      LogConfig      `json:"log,omitempty"`
+	Services ServicesConfig `json:"services,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HttpConfig struct {
-	Host                     string      `json:"host,omitempty"`
-	Port                     int         `json:"port,omitempty"`
-	PublicHost               string      `json:"publicHost,omitempty"`
-	PublicPort               int         `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int         `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int         `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool        `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int         `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int         `json:"requestTimeoutSeconds,omitempty"`
-	Cors                     *CorsConfig `json:"cors,omitempty"`
-	WhiteCIDR                []string    `json:"whiteCIDR,omitempty"`
+	Host                     string     `json:"host,omitempty"`
+	Port                     int        `json:"port,omitempty"`
+	PublicHost               string     `json:"publicHost,omitempty"`
+	PublicPort               int        `json:"publicPort,omitempty"`
+	MaxConnectionsPerIP      int        `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int        `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool       `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int        `json:"keepalivePeriodSecond,omitempty"`
+	RequestTimeoutSeconds    int        `json:"requestTimeoutSeconds,omitempty"`
+	Cors                     CorsConfig `json:"cors,omitempty"`
+	WhiteCIDR                []string   `json:"whiteCIDR,omitempty"`
 }
 
 type CorsConfig struct {
+	Enabled          bool     `json:"enabled,omitempty"`
 	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`
 	AllowedMethods   []string `json:"allowedMethods,omitempty"`
 	AllowedHeaders   []string `json:"allowedHeaders,omitempty"`

@@ -59,7 +59,7 @@ func (discovery *standaloneServiceDiscovery) IsLocal(namespace string) (ok bool)
 
 func (discovery *standaloneServiceDiscovery) Proxy(namespace string) (proxy ServiceProxy, err errors.CodeError) {
 	service, has := discovery.serviceMap[namespace]
-	if has || service == nil {
+	if !has || service == nil {
 		err = errors.NotFound(fmt.Sprintf("%s service was not found", namespace))
 		return
 	}

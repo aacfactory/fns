@@ -21,7 +21,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/workers"
-	"github.com/tidwall/sjson"
 	"strings"
 	"sync"
 	"time"
@@ -204,12 +203,13 @@ func (s *services) Description(namespace string) (description []byte) {
 	if !has {
 		return
 	}
-	p, setErr := sjson.SetBytes(description, "info.version", s.version)
+	obj := json.NewObjectFromBytes(description)
+	setErr := obj.Put("info.version", s.version)
 	if setErr != nil {
 		description = description0
 		return
 	}
-	description = p
+	description = obj.Raw()
 	return
 }
 

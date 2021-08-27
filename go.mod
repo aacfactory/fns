@@ -10,7 +10,6 @@ require (
 	github.com/aacfactory/workers v1.2.0
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/rs/xid v1.3.0
-	github.com/tidwall/sjson v1.1.7
 	github.com/valyala/fasthttp v1.29.0
 )
 
@@ -31,6 +30,7 @@ require (
 	github.com/tidwall/gjson v1.8.1 // indirect
 	github.com/tidwall/match v1.0.3 // indirect
 	github.com/tidwall/pretty v1.1.0 // indirect
+	github.com/tidwall/sjson v1.1.7 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/sys v0.0.0-20210806184541-e5e7981a1069 // indirect

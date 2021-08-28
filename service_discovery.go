@@ -63,8 +63,8 @@ func (discovery *standaloneServiceDiscovery) Proxy(namespace string) (proxy Serv
 		err = errors.NotFound(fmt.Sprintf("%s service was not found", namespace))
 		return
 	}
-	proxy = &localedServiceProxy{
-		service: service,
+	proxy = &LocaledServiceProxy{
+		Service: service,
 	}
 	return
 }

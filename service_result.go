@@ -37,11 +37,20 @@ func (r *futureResult) Succeed(v interface{}) {
 		r.ch <- []byte("+")
 		return
 	}
-	p, encodeErr := json.Marshal(v)
-	if encodeErr != nil {
-		r.Failed(errors.ServiceError(encodeErr.Error()))
-		return
+
+	var p []byte
+	switch v.(type) {
+	case []byte:
+		p = v.([]byte)
+	default:
+		p0, encodeErr := json.Marshal(v)
+		if encodeErr != nil {
+			r.Failed(errors.ServiceError(encodeErr.Error()))
+			return
+		}
+		p = p0
 	}
+
 	data := make([]byte, len(p)+1)
 	data[0] = '+'
 	copy(data[1:], p)
@@ -70,7 +79,7 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 	case data := <-r.ch:
 		if data[0] == '-' {
 			err = errors.ServiceError("")
-			decodeErr := json.Unmarshal(data[1:], &err)
+			decodeErr := json.Unmarshal(data[1:], err)
 			if decodeErr != nil {
 				err = errors.Map(decodeErr)
 				return
@@ -106,6 +115,11 @@ type syncResult struct {
 
 func (r *syncResult) Succeed(v interface{}) {
 	if v == nil {
+		return
+	}
+	data, ok := v.([]byte)
+	if ok {
+		r.data = data
 		return
 	}
 	p, encodeErr := json.Marshal(v)

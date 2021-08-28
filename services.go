@@ -33,6 +33,7 @@ const (
 type services struct {
 	wp             workers.Workers
 	descriptions   map[string][]byte
+	internals      map[string]int64
 	discovery      ServiceDiscovery
 	authorizations Authorizations
 	permissions    Permissions
@@ -56,6 +57,9 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		return
 	}
 	s.wp = wp
+
+	// internals
+	s.internals = make(map[string]int64)
 
 	// discovery
 	var discoveryRetriever ServiceDiscoveryRetriever
@@ -146,11 +150,19 @@ func (s *services) Mount(service Service) (err error) {
 	if description != nil {
 		s.descriptions[service.Namespace()] = description
 	}
+	if service.Internal() {
+		s.internals[service.Namespace()] = 0
+	}
 	return
 }
 
 func (s *services) Exist(namespace string) (ok bool) {
 	ok = s.discovery.IsLocal(namespace)
+	return
+}
+
+func (s *services) IsInternal(namespace string) (ok bool) {
+	_, ok = s.internals[namespace]
 	return
 }
 

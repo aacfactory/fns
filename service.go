@@ -64,6 +64,7 @@ type Services interface {
 	Build(config ServicesConfig) (err error)
 	Mount(service Service) (err error)
 	Exist(namespace string) (ok bool)
+	IsInternal(namespace string) (ok bool)
 	Description(namespace string) (description []byte)
 	DecodeAuthorization(ctx Context, value []byte) (err errors.CodeError)
 	PermissionAllow(ctx Context, namespace string, fn string) (err errors.CodeError)
@@ -77,6 +78,7 @@ type Services interface {
 // 管理 Fn 的服务
 type Service interface {
 	Namespace() (namespace string)
+	Internal() (internal bool)
 	Build(config configuares.Config) (err error)
 	Description() (description []byte)
 	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)

@@ -498,17 +498,22 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		if requestId != nil && len(requestId) > 0 {
 			metaValue := request.Request.Header.PeekBytes(requestMetaHeader)
 			if metaValue == nil || len(metaValue) == 0 {
-				sendError(request, errors.New(555, "***WARNING***", "meta is required in inner request"))
+				sendError(request, errors.New(555, "***WARNING***", "meta is required in internal request"))
 				cancel()
 				return
 			}
 			ctx = newContext(timeoutCtx, string(requestId))
 			if !ctx.Meta().Decode(metaValue) {
-				sendError(request, errors.New(555, "***WARNING***", "meta is invalid in inner request"))
+				sendError(request, errors.New(555, "***WARNING***", "meta is invalid in internal request"))
 				cancel()
 				return
 			}
 		} else {
+			if app.svc.IsInternal(namespace) {
+				sendError(request, errors.New(555, "***WARNING***", "can not access an internal service"))
+				cancel()
+				return
+			}
 			ctx = newContext(timeoutCtx, UID())
 		}
 		ctx.log = app.log

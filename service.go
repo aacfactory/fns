@@ -165,7 +165,7 @@ var serviceDiscoveryRetrieverMap = map[string]ServiceDiscoveryRetriever{
 	"default": standaloneServiceDiscoveryRetriever,
 }
 
-type ServiceDiscoveryRetriever func(options ServiceDiscoveryOption) (discovery ServiceDiscovery, err error)
+type ServiceDiscoveryRetriever func(option ServiceDiscoveryOption) (discovery ServiceDiscovery, err error)
 
 // RegisterServiceDiscoveryRetriever
 // 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
@@ -179,7 +179,7 @@ func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRe
 type ServiceDiscoveryOption struct {
 	ServerId string
 	Address  string
-	Config   []byte
+	Config   configuares.Raw
 }
 
 type ServiceDiscovery interface {

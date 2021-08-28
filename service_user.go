@@ -74,19 +74,19 @@ func (u *user) Encode() (value []byte, err error) {
 	return
 }
 
-func (u *user) Active() (err error) {
+func (u *user) Active(ctx Context) (err error) {
 	if u.auth == nil {
 		err = fmt.Errorf("user Active failed for no Authorizations contains")
 	}
-	err = u.auth.Active(u)
+	err = u.auth.Active(ctx, u)
 	return
 }
 
-func (u *user) Revoke() (err error) {
+func (u *user) Revoke(ctx Context) (err error) {
 	if u.auth == nil {
 		err = fmt.Errorf("user Revoke failed for no Authorizations contains")
 	}
-	err = u.auth.Revoke(u)
+	err = u.auth.Revoke(ctx, u)
 	return
 }
 

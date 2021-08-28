@@ -120,8 +120,9 @@ func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetrie
 type Authorizations interface {
 	Encode(user User) (token []byte, err error)
 	Decode(token []byte, user User) (err error)
-	Active(user User) (err error)
-	Revoke(user User) (err error)
+	Knock(ctx Context, user User) (ok bool)
+	Active(ctx Context, user User) (err error)
+	Revoke(ctx Context, user User) (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -132,8 +133,8 @@ type User interface {
 	Principals() (principal *json.Object)
 	Attributes() (attributes *json.Object)
 	Encode() (value []byte, err error)
-	Active() (err error)
-	Revoke() (err error)
+	Active(ctx Context) (err error)
+	Revoke(ctx Context) (err error)
 	String() (value string)
 }
 

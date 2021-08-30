@@ -90,7 +90,7 @@ type Service interface {
 type Argument interface {
 	json.Marshaler
 	json.Unmarshaler
-	As(v interface{}) (err error)
+	As(v interface{}) (err errors.CodeError)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

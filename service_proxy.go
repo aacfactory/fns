@@ -201,6 +201,10 @@ type RemotedServiceProxy struct {
 	health    int64
 }
 
+func (proxy *RemotedServiceProxy) Namespace() string {
+	return proxy.namespace
+}
+
 func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
 	result = SyncResult()
 

@@ -447,6 +447,10 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			return
 		}
 		namespace := string(items[0])
+		if app.svc.IsInternal(namespace) {
+			sendError(request, errors.New(555, "***WARNING***", "can not access an internal service"))
+			return
+		}
 		if string(items[1]) == descriptionPathItem {
 			description := app.svc.Description(namespace)
 			if description == nil || len(description) == 0 {

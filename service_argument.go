@@ -21,7 +21,7 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func NewArgument(v interface{}) (arg Argument, err error) {
+func NewArgument(v interface{}) (arg Argument, err errors.CodeError) {
 	if v == nil {
 		err = errors.BadRequest("fns.Argument: new with nil pointer value")
 		return
@@ -35,8 +35,9 @@ func NewArgument(v interface{}) (arg Argument, err error) {
 			return
 		}
 	default:
-		p, err = json.Marshal(v)
-		if err != nil {
+		var encodeErr error
+		p, encodeErr = json.Marshal(v)
+		if encodeErr != nil {
 			err = errors.BadRequest("fns.Argument: new with invalid value")
 			return
 		}
@@ -78,7 +79,7 @@ func (arg *argument) UnmarshalJSON(data []byte) (err error) {
 	return
 }
 
-func (arg *argument) As(v interface{}) (err error) {
+func (arg *argument) As(v interface{}) (err errors.CodeError) {
 	decodeErr := json.Unmarshal(*arg, v)
 	if decodeErr != nil {
 		err = errors.BadRequest("fns.Argument: As failed")

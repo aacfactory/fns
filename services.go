@@ -256,7 +256,7 @@ func (s *services) Handle(action string, _payload interface{}) {
 		return
 	}
 
-	proxy, proxyErr := s.discovery.Proxy(payload.namespace)
+	proxy, proxyErr := s.discovery.Proxy(payload.ctx, payload.namespace)
 	if proxyErr != nil {
 		payload.result.Failed(proxyErr)
 		return

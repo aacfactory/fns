@@ -108,7 +108,7 @@ func (ctx *context) Log() (log logs.Logger) {
 }
 
 func (ctx *context) ServiceProxy(namespace string) (proxy ServiceProxy, err error) {
-	proxy, err = ctx.discovery.Proxy(namespace)
+	proxy, err = ctx.discovery.Proxy(ctx, namespace)
 	return
 }
 

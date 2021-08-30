@@ -188,7 +188,7 @@ type ServiceDiscoveryOption struct {
 type ServiceDiscovery interface {
 	Publish(service Service) (err error)
 	IsLocal(namespace string) (ok bool)
-	Proxy(namespace string) (proxy ServiceProxy, err errors.CodeError)
+	Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError)
 	Close()
 }
 

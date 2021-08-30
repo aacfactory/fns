@@ -57,8 +57,7 @@ func (proxy *LocaledServiceProxy) Request(ctx Context, fn string, argument Argum
 
 func NewRemotedServiceProxyGroup(namespace string) (group *RemotedServiceProxyGroup) {
 	group = &RemotedServiceProxyGroup{
-		mutex:     sync.Mutex{},
-		wg:        sync.WaitGroup{},
+		mutex:     sync.RWMutex{},
 		namespace: namespace,
 		pos:       0,
 		keys:      make([]string, 0, 1),
@@ -68,8 +67,7 @@ func NewRemotedServiceProxyGroup(namespace string) (group *RemotedServiceProxyGr
 }
 
 type RemotedServiceProxyGroup struct {
-	mutex     sync.Mutex
-	wg        sync.WaitGroup
+	mutex     sync.RWMutex
 	namespace string
 	pos       uint64
 	keys      []string
@@ -81,9 +79,18 @@ func (group *RemotedServiceProxyGroup) Namespace() string {
 }
 
 func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err errors.CodeError) {
-	group.wg.Wait()
+	group.mutex.RLocker()
+	defer group.mutex.RUnlock()
 
-	pos := group.pos & uint64(len(group.keys))
+	num := uint64(len(group.keys))
+	if num < 1 {
+		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy Next: no agents")
+		return
+	}
+
+	pos := atomic.LoadUint64(&group.pos) % num
+	atomic.AddUint64(&group.pos, 1)
+
 	key := group.keys[pos]
 	agent, has := group.agentMap[key]
 
@@ -93,9 +100,15 @@ func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err e
 	}
 
 	if !agent.Health() {
-		group.RemoveAgent(agent.id)
 
+		group.mutex.RUnlock()
+		group.RemoveAgent(agent.id)
+		group.mutex.RLocker()
+
+		group.mutex.RUnlock()
 		proxy, err = group.Next()
+		group.mutex.RLocker()
+
 		return
 	}
 
@@ -105,7 +118,8 @@ func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err e
 }
 
 func (group *RemotedServiceProxyGroup) GetAgent(id string) (proxy *RemotedServiceProxy, err errors.CodeError) {
-	group.wg.Wait()
+	group.mutex.RLock()
+	defer group.mutex.RUnlock()
 	agent, has := group.agentMap[id]
 	if !has {
 		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy GetAgent: no such agent")
@@ -116,13 +130,14 @@ func (group *RemotedServiceProxyGroup) GetAgent(id string) (proxy *RemotedServic
 }
 
 func (group *RemotedServiceProxyGroup) AppendAgent(agent *RemotedServiceProxy) {
-	group.wg.Add(1)
-	defer group.wg.Done()
-
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
 
 	if agent.namespace != group.namespace {
+		return
+	}
+
+	if !agent.Check() {
 		return
 	}
 
@@ -140,19 +155,20 @@ func (group *RemotedServiceProxyGroup) AppendAgent(agent *RemotedServiceProxy) {
 }
 
 func (group *RemotedServiceProxyGroup) ContainsAgent(id string) (has bool) {
+	group.mutex.RLock()
+	defer group.mutex.RUnlock()
 	_, has = group.agentMap[id]
 	return
 }
 
 func (group *RemotedServiceProxyGroup) AgentNum() (num int) {
+	group.mutex.RLock()
+	defer group.mutex.RUnlock()
 	num = len(group.agentMap)
 	return
 }
 
 func (group *RemotedServiceProxyGroup) RemoveAgent(id string) {
-	group.wg.Add(1)
-	defer group.wg.Done()
-
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
 
@@ -177,9 +193,6 @@ func (group *RemotedServiceProxyGroup) RemoveAgent(id string) {
 }
 
 func (group *RemotedServiceProxyGroup) Close() {
-	group.wg.Add(1)
-	defer group.wg.Done()
-
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
 

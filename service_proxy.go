@@ -79,7 +79,7 @@ func (group *RemotedServiceProxyGroup) Namespace() string {
 }
 
 func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err errors.CodeError) {
-	group.mutex.RLocker()
+	group.mutex.RLock()
 	defer group.mutex.RUnlock()
 
 	num := uint64(len(group.keys))
@@ -103,11 +103,11 @@ func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err e
 
 		group.mutex.RUnlock()
 		group.RemoveAgent(agent.id)
-		group.mutex.RLocker()
+		group.mutex.RLock()
 
 		group.mutex.RUnlock()
 		proxy, err = group.Next()
-		group.mutex.RLocker()
+		group.mutex.RLock()
 
 		return
 	}

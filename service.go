@@ -159,6 +159,7 @@ type Permissions interface {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ServiceProxy interface {
+	Id() (id string)
 	Request(ctx Context, fn string, argument Argument) (result Result)
 }
 
@@ -189,6 +190,7 @@ type ServiceDiscovery interface {
 	Publish(service Service) (err error)
 	IsLocal(namespace string) (ok bool)
 	Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError)
+	ProxyByExact(ctx Context, proxyId string) (proxy ServiceProxy, err errors.CodeError)
 	Close()
 }
 

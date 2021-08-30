@@ -24,13 +24,13 @@ import (
 
 func standaloneServiceDiscoveryRetriever(_ ServiceDiscoveryOption) (discovery ServiceDiscovery, _ error) {
 	discovery = &standaloneServiceDiscovery{
-		serviceMap: make(map[string]Service),
+		proxyMap: make(map[string]*LocaledServiceProxy),
 	}
 	return
 }
 
 type standaloneServiceDiscovery struct {
-	serviceMap map[string]Service
+	proxyMap map[string]*LocaledServiceProxy
 }
 
 func (discovery *standaloneServiceDiscovery) Publish(service Service) (err error) {
@@ -43,28 +43,37 @@ func (discovery *standaloneServiceDiscovery) Publish(service Service) (err error
 		err = fmt.Errorf("ServiceDiscovery: Publish no namespace service")
 		return
 	}
-	_, has := discovery.serviceMap[namespace]
+
+	_, has := discovery.proxyMap[namespace]
 	if has {
 		err = fmt.Errorf("ServiceDiscovery: Publish duplicated namespace service")
 		return
 	}
-	discovery.serviceMap[namespace] = service
+	discovery.proxyMap[namespace] = NewLocaledServiceProxy(service)
 	return
 }
 
 func (discovery *standaloneServiceDiscovery) IsLocal(namespace string) (ok bool) {
-	_, ok = discovery.serviceMap[namespace]
+	_, ok = discovery.proxyMap[namespace]
 	return
 }
 
 func (discovery *standaloneServiceDiscovery) Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError) {
-	service, has := discovery.serviceMap[namespace]
-	if !has || service == nil {
+	proxy0, has := discovery.proxyMap[namespace]
+	if !has || proxy0 == nil {
 		err = errors.NotFound(fmt.Sprintf("%s service was not found", namespace))
 		return
 	}
-	proxy = &LocaledServiceProxy{
-		Service: service,
+	proxy = proxy0
+	return
+}
+
+func (discovery *standaloneServiceDiscovery) ProxyByExact(ctx Context, proxyId string) (proxy ServiceProxy, err errors.CodeError) {
+	for _, serviceProxy := range discovery.proxyMap {
+		if serviceProxy.Id() == proxyId {
+			proxy = serviceProxy
+			return
+		}
 	}
 	return
 }

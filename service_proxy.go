@@ -26,13 +26,25 @@ import (
 	"time"
 )
 
+func NewLocaledServiceProxy(service Service) *LocaledServiceProxy {
+	return &LocaledServiceProxy{
+		id:      UID(),
+		service: service,
+	}
+}
+
 type LocaledServiceProxy struct {
-	Service Service
+	id      string
+	service Service
+}
+
+func (proxy *LocaledServiceProxy) Id() string {
+	return proxy.id
 }
 
 func (proxy *LocaledServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
 	result = SyncResult()
-	v, err := proxy.Service.Handle(WithNamespace(ctx, proxy.Service.Namespace()), fn, argument)
+	v, err := proxy.service.Handle(WithNamespace(ctx, proxy.service.Namespace()), fn, argument)
 	if err != nil {
 		result.Failed(err)
 		return
@@ -43,8 +55,8 @@ func (proxy *LocaledServiceProxy) Request(ctx Context, fn string, argument Argum
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func NewGroupRemotedServiceProxy(namespace string) (group *GroupRemotedServiceProxy) {
-	group = &GroupRemotedServiceProxy{
+func NewRemotedServiceProxyGroup(namespace string) (group *RemotedServiceProxyGroup) {
+	group = &RemotedServiceProxyGroup{
 		mutex:     sync.Mutex{},
 		wg:        sync.WaitGroup{},
 		namespace: namespace,
@@ -55,7 +67,7 @@ func NewGroupRemotedServiceProxy(namespace string) (group *GroupRemotedServicePr
 	return
 }
 
-type GroupRemotedServiceProxy struct {
+type RemotedServiceProxyGroup struct {
 	mutex     sync.Mutex
 	wg        sync.WaitGroup
 	namespace string
@@ -64,76 +76,87 @@ type GroupRemotedServiceProxy struct {
 	agentMap  map[string]*RemotedServiceProxy
 }
 
-func (proxy *GroupRemotedServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
-	proxy.wg.Wait()
+func (group *RemotedServiceProxyGroup) Namespace() string {
+	return group.namespace
+}
 
-	pos := proxy.pos & uint64(len(proxy.keys))
-	key := proxy.keys[pos]
-	agent, has := proxy.agentMap[key]
+func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err errors.CodeError) {
+	group.wg.Wait()
 
-	atomic.AddUint64(&proxy.pos, 1)
+	pos := group.pos & uint64(len(group.keys))
+	key := group.keys[pos]
+	agent, has := group.agentMap[key]
 
 	if !has {
-		result = SyncResult()
-		result.Failed(errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy Request: next agent failed"))
+		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy Next: no agents")
 		return
 	}
 
 	if !agent.Health() {
-		proxy.RemoveAgent(agent.id)
+		group.RemoveAgent(agent.id)
 
-		result = SyncResult()
-		result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: [%s:%s:%s] is not healthy", agent.namespace, agent.address, agent.id)))
+		proxy, err = group.Next()
 		return
 	}
 
-	result = agent.Request(ctx, fn, argument)
+	proxy = agent
 
 	return
 }
 
-func (proxy *GroupRemotedServiceProxy) AppendAgent(agent *RemotedServiceProxy) {
-	proxy.wg.Add(1)
-	defer proxy.wg.Done()
+func (group *RemotedServiceProxyGroup) GetAgent(id string) (proxy *RemotedServiceProxy, err errors.CodeError) {
+	group.wg.Wait()
+	agent, has := group.agentMap[id]
+	if !has {
+		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy GetAgent: no such agent")
+		return
+	}
+	proxy = agent
+	return
+}
 
-	proxy.mutex.Lock()
-	defer proxy.mutex.Unlock()
+func (group *RemotedServiceProxyGroup) AppendAgent(agent *RemotedServiceProxy) {
+	group.wg.Add(1)
+	defer group.wg.Done()
 
-	if agent.namespace != proxy.namespace {
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
+
+	if agent.namespace != group.namespace {
 		return
 	}
 
 	id := agent.Id()
 
-	_, has := proxy.agentMap[id]
+	_, has := group.agentMap[id]
 	if has {
 		return
 	}
 
-	proxy.keys = append(proxy.keys, id)
-	proxy.agentMap[id] = agent
+	group.keys = append(group.keys, id)
+	group.agentMap[id] = agent
 
 	return
 }
 
-func (proxy *GroupRemotedServiceProxy) ContainsAgent(id string) (has bool) {
-	_, has = proxy.agentMap[id]
+func (group *RemotedServiceProxyGroup) ContainsAgent(id string) (has bool) {
+	_, has = group.agentMap[id]
 	return
 }
 
-func (proxy *GroupRemotedServiceProxy) AgentNum() (num int) {
-	num = len(proxy.agentMap)
+func (group *RemotedServiceProxyGroup) AgentNum() (num int) {
+	num = len(group.agentMap)
 	return
 }
 
-func (proxy *GroupRemotedServiceProxy) RemoveAgent(id string) {
-	proxy.wg.Add(1)
-	defer proxy.wg.Done()
+func (group *RemotedServiceProxyGroup) RemoveAgent(id string) {
+	group.wg.Add(1)
+	defer group.wg.Done()
 
-	proxy.mutex.Lock()
-	defer proxy.mutex.Unlock()
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
 
-	agent, has := proxy.agentMap[id]
+	agent, has := group.agentMap[id]
 	if !has {
 		return
 	}
@@ -141,31 +164,31 @@ func (proxy *GroupRemotedServiceProxy) RemoveAgent(id string) {
 	agent.Close()
 
 	newKeys := make([]string, 0, 1)
-	for _, key := range proxy.keys {
+	for _, key := range group.keys {
 		if key == id {
 			continue
 		}
 		newKeys = append(newKeys, key)
 	}
-	proxy.keys = newKeys
+	group.keys = newKeys
 
-	delete(proxy.agentMap, id)
+	delete(group.agentMap, id)
 
 }
 
-func (proxy *GroupRemotedServiceProxy) Close() {
-	proxy.wg.Add(1)
-	defer proxy.wg.Done()
+func (group *RemotedServiceProxyGroup) Close() {
+	group.wg.Add(1)
+	defer group.wg.Done()
 
-	proxy.mutex.Lock()
-	defer proxy.mutex.Unlock()
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
 
-	for _, agent := range proxy.agentMap {
+	for _, agent := range group.agentMap {
 		agent.Close()
 	}
 
-	proxy.keys = make([]string, 0, 1)
-	proxy.agentMap = make(map[string]*RemotedServiceProxy)
+	group.keys = make([]string, 0, 1)
+	group.agentMap = make(map[string]*RemotedServiceProxy)
 
 	return
 }

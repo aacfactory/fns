@@ -80,9 +80,8 @@ func (group *RemotedServiceProxyGroup) Namespace() string {
 
 func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err errors.CodeError) {
 	group.mutex.RLock()
-	defer group.mutex.RUnlock()
-
 	num := uint64(len(group.keys))
+	group.mutex.RUnlock()
 	if num < 1 {
 		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy Next: no agents")
 		return
@@ -91,8 +90,10 @@ func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err e
 	pos := atomic.LoadUint64(&group.pos) % num
 	atomic.AddUint64(&group.pos, 1)
 
+	group.mutex.RLock()
 	key := group.keys[pos]
 	agent, has := group.agentMap[key]
+	group.mutex.RUnlock()
 
 	if !has {
 		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy Next: no agents")
@@ -100,15 +101,8 @@ func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err e
 	}
 
 	if !agent.Health() {
-
-		group.mutex.RUnlock()
 		group.RemoveAgent(agent.id)
-		group.mutex.RLock()
-
-		group.mutex.RUnlock()
 		proxy, err = group.Next()
-		group.mutex.RLock()
-
 		return
 	}
 
@@ -119,8 +113,8 @@ func (group *RemotedServiceProxyGroup) Next() (proxy *RemotedServiceProxy, err e
 
 func (group *RemotedServiceProxyGroup) GetAgent(id string) (proxy *RemotedServiceProxy, err errors.CodeError) {
 	group.mutex.RLock()
-	defer group.mutex.RUnlock()
 	agent, has := group.agentMap[id]
+	group.mutex.RUnlock()
 	if !has {
 		err = errors.New(555, "***WARNING***", "fns GroupRemotedServiceProxy GetAgent: no such agent")
 		return
@@ -130,26 +124,29 @@ func (group *RemotedServiceProxyGroup) GetAgent(id string) (proxy *RemotedServic
 }
 
 func (group *RemotedServiceProxyGroup) AppendAgent(agent *RemotedServiceProxy) {
-	group.mutex.Lock()
-	defer group.mutex.Unlock()
 
 	if agent.namespace != group.namespace {
 		return
 	}
 
-	if !agent.Check() {
+	if !agent.Health() {
 		return
 	}
 
 	id := agent.Id()
 
+	group.mutex.RLock()
 	_, has := group.agentMap[id]
+	group.mutex.RUnlock()
+
 	if has {
 		return
 	}
 
+	group.mutex.Lock()
 	group.keys = append(group.keys, id)
 	group.agentMap[id] = agent
+	group.mutex.Unlock()
 
 	return
 }
@@ -169,10 +166,11 @@ func (group *RemotedServiceProxyGroup) AgentNum() (num int) {
 }
 
 func (group *RemotedServiceProxyGroup) RemoveAgent(id string) {
-	group.mutex.Lock()
-	defer group.mutex.Unlock()
 
+	group.mutex.RLock()
 	agent, has := group.agentMap[id]
+	group.mutex.RUnlock()
+
 	if !has {
 		return
 	}
@@ -180,16 +178,20 @@ func (group *RemotedServiceProxyGroup) RemoveAgent(id string) {
 	agent.Close()
 
 	newKeys := make([]string, 0, 1)
-	for _, key := range group.keys {
+	group.mutex.RLock()
+	keys := group.keys
+	group.mutex.RUnlock()
+	for _, key := range keys {
 		if key == id {
 			continue
 		}
 		newKeys = append(newKeys, key)
 	}
+
+	group.mutex.Lock()
 	group.keys = newKeys
-
 	delete(group.agentMap, id)
-
+	group.mutex.Unlock()
 }
 
 func (group *RemotedServiceProxyGroup) Close() {
@@ -217,6 +219,7 @@ func NewRemotedServiceProxy(id string, namespace string, address string) (proxy 
 		client: &fasthttp.Client{
 			Name: id,
 		},
+		health: 0,
 	}
 
 	proxy.Check()
@@ -274,11 +277,11 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 	if doErr != nil {
 		if doErr == fasthttp.ErrTimeout {
 			result.Failed(errors.Timeout(fmt.Sprintf("fns Proxy Request: post to %s timeout", proxy.address)).WithCause(doErr))
-			proxy.Check()
 		} else {
 			result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: post to %s failed", proxy.address)).WithCause(doErr))
-			proxy.Check()
 		}
+		atomic.StoreInt64(&proxy.health, int64(0))
+		go proxy.Check()
 		return
 	}
 
@@ -316,7 +319,7 @@ func (proxy *RemotedServiceProxy) Check() (ok bool) {
 	response := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(response)
 
-	err := proxy.client.DoTimeout(request, response, 5*time.Second)
+	err := proxy.client.DoTimeout(request, response, 3*time.Second)
 	if err != nil {
 		return
 	}

@@ -48,10 +48,11 @@ func defaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ApplicationConfig struct {
-	Name     string         `json:"name,omitempty"`
-	Http     HttpConfig     `json:"http,omitempty"`
-	Log      LogConfig      `json:"log,omitempty"`
-	Services ServicesConfig `json:"services,omitempty"`
+	Name        string         `json:"name,omitempty"`
+	Concurrency int            `json:"concurrency,omitempty"`
+	Http        HttpConfig     `json:"http,omitempty"`
+	Log         LogConfig      `json:"log,omitempty"`
+	Services    ServicesConfig `json:"services,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -120,22 +121,23 @@ func (cors *CorsConfig) originAllowed(origin string) (ok bool) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ServicesConfig struct {
-	Concurrency         int                  `json:"concurrency,omitempty"`
 	HandleTimeoutSecond int                  `json:"handleTimeoutSecond,omitempty"`
 	MaxIdleTimeSecond   int                  `json:"maxIdleTimeSecond,omitempty"`
 	ReduceMemoryUsage   bool                 `json:"reduceMemoryUsage,omitempty"`
 	Discovery           DiscoveryConfig      `json:"discovery,omitempty"`
 	Authorization       AuthorizationsConfig `json:"authorization,omitempty"`
 	Permission          PermissionsConfig    `json:"permission,omitempty"`
+	concurrency         int
 	serverId            string
 	address             string
 	version             string
 }
 
 type DiscoveryConfig struct {
-	Enable bool            `json:"enable,omitempty"`
-	Kind   string          `json:"kind,omitempty"`
-	Config configuares.Raw `json:"config,omitempty"`
+	Enable             bool            `json:"enable,omitempty"`
+	Kind               string          `json:"kind,omitempty"`
+	HttpClientPoolSize int             `json:"httpClientPoolSize,omitempty"`
+	Config             configuares.Raw `json:"config,omitempty"`
 }
 
 type AuthorizationsConfig struct {

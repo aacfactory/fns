@@ -145,6 +145,8 @@ func New(options ...Option) (app Application, err error) {
 		commons.ValidateRegisterRegex(validate)
 	}
 
+	appConfig.Services.concurrency = appConfig.Concurrency
+
 	app0 := &application{
 		id:              UID(),
 		name:            name,
@@ -355,7 +357,7 @@ func (app *application) buildListener(_config ApplicationConfig) (err error) {
 func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	// config
 	config := _config.Http
-	concurrency := _config.Services.Concurrency
+	concurrency := _config.Concurrency
 	reduceMemoryUsage := _config.Services.ReduceMemoryUsage
 
 	// server

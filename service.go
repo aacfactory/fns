@@ -176,8 +176,9 @@ func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRe
 }
 
 type ServiceDiscoveryOption struct {
-	Address string
-	Config  configuares.Raw
+	Address            string
+	HttpClientPoolSize int
+	Config             configuares.Raw
 }
 
 const (

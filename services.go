@@ -42,7 +42,7 @@ type services struct {
 }
 
 func (s *services) Build(config ServicesConfig) (err error) {
-	concurrency := config.Concurrency
+	concurrency := config.concurrency
 	if concurrency < 1 {
 		concurrency = workers.DefaultConcurrency
 	}
@@ -81,8 +81,9 @@ func (s *services) Build(config ServicesConfig) (err error) {
 	}
 
 	discovery, discoveryErr := discoveryRetriever(ServiceDiscoveryOption{
-		Address: config.address,
-		Config:  discoveryConfig.Config,
+		Address:            config.address,
+		Config:             discoveryConfig.Config,
+		HttpClientPoolSize: discoveryConfig.HttpClientPoolSize,
 	})
 
 	if discoveryErr != nil {

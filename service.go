@@ -109,8 +109,6 @@ var authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
 
 type AuthorizationsRetriever func(config configuares.Raw) (authorizations Authorizations, err error)
 
-// RegisterAuthorizationsRetriever
-// 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
 func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetriever) {
 	authorizationsRetrieverMap[kind] = retriever
 }
@@ -142,8 +140,6 @@ var permissionsRetrieverMap = make(map[string]PermissionsRetriever)
 
 type PermissionsRetriever func(config configuares.Raw) (permission Permissions, err error)
 
-// RegisterPermissionsRetriever
-// 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
 func RegisterPermissionsRetriever(kind string, retriever PermissionsRetriever) {
 	permissionsRetrieverMap[kind] = retriever
 }
@@ -166,8 +162,6 @@ var serviceDiscoveryRetrieverMap = map[string]ServiceDiscoveryRetriever{
 
 type ServiceDiscoveryRetriever func(option ServiceDiscoveryOption) (discovery ServiceDiscovery, err error)
 
-// RegisterServiceDiscoveryRetriever
-// 在支持的包里调用这个函数，如 INIT 中，在使用的时候如注入SQL驱动一样
 func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRetriever) {
 	if serviceDiscoveryRetrieverMap == nil {
 		serviceDiscoveryRetrieverMap = make(map[string]ServiceDiscoveryRetriever)
@@ -194,9 +188,10 @@ type Registration struct {
 
 func NewRegistrations() (registrations *Registrations) {
 	idx := uint64(0)
+	size := uint64(0)
 	registrations = &Registrations{
 		idx:    &idx,
-		size:   0,
+		size:   &size,
 		mutex:  sync.RWMutex{},
 		values: make([]Registration, 0, 1),
 	}
@@ -205,7 +200,7 @@ func NewRegistrations() (registrations *Registrations) {
 
 type Registrations struct {
 	idx    *uint64
-	size   uint64
+	size   *uint64
 	mutex  sync.RWMutex
 	values []Registration
 }
@@ -213,10 +208,10 @@ type Registrations struct {
 func (r *Registrations) Next() (v Registration, has bool) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	if len(r.values) == 0 {
+	if len(r.values) == 0 || atomic.LoadUint64(r.size) == 0 {
 		return
 	}
-	v = r.values[*r.idx%r.size]
+	v = r.values[*r.idx%*r.size]
 	has = true
 	atomic.AddUint64(r.idx, 1)
 	return
@@ -226,7 +221,7 @@ func (r *Registrations) Append(v Registration) {
 	r.mutex.Lock()
 	r.mutex.Unlock()
 
-	if r.size > 0 {
+	if atomic.LoadUint64(r.size) > 0 {
 		for i, value := range r.values {
 			if value.Id == v.Id {
 				if value.Reversion < v.Reversion {
@@ -238,7 +233,7 @@ func (r *Registrations) Append(v Registration) {
 	}
 
 	r.values = append(r.values, v)
-	r.size = uint64(len(r.values))
+	atomic.StoreUint64(r.size, uint64(len(r.values)))
 
 	return
 }
@@ -254,14 +249,14 @@ func (r *Registrations) Remove(v Registration) {
 		values = append(values, value)
 	}
 	r.values = values
-	r.size = uint64(len(r.values))
+	atomic.StoreUint64(r.size, uint64(len(r.values)))
 	return
 }
 
 func (r *Registrations) Size() (size int) {
 	r.mutex.Lock()
 	r.mutex.Unlock()
-	size = int(r.size)
+	size = int(atomic.LoadUint64(r.size))
 	return
 }
 

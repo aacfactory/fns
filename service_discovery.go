@@ -35,18 +35,18 @@ type standaloneServiceDiscovery struct {
 
 func (discovery *standaloneServiceDiscovery) Publish(service Service) (err error) {
 	if service == nil {
-		err = fmt.Errorf("ServiceDiscovery: Publish nil pointer service")
+		err = fmt.Errorf("fns ServiceDiscovery Publish: nil pointer service")
 		return
 	}
 	namespace := strings.TrimSpace(service.Namespace())
 	if namespace == "" {
-		err = fmt.Errorf("ServiceDiscovery: Publish no namespace service")
+		err = fmt.Errorf("fns ServiceDiscovery Publish: no namespace service")
 		return
 	}
 
 	_, has := discovery.proxyMap[namespace]
 	if has {
-		err = fmt.Errorf("ServiceDiscovery: Publish duplicated namespace service")
+		err = fmt.Errorf("fns ServiceDiscovery Publish: duplicated namespace service")
 		return
 	}
 	discovery.proxyMap[namespace] = NewLocaledServiceProxy(service)
@@ -58,24 +58,85 @@ func (discovery *standaloneServiceDiscovery) IsLocal(namespace string) (ok bool)
 	return
 }
 
-func (discovery *standaloneServiceDiscovery) Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError) {
+func (discovery *standaloneServiceDiscovery) Proxy(_ Context, namespace string) (proxy ServiceProxy, err errors.CodeError) {
 	proxy0, has := discovery.proxyMap[namespace]
 	if !has || proxy0 == nil {
-		err = errors.NotFound(fmt.Sprintf("%s service was not found", namespace))
+		err = errors.NotFound(fmt.Sprintf("fns ServiceDiscovery Proxy: %s service was not found", namespace))
 		return
 	}
 	proxy = proxy0
 	return
 }
 
-func (discovery *standaloneServiceDiscovery) ProxyByExact(ctx Context, proxyId string) (proxy ServiceProxy, err errors.CodeError) {
-	for _, serviceProxy := range discovery.proxyMap {
-		if serviceProxy.Id() == proxyId {
-			proxy = serviceProxy
-			return
-		}
+func (discovery *standaloneServiceDiscovery) Close() {}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func NewAbstractServiceDiscovery(httpClientPoolSize int) AbstractServiceDiscovery {
+	return AbstractServiceDiscovery{
+		Local: &standaloneServiceDiscovery{
+			proxyMap: make(map[string]*LocaledServiceProxy),
+		},
+		Clients: NewHttpClients(httpClientPoolSize),
+		Manager: NewRegistrationsManager(),
 	}
+}
+
+type AbstractServiceDiscovery struct {
+	Local   ServiceDiscovery
+	Clients *HttpClients
+	Manager *RegistrationsManager
+}
+
+func (discovery *AbstractServiceDiscovery) IsLocal(namespace string) (ok bool) {
+	ok = discovery.Local.IsLocal(namespace)
 	return
 }
 
-func (discovery *standaloneServiceDiscovery) Close() {}
+func (discovery *AbstractServiceDiscovery) Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError) {
+	namespace = strings.TrimSpace(namespace)
+	if namespace == "" {
+		err = errors.NotFound(fmt.Sprintf("fns ServiceDiscovery Proxy: empty namespace service"))
+		return
+	}
+	// exact
+	if ctx.Meta().Exists(ServiceProxyAddress) {
+		proxy = discovery.exactProxy(ctx, namespace)
+		return
+	}
+
+	// local
+	if discovery.IsLocal(namespace) {
+		proxy, err = discovery.Local.Proxy(ctx, namespace)
+		return
+	}
+
+	// remote
+	registration, has := discovery.Manager.Get(namespace)
+	if !has {
+		err = errors.NotFound(fmt.Sprintf("fns ServiceDiscovery Proxy: %s service was not found", namespace))
+		return
+	}
+
+	proxy = NewRemotedServiceProxy(discovery.Clients, registration, discovery.Manager.ProblemChan())
+
+	return
+}
+
+func (discovery *AbstractServiceDiscovery) exactProxy(ctx Context, namespace string) (proxy ServiceProxy) {
+	address, _ := ctx.Meta().GetString(ServiceProxyAddress)
+	registration := Registration{
+		Id:        "_exact",
+		Namespace: namespace,
+		Address:   address,
+	}
+	proxy = NewRemotedServiceProxy(discovery.Clients, registration, discovery.Manager.ProblemChan())
+	return
+}
+
+func (discovery *AbstractServiceDiscovery) Close() {
+	discovery.Manager.Close()
+	discovery.Clients.Close()
+	discovery.Local.Close()
+	return
+}

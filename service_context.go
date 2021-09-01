@@ -70,6 +70,19 @@ func newContext(ctx sc.Context, id string) *context {
 	}
 }
 
+func FakeContext(ctx sc.Context, authorization []byte, log logs.Logger, validate *validator.Validate, discovery ServiceDiscovery) Context {
+	return &context{
+		Context:       ctx,
+		id:            UID(),
+		authorization: authorization,
+		user:          newUser(),
+		meta:          newContextMeta(),
+		log:           log,
+		validate:      validate,
+		discovery:     discovery,
+	}
+}
+
 type context struct {
 	sc.Context
 	namespace     string

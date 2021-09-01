@@ -81,9 +81,8 @@ func (s *services) Build(config ServicesConfig) (err error) {
 	}
 
 	discovery, discoveryErr := discoveryRetriever(ServiceDiscoveryOption{
-		ServerId: config.serverId,
-		Address:  config.address,
-		Config:   discoveryConfig.Config,
+		Address: config.address,
+		Config:  discoveryConfig.Config,
 	})
 
 	if discoveryErr != nil {

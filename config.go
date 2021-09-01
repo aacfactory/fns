@@ -69,6 +69,19 @@ type HttpConfig struct {
 	Cors                     CorsConfig `json:"cors,omitempty"`
 }
 
+const (
+	publicHost = "PUBLIC_HOST"
+)
+
+func getPublicHostFromEnv() (host string, has bool) {
+	host, has = os.LookupEnv(publicHost)
+	if has {
+		host = strings.TrimSpace(host)
+		has = host != ""
+	}
+	return
+}
+
 type CorsConfig struct {
 	Enabled          bool     `json:"enabled,omitempty"`
 	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`

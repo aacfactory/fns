@@ -22,6 +22,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -103,12 +105,6 @@ type Result interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type ServiceRequestHeader interface {
-	Get(name string) (value []byte, has bool)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 var authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
 
 type AuthorizationsRetriever func(config configuares.Raw) (authorizations Authorizations, err error)
@@ -159,7 +155,6 @@ type Permissions interface {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ServiceProxy interface {
-	Id() (id string)
 	Request(ctx Context, fn string, argument Argument) (result Result)
 }
 
@@ -181,16 +176,196 @@ func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRe
 }
 
 type ServiceDiscoveryOption struct {
-	ServerId string
-	Address  string
-	Config   configuares.Raw
+	Address string
+	Config  configuares.Raw
+}
+
+const (
+	ServiceProxyAddress = "proxyAddress"
+)
+
+type Registration struct {
+	Id        string `json:"id"`
+	Namespace string `json:"namespace,omitempty"`
+	Address   string `json:"address"`
+	Reversion int64  `json:"-"`
+}
+
+func NewRegistrations() (registrations *Registrations) {
+	idx := uint64(0)
+	registrations = &Registrations{
+		idx:    &idx,
+		size:   0,
+		mutex:  sync.RWMutex{},
+		values: make([]Registration, 0, 1),
+	}
+	return
+}
+
+type Registrations struct {
+	idx    *uint64
+	size   uint64
+	mutex  sync.RWMutex
+	values []Registration
+}
+
+func (r *Registrations) Next() (v Registration, has bool) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	if len(r.values) == 0 {
+		return
+	}
+	v = r.values[*r.idx%r.size]
+	has = true
+	atomic.AddUint64(r.idx, 1)
+	return
+}
+
+func (r *Registrations) Append(v Registration) {
+	r.mutex.Lock()
+	r.mutex.Unlock()
+
+	if r.size > 0 {
+		for i, value := range r.values {
+			if value.Id == v.Id {
+				if value.Reversion < v.Reversion {
+					r.values[i] = v
+				}
+				return
+			}
+		}
+	}
+
+	r.values = append(r.values, v)
+	r.size = uint64(len(r.values))
+
+	return
+}
+
+func (r *Registrations) Remove(v Registration) {
+	r.mutex.Lock()
+	r.mutex.Unlock()
+	values := make([]Registration, 0, 1)
+	for _, value := range r.values {
+		if value.Id == v.Id {
+			continue
+		}
+		values = append(values, value)
+	}
+	r.values = values
+	r.size = uint64(len(r.values))
+	return
+}
+
+func (r *Registrations) Size() (size int) {
+	r.mutex.Lock()
+	r.mutex.Unlock()
+	size = int(r.size)
+	return
+}
+
+func NewRegistrationsManager() (manager *RegistrationsManager) {
+	manager = &RegistrationsManager{
+		mutex:           sync.RWMutex{},
+		problemCh:       make(chan Registration, 512),
+		stopListenCh:    make(chan struct{}, 1),
+		registrationMap: make(map[string]*Registrations),
+	}
+	return
+}
+
+type RegistrationsManager struct {
+	mutex           sync.RWMutex
+	problemCh       chan Registration
+	stopListenCh    chan struct{}
+	registrationMap map[string]*Registrations
+}
+
+func (manager *RegistrationsManager) Registrations() (v []Registration) {
+	manager.mutex.RLock()
+	defer manager.mutex.RUnlock()
+	v = make([]Registration, 0, 1)
+	for _, registrations := range manager.registrationMap {
+		for _, value := range registrations.values {
+			v = append(v, value)
+		}
+	}
+	return
+}
+
+func (manager *RegistrationsManager) Append(registration Registration) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	registrations, has := manager.registrationMap[registration.Namespace]
+	if !has {
+		registrations = NewRegistrations()
+	}
+	registrations.Append(registration)
+	return
+}
+
+func (manager *RegistrationsManager) Remove(registration Registration) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	registrations, has := manager.registrationMap[registration.Namespace]
+	if !has {
+		return
+	}
+	registrations.Remove(registration)
+	if registrations.Size() == 0 {
+		delete(manager.registrationMap, registration.Namespace)
+	}
+	return
+}
+
+func (manager *RegistrationsManager) Get(namespace string) (registration Registration, exists bool) {
+	manager.mutex.RLock()
+	defer manager.mutex.RUnlock()
+	registrations, has := manager.registrationMap[namespace]
+	if !has {
+		return
+	}
+	registration, exists = registrations.Next()
+	return
+}
+
+func (manager *RegistrationsManager) ProblemChan() (ch chan<- Registration) {
+	ch = manager.problemCh
+	return
+}
+
+func (manager *RegistrationsManager) ListenProblemChan() {
+	go func(manager *RegistrationsManager) {
+		for {
+			stopped := false
+			select {
+			case <-manager.stopListenCh:
+				stopped = true
+				break
+			case r, ok := <-manager.problemCh:
+				if !ok {
+					stopped = true
+					break
+				}
+				manager.Remove(r)
+			}
+			if stopped {
+				break
+			}
+		}
+	}(manager)
+	return
+}
+
+func (manager *RegistrationsManager) Close() {
+	manager.stopListenCh <- struct{}{}
+	return
 }
 
 type ServiceDiscovery interface {
 	Publish(service Service) (err error)
 	IsLocal(namespace string) (ok bool)
 	Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError)
-	ProxyByExact(ctx Context, proxyId string) (proxy ServiceProxy, err errors.CodeError)
 	Close()
 }
 

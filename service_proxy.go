@@ -108,14 +108,12 @@ func (hc *HttpClients) Close() {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func NewRemotedServiceProxy(clients *HttpClients, registration Registration, problemCh chan<- Registration) (proxy *RemotedServiceProxy) {
-
+func NewRemotedServiceProxy(clients *HttpClients, registration *Registration, problemCh chan<- *Registration) (proxy *RemotedServiceProxy) {
 	proxy = &RemotedServiceProxy{
 		registration: registration,
 		client:       clients.next(),
 		problemCh:    problemCh,
 	}
-
 	return
 }
 
@@ -125,9 +123,9 @@ var (
 )
 
 type RemotedServiceProxy struct {
-	registration Registration
+	registration *Registration
 	client       *fasthttp.Client
-	problemCh    chan<- Registration
+	problemCh    chan<- *Registration
 }
 
 func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
@@ -161,7 +159,9 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 		} else {
 			result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: post to %s failed", proxy.registration.Address)).WithCause(doErr))
 		}
-		proxy.problemCh <- proxy.registration
+		if proxy.registration.Id != "" {
+			proxy.problemCh <- proxy.registration
+		}
 		return
 	}
 

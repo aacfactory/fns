@@ -193,7 +193,7 @@ func NewRegistrations() (registrations *Registrations) {
 		idx:    &idx,
 		size:   &size,
 		mutex:  sync.RWMutex{},
-		values: make([]Registration, 0, 1),
+		values: make([]*Registration, 0, 1),
 	}
 	return
 }
@@ -202,10 +202,13 @@ type Registrations struct {
 	idx    *uint64
 	size   *uint64
 	mutex  sync.RWMutex
-	values []Registration
+	values []*Registration
 }
 
-func (r *Registrations) Next() (v Registration, has bool) {
+func (r *Registrations) Next() (v *Registration, has bool) {
+	defer func() {
+		_ = recover()
+	}()
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	if len(r.values) == 0 || atomic.LoadUint64(r.size) == 0 {
@@ -225,14 +228,14 @@ func (r *Registrations) Append(v Registration) {
 		for i, value := range r.values {
 			if value.Id == v.Id {
 				if value.Reversion < v.Reversion {
-					r.values[i] = v
+					r.values[i] = &v
 				}
 				return
 			}
 		}
 	}
 
-	r.values = append(r.values, v)
+	r.values = append(r.values, &v)
 	atomic.StoreUint64(r.size, uint64(len(r.values)))
 
 	return
@@ -241,7 +244,7 @@ func (r *Registrations) Append(v Registration) {
 func (r *Registrations) Remove(v Registration) {
 	r.mutex.Lock()
 	r.mutex.Unlock()
-	values := make([]Registration, 0, 1)
+	values := make([]*Registration, 0, 1)
 	for _, value := range r.values {
 		if value.Id == v.Id {
 			continue
@@ -263,7 +266,7 @@ func (r *Registrations) Size() (size int) {
 func NewRegistrationsManager() (manager *RegistrationsManager) {
 	manager = &RegistrationsManager{
 		mutex:           sync.RWMutex{},
-		problemCh:       make(chan Registration, 512),
+		problemCh:       make(chan *Registration, 512),
 		stopListenCh:    make(chan struct{}, 1),
 		registrationMap: make(map[string]*Registrations),
 	}
@@ -273,7 +276,7 @@ func NewRegistrationsManager() (manager *RegistrationsManager) {
 
 type RegistrationsManager struct {
 	mutex           sync.RWMutex
-	problemCh       chan Registration
+	problemCh       chan *Registration
 	stopListenCh    chan struct{}
 	registrationMap map[string]*Registrations
 }
@@ -284,7 +287,7 @@ func (manager *RegistrationsManager) Registrations() (v []Registration) {
 	v = make([]Registration, 0, 1)
 	for _, registrations := range manager.registrationMap {
 		for _, value := range registrations.values {
-			v = append(v, value)
+			v = append(v, *value)
 		}
 	}
 	return
@@ -315,7 +318,7 @@ func (manager *RegistrationsManager) Remove(registration Registration) {
 	return
 }
 
-func (manager *RegistrationsManager) Get(namespace string) (registration Registration, exists bool) {
+func (manager *RegistrationsManager) Get(namespace string) (registration *Registration, exists bool) {
 	manager.mutex.RLock()
 	defer manager.mutex.RUnlock()
 	registrations, has := manager.registrationMap[namespace]
@@ -326,7 +329,7 @@ func (manager *RegistrationsManager) Get(namespace string) (registration Registr
 	return
 }
 
-func (manager *RegistrationsManager) ProblemChan() (ch chan<- Registration) {
+func (manager *RegistrationsManager) ProblemChan() (ch chan<- *Registration) {
 	ch = manager.problemCh
 	return
 }
@@ -344,7 +347,7 @@ func (manager *RegistrationsManager) ListenProblemChan() {
 					stopped = true
 					break
 				}
-				manager.Remove(r)
+				manager.Remove(*r)
 			}
 			if stopped {
 				break

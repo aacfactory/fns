@@ -126,11 +126,10 @@ func (discovery *AbstractServiceDiscovery) Proxy(ctx Context, namespace string) 
 func (discovery *AbstractServiceDiscovery) exactProxy(ctx Context, namespace string) (proxy ServiceProxy) {
 	address, _ := ctx.Meta().GetString(ServiceProxyAddress)
 	registration := Registration{
-		Id:        "_exact",
 		Namespace: namespace,
 		Address:   address,
 	}
-	proxy = NewRemotedServiceProxy(discovery.Clients, registration, discovery.Manager.ProblemChan())
+	proxy = NewRemotedServiceProxy(discovery.Clients, &registration, discovery.Manager.ProblemChan())
 	return
 }
 

@@ -272,6 +272,7 @@ func NewRegistrationsManager() (manager *RegistrationsManager) {
 		stopListenCh:    make(chan struct{}, 1),
 		registrationMap: make(map[string]*Registrations),
 	}
+	manager.ListenProblemChan()
 	return
 }
 

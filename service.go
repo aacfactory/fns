@@ -41,6 +41,14 @@ type Context interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+// context meta keys
+const (
+	// ServiceProxyAddress 指定Namespace服务代理的Address，value格式为 namespace/address
+	ServiceProxyAddress = "exactProxyAddress"
+	// ServicePublicAddress 服务所对外开放的访问地址
+	ServicePublicAddress = "servicePublicAddress"
+)
+
 type ContextMeta interface {
 	Exists(key string) (has bool)
 	Put(key string, value interface{})
@@ -54,6 +62,9 @@ type ContextMeta interface {
 	GetBool(key string) (value bool, has bool)
 	GetTime(key string) (value time.Time, has bool)
 	GetDuration(key string) (value time.Duration, has bool)
+	ServicePublicAddress() (address string)
+	SetExactProxyService(namespace string, address string)
+	GetExactProxyService() (namespace string, address string, has bool)
 	Encode() (value []byte)
 	Decode(value []byte) (ok bool)
 }
@@ -175,9 +186,7 @@ type ServiceDiscoveryOption struct {
 	Config             configuares.Raw
 }
 
-const (
-	ServiceProxyAddress = "proxyAddress"
-)
+
 
 type Registration struct {
 	Id        string `json:"id"`

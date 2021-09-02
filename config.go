@@ -19,8 +19,10 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/fns/commons"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -71,15 +73,38 @@ type HttpConfig struct {
 }
 
 const (
-	publicHost = "PUBLIC_HOST"
+	publicHostEnv = "PUBLIC_HOST"
+	publicPortEnv = "PUBLIC_PORT"
 )
 
 func getPublicHostFromEnv() (host string, has bool) {
-	host, has = os.LookupEnv(publicHost)
+	host, has = os.LookupEnv(publicHostEnv)
 	if has {
 		host = strings.TrimSpace(host)
 		has = host != ""
 	}
+	return
+}
+
+func getPublicPortFromEnv() (port int, has bool) {
+	portStr, ok := os.LookupEnv(publicPortEnv)
+	if ok {
+		portInt, parseErr := strconv.Atoi(strings.TrimSpace(portStr))
+		if parseErr == nil {
+			port = portInt
+			has = true
+		}
+	}
+	return
+}
+
+func getPublicHostFromHostname() (host string, has bool) {
+	ip, err := commons.IpFromHostname(false)
+	if err != nil {
+		return
+	}
+	host = ip
+	has = true
 	return
 }
 

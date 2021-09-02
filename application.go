@@ -152,6 +152,7 @@ func New(options ...Option) (app Application, err error) {
 		name:            name,
 		version:         opt.Version,
 		address:         "",
+		publicAddress: "",
 		running:         0,
 		config:          config,
 		log:             log,
@@ -186,6 +187,7 @@ type application struct {
 	name            string
 	version         string
 	address         string
+	publicAddress string
 	running         int64
 	config          configuares.Config
 	log             logs.Logger
@@ -308,7 +310,7 @@ func (app *application) buildServices(_config ApplicationConfig) (err error) {
 
 	config := _config.Services
 	config.serverId = app.id
-	config.address = app.address
+	config.address = app.publicAddress
 	config.version = app.version
 
 	svc := &services{}
@@ -350,6 +352,31 @@ func (app *application) buildListener(_config ApplicationConfig) (err error) {
 
 	app.ln = ln
 	app.address = serverAddr
+
+	// public address
+	publicHost := strings.TrimSpace(httpConfig.PublicHost)
+	if publicHost == "" {
+		// from env
+		publicHost, _ = getPublicHostFromEnv()
+		// from hostname
+		if publicHost == "" {
+			publicHost, _ = getPublicHostFromHostname()
+		}
+	}
+	if publicHost != "" {
+		publicPort := httpConfig.PublicPort
+		if publicPort == 0 {
+			publicPort, _ = getPublicPortFromEnv()
+			if publicPort == 0 {
+				publicPort = serverPort
+			}
+		}
+		if publicPort < 1 || publicPort > 65535 {
+			err = fmt.Errorf("invalid public port, %v", publicPort)
+			return
+		}
+		app.publicAddress = fmt.Sprintf("%s:%d", publicHost, publicPort)
+	}
 
 	return
 }
@@ -524,6 +551,9 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		}
 		ctx.log = app.log
 		ctx.validate = app.validate
+		// public address
+		ctx.Meta().Put(ServicePublicAddress, app.publicAddress)
+		// X
 
 		// authorization
 		authorization := request.Request.Header.PeekBytes(authorizationHeader)

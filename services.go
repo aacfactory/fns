@@ -53,7 +53,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 
 	wp, wpErr := workers.New(s, workers.WithConcurrency(concurrency), workers.WithMaxIdleTime(maxIdleTimeSecond))
 	if wpErr != nil {
-		err = fmt.Errorf("fns Services: Build failed, %v", wpErr)
+		err = fmt.Errorf("fns Services: build failed, %v", wpErr)
 		return
 	}
 	s.wp = wp
@@ -75,7 +75,11 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		has := false
 		discoveryRetriever, has = serviceDiscoveryRetrieverMap[kind]
 		if !has || discoveryRetriever == nil {
-			err = fmt.Errorf("fns Services: Build failed for %s kind was not register, please use fns.RegisterServiceDiscoveryRetriever() to register retriever", kind)
+			err = fmt.Errorf("fns Services: build failed for %s kind was not register, please use fns.RegisterServiceDiscoveryRetriever() to register retriever", kind)
+			return
+		}
+		if config.address == "" {
+			err = fmt.Errorf("fns Services: build failed for %s kind, public host and public port was not set", kind)
 			return
 		}
 	}
@@ -87,7 +91,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 	})
 
 	if discoveryErr != nil {
-		err = fmt.Errorf("fns Services: Build failed, %v", discoveryErr)
+		err = fmt.Errorf("fns Services: build failed, %v", discoveryErr)
 		return
 	}
 	s.discovery = discovery
@@ -97,12 +101,12 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		kind := strings.TrimSpace(config.Authorization.Kind)
 		authorizationsRetriever, has := authorizationsRetrieverMap[kind]
 		if !has || authorizationsRetriever == nil {
-			err = fmt.Errorf("fns Services: Build failed for %s kind Authorization was not register, please use fns.RegisterAuthorizationsRetriever() to register retriever", kind)
+			err = fmt.Errorf("fns Services: build failed for %s kind Authorization was not register, please use fns.RegisterAuthorizationsRetriever() to register retriever", kind)
 			return
 		}
 		authorizations, authorizationsErr := authorizationsRetriever(config.Authorization.Config)
 		if authorizationsErr != nil {
-			err = fmt.Errorf("fns Services: Build failed, %v", authorizationsErr)
+			err = fmt.Errorf("fns Services: build failed, %v", authorizationsErr)
 			return
 		}
 		s.authorizations = authorizations
@@ -113,12 +117,12 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		kind := strings.TrimSpace(config.Permission.Kind)
 		permissionsRetriever, has := permissionsRetrieverMap[kind]
 		if !has || permissionsRetriever == nil {
-			err = fmt.Errorf("fns Services: Build failed for %s kind Permissions was not register, please use fns.RegisterPermissionsRetriever() to register retriever", kind)
+			err = fmt.Errorf("fns Services: build failed for %s kind Permissions was not register, please use fns.RegisterPermissionsRetriever() to register retriever", kind)
 			return
 		}
 		permissions, permissionsErr := permissionsRetriever(config.Permission.Config)
 		if permissionsErr != nil {
-			err = fmt.Errorf("fns Services: Build failed, %v", permissionsErr)
+			err = fmt.Errorf("fns Services: build failed, %v", permissionsErr)
 			return
 		}
 		s.permissions = permissions
@@ -143,7 +147,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 func (s *services) Mount(service Service) (err error) {
 	pubErr := s.discovery.Publish(service)
 	if pubErr != nil {
-		err = fmt.Errorf("fns Services: Mount failed, %v", pubErr)
+		err = fmt.Errorf("fns Services: mount failed, %v", pubErr)
 		return
 	}
 	description := service.Description()
@@ -168,7 +172,7 @@ func (s *services) IsInternal(namespace string) (ok bool) {
 
 func (s *services) DecodeAuthorization(ctx Context, value []byte) (err errors.CodeError) {
 	if s.authorizations == nil {
-		err = errors.NotImplemented("Services: DecodeAuthorization failed for Authorizations was not set, please use fns.RegisterAuthorizationsRetriever() to set")
+		err = errors.NotImplemented("Services: decodeAuthorization failed for Authorizations was not set, please use fns.RegisterAuthorizationsRetriever() to set")
 		return
 	}
 

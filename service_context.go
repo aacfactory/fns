@@ -314,6 +314,25 @@ func (meta *contextMeta) GetDuration(key string) (value time.Duration, has bool)
 	return
 }
 
+func (meta *contextMeta) ServicePublicAddress() (address string) {
+	address, _ = meta.GetString(ServicePublicAddress)
+	return
+}
+
+func (meta *contextMeta) SetExactProxyService(namespace string, address string) {
+	meta.Put(ServiceProxyAddress, fmt.Sprintf("%s/%s", namespace, address))
+}
+
+func (meta *contextMeta) GetExactProxyService() (namespace string, address string, has bool) {
+	proxyAddress, hasServiceProxyAddress := meta.GetString(ServiceProxyAddress)
+	if hasServiceProxyAddress {
+		namespace = proxyAddress[0:strings.Index(proxyAddress, "/")]
+		address = proxyAddress[strings.Index(proxyAddress, "/")+1:]
+		has = true
+	}
+	return
+}
+
 func (meta *contextMeta) MarshalJSON() (b []byte, err error) {
 	b = meta.obj.Raw()
 	return

@@ -31,12 +31,72 @@ import (
 	"time"
 )
 
+type appRuntime struct {
+	publicAddress string
+	log           logs.Logger
+	validate      *validator.Validate
+	discovery     ServiceDiscovery
+}
+
+func (app *appRuntime) PublicAddress() (address string) {
+	address = app.publicAddress
+	return
+}
+
+func (app *appRuntime) Log() (log logs.Logger) {
+	log = app.log
+	return
+}
+
+func (app *appRuntime) Validate(v interface{}) (err errors.CodeError) {
+	if app.validate == nil {
+		err = errors.NotImplemented("fns Context App: validate not implemented")
+		return
+	}
+	validateErr := app.validate.Struct(v)
+	if validateErr == nil {
+		return
+	}
+	validationErrors, ok := validateErr.(validator.ValidationErrors)
+	if !ok {
+		err = errors.ServiceError(fmt.Sprintf("fns Context App: validate failed, %v", validateErr))
+		return
+	}
+	err = errors.BadRequest("argument is invalid")
+	for _, validationError := range validationErrors {
+		sf := validationError.Namespace()
+		exp := sf[strings.Index(sf, ".")+1:]
+		key, message := commons.ValidateFieldMessage(reflect.TypeOf(v), exp)
+		if key == "" {
+			err = errors.ServiceError(fmt.Sprintf("fns Context App: validate failed, json tag of %s was not founed", sf))
+			return
+		}
+		if message == "" {
+			err = errors.ServiceError(fmt.Sprintf("fns Context App: validate failed, message tag of %s was not founed", sf))
+			return
+		}
+		err = err.WithMeta(key, message)
+	}
+	return
+}
+
+func (app *appRuntime) ServiceProxy(ctx Context, namespace string) (proxy ServiceProxy, err error) {
+	proxy, err = app.discovery.Proxy(ctx, namespace)
+	return
+}
+
 func WithNamespace(ctx Context, namespace string) Context {
 	ctx0 := ctx.(*context)
 	if ctx0.namespace == "" {
 		ctx0.namespace = namespace
-		ctx0.log = ctx0.Log().With("namespace", namespace)
+		ctx0.app.log = ctx0.app.log.With("namespace", namespace)
 		return ctx0
+	}
+	app := &appRuntime{
+		publicAddress: ctx0.app.publicAddress,
+		log:           ctx0.app.log.With("namespace", namespace).With("fn", ""),
+		validate:      ctx0.app.validate,
+		discovery:     ctx0.app.discovery,
 	}
 	return &context{
 		Context:       ctx0,
@@ -45,19 +105,18 @@ func WithNamespace(ctx Context, namespace string) Context {
 		authorization: ctx0.Authorization(),
 		user:          ctx0.User(),
 		meta:          ctx0.meta.fork(),
-		log:           ctx0.Log().With("namespace", namespace).With("fn", ""),
-		discovery:     ctx0.discovery,
+		app:           app,
 	}
 }
 
 func WithFn(ctx Context, fnName string) Context {
 	ctx0 := ctx.(*context)
-	ctx0.log = ctx0.Log().With("fn", fnName)
+	ctx0.app.log = ctx0.app.log.With("fn", fnName)
 	return ctx0
 }
 
 func withDiscovery(ctx Context, discovery ServiceDiscovery) Context {
-	ctx.(*context).discovery = discovery
+	ctx.(*context).app.discovery = discovery
 	return ctx
 }
 
@@ -70,19 +129,6 @@ func newContext(ctx sc.Context, id string) *context {
 	}
 }
 
-func FakeContext(ctx sc.Context, authorization []byte, log logs.Logger, validate *validator.Validate, discovery ServiceDiscovery) Context {
-	return &context{
-		Context:       ctx,
-		id:            UID(),
-		authorization: authorization,
-		user:          newUser(),
-		meta:          newContextMeta(),
-		log:           log,
-		validate:      validate,
-		discovery:     discovery,
-	}
-}
-
 type context struct {
 	sc.Context
 	namespace     string
@@ -90,9 +136,7 @@ type context struct {
 	authorization []byte
 	user          User
 	meta          *contextMeta
-	log           logs.Logger
-	validate      *validator.Validate
-	discovery     ServiceDiscovery
+	app           *appRuntime
 }
 
 func (ctx *context) RequestId() (id string) {
@@ -115,13 +159,8 @@ func (ctx *context) Meta() (meta ContextMeta) {
 	return
 }
 
-func (ctx *context) Log() (log logs.Logger) {
-	log = ctx.log
-	return
-}
-
-func (ctx *context) ServiceProxy(namespace string) (proxy ServiceProxy, err error) {
-	proxy, err = ctx.discovery.Proxy(ctx, namespace)
+func (ctx *context) App() (app AppRuntime) {
+	app = ctx.app
 	return
 }
 
@@ -131,38 +170,6 @@ func (ctx *context) Timeout() (has bool) {
 		return
 	}
 	has = deadline.Before(time.Now())
-	return
-}
-
-func (ctx *context) Validate(v interface{}) (err errors.CodeError) {
-	if ctx.validate == nil {
-		err = errors.NotImplemented("context Validate: not implemented")
-		return
-	}
-	validateErr := ctx.validate.Struct(v)
-	if validateErr == nil {
-		return
-	}
-	validationErrors, ok := validateErr.(validator.ValidationErrors)
-	if !ok {
-		err = errors.ServiceError(fmt.Sprintf("context Validate: %v", validateErr))
-		return
-	}
-	err = errors.BadRequest("argument is invalid")
-	for _, validationError := range validationErrors {
-		sf := validationError.Namespace()
-		exp := sf[strings.Index(sf, ".")+1:]
-		key, message := commons.ValidateFieldMessage(reflect.TypeOf(v), exp)
-		if key == "" {
-			err = errors.ServiceError(fmt.Sprintf("context Validate: json tag of %s was not founed", sf))
-			return
-		}
-		if message == "" {
-			err = errors.ServiceError(fmt.Sprintf("context Validate: message tag of %s was not founed", sf))
-			return
-		}
-		err = err.WithMeta(key, message)
-	}
 	return
 }
 
@@ -311,11 +318,6 @@ func (meta *contextMeta) GetDuration(key string) (value time.Duration, has bool)
 		return
 	}
 	has = true
-	return
-}
-
-func (meta *contextMeta) ServicePublicAddress() (address string) {
-	address, _ = meta.GetString(ServicePublicAddress)
 	return
 }
 

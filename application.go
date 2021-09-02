@@ -152,7 +152,7 @@ func New(options ...Option) (app Application, err error) {
 		name:            name,
 		version:         opt.Version,
 		address:         "",
-		publicAddress: "",
+		publicAddress:   "",
 		running:         0,
 		config:          config,
 		log:             log,
@@ -187,7 +187,7 @@ type application struct {
 	name            string
 	version         string
 	address         string
-	publicAddress string
+	publicAddress   string
 	running         int64
 	config          configuares.Config
 	log             logs.Logger
@@ -549,11 +549,12 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			}
 			ctx = newContext(timeoutCtx, UID())
 		}
-		ctx.log = app.log
-		ctx.validate = app.validate
-		// public address
-		ctx.Meta().Put(ServicePublicAddress, app.publicAddress)
-		// X
+		ctx.app = &appRuntime{
+			publicAddress: app.publicAddress,
+			log:           app.log,
+			validate:      app.validate,
+			discovery:     nil,
+		}
 
 		// authorization
 		authorization := request.Request.Header.PeekBytes(authorizationHeader)

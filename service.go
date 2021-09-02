@@ -27,16 +27,23 @@ import (
 	"time"
 )
 
+type AppRuntime interface {
+	PublicAddress() (address string)
+	Log() (log logs.Logger)
+	Validate(v interface{}) (err errors.CodeError)
+	ServiceProxy(ctx Context, namespace string) (proxy ServiceProxy, err error)
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type Context interface {
 	sc.Context
 	RequestId() (id string)
 	Authorization() (value []byte)
 	User() (user User)
 	Meta() (meta ContextMeta)
-	Log() (log logs.Logger)
-	ServiceProxy(namespace string) (proxy ServiceProxy, err error)
 	Timeout() (has bool)
-	Validate(v interface{}) (err errors.CodeError)
+	App() (app AppRuntime)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -45,8 +52,6 @@ type Context interface {
 const (
 	// ServiceProxyAddress 指定Namespace服务代理的Address，value格式为 namespace/address
 	ServiceProxyAddress = "exactProxyAddress"
-	// ServicePublicAddress 服务所对外开放的访问地址
-	ServicePublicAddress = "servicePublicAddress"
 )
 
 type ContextMeta interface {
@@ -62,7 +67,6 @@ type ContextMeta interface {
 	GetBool(key string) (value bool, has bool)
 	GetTime(key string) (value time.Time, has bool)
 	GetDuration(key string) (value time.Duration, has bool)
-	ServicePublicAddress() (address string)
 	SetExactProxyService(namespace string, address string)
 	GetExactProxyService() (namespace string, address string, has bool)
 	Encode() (value []byte)
@@ -185,8 +189,6 @@ type ServiceDiscoveryOption struct {
 	HttpClientPoolSize int
 	Config             configuares.Raw
 }
-
-
 
 type Registration struct {
 	Id        string `json:"id"`

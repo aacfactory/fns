@@ -20,10 +20,10 @@ import (
 	sc "context"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -197,80 +197,43 @@ type Registration struct {
 	Reversion int64  `json:"-"`
 }
 
+func (r Registration) Key() (key string) {
+	key = r.Id
+	return
+}
+
 func NewRegistrations() (registrations *Registrations) {
-	idx := uint64(0)
-	size := uint64(0)
 	registrations = &Registrations{
-		idx:    &idx,
-		size:   &size,
-		mutex:  sync.RWMutex{},
-		values: make([]*Registration, 0, 1),
+		r: commons.NewRing(),
 	}
 	return
 }
 
 type Registrations struct {
-	idx    *uint64
-	size   *uint64
-	mutex  sync.RWMutex
-	values []*Registration
+	r *commons.Ring
 }
 
 func (r *Registrations) Next() (v *Registration, has bool) {
-	defer func() {
-		_ = recover()
-	}()
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
-	if len(r.values) == 0 || atomic.LoadUint64(r.size) == 0 {
+	p := r.r.Next()
+	if p == nil {
 		return
 	}
-	v = r.values[*r.idx%*r.size]
-	has = true
-	atomic.AddUint64(r.idx, 1)
+	v, has = p.(*Registration)
 	return
 }
 
 func (r *Registrations) Append(v Registration) {
-	r.mutex.Lock()
-	r.mutex.Unlock()
-
-	if atomic.LoadUint64(r.size) > 0 {
-		for i, value := range r.values {
-			if value.Id == v.Id {
-				if value.Reversion < v.Reversion {
-					r.values[i] = &v
-				}
-				return
-			}
-		}
-	}
-
-	r.values = append(r.values, &v)
-	atomic.StoreUint64(r.size, uint64(len(r.values)))
-
+	r.r.Append(v)
 	return
 }
 
 func (r *Registrations) Remove(v Registration) {
-	r.mutex.Lock()
-	r.mutex.Unlock()
-	values := make([]*Registration, 0, 1)
-	for _, value := range r.values {
-		if value.Id == v.Id {
-			continue
-		}
-		values = append(values, value)
-	}
-	r.values = values
-	atomic.StoreUint64(r.size, uint64(len(r.values)))
+	r.r.Remove(v)
 	return
 }
 
 func (r *Registrations) Size() (size int) {
-	r.mutex.Lock()
-	r.mutex.Unlock()
-	size = int(atomic.LoadUint64(r.size))
+	size = r.r.Size()
 	return
 }
 
@@ -297,8 +260,11 @@ func (manager *RegistrationsManager) Registrations() (v []Registration) {
 	defer manager.mutex.RUnlock()
 	v = make([]Registration, 0, 1)
 	for _, registrations := range manager.registrationMap {
-		for _, value := range registrations.values {
-			v = append(v, *value)
+		for i := 0; i < registrations.Size(); i++ {
+			registration, has := registrations.Next()
+			if has {
+				v = append(v, *registration)
+			}
 		}
 	}
 	return

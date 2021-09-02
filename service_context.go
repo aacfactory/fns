@@ -213,6 +213,10 @@ func (meta *contextMeta) Get(key string, value interface{}) (err error) {
 	return
 }
 
+func (meta *contextMeta) Remove(key string) {
+	_ = meta.obj.Remove(key)
+}
+
 func (meta *contextMeta) GetString(key string) (value string, has bool) {
 	if !meta.Exists(key) {
 		return
@@ -322,17 +326,21 @@ func (meta *contextMeta) GetDuration(key string) (value time.Duration, has bool)
 }
 
 func (meta *contextMeta) SetExactProxyService(namespace string, address string) {
-	meta.Put(ServiceProxyAddress, fmt.Sprintf("%s/%s", namespace, address))
+	meta.Put(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace), fmt.Sprintf("%s/%s", namespace, address))
 }
 
 func (meta *contextMeta) GetExactProxyService() (namespace string, address string, has bool) {
-	proxyAddress, hasServiceProxyAddress := meta.GetString(ServiceProxyAddress)
+	proxyAddress, hasServiceProxyAddress := meta.GetString(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace))
 	if hasServiceProxyAddress {
 		namespace = proxyAddress[0:strings.Index(proxyAddress, "/")]
 		address = proxyAddress[strings.Index(proxyAddress, "/")+1:]
 		has = true
 	}
 	return
+}
+
+func (meta *contextMeta) DelExactProxyService(namespace string) {
+	meta.Remove(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace))
 }
 
 func (meta *contextMeta) MarshalJSON() (b []byte, err error) {

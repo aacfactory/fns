@@ -50,7 +50,7 @@ func (app *appRuntime) Log() (log logs.Logger) {
 
 func (app *appRuntime) Validate(v interface{}) (err errors.CodeError) {
 	if app.validate == nil {
-		err = errors.NotImplemented("fns Context App: validate not implemented")
+		err = errors.NotImplemented("fns Validation: validate not implemented")
 		return
 	}
 	validateErr := app.validate.Struct(v)
@@ -59,20 +59,20 @@ func (app *appRuntime) Validate(v interface{}) (err errors.CodeError) {
 	}
 	validationErrors, ok := validateErr.(validator.ValidationErrors)
 	if !ok {
-		err = errors.ServiceError(fmt.Sprintf("fns Context App: validate failed, %v", validateErr))
+		err = errors.New(555, "***WARNING***", fmt.Sprintf("fns Validation: validate failed")).WithCause(validateErr)
 		return
 	}
-	err = errors.BadRequest("argument is invalid")
+	err = errors.BadRequest("fns Validation: argument is invalid")
 	for _, validationError := range validationErrors {
 		sf := validationError.Namespace()
 		exp := sf[strings.Index(sf, ".")+1:]
 		key, message := commons.ValidateFieldMessage(reflect.TypeOf(v), exp)
 		if key == "" {
-			err = errors.ServiceError(fmt.Sprintf("fns Context App: validate failed, json tag of %s was not founed", sf))
+			err = errors.New(555, "***WARNING***", fmt.Sprintf("fns Validation: validate failed, json tag of %s was not founed", sf))
 			return
 		}
 		if message == "" {
-			err = errors.ServiceError(fmt.Sprintf("fns Context App: validate failed, message tag of %s was not founed", sf))
+			err = errors.New(555, "***WARNING***", fmt.Sprintf("fns Validation: validate failed, message tag of %s was not founed", sf))
 			return
 		}
 		err = err.WithMeta(key, message)
@@ -99,12 +99,12 @@ func WithNamespace(ctx Context, namespace string) Context {
 		discovery:     ctx0.app.discovery,
 	}
 	return &context{
-		Context:       ctx0,
-		namespace:     namespace,
-		id:            ctx0.RequestId(),
-		user:          ctx0.User(),
-		meta:          ctx0.meta.fork(),
-		app:           app,
+		Context:   ctx0,
+		namespace: namespace,
+		id:        ctx0.RequestId(),
+		user:      ctx0.User(),
+		meta:      ctx0.meta.fork(),
+		app:       app,
 	}
 }
 
@@ -122,18 +122,18 @@ func newContext(ctx sc.Context, id string, user User) *context {
 	return &context{
 		Context: ctx,
 		id:      id,
-		user: user,
+		user:    user,
 		meta:    newContextMeta(),
 	}
 }
 
 type context struct {
 	sc.Context
-	namespace     string
-	id            string
-	user          User
-	meta          *contextMeta
-	app           *appRuntime
+	namespace string
+	id        string
+	user      User
+	meta      *contextMeta
+	app       *appRuntime
 }
 
 func (ctx *context) RequestId() (id string) {

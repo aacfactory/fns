@@ -132,6 +132,7 @@ type User interface {
 	CheckAuthorization() (err errors.CodeError)
 	CheckPermissions(ctx Context, namespace string, fn string) (err errors.CodeError)
 	EncodeToAuthorization() (value []byte, err error)
+	IsActive(ctx Context) (ok bool)
 	Active(ctx Context) (err error)
 	Revoke(ctx Context) (err error)
 	String() (value string)

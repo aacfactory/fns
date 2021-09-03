@@ -113,6 +113,11 @@ func (u *user) EncodeToAuthorization() (value []byte, err error) {
 	return
 }
 
+func (u *user) IsActive(ctx Context) (ok bool) {
+	ok = u.authorizations.IsActive(ctx, u)
+	return
+}
+
 func (u *user) Active(ctx Context) (err error) {
 	if u.authorizations == nil {
 		err = fmt.Errorf("fns User: active failed for no Authorizations set, please setup services Authorizations")

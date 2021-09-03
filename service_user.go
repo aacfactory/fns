@@ -48,16 +48,12 @@ func (u *user) Exists() (ok bool) {
 
 func (u *user) Id() (id string) {
 	if u.Principals().Contains("sub") {
-		subErr := u.Principals().Get("sub", &id)
-		if subErr == nil {
-			return
-		}
+		_ = u.Principals().Get("sub", &id)
+		return
 	}
 	if u.Attributes().Contains("id") {
-		idErr := u.Principals().Get("id", &id)
-		if idErr == nil {
-			return
-		}
+		_ = u.Principals().Get("id", &id)
+		return
 	}
 	return
 }

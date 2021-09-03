@@ -193,7 +193,7 @@ type application struct {
 	log             logs.Logger
 	validate        *validator.Validate
 	serviceMap      map[string]Service
-	svc             Services
+	svc             *services
 	fnHandleTimeout time.Duration
 	requestCounter  sync.WaitGroup
 	ln              net.Listener
@@ -524,6 +524,15 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			return
 		}
 
+		// user
+		var requestUser User
+		authorization := request.Request.Header.PeekBytes(authorizationHeader)
+		if authorization != nil && len(authorization) > 0 {
+			requestUser = newUser(authorization, app.svc.Authorizations(), app.svc.Permissions())
+		} else {
+			requestUser = newUser(nil, app.svc.Authorizations(), app.svc.Permissions())
+		}
+
 		// ctx
 		timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), app.fnHandleTimeout)
 		var ctx *context
@@ -535,7 +544,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 				cancel()
 				return
 			}
-			ctx = newContext(timeoutCtx, string(requestId))
+			ctx = newContext(timeoutCtx, string(requestId), requestUser)
 			if !ctx.Meta().Decode(metaValue) {
 				sendError(request, errors.New(555, "***WARNING***", "meta is invalid in internal request"))
 				cancel()
@@ -547,36 +556,17 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 				cancel()
 				return
 			}
-			ctx = newContext(timeoutCtx, UID())
+			ctx = newContext(timeoutCtx, UID(), requestUser)
 		}
+		// ctx app
 		ctx.app = &appRuntime{
 			publicAddress: app.publicAddress,
 			log:           app.log,
 			validate:      app.validate,
-			discovery:     nil,
 		}
 
-		// authorization
-		authorization := request.Request.Header.PeekBytes(authorizationHeader)
-		if authorization != nil && len(authorization) > 0 {
-			decodeErr := app.svc.DecodeAuthorization(ctx, authorization)
-			if decodeErr != nil {
-				sendError(request, decodeErr)
-				cancel()
-				return
-			}
-			ctx.authorization = authorization
-		}
-
+		// fn
 		fn := string(items[1])
-
-		// permission
-		permissionErr := app.svc.PermissionAllow(ctx, namespace, fn)
-		if permissionErr != nil {
-			sendError(request, permissionErr)
-			cancel()
-			return
-		}
 
 		// request
 		handleBeg := time.Now()

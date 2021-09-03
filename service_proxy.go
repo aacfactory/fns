@@ -145,7 +145,10 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 	request.Header.SetContentTypeBytes(jsonUTF8ContentType)
 	request.Header.SetBytesK(requestIdHeader, ctx.RequestId())
 	request.Header.SetBytesKV(requestMetaHeader, ctx.Meta().Encode())
-	request.Header.SetBytesKV(authorizationHeader, ctx.Authorization())
+	authorization, hasAuthorization := ctx.User().Authorization()
+	if hasAuthorization {
+		request.Header.SetBytesKV(authorizationHeader, authorization)
+	}
 
 	request.SetBody(body)
 

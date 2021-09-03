@@ -39,7 +39,6 @@ type AppRuntime interface {
 type Context interface {
 	sc.Context
 	RequestId() (id string)
-	Authorization() (value []byte)
 	User() (user User)
 	Meta() (meta ContextMeta)
 	Timeout() (has bool)
@@ -73,22 +72,6 @@ type ContextMeta interface {
 	DelExactProxyService(namespace string)
 	Encode() (value []byte)
 	Decode(value []byte) (ok bool)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-// Services
-// 管理 Service，具备 Service 的注册与发现
-type Services interface {
-	Build(config ServicesConfig) (err error)
-	Mount(service Service) (err error)
-	Exist(namespace string) (ok bool)
-	IsInternal(namespace string) (ok bool)
-	Description(namespace string) (description []byte)
-	DecodeAuthorization(ctx Context, value []byte) (err errors.CodeError)
-	PermissionAllow(ctx Context, namespace string, fn string) (err errors.CodeError)
-	Request(ctx Context, namespace string, fn string, argument Argument) (result Result)
-	Close()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -133,7 +116,7 @@ func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetrie
 type Authorizations interface {
 	Encode(user User) (token []byte, err error)
 	Decode(token []byte, user User) (err error)
-	Knock(ctx Context, user User) (ok bool)
+	IsActive(ctx Context, user User) (ok bool)
 	Active(ctx Context, user User) (err error)
 	Revoke(ctx Context, user User) (err error)
 }
@@ -145,7 +128,10 @@ type User interface {
 	Id() (id string)
 	Principals() (principal *json.Object)
 	Attributes() (attributes *json.Object)
-	Encode() (value []byte, err error)
+	Authorization() (authorization []byte, has bool)
+	CheckAuthorization() (err errors.CodeError)
+	CheckPermissions(ctx Context, namespace string, fn string) (err errors.CodeError)
+	EncodeToAuthorization() (value []byte, err error)
 	Active(ctx Context) (err error)
 	Revoke(ctx Context) (err error)
 	String() (value string)

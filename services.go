@@ -110,6 +110,9 @@ func (s *services) Build(config ServicesConfig) (err error) {
 			return
 		}
 		s.authorizations = authorizations
+	} else {
+		// fake authorizations
+		s.authorizations = &fakeAuthorizations{}
 	}
 
 	// permissions
@@ -126,6 +129,9 @@ func (s *services) Build(config ServicesConfig) (err error) {
 			return
 		}
 		s.permissions = permissions
+	} else {
+		// fake permissions
+		s.permissions = &fakePermissions{}
 	}
 
 	// payloads
@@ -170,36 +176,13 @@ func (s *services) IsInternal(namespace string) (ok bool) {
 	return
 }
 
-func (s *services) DecodeAuthorization(ctx Context, value []byte) (err errors.CodeError) {
-	if s.authorizations == nil {
-		err = errors.NotImplemented("Services: decodeAuthorization failed for Authorizations was not set, please use fns.RegisterAuthorizationsRetriever() to set")
-		return
-	}
-
-	decodeErr := s.authorizations.Decode(value, ctx.User())
-	if decodeErr != nil {
-		err = errors.Unauthorized(decodeErr.Error())
-		return
-	}
-
-	_ctx := ctx.(*context)
-	_ctx.user.(*user).auth = s.authorizations
-	_ctx.authorization = value
-
+func (s *services) Authorizations() (authorizations Authorizations) {
+	authorizations = s.authorizations
 	return
 }
 
-func (s *services) PermissionAllow(ctx Context, namespace string, fn string) (err errors.CodeError) {
-	if s.permissions == nil {
-		return
-	}
-
-	notPass := s.permissions.Validate(ctx, namespace, fn, ctx.User())
-	if notPass != nil {
-		err = errors.Forbidden(notPass.Error())
-		return
-	}
-
+func (s *services) Permissions() (p Permissions) {
+	p = s.permissions
 	return
 }
 
@@ -207,7 +190,7 @@ func (s *services) Request(ctx Context, namespace string, fn string, argument Ar
 
 	if !s.discovery.IsLocal(namespace) {
 		result = SyncResult()
-		result.Failed(errors.NotFound(fmt.Sprintf("%s service was not found", namespace)))
+		result.Failed(errors.NotFound(fmt.Sprintf("fns Services: %s service was not found", namespace)))
 		return
 	}
 
@@ -223,7 +206,7 @@ func (s *services) Request(ctx Context, namespace string, fn string, argument Ar
 	if !s.wp.Execute(fnRequestWorkHandleAction, payload) {
 		s.payloads.Put(payload)
 		result = SyncResult()
-		result.Failed(errors.New(429, "***TOO MANY REQUEST***", fmt.Sprintf("no work unit remains for %s/%s", namespace, fn)))
+		result.Failed(errors.New(429, "***TOO MANY REQUEST***", fmt.Sprintf("fns Services: no work unit remains for %s/%s", namespace, fn)))
 		return
 	}
 
@@ -260,14 +243,17 @@ func (s *services) Handle(action string, _payload interface{}) {
 		return
 	}
 
-	proxy, proxyErr := s.discovery.Proxy(payload.ctx, payload.namespace)
+	ctx := payload.ctx
+
+	withDiscovery(ctx, s.discovery)
+
+	proxy, proxyErr := s.discovery.Proxy(ctx, payload.namespace)
 	if proxyErr != nil {
 		payload.result.Failed(proxyErr)
 		return
 	}
 
-	ctx := withDiscovery(payload.ctx, s.discovery)
-
+	// request
 	r := proxy.Request(ctx, payload.fn, payload.argument)
 	raw := json.RawMessage{}
 	err := r.Get(ctx, &raw)

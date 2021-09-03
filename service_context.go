@@ -102,7 +102,6 @@ func WithNamespace(ctx Context, namespace string) Context {
 		Context:       ctx0,
 		namespace:     namespace,
 		id:            ctx0.RequestId(),
-		authorization: ctx0.Authorization(),
 		user:          ctx0.User(),
 		meta:          ctx0.meta.fork(),
 		app:           app,
@@ -115,16 +114,15 @@ func WithFn(ctx Context, fnName string) Context {
 	return ctx0
 }
 
-func withDiscovery(ctx Context, discovery ServiceDiscovery) Context {
+func withDiscovery(ctx Context, discovery ServiceDiscovery) {
 	ctx.(*context).app.discovery = discovery
-	return ctx
 }
 
-func newContext(ctx sc.Context, id string) *context {
+func newContext(ctx sc.Context, id string, user User) *context {
 	return &context{
 		Context: ctx,
 		id:      id,
-		user:    newUser(),
+		user: user,
 		meta:    newContextMeta(),
 	}
 }
@@ -133,7 +131,6 @@ type context struct {
 	sc.Context
 	namespace     string
 	id            string
-	authorization []byte
 	user          User
 	meta          *contextMeta
 	app           *appRuntime
@@ -141,11 +138,6 @@ type context struct {
 
 func (ctx *context) RequestId() (id string) {
 	id = ctx.id
-	return
-}
-
-func (ctx *context) Authorization() (value []byte) {
-	value = ctx.authorization
 	return
 }
 

@@ -39,7 +39,10 @@ func ValidateFieldMessage(_type reflect.Type, exp string) (key string, msg strin
 		return
 	}
 	xk := field.Tag.Get("json")
-
+	if pos := strings.Index(xk, ","); pos > 0 {
+		xk = xk[0:pos]
+	}
+	
 	if idx > 0 {
 		key, msg = ValidateFieldMessage(field.Type, exp[idx+1:])
 		key = xk + "." + key

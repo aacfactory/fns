@@ -4,8 +4,8 @@ go 1.17
 
 require (
 	github.com/aacfactory/configuares v1.2.2
-	github.com/aacfactory/errors v1.4.0
-	github.com/aacfactory/json v1.2.0
+	github.com/aacfactory/errors v1.5.0
+	github.com/aacfactory/json v1.3.1
 	github.com/aacfactory/logs v1.1.3
 	github.com/aacfactory/workers v1.2.0
 	github.com/go-playground/validator/v10 v10.9.0

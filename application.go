@@ -584,6 +584,8 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		data := json.RawMessage{}
 		handleErr := result.Get(ctx.Context, &data)
 		if handleErr != nil {
+			request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
+			request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
 			sendError(request, handleErr)
 			cancel()
 			return

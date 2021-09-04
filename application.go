@@ -594,7 +594,9 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		request.SetContentTypeBytes(jsonUTF8ContentType)
 		request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
 		request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
-		request.SetBody(data)
+		if len(data) > 0 && !bytes.Equal(data, nullJson) {
+			request.SetBody(data)
+		}
 
 		// hook
 		if app.hasHook {
@@ -634,6 +636,8 @@ var (
 	requestMetaHeader = []byte("X-Fns-Meta")
 
 	responseLatencyHeader = []byte("X-Fns-Latency")
+
+	nullJson = []byte("null")
 )
 
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {

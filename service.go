@@ -339,4 +339,6 @@ type ServiceDiscovery interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+// Empty
+// @description Empty
 type Empty struct{}

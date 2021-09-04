@@ -169,7 +169,11 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 	}
 
 	if response.StatusCode() == 200 {
-		result.Succeed(response.Body())
+		if response.Body() == nil || len(response.Body()) == 0 {
+			result.Succeed(nil)
+		} else {
+			result.Succeed(response.Body())
+		}
 	} else {
 		err := errors.ServiceError("")
 		decodeErr := json.Unmarshal(response.Body(), err)

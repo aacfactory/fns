@@ -100,12 +100,10 @@ func (discovery *AbstractServiceDiscovery) Proxy(ctx Context, namespace string) 
 		return
 	}
 	// exact
-	exactNamespace, exactAddress, hasExactProxyAddress := ctx.Meta().GetExactProxyService()
+	exactAddress, hasExactProxyAddress := ctx.Meta().GetExactProxyServiceAddress(namespace)
 	if hasExactProxyAddress {
-		if exactNamespace == namespace {
-			proxy = discovery.exactProxy(namespace, exactAddress)
-			return
-		}
+		proxy = discovery.exactProxy(namespace, exactAddress)
+		return
 	}
 
 	// local

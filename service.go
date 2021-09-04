@@ -47,9 +47,7 @@ type Context interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-// context meta keys
 const (
-	// ServiceProxyAddress 指定Namespace服务代理的Address，value格式为 namespace/address
 	serviceExactProxyMetaKeyPrefix = "exact_proxy"
 )
 
@@ -67,9 +65,9 @@ type ContextMeta interface {
 	GetBool(key string) (value bool, has bool)
 	GetTime(key string) (value time.Time, has bool)
 	GetDuration(key string) (value time.Duration, has bool)
-	SetExactProxyService(namespace string, address string)
-	GetExactProxyService() (namespace string, address string, has bool)
-	DelExactProxyService(namespace string)
+	SetExactProxyServiceAddress(namespace string, address string)
+	GetExactProxyServiceAddress(namespace string) (address string, has bool)
+	DelExactProxyServiceAddress(namespace string)
 	Encode() (value []byte)
 	Decode(value []byte) (ok bool)
 }

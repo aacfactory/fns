@@ -317,21 +317,16 @@ func (meta *contextMeta) GetDuration(key string) (value time.Duration, has bool)
 	return
 }
 
-func (meta *contextMeta) SetExactProxyService(namespace string, address string) {
-	meta.Put(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace), fmt.Sprintf("%s/%s", namespace, address))
+func (meta *contextMeta) SetExactProxyServiceAddress(namespace string, address string) {
+	meta.Put(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace), address)
 }
 
-func (meta *contextMeta) GetExactProxyService() (namespace string, address string, has bool) {
-	proxyAddress, hasServiceProxyAddress := meta.GetString(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace))
-	if hasServiceProxyAddress {
-		namespace = proxyAddress[0:strings.Index(proxyAddress, "/")]
-		address = proxyAddress[strings.Index(proxyAddress, "/")+1:]
-		has = true
-	}
+func (meta *contextMeta) GetExactProxyServiceAddress(namespace string) (address string, has bool) {
+	address, has = meta.GetString(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace))
 	return
 }
 
-func (meta *contextMeta) DelExactProxyService(namespace string) {
+func (meta *contextMeta) DelExactProxyServiceAddress(namespace string) {
 	meta.Remove(fmt.Sprintf("%s_%s", serviceExactProxyMetaKeyPrefix, namespace))
 }
 

@@ -97,6 +97,13 @@ func New(options ...Option) (app Application, err error) {
 		return
 	}
 
+	// concurrency
+	concurrency := appConfig.Concurrency
+	if concurrency < 1024 {
+		concurrency = 256 * 1024
+	}
+	appConfig.Concurrency = concurrency
+
 	// logs
 	logFormatter := logs.ConsoleFormatter
 	logFormatterValue := strings.ToLower(strings.TrimSpace(appConfig.Log.Formatter))
@@ -312,6 +319,7 @@ func (app *application) buildServices(_config ApplicationConfig) (err error) {
 	config.serverId = app.id
 	config.address = app.publicAddress
 	config.version = app.version
+	config.concurrency = _config.Concurrency
 
 	svc := &services{}
 

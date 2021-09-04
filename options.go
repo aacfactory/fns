@@ -17,10 +17,12 @@
 package fns
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/go-playground/validator/v10"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -70,6 +72,17 @@ func ConfigRetriever(path string, format string, active string, prefix string, s
 	}
 }
 
+func ConfigActiveFromENV(key string) (active string) {
+	v, has := os.LookupEnv(key)
+	if !has {
+		return
+	}
+	active = strings.ToLower(strings.TrimSpace(v))
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 func Hooks(hooks ...Hook) Option {
 	return func(o *Options) error {
 		if hooks == nil || len(hooks) == 0 {
@@ -79,6 +92,8 @@ func Hooks(hooks ...Hook) Option {
 		return nil
 	}
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 func SecretKeyFile(path string) Option {
 	return func(options *Options) error {
@@ -94,10 +109,12 @@ func SecretKeyFile(path string) Option {
 		if readErr != nil {
 			return fmt.Errorf("set secret key failed for read file failed, %v", readErr)
 		}
-		options.SecretKey = data
+		options.SecretKey = bytes.TrimSpace(data)
 		return nil
 	}
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 func Version(version string) Option {
 	return func(options *Options) error {
@@ -109,6 +126,8 @@ func Version(version string) Option {
 		return nil
 	}
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 func CustomizeValidate(validate *validator.Validate) Option {
 	return func(options *Options) error {

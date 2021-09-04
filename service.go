@@ -227,69 +227,72 @@ func (r *Registrations) Size() (size int) {
 
 func NewRegistrationsManager() (manager *RegistrationsManager) {
 	manager = &RegistrationsManager{
-		mutex:           sync.RWMutex{},
 		problemCh:       make(chan *Registration, 512),
 		stopListenCh:    make(chan struct{}, 1),
-		registrationMap: make(map[string]*Registrations),
+		registrationMap: sync.Map{},
 	}
 	manager.ListenProblemChan()
 	return
 }
 
 type RegistrationsManager struct {
-	mutex           sync.RWMutex
 	problemCh       chan *Registration
 	stopListenCh    chan struct{}
-	registrationMap map[string]*Registrations
+	registrationMap sync.Map
 }
 
 func (manager *RegistrationsManager) Registrations() (v []Registration) {
-	manager.mutex.RLock()
-	defer manager.mutex.RUnlock()
+
 	v = make([]Registration, 0, 1)
-	for _, registrations := range manager.registrationMap {
+	manager.registrationMap.Range(func(_, value interface{}) bool {
+		registrations := value.(*Registrations)
 		for i := 0; i < registrations.Size(); i++ {
 			registration, has := registrations.Next()
 			if has {
 				v = append(v, *registration)
 			}
 		}
-	}
+		return true
+	})
 	return
 }
 
 func (manager *RegistrationsManager) Append(registration Registration) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
-	registrations, has := manager.registrationMap[registration.Namespace]
-	if !has {
+
+	var registrations *Registrations
+	value, has := manager.registrationMap.Load(registration.Namespace)
+	if has {
+		registrations = value.(*Registrations)
+	} else {
 		registrations = NewRegistrations()
 	}
 	registrations.Append(registration)
+	manager.registrationMap.Store(registration.Namespace, registrations)
 	return
 }
 
 func (manager *RegistrationsManager) Remove(registration Registration) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
-	registrations, has := manager.registrationMap[registration.Namespace]
+	value, has := manager.registrationMap.Load(registration.Namespace)
 	if !has {
 		return
 	}
+
+	registrations := value.(*Registrations)
 	registrations.Remove(registration)
 	if registrations.Size() == 0 {
-		delete(manager.registrationMap, registration.Namespace)
+		manager.registrationMap.Delete(registration.Namespace)
 	}
+
 	return
 }
 
 func (manager *RegistrationsManager) Get(namespace string) (registration *Registration, exists bool) {
-	manager.mutex.RLock()
-	defer manager.mutex.RUnlock()
-	registrations, has := manager.registrationMap[namespace]
+	value, has := manager.registrationMap.Load(namespace)
 	if !has {
 		return
 	}
+
+	registrations := value.(*Registrations)
 	registration, exists = registrations.Next()
 	return
 }

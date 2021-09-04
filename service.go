@@ -28,6 +28,7 @@ import (
 )
 
 type AppRuntime interface {
+	ClusterMode() (ok bool)
 	PublicAddress() (address string)
 	Log() (log logs.Logger)
 	Validate(v interface{}) (err errors.CodeError)

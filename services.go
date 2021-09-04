@@ -39,6 +39,7 @@ type services struct {
 	permissions    Permissions
 	payloads       sync.Pool
 	version        string
+	clusterMode    bool
 }
 
 func (s *services) Build(config ServicesConfig) (err error) {
@@ -66,6 +67,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 	discoveryConfig := config.Discovery
 	if !discoveryConfig.Enable {
 		discoveryRetriever = standaloneServiceDiscoveryRetriever
+		s.clusterMode = false
 	} else {
 		kind := strings.TrimSpace(discoveryConfig.Kind)
 		if kind == "" {
@@ -82,6 +84,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 			err = fmt.Errorf("fns Services: build failed for %s kind, public host and public port was not set", kind)
 			return
 		}
+		s.clusterMode = true
 	}
 
 	discovery, discoveryErr := discoveryRetriever(ServiceDiscoveryOption{
@@ -147,6 +150,11 @@ func (s *services) Build(config ServicesConfig) (err error) {
 
 	s.wp.Start()
 
+	return
+}
+
+func (s *services) ClusterMode() (ok bool) {
+	ok = s.clusterMode
 	return
 }
 

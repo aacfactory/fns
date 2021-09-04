@@ -32,10 +32,16 @@ import (
 )
 
 type appRuntime struct {
+	clusterMode   bool
 	publicAddress string
 	log           logs.Logger
 	validate      *validator.Validate
 	discovery     ServiceDiscovery
+}
+
+func (app *appRuntime) ClusterMode() (ok bool) {
+	ok = app.clusterMode
+	return
 }
 
 func (app *appRuntime) PublicAddress() (address string) {

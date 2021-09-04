@@ -560,6 +560,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		}
 		// ctx app
 		ctx.app = &appRuntime{
+			clusterMode:   app.svc.ClusterMode(),
 			publicAddress: app.publicAddress,
 			log:           app.log,
 			validate:      app.validate,

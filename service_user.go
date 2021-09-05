@@ -47,7 +47,7 @@ func (u *user) Id() (id string) {
 		return
 	}
 	if u.Attributes().Contains("id") {
-		_ = u.Principals().Get("id", &id)
+		_ = u.Attributes().Get("id", &id)
 		return
 	}
 	return

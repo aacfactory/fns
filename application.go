@@ -548,6 +548,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			discovery:      app.svc.discovery,
 			authorizations: app.svc.authorizations,
 			permissions:    app.svc.permissions,
+			httpClients:    app.svc.clients,
 		}
 
 		// ctx

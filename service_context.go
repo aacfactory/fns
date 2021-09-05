@@ -41,6 +41,7 @@ type appRuntime struct {
 	discovery      ServiceDiscovery
 	authorizations Authorizations
 	permissions    Permissions
+	httpClients    *HttpClients
 }
 
 func (app *appRuntime) ClusterMode() (ok bool) {
@@ -108,6 +109,13 @@ func (app *appRuntime) Authorizations() (authorizations Authorizations) {
 
 func (app *appRuntime) Permissions() (permissions Permissions) {
 	permissions = app.permissions
+	return
+}
+
+func (app *appRuntime) HttpClient() (client HttpClient) {
+	client = &httpClient{
+		client: app.httpClients.next(),
+	}
 	return
 }
 

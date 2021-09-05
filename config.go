@@ -152,6 +152,7 @@ type ServicesConfig struct {
 	Discovery           DiscoveryConfig      `json:"discovery,omitempty"`
 	Authorization       AuthorizationsConfig `json:"authorization,omitempty"`
 	Permission          PermissionsConfig    `json:"permission,omitempty"`
+	HttpClientPoolSize  int                  `json:"httpClientPoolSize,omitempty"`
 	concurrency         int
 	serverId            string
 	address             string
@@ -159,10 +160,9 @@ type ServicesConfig struct {
 }
 
 type DiscoveryConfig struct {
-	Enable             bool            `json:"enable,omitempty"`
-	Kind               string          `json:"kind,omitempty"`
-	HttpClientPoolSize int             `json:"httpClientPoolSize,omitempty"`
-	Config             configuares.Raw `json:"config,omitempty"`
+	Enable bool            `json:"enable,omitempty"`
+	Kind   string          `json:"kind,omitempty"`
+	Config configuares.Raw `json:"config,omitempty"`
 }
 
 type AuthorizationsConfig struct {

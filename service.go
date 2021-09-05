@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/commons"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/valyala/fasthttp"
 	"sync"
 	"time"
 )
@@ -36,6 +37,7 @@ type AppRuntime interface {
 	ServiceProxy(ctx Context, namespace string) (proxy ServiceProxy, err error)
 	Authorizations() (authorizations Authorizations)
 	Permissions() (permissions Permissions)
+	HttpClient() (client HttpClient)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -238,9 +240,9 @@ func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRe
 }
 
 type ServiceDiscoveryOption struct {
-	Address            string
-	HttpClientPoolSize int
-	Config             configuares.Raw
+	Address     string
+	HttpClients *HttpClients
+	Config      configuares.Raw
 }
 
 type Registration struct {
@@ -290,8 +292,9 @@ func (r *Registrations) Size() (size int) {
 	return
 }
 
-func NewRegistrationsManager() (manager *RegistrationsManager) {
+func newRegistrationsManager(clients *HttpClients) (manager *RegistrationsManager) {
 	manager = &RegistrationsManager{
+		clients:         clients,
 		problemCh:       make(chan *Registration, 512),
 		stopListenCh:    make(chan struct{}, 1),
 		registrationMap: sync.Map{},
@@ -301,6 +304,7 @@ func NewRegistrationsManager() (manager *RegistrationsManager) {
 }
 
 type RegistrationsManager struct {
+	clients         *HttpClients
 	problemCh       chan *Registration
 	stopListenCh    chan struct{}
 	registrationMap sync.Map
@@ -367,6 +371,26 @@ func (manager *RegistrationsManager) ProblemChan() (ch chan<- *Registration) {
 	return
 }
 
+func (manager *RegistrationsManager) CheckRegistration(registration Registration) (ok bool) {
+	client := manager.clients.next()
+	request := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(request)
+	request.URI().SetHost(registration.Address)
+	request.URI().SetPath(healthCheckPath)
+	request.Header.SetMethodBytes(get)
+
+	response := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(response)
+
+	err := client.DoTimeout(request, response, 2*time.Second)
+	if err != nil {
+		return
+	}
+
+	ok = response.StatusCode() == 200
+	return
+}
+
 func (manager *RegistrationsManager) ListenProblemChan() {
 	go func(manager *RegistrationsManager) {
 		for {
@@ -380,7 +404,9 @@ func (manager *RegistrationsManager) ListenProblemChan() {
 					stopped = true
 					break
 				}
-				manager.Remove(*r)
+				if !manager.CheckRegistration(*r) {
+					manager.Remove(*r)
+				}
 			}
 			if stopped {
 				break

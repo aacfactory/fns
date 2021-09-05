@@ -37,6 +37,7 @@ type services struct {
 	discovery      ServiceDiscovery
 	authorizations Authorizations
 	permissions    Permissions
+	clients        *HttpClients
 	payloads       sync.Pool
 	version        string
 	clusterMode    bool
@@ -61,6 +62,13 @@ func (s *services) Build(config ServicesConfig) (err error) {
 
 	// internals
 	s.internals = make(map[string]int64)
+
+	// http clients
+	httpClientPoolSize := config.HttpClientPoolSize
+	if httpClientPoolSize < 1 {
+		httpClientPoolSize = 10
+	}
+	s.clients = NewHttpClients(httpClientPoolSize)
 
 	// discovery
 	var discoveryRetriever ServiceDiscoveryRetriever
@@ -88,9 +96,9 @@ func (s *services) Build(config ServicesConfig) (err error) {
 	}
 
 	discovery, discoveryErr := discoveryRetriever(ServiceDiscoveryOption{
-		Address:            config.address,
-		Config:             discoveryConfig.Config,
-		HttpClientPoolSize: discoveryConfig.HttpClientPoolSize,
+		Address:     config.address,
+		Config:      discoveryConfig.Config,
+		HttpClients: s.clients,
 	})
 
 	if discoveryErr != nil {

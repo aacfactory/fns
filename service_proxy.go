@@ -80,26 +80,6 @@ func (hc *HttpClients) next() (client *fasthttp.Client) {
 	return
 }
 
-func (hc *HttpClients) Check(registration Registration) (ok bool) {
-	client := hc.next()
-	request := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(request)
-	request.URI().SetHost(registration.Address)
-	request.URI().SetPath(healthCheckPath)
-	request.Header.SetMethodBytes(get)
-
-	response := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(response)
-
-	err := client.DoTimeout(request, response, 2*time.Second)
-	if err != nil {
-		return
-	}
-
-	ok = response.StatusCode() == 200
-	return
-}
-
 func (hc *HttpClients) Close() {
 	for _, client := range hc.clients {
 		client.CloseIdleConnections()

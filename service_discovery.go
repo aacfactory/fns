@@ -72,13 +72,13 @@ func (discovery *standaloneServiceDiscovery) Close() {}
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func NewAbstractServiceDiscovery(httpClientPoolSize int) AbstractServiceDiscovery {
+func NewAbstractServiceDiscovery(clients *HttpClients) AbstractServiceDiscovery {
 	return AbstractServiceDiscovery{
 		Local: &standaloneServiceDiscovery{
 			proxyMap: make(map[string]*LocaledServiceProxy),
 		},
-		Clients: NewHttpClients(httpClientPoolSize),
-		Manager: NewRegistrationsManager(),
+		Clients: clients,
+		Manager: newRegistrationsManager(clients),
 	}
 }
 

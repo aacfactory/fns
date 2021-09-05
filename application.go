@@ -589,6 +589,8 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
 			request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
 			sendError(request, handleErr)
+			// release ctx
+			clearContext(ctx)
 			cancel()
 			return
 		}
@@ -613,7 +615,8 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			unit.HandleError = handleErr
 			app.hookUnitCh <- unit
 		}
-
+		// release ctx
+		clearContext(ctx)
 		cancel()
 	} else {
 		sendError(request, errors.New(555, "***WARNING***", "method is invalid"))

@@ -143,6 +143,12 @@ func WithFn(ctx Context, fn string) Context {
 	return ctx0
 }
 
+func clearContext(ctx *context) {
+	ctx.meta = nil
+	ctx.app = nil
+	ctx.user = nil
+}
+
 func newContext(ctx sc.Context, id string, user User, app *appRuntime) *context {
 	return &context{
 		Context: ctx,

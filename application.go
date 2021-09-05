@@ -535,10 +535,20 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		// user
 		var requestUser User
 		authorization := request.Request.Header.PeekBytes(authorizationHeader)
-		if authorization != nil && len(authorization) > 0 {
-			requestUser = newUser(authorization, app.svc.Authorizations(), app.svc.Permissions())
-		} else {
-			requestUser = newUser(nil, app.svc.Authorizations(), app.svc.Permissions())
+		if authorization == nil {
+			authorization = make([]byte, 0, 1)
+		}
+		requestUser = newUser(authorization)
+
+		// app runtime
+		ar := &appRuntime{
+			clusterMode:    app.svc.ClusterMode(),
+			publicAddress:  app.publicAddress,
+			log:            app.log,
+			validate:       app.validate,
+			discovery:      app.svc.discovery,
+			authorizations: app.svc.authorizations,
+			permissions:    app.svc.permissions,
 		}
 
 		// ctx
@@ -552,7 +562,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 				cancel()
 				return
 			}
-			ctx = newContext(timeoutCtx, string(requestId), requestUser)
+			ctx = newContext(timeoutCtx, string(requestId), requestUser, ar)
 			if !ctx.Meta().Decode(metaValue) {
 				sendError(request, errors.New(555, "***WARNING***", "meta is invalid in internal request"))
 				cancel()
@@ -564,14 +574,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 				cancel()
 				return
 			}
-			ctx = newContext(timeoutCtx, UID(), requestUser)
-		}
-		// ctx app
-		ctx.app = &appRuntime{
-			clusterMode:   app.svc.ClusterMode(),
-			publicAddress: app.publicAddress,
-			log:           app.log,
-			validate:      app.validate,
+			ctx = newContext(timeoutCtx, UID(), requestUser, ar)
 		}
 
 		// fn

@@ -18,6 +18,7 @@ package fns
 
 import (
 	sc "context"
+	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons"
@@ -33,6 +34,8 @@ type AppRuntime interface {
 	Log() (log logs.Logger)
 	Validate(v interface{}) (err errors.CodeError)
 	ServiceProxy(ctx Context, namespace string) (proxy ServiceProxy, err error)
+	Authorizations() (authorizations Authorizations)
+	Permissions() (permissions Permissions)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -104,6 +107,18 @@ type Result interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type User interface {
+	Exists() (ok bool)
+	Id() (id string)
+	Principals() (principal *json.Object)
+	Attributes() (attributes *json.Object)
+	Authorization() (authorization []byte, has bool)
+	SetAuthorization(authorization []byte)
+	String() (value string)
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 var authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
 
 type AuthorizationsRetriever func(config configuares.Raw) (authorizations Authorizations, err error)
@@ -113,42 +128,92 @@ func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetrie
 }
 
 type Authorizations interface {
-	Encode(user User) (token []byte, err error)
-	Decode(token []byte, user User) (err error)
-	IsActive(ctx Context, user User) (ok bool)
-	Active(ctx Context, user User) (err error)
-	Revoke(ctx Context, user User) (err error)
+	Encode(ctx Context) (token []byte, err errors.CodeError)
+	Decode(ctx Context, token []byte) (err errors.CodeError)
+	Revoke(ctx Context) (err errors.CodeError)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type User interface {
-	Exists() (ok bool)
-	Id() (id string)
-	Principals() (principal *json.Object)
-	Attributes() (attributes *json.Object)
-	Authorization() (authorization []byte, has bool)
-	CheckAuthorization() (err errors.CodeError)
-	CheckPermissions(ctx Context, namespace string, fn string) (err errors.CodeError)
-	EncodeToAuthorization() (value []byte, err error)
-	IsActive(ctx Context) (ok bool)
-	Active(ctx Context) (err error)
-	Revoke(ctx Context) (err error)
-	String() (value string)
+var permissionsDefinitionsLoaderRetrieverMap = make(map[string]PermissionsDefinitionsLoaderRetriever)
+
+type PermissionsDefinitionsLoaderRetriever func(config configuares.Raw) (loader PermissionsDefinitionsLoader, err error)
+
+func RegisterPermissionsDefinitionsLoaderRetriever(kind string, retriever PermissionsDefinitionsLoaderRetriever) {
+	permissionsDefinitionsLoaderRetrieverMap[kind] = retriever
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
-
-var permissionsRetrieverMap = make(map[string]PermissionsRetriever)
-
-type PermissionsRetriever func(config configuares.Raw) (permission Permissions, err error)
-
-func RegisterPermissionsRetriever(kind string, retriever PermissionsRetriever) {
-	permissionsRetrieverMap[kind] = retriever
-}
-
+// Permissions
+// 基于RBAC的权限控制器
+// 角色：角色树，控制器不存储用户的角色。
+// 资源：fn
+// 控制：是否可以使用（不可以使用优先于可以使用）
 type Permissions interface {
-	Validate(ctx Context, namespace string, fnName string, user User) (err error)
+	// Validate 验证当前 context 中 user 对 fn 的权限
+	Validate(ctx Context, namespace string, fn string) (err errors.CodeError)
+	// SaveUserRoles 将角色保存到 当前 context 的 user attributes 中
+	SaveUserRoles(ctx Context, roles ...string) (err errors.CodeError)
+}
+
+type PermissionsDefinitions struct {
+	data map[string]map[string]bool
+}
+
+func (d *PermissionsDefinitions) Add(namespace string, fn string, role string, accessible bool) {
+	if namespace == "" || fn == "" || role == "" {
+		return
+	}
+	if d.data == nil {
+		d.data = make(map[string]map[string]bool)
+	}
+	key := fmt.Sprintf("%s:%s", namespace, fn)
+	g, has := d.data[key]
+	if !has {
+		g = make(map[string]bool)
+	}
+	g[role] = accessible
+	d.data[key] = g
+}
+func (d *PermissionsDefinitions) Accessible(namespace string, fn string, roles []string) (accessible bool) {
+	if namespace == "" || fn == "" || d.data == nil || len(d.data) == 0 {
+		return
+	}
+	key := fmt.Sprintf("%s:%s", namespace, fn)
+	g, has := d.data[key]
+	if !has {
+		accessible = false
+		return
+	}
+	_, all := g["*"]
+	if all {
+		accessible = true
+		return
+	}
+	not := false
+	n := 0
+	for _, role := range roles {
+		x, hasRole := g[role]
+		if !hasRole {
+			continue
+		}
+		if !x {
+			not = true
+			break
+		}
+		n++
+	}
+	if not {
+		accessible = false
+		return
+	}
+	accessible = n > 0
+	return
+}
+
+// PermissionsDefinitionsLoader
+// 存储权限设定的加载器
+type PermissionsDefinitionsLoader interface {
+	Load() (definitions *PermissionsDefinitions, err errors.CodeError)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

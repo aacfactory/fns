@@ -173,7 +173,7 @@ type AuthorizationsConfig struct {
 
 type PermissionsConfig struct {
 	Enable bool            `json:"enable,omitempty"`
-	Kind   string          `json:"kind,omitempty"`
+	Loader string          `json:"loader,omitempty"`
 	Config configuares.Raw `json:"config,omitempty"`
 }
 

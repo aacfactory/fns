@@ -16,30 +16,23 @@
 
 package fns
 
-import "fmt"
+import (
+	"github.com/aacfactory/errors"
+)
 
 type fakeAuthorizations struct{}
 
-func (auth *fakeAuthorizations) Encode(user User) (token []byte, err error) {
-	err = fmt.Errorf("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
+func (auth *fakeAuthorizations) Encode(_ Context) (token []byte, err errors.CodeError) {
+	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
 	return
 }
 
-func (auth *fakeAuthorizations) Decode(token []byte, user User) (err error) {
-	err = fmt.Errorf("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
+func (auth *fakeAuthorizations) Decode(_ Context, _ []byte) (err errors.CodeError) {
+	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
 	return
 }
 
-func (auth *fakeAuthorizations) IsActive(ctx Context, user User) (ok bool) {
-	return
-}
-
-func (auth *fakeAuthorizations) Active(ctx Context, user User) (err error) {
-	err = fmt.Errorf("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
-	return
-}
-
-func (auth *fakeAuthorizations) Revoke(ctx Context, user User) (err error) {
-	err = fmt.Errorf("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
+func (auth *fakeAuthorizations) Revoke(_ Context) (err errors.CodeError) {
+	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
 	return
 }

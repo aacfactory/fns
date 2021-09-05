@@ -18,27 +18,22 @@ package fns
 
 import (
 	"fmt"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 )
 
-func newUser(authorization []byte, authorizations Authorizations, permissions Permissions) (u User) {
+func newUser(authorization []byte) (u User) {
 	u = &user{
-		authorization:  authorization,
-		attributes:     json.NewObject(),
-		principals:     json.NewObject(),
-		authorizations: authorizations,
-		permissions:    permissions,
+		authorization: authorization,
+		attributes:    json.NewObject(),
+		principals:    json.NewObject(),
 	}
 	return
 }
 
 type user struct {
-	authorization  []byte
-	attributes     *json.Object
-	principals     *json.Object
-	authorizations Authorizations
-	permissions    Permissions
+	authorization []byte
+	attributes    *json.Object
+	principals    *json.Object
 }
 
 func (u *user) Exists() (ok bool) {
@@ -64,6 +59,11 @@ func (u *user) Authorization() (authorization []byte, has bool) {
 	return
 }
 
+func (u *user) SetAuthorization(authorization []byte) {
+	u.authorization = authorization
+	return
+}
+
 func (u *user) Principals() (principals *json.Object) {
 	principals = u.principals
 	return
@@ -71,64 +71,6 @@ func (u *user) Principals() (principals *json.Object) {
 
 func (u *user) Attributes() (attributes *json.Object) {
 	attributes = u.attributes
-	return
-}
-
-func (u *user) CheckAuthorization() (err errors.CodeError) {
-	token, has := u.Authorization()
-	if !has {
-		err = errors.Unauthorized("fns User: check authorization failed for authorization was not found")
-		return
-	}
-	decodeErr := u.authorizations.Decode(token, u)
-	if decodeErr != nil {
-		err = errors.Unauthorized("fns User: check authorization failed for decode authorization failed").WithCause(decodeErr)
-		return
-	}
-	return
-}
-
-func (u *user) CheckPermissions(ctx Context, namespace string, fn string) (err errors.CodeError) {
-	permissionErr := u.permissions.Validate(ctx, namespace, fn, u)
-	if permissionErr != nil {
-		err = errors.Forbidden("fns User: check permissions failed").WithCause(permissionErr)
-		return
-	}
-	return
-}
-
-func (u *user) EncodeToAuthorization() (value []byte, err error) {
-	if u.authorizations == nil {
-		err = fmt.Errorf("fns User: encode failed for no Authorizations set, please setup services Authorizations")
-		return
-	}
-	value, err = u.authorizations.Encode(u)
-	if err == nil {
-		u.authorization = value
-	}
-	return
-}
-
-func (u *user) IsActive(ctx Context) (ok bool) {
-	ok = u.authorizations.IsActive(ctx, u)
-	return
-}
-
-func (u *user) Active(ctx Context) (err error) {
-	if u.authorizations == nil {
-		err = fmt.Errorf("fns User: active failed for no Authorizations set, please setup services Authorizations")
-		return
-	}
-	err = u.authorizations.Active(ctx, u)
-	return
-}
-
-func (u *user) Revoke(ctx Context) (err error) {
-	if u.authorizations == nil {
-		err = fmt.Errorf("fns User: revoke failed for no Authorizations set, please setup services Authorizations")
-		return
-	}
-	err = u.authorizations.Revoke(ctx, u)
 	return
 }
 

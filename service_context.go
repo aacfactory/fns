@@ -32,11 +32,13 @@ import (
 )
 
 type appRuntime struct {
-	clusterMode   bool
-	publicAddress string
-	log           logs.Logger
-	validate      *validator.Validate
-	discovery     ServiceDiscovery
+	clusterMode    bool
+	publicAddress  string
+	log            logs.Logger
+	validate       *validator.Validate
+	discovery      ServiceDiscovery
+	authorizations Authorizations
+	permissions    Permissions
 }
 
 func (app *appRuntime) ClusterMode() (ok bool) {
@@ -91,6 +93,16 @@ func (app *appRuntime) ServiceProxy(ctx Context, namespace string) (proxy Servic
 	return
 }
 
+func (app *appRuntime) Authorizations() (authorizations Authorizations) {
+	authorizations = app.authorizations
+	return
+}
+
+func (app *appRuntime) Permissions() (permissions Permissions) {
+	permissions = app.permissions
+	return
+}
+
 func WithNamespace(ctx Context, namespace string) Context {
 	ctx0 := ctx.(*context)
 	if ctx0.namespace == "" {
@@ -120,16 +132,13 @@ func WithFn(ctx Context, fnName string) Context {
 	return ctx0
 }
 
-func withDiscovery(ctx Context, discovery ServiceDiscovery) {
-	ctx.(*context).app.discovery = discovery
-}
-
-func newContext(ctx sc.Context, id string, user User) *context {
+func newContext(ctx sc.Context, id string, user User, app *appRuntime) *context {
 	return &context{
 		Context: ctx,
 		id:      id,
 		user:    user,
 		meta:    newContextMeta(),
+		app:     app,
 	}
 }
 

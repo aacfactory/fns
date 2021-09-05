@@ -120,13 +120,22 @@ func (s *services) Build(config ServicesConfig) (err error) {
 
 	// permissions
 	if config.Permission.Enable {
-		kind := strings.TrimSpace(config.Permission.Kind)
-		permissionsRetriever, has := permissionsRetrieverMap[kind]
-		if !has || permissionsRetriever == nil {
-			err = fmt.Errorf("fns Services: build failed for %s kind Permissions was not register, please use fns.RegisterPermissionsRetriever() to register retriever", kind)
+		loader := strings.TrimSpace(config.Permission.Loader)
+		if loader == "" {
+			err = fmt.Errorf("fns Services: build failed for %s PermissionsDefinitionsLoader was not register, please use fns.RegisterPermissionsDefinitionsLoaderRetriever() to register retriever", loader)
 			return
 		}
-		permissions, permissionsErr := permissionsRetriever(config.Permission.Config)
+		permissionsDefinitionsLoaderRetriever, has := permissionsDefinitionsLoaderRetrieverMap[loader]
+		if !has || permissionsDefinitionsLoaderRetriever == nil {
+			err = fmt.Errorf("fns Services: build failed for %s PermissionsDefinitionsLoader was not register, please use fns.RegisterPermissionsRetriever() to register retriever", loader)
+			return
+		}
+		permissionsDefinitionsLoader, permissionsDefinitionsLoaderErr := permissionsDefinitionsLoaderRetriever(config.Permission.Config)
+		if permissionsDefinitionsLoaderErr != nil {
+			err = fmt.Errorf("fns Services: build failed, %v", permissionsDefinitionsLoaderErr)
+			return
+		}
+		permissions, permissionsErr := newRbacPermissions(permissionsDefinitionsLoader)
 		if permissionsErr != nil {
 			err = fmt.Errorf("fns Services: build failed, %v", permissionsErr)
 			return
@@ -252,8 +261,6 @@ func (s *services) Handle(action string, _payload interface{}) {
 	}
 
 	ctx := payload.ctx
-
-	withDiscovery(ctx, s.discovery)
 
 	proxy, proxyErr := s.discovery.Proxy(ctx, payload.namespace)
 	if proxyErr != nil {

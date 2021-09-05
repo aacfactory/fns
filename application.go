@@ -543,7 +543,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		ar := &appRuntime{
 			clusterMode:    app.svc.ClusterMode(),
 			publicAddress:  app.publicAddress,
-			log:            app.log,
+			appLog:         app.log,
 			validate:       app.validate,
 			discovery:      app.svc.discovery,
 			authorizations: app.svc.authorizations,

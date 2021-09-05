@@ -34,7 +34,9 @@ import (
 type appRuntime struct {
 	clusterMode    bool
 	publicAddress  string
-	log            logs.Logger
+	appLog         logs.Logger
+	nsLog          logs.Logger
+	fnLog          logs.Logger
 	validate       *validator.Validate
 	discovery      ServiceDiscovery
 	authorizations Authorizations
@@ -52,7 +54,13 @@ func (app *appRuntime) PublicAddress() (address string) {
 }
 
 func (app *appRuntime) Log() (log logs.Logger) {
-	log = app.log
+	if app.fnLog != nil {
+		log = app.fnLog
+	} else if app.nsLog != nil {
+		log = app.nsLog
+	} else {
+		log = app.appLog
+	}
 	return
 }
 
@@ -105,30 +113,33 @@ func (app *appRuntime) Permissions() (permissions Permissions) {
 
 func WithNamespace(ctx Context, namespace string) Context {
 	ctx0 := ctx.(*context)
-	if ctx0.namespace == "" {
-		ctx0.namespace = namespace
-		ctx0.app.log = ctx0.app.log.With("namespace", namespace)
+	if ctx0.app.nsLog == nil {
+		ctx0.app.nsLog = ctx0.app.appLog.With("namespace", namespace)
 		return ctx0
 	}
 	app := &appRuntime{
 		publicAddress: ctx0.app.publicAddress,
-		log:           ctx0.app.log.With("namespace", namespace).With("fn", ""),
+		appLog:        ctx0.app.appLog,
+		nsLog:         ctx0.app.appLog.With("namespace", namespace),
 		validate:      ctx0.app.validate,
 		discovery:     ctx0.app.discovery,
 	}
 	return &context{
-		Context:   ctx0,
-		namespace: namespace,
-		id:        ctx0.RequestId(),
-		user:      ctx0.User(),
-		meta:      ctx0.meta.fork(),
-		app:       app,
+		Context: ctx0.Context,
+		id:      ctx0.RequestId(),
+		user:    ctx0.User(),
+		meta:    ctx0.meta.fork(),
+		app:     app,
 	}
 }
 
-func WithFn(ctx Context, fnName string) Context {
+func WithFn(ctx Context, fn string) Context {
 	ctx0 := ctx.(*context)
-	ctx0.app.log = ctx0.app.log.With("fn", fnName)
+	if ctx0.app.nsLog == nil {
+		panic("can not call fns.WithFn before call fns.WithNamespace")
+		return ctx0
+	}
+	ctx0.app.fnLog = ctx0.app.nsLog.With("fn", fn)
 	return ctx0
 }
 
@@ -144,11 +155,10 @@ func newContext(ctx sc.Context, id string, user User, app *appRuntime) *context 
 
 type context struct {
 	sc.Context
-	namespace string
-	id        string
-	user      User
-	meta      *contextMeta
-	app       *appRuntime
+	id   string
+	user User
+	meta *contextMeta
+	app  *appRuntime
 }
 
 func (ctx *context) RequestId() (id string) {

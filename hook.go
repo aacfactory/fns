@@ -25,10 +25,12 @@ import (
 type HookUnit struct {
 	Namespace    string
 	FnName       string
+	RequestId    string
+	RequestUser  User
 	RequestSize  int64
 	ResponseSize int64
 	Latency      time.Duration
-	Error        errors.CodeError
+	HandleError  errors.CodeError
 }
 
 type Hook interface {

@@ -206,7 +206,6 @@ type application struct {
 	ln              net.Listener
 	server          *fasthttp.Server
 	hasHook         bool
-	hookUnitPool    sync.Pool
 	hookUnitCh      chan *HookUnit
 	hookStopCh      chan chan struct{}
 	hooks           []Hook
@@ -603,13 +602,15 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 
 		// hook
 		if app.hasHook {
-			unit := app.hookUnitPool.Get().(*HookUnit)
+			unit := &HookUnit{}
 			unit.Namespace = namespace
 			unit.FnName = fn
+			unit.RequestId = ctx.RequestId()
+			unit.RequestUser = ctx.User()
 			unit.RequestSize = int64(len(request.PostBody()))
 			unit.ResponseSize = int64(len(data))
 			unit.Latency = latency
-			unit.Error = handleErr
+			unit.HandleError = handleErr
 			app.hookUnitCh <- unit
 		}
 
@@ -664,13 +665,11 @@ func (app *application) mountHooks() (err error) {
 			return
 		}
 	}
-	app.hookUnitPool.New = func() interface{} {
-		return &HookUnit{}
-	}
+
 	app.hookUnitCh = make(chan *HookUnit, 256*1024)
 	app.hookStopCh = make(chan chan struct{}, 1)
 	app.hasHook = true
-	go func(units *sync.Pool, ch chan *HookUnit, stop chan chan struct{}, hooks []Hook) {
+	go func(ch chan *HookUnit, stop chan chan struct{}, hooks []Hook) {
 		for {
 			var stopCallbackCh chan struct{}
 			stopped := false
@@ -686,7 +685,6 @@ func (app *application) mountHooks() (err error) {
 				for _, hook := range hooks {
 					hook.Handle(*unit)
 				}
-				units.Put(unit)
 			}
 			if stopped {
 				for _, hook := range hooks {
@@ -696,7 +694,7 @@ func (app *application) mountHooks() (err error) {
 				break
 			}
 		}
-	}(&app.hookUnitPool, app.hookUnitCh, app.hookStopCh, app.hooks)
+	}(app.hookUnitCh, app.hookStopCh, app.hooks)
 	return
 }
 

@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -40,6 +41,8 @@ var (
 		ConfigRetrieverOption: defaultConfigRetrieverOption(),
 		Version:               defaultVersion,
 		SecretKey:             secretKey,
+		MinPROCS:              1,
+		MaxPROCS:              runtime.NumCPU() * 2,
 	}
 	secretKey = []byte("+-fns")
 )
@@ -50,6 +53,8 @@ type Options struct {
 	Hooks                 []Hook
 	Version               string
 	SecretKey             []byte
+	MinPROCS              int
+	MaxPROCS              int
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -135,6 +140,22 @@ func CustomizeValidate(validate *validator.Validate) Option {
 			return fmt.Errorf("set validate failed for nil")
 		}
 		options.Validate = validate
+		return nil
+	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func GOPROCS(min int, max int) Option {
+	return func(options *Options) error {
+		if min < 1 {
+			min = 1
+		}
+		if max < 1 {
+			max = 0
+		}
+		options.MinPROCS = min
+		options.MaxPROCS = max
 		return nil
 	}
 }

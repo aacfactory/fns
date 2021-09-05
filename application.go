@@ -27,9 +27,11 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/go-playground/validator/v10"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/automaxprocs/maxprocs"
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -160,6 +162,8 @@ func New(options ...Option) (app Application, err error) {
 		version:         opt.Version,
 		address:         "",
 		publicAddress:   "",
+		minPROCS:        opt.MinPROCS,
+		maxPROCS:        opt.MaxPROCS,
 		running:         0,
 		config:          config,
 		log:             log,
@@ -195,6 +199,9 @@ type application struct {
 	version         string
 	address         string
 	publicAddress   string
+	minPROCS        int
+	maxPROCS        int
+	undoMAXPROCS    func()
 	running         int64
 	config          configuares.Config
 	log             logs.Logger
@@ -237,6 +244,19 @@ func (app *application) Deploy(services ...Service) (err error) {
 	return
 }
 
+func (app *application) setGOMAXPROCS() {
+	if app.maxPROCS == 0 {
+		undo, setErr := maxprocs.Set(maxprocs.Min(app.minPROCS))
+		if setErr != nil {
+			runtime.GOMAXPROCS(0)
+			return
+		}
+		app.undoMAXPROCS = undo
+		return
+	}
+	runtime.GOMAXPROCS(app.maxPROCS)
+}
+
 func (app *application) Run(ctx sc.Context) (err error) {
 
 	// build services
@@ -254,6 +274,8 @@ func (app *application) Run(ctx sc.Context) (err error) {
 			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.Namespace()))
 		}
 	}
+	// GOMAXPROCS
+	app.setGOMAXPROCS()
 	// serve http
 	serveErr := app.serve(ctx)
 	if serveErr != nil {
@@ -769,6 +791,9 @@ func (app *application) stop(timeout time.Duration) {
 		break
 	case <-cancelCTX.Done():
 		break
+	}
+	if app.undoMAXPROCS != nil {
+		app.undoMAXPROCS()
 	}
 	cancel()
 }

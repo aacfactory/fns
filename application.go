@@ -246,8 +246,14 @@ func (app *application) Deploy(services ...Service) (err error) {
 
 func (app *application) setGOMAXPROCS() {
 	if app.maxPROCS == 0 {
-		undo, setErr := maxprocs.Set(maxprocs.Min(app.minPROCS))
+		maxprocsLog := &printf{
+			core: app.Log(),
+		}
+		undo, setErr := maxprocs.Set(maxprocs.Min(app.minPROCS), maxprocs.Logger(maxprocsLog.Printf))
 		if setErr != nil {
+			if app.Log().DebugEnabled() {
+				app.log.Debug().Message("fns Run: set automaxprocs failed, use runtime.GOMAXPROCS(0) insteadof")
+			}
 			runtime.GOMAXPROCS(0)
 			return
 		}

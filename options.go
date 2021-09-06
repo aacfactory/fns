@@ -24,7 +24,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -42,7 +41,7 @@ var (
 		Version:               defaultVersion,
 		SecretKey:             secretKey,
 		MinPROCS:              1,
-		MaxPROCS:              runtime.NumCPU() * 2,
+		MaxPROCS:              0,
 	}
 	secretKey = []byte("+-fns")
 )

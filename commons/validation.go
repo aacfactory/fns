@@ -42,7 +42,7 @@ func ValidateFieldMessage(_type reflect.Type, exp string) (key string, msg strin
 	if pos := strings.Index(xk, ","); pos > 0 {
 		xk = xk[0:pos]
 	}
-	
+
 	if idx > 0 {
 		key, msg = ValidateFieldMessage(field.Type, exp[idx+1:])
 		key = xk + "." + key
@@ -64,6 +64,26 @@ func ValidateRegisterRegex(validate *validator.Validate) {
 		}
 		value := fl.Field().String()
 		ok, _ = regexp.MatchString(exp, value)
+		return
+	})
+}
+
+func ValidateRegisterNotBlank(validate *validator.Validate) {
+	_ = validate.RegisterValidation("not_blank", func(fl validator.FieldLevel) (ok bool) {
+		if fl.Field().Type().Kind() != reflect.String {
+			return
+		}
+		ok = strings.TrimSpace(fl.Field().String()) != ""
+		return
+	})
+}
+
+func ValidateRegisterNotEmpty(validate *validator.Validate) {
+	_ = validate.RegisterValidation("not_empty", func(fl validator.FieldLevel) (ok bool) {
+		if fl.Field().Type().Kind() != reflect.Slice {
+			return
+		}
+		ok = !fl.Field().IsNil() && fl.Field().Len() > 0
 		return
 	})
 }

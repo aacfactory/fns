@@ -154,6 +154,7 @@ func New(options ...Option) (app Application, err error) {
 		commons.ValidateRegisterRegex(validate)
 		commons.ValidateRegisterNotBlank(validate)
 		commons.ValidateRegisterNotEmpty(validate)
+		commons.ValidateRegisterDefault(validate)
 	}
 
 	appConfig.Services.concurrency = appConfig.Concurrency

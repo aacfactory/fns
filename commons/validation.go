@@ -87,3 +87,17 @@ func ValidateRegisterNotEmpty(validate *validator.Validate) {
 		return
 	})
 }
+
+func ValidateRegisterDefault(validate *validator.Validate) {
+	_ = validate.RegisterValidation("default", func(fl validator.FieldLevel) (ok bool) {
+		if fl.Field().Type().Kind() != reflect.String {
+			return
+		}
+		v := strings.TrimSpace(fl.Field().String())
+		if v == "" {
+			fl.Field().SetString(strings.TrimSpace(fl.Param()))
+		}
+		ok = true
+		return
+	})
+}

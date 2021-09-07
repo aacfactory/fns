@@ -153,10 +153,6 @@ type ServicesConfig struct {
 	Authorization       AuthorizationsConfig `json:"authorization,omitempty"`
 	Permission          PermissionsConfig    `json:"permission,omitempty"`
 	HttpClientPoolSize  int                  `json:"httpClientPoolSize,omitempty"`
-	concurrency         int
-	serverId            string
-	address             string
-	version             string
 }
 
 type DiscoveryConfig struct {

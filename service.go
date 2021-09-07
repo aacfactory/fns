@@ -75,7 +75,6 @@ type ContextMeta interface {
 	GetExactProxyServiceAddress(namespace string) (address string, has bool)
 	DelExactProxyServiceAddress(namespace string)
 	Encode() (value []byte)
-	Decode(value []byte) (ok bool)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

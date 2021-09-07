@@ -141,12 +141,6 @@ func New(options ...Option) (app Application, err error) {
 		log = log.With("ver", opt.Version)
 	}
 
-	// timeout
-	handleTimeout := 30 * time.Second
-	if appConfig.Services.HandleTimeoutSecond > 0 {
-		handleTimeout = time.Duration(appConfig.Services.HandleTimeoutSecond) * time.Second
-	}
-
 	// validate
 	validate := opt.Validate
 	if validate == nil {
@@ -157,30 +151,27 @@ func New(options ...Option) (app Application, err error) {
 		commons.ValidateRegisterDefault(validate)
 	}
 
-	appConfig.Services.concurrency = appConfig.Concurrency
-
 	app0 := &application{
-		id:              UID(),
-		name:            name,
-		version:         opt.Version,
-		address:         "",
-		publicAddress:   "",
-		minPROCS:        opt.MinPROCS,
-		maxPROCS:        opt.MaxPROCS,
-		running:         0,
-		config:          config,
-		log:             log,
-		validate:        validate,
-		serviceMap:      make(map[string]Service),
-		svc:             nil,
-		fnHandleTimeout: handleTimeout,
-		requestCounter:  sync.WaitGroup{},
-		ln:              nil,
-		server:          nil,
-		hasHook:         false,
-		hookUnitCh:      nil,
-		hookStopCh:      nil,
-		hooks:           opt.Hooks,
+		id:             UID(),
+		name:           name,
+		version:        opt.Version,
+		address:        "",
+		publicAddress:  "",
+		minPROCS:       opt.MinPROCS,
+		maxPROCS:       opt.MaxPROCS,
+		running:        0,
+		config:         config,
+		log:            log,
+		validate:       validate,
+		serviceMap:     make(map[string]Service),
+		svc:            nil,
+		requestCounter: sync.WaitGroup{},
+		ln:             nil,
+		server:         nil,
+		hasHook:        false,
+		hookUnitCh:     nil,
+		hookStopCh:     nil,
+		hooks:          opt.Hooks,
 	}
 
 	// build
@@ -197,28 +188,27 @@ func New(options ...Option) (app Application, err error) {
 }
 
 type application struct {
-	id              string
-	name            string
-	version         string
-	address         string
-	publicAddress   string
-	minPROCS        int
-	maxPROCS        int
-	undoMAXPROCS    func()
-	running         int64
-	config          configuares.Config
-	log             logs.Logger
-	validate        *validator.Validate
-	serviceMap      map[string]Service
-	svc             *services
-	fnHandleTimeout time.Duration
-	requestCounter  sync.WaitGroup
-	ln              net.Listener
-	server          *fasthttp.Server
-	hasHook         bool
-	hookUnitCh      chan *HookUnit
-	hookStopCh      chan chan struct{}
-	hooks           []Hook
+	id             string
+	name           string
+	version        string
+	address        string
+	publicAddress  string
+	minPROCS       int
+	maxPROCS       int
+	undoMAXPROCS   func()
+	running        int64
+	config         configuares.Config
+	log            logs.Logger
+	validate       *validator.Validate
+	serviceMap     map[string]Service
+	svc            *services
+	requestCounter sync.WaitGroup
+	ln             net.Listener
+	server         *fasthttp.Server
+	hasHook        bool
+	hookUnitCh     chan *HookUnit
+	hookStopCh     chan chan struct{}
+	hooks          []Hook
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -346,12 +336,8 @@ func (app *application) build(config ApplicationConfig) (err error) {
 func (app *application) buildServices(_config ApplicationConfig) (err error) {
 
 	config := _config.Services
-	config.serverId = app.id
-	config.address = app.publicAddress
-	config.version = app.version
-	config.concurrency = _config.Concurrency
 
-	svc := &services{}
+	svc := newServices(app.id, app.version, app.publicAddress, _config.Concurrency, app.log, app.validate)
 
 	buildErr := svc.Build(config)
 	if buildErr != nil {
@@ -490,13 +476,13 @@ func (app *application) serve(ctx sc.Context) (err error) {
 
 func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 	if atomic.LoadInt64(&app.running) != int64(1) {
-		sendError(request, errors.New(555, "***WARNING***", "fns is not ready or closing"))
+		sendError(request, errors.New(555, "***WARNING***", "fns Http: fns is not ready or closing"))
 		return
 	}
 	if request.IsGet() {
 		uri := request.URI()
 		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
-			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return
 		}
 		p := uri.Path()
@@ -510,12 +496,12 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		// description
 		items := bytes.Split(p[1:], pathSplitter)
 		if len(items) != 2 {
-			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return
 		}
 		namespace := string(items[0])
 		if app.svc.IsInternal(namespace) {
-			sendError(request, errors.New(555, "***WARNING***", "can not access an internal service"))
+			sendError(request, errors.New(555, "***WARNING***", "fns Http: can not access an internal service"))
 			return
 		}
 		if string(items[1]) == descriptionPathItem {
@@ -531,7 +517,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			}
 			return
 		} else {
-			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return
 		}
 	} else if request.IsPost() {
@@ -540,13 +526,13 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 
 		uri := request.URI()
 		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
-			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return
 		}
 		p := uri.Path()
 		items := bytes.Split(p[1:], pathSplitter)
 		if len(items) != 2 {
-			sendError(request, errors.New(555, "***WARNING***", "uri is invalid"))
+			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return
 		}
 		namespace := string(items[0])
@@ -558,77 +544,41 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		// body
 		arg, argErr := NewArgument(request.PostBody())
 		if argErr != nil {
-			sendError(request, errors.BadRequest("request body must be json content"))
+			sendError(request, errors.BadRequest("fns Http: request body must be json content"))
 			return
 		}
 
-		// user
-		var requestUser User
+		// authorization
 		authorization := request.Request.Header.PeekBytes(authorizationHeader)
 		if authorization == nil {
 			authorization = make([]byte, 0, 1)
 		}
-		requestUser = newUser(authorization)
-
-		// app runtime
-		ar := &appRuntime{
-			clusterMode:    app.svc.ClusterMode(),
-			publicAddress:  app.publicAddress,
-			appLog:         app.log,
-			validate:       app.validate,
-			discovery:      app.svc.discovery,
-			authorizations: app.svc.authorizations,
-			permissions:    app.svc.permissions,
-			httpClients:    app.svc.clients,
+		// requestId
+		requestId := string(request.Request.Header.PeekBytes(requestIdHeader))
+		if requestId == "" {
+			requestId = UID()
 		}
-
-		// ctx
-		timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), app.fnHandleTimeout)
-		var ctx *context
-		requestId := request.Request.Header.PeekBytes(requestIdHeader)
-		if requestId != nil && len(requestId) > 0 {
-			metaValue := request.Request.Header.PeekBytes(requestMetaHeader)
-			if metaValue == nil || len(metaValue) == 0 {
-				sendError(request, errors.New(555, "***WARNING***", "meta is required in internal request"))
-				cancel()
-				return
-			}
-			ctx = newContext(timeoutCtx, string(requestId), requestUser, ar)
-			if !ctx.Meta().Decode(metaValue) {
-				sendError(request, errors.New(555, "***WARNING***", "meta is invalid in internal request"))
-				cancel()
-				return
-			}
-		} else {
-			if app.svc.IsInternal(namespace) {
-				sendError(request, errors.New(555, "***WARNING***", "can not access an internal service"))
-				cancel()
-				return
-			}
-			ctx = newContext(timeoutCtx, UID(), requestUser, ar)
-		}
+		// requestMeta
+		requestMeta := request.Request.Header.PeekBytes(requestMetaHeader)
 
 		// fn
 		fn := string(items[1])
 
 		// request
 		handleBeg := time.Now()
-		result := app.svc.Request(ctx, namespace, fn, arg)
+		result := app.svc.Request(requestId, requestMeta, authorization, namespace, fn, arg)
 		latency := time.Now().Sub(handleBeg)
 		data := json.RawMessage{}
-		handleErr := result.Get(ctx.Context, &data)
+		handleErr := result.Get(sc.TODO(), &data)
 		if handleErr != nil {
-			request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
+			request.Response.Header.SetBytesK(requestIdHeader, requestId)
 			request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
 			sendError(request, handleErr)
-			// release ctx
-			clearContext(ctx)
-			cancel()
 			return
 		}
 		request.SetStatusCode(200)
 		request.SetContentTypeBytes(jsonUTF8ContentType)
-		request.Response.Header.SetBytesK(requestIdHeader, ctx.RequestId())
+		request.Response.Header.SetBytesK(requestIdHeader, requestId)
 		request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
 		if len(data) > 0 && !bytes.Equal(data, nullJson) {
 			request.SetBody(data)
@@ -639,19 +589,16 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			unit := &HookUnit{}
 			unit.Namespace = namespace
 			unit.FnName = fn
-			unit.RequestId = ctx.RequestId()
-			unit.RequestUser = ctx.User()
+			unit.RequestId = requestId
+			unit.Authorization = authorization
 			unit.RequestSize = int64(len(request.PostBody()))
 			unit.ResponseSize = int64(len(data))
 			unit.Latency = latency
 			unit.HandleError = handleErr
 			app.hookUnitCh <- unit
 		}
-		// release ctx
-		clearContext(ctx)
-		cancel()
 	} else {
-		sendError(request, errors.New(555, "***WARNING***", "method is invalid"))
+		sendError(request, errors.New(555, "***WARNING***", "fns Http: method is invalid"))
 		return
 	}
 

@@ -17,10 +17,13 @@
 package fns
 
 import (
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"github.com/go-playground/validator/v10"
 	"strings"
 	"sync"
 	"time"
@@ -30,38 +33,62 @@ const (
 	fnRequestWorkHandleAction = "+"
 )
 
-type services struct {
-	wp             workers.Workers
-	descriptions   map[string][]byte
-	internals      map[string]int64
-	discovery      ServiceDiscovery
-	authorizations Authorizations
-	permissions    Permissions
-	clients        *HttpClients
-	payloads       sync.Pool
-	version        string
-	clusterMode    bool
-}
-
-func (s *services) Build(config ServicesConfig) (err error) {
-	concurrency := config.concurrency
+func newServices(serverId string, version string, publicAddress string, concurrency int, log logs.Logger, validate *validator.Validate) (v *services) {
 	if concurrency < 1 {
 		concurrency = workers.DefaultConcurrency
 	}
+	v = &services{
+		concurrency:   concurrency,
+		descriptions:  make(map[string][]byte),
+		internals:     make(map[string]int64),
+		version:       version,
+		serverId:      serverId,
+		publicAddress: publicAddress,
+		log:           log,
+		validate:      validate,
+	}
+	return
+}
+
+type services struct {
+	concurrency     int
+	wp              workers.Workers
+	descriptions    map[string][]byte
+	internals       map[string]int64
+	discovery       ServiceDiscovery
+	authorizations  Authorizations
+	permissions     Permissions
+	clients         *HttpClients
+	payloads        sync.Pool
+	version         string
+	serverId        string
+	clusterMode     bool
+	publicAddress   string
+	log             logs.Logger
+	validate        *validator.Validate
+	fnHandleTimeout time.Duration
+}
+
+func (s *services) Build(config ServicesConfig) (err error) {
+	// timeout
+	handleTimeout := 30 * time.Second
+	if config.HandleTimeoutSecond > 0 {
+		handleTimeout = time.Duration(config.HandleTimeoutSecond) * time.Second
+	}
+	s.fnHandleTimeout = handleTimeout
+
+	// workers
 	maxIdleTimeSecond := time.Duration(config.MaxIdleTimeSecond) * time.Second
 	if maxIdleTimeSecond == 0 {
 		maxIdleTimeSecond = 10 * time.Second
 	}
 
-	wp, wpErr := workers.New(s, workers.WithConcurrency(concurrency), workers.WithMaxIdleTime(maxIdleTimeSecond))
+	wp, wpErr := workers.New(s, workers.WithConcurrency(s.concurrency), workers.WithMaxIdleTime(maxIdleTimeSecond))
 	if wpErr != nil {
 		err = fmt.Errorf("fns Services: build failed, %v", wpErr)
 		return
 	}
 	s.wp = wp
-
-	// internals
-	s.internals = make(map[string]int64)
 
 	// http clients
 	httpClientPoolSize := config.HttpClientPoolSize
@@ -88,7 +115,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 			err = fmt.Errorf("fns Services: build failed for %s kind was not register, please use fns.RegisterServiceDiscoveryRetriever() to register retriever", kind)
 			return
 		}
-		if config.address == "" {
+		if s.publicAddress == "" {
 			err = fmt.Errorf("fns Services: build failed for %s kind, public host and public port was not set", kind)
 			return
 		}
@@ -96,7 +123,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 	}
 
 	discovery, discoveryErr := discoveryRetriever(ServiceDiscoveryOption{
-		Address:     config.address,
+		Address:     s.publicAddress,
 		Config:      discoveryConfig.Config,
 		HttpClients: s.clients,
 	})
@@ -159,19 +186,8 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		return &servicesRequestPayload{}
 	}
 
-	// descriptions
-	s.descriptions = make(map[string][]byte)
-
-	// version
-	s.version = config.version
-
 	s.wp.Start()
 
-	return
-}
-
-func (s *services) ClusterMode() (ok bool) {
-	ok = s.clusterMode
 	return
 }
 
@@ -211,7 +227,7 @@ func (s *services) Permissions() (p Permissions) {
 	return
 }
 
-func (s *services) Request(ctx Context, namespace string, fn string, argument Argument) (result Result) {
+func (s *services) Request(requestId string, meta []byte, authorization []byte, namespace string, fn string, argument Argument) (result Result) {
 
 	if !s.discovery.IsLocal(namespace) {
 		result = SyncResult()
@@ -220,7 +236,9 @@ func (s *services) Request(ctx Context, namespace string, fn string, argument Ar
 	}
 
 	payload := s.payloads.Get().(*servicesRequestPayload)
-	payload.ctx = ctx
+	payload.requestId = requestId
+	payload.meta = meta
+	payload.authorization = authorization
 	payload.namespace = namespace
 	payload.fn = fn
 	payload.argument = argument
@@ -264,15 +282,37 @@ func (s *services) Handle(action string, _payload interface{}) {
 	payload := _payload.(*servicesRequestPayload)
 
 	if action != fnRequestWorkHandleAction {
-		payload.result.Failed(errors.Unavailable("not fn request"))
+		payload.result.Failed(errors.Unavailable("fns Services: not fn request"))
 		return
 	}
 
-	ctx := payload.ctx
+	// ctx
+	if (payload.meta == nil || len(payload.meta) == 0) && s.IsInternal(payload.namespace) {
+		payload.result.Failed(errors.Warning("fns Services: can not access an internal service"))
+		return
+	}
+	timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), s.fnHandleTimeout)
+	ctx, ctxErr := newContext(timeoutCtx, payload.requestId, payload.authorization, payload.meta, &appRuntime{
+		clusterMode:    s.clusterMode,
+		publicAddress:  s.publicAddress,
+		appLog:         s.log,
+		validate:       s.validate,
+		discovery:      s.discovery,
+		authorizations: s.authorizations,
+		permissions:    s.permissions,
+		httpClients:    s.clients,
+	})
+	if ctxErr != nil {
+		payload.result.Failed(errors.Warning("fns Context: create context from request failed").WithCause(ctxErr))
+		cancel()
+		return
+	}
 
+	// proxy
 	proxy, proxyErr := s.discovery.Proxy(ctx, payload.namespace)
 	if proxyErr != nil {
 		payload.result.Failed(proxyErr)
+		cancel()
 		return
 	}
 
@@ -285,12 +325,15 @@ func (s *services) Handle(action string, _payload interface{}) {
 	} else {
 		payload.result.Succeed(raw)
 	}
+	cancel()
 }
 
 type servicesRequestPayload struct {
-	ctx       Context
-	namespace string
-	fn        string
-	argument  Argument
-	result    Result
+	requestId     string
+	meta          []byte
+	authorization []byte
+	namespace     string
+	fn            string
+	argument      Argument
+	result        Result
 }

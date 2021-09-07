@@ -151,20 +151,26 @@ func WithFn(ctx Context, fn string) Context {
 	return ctx0
 }
 
-func clearContext(ctx *context) {
-	ctx.meta = nil
-	ctx.app = nil
-	ctx.user = nil
-}
-
-func newContext(ctx sc.Context, id string, user User, app *appRuntime) *context {
-	return &context{
-		Context: ctx,
+func newContext(_ctx sc.Context, id string, authorization []byte, metaData []byte, app *appRuntime) (ctx *context, err error) {
+	var meta *contextMeta
+	if metaData == nil || len(metaData) == 0 {
+		meta = newContextMeta()
+	} else {
+		_meta, metaErr := newContextMetaFromValue(metaData)
+		if metaErr != nil {
+			err = metaErr
+			return
+		}
+		meta = _meta
+	}
+	ctx = &context{
+		Context: _ctx,
 		id:      id,
-		user:    user,
-		meta:    newContextMeta(),
+		user:    newUser(authorization),
+		meta:    meta,
 		app:     app,
 	}
+	return
 }
 
 type context struct {
@@ -201,6 +207,24 @@ func (ctx *context) Timeout() (has bool) {
 		return
 	}
 	has = deadline.Before(time.Now())
+	return
+}
+
+func newContextMetaFromValue(p []byte) (meta *contextMeta, err error) {
+	if !secret.Verify(p, secretKey) {
+		err = fmt.Errorf("invalid request meta")
+		return
+	}
+	idx := bytes.LastIndexByte(p, '.')
+	src := p[:idx]
+	obj := json.NewObject()
+	err = obj.UnmarshalJSON(src)
+	if err != nil {
+		return
+	}
+	meta = &contextMeta{
+		obj: obj,
+	}
 	return
 }
 
@@ -381,19 +405,5 @@ func (meta *contextMeta) UnmarshalJSON(b []byte) (err error) {
 
 func (meta *contextMeta) Encode() (value []byte) {
 	value = secret.Sign(meta.obj.Raw(), secretKey)
-	return
-}
-
-func (meta *contextMeta) Decode(value []byte) (ok bool) {
-	if !secret.Verify(value, secretKey) {
-		return
-	}
-	idx := bytes.LastIndexByte(value, '.')
-	src := value[:idx]
-	err := meta.obj.UnmarshalJSON(src)
-	if err != nil {
-		return
-	}
-	ok = true
 	return
 }

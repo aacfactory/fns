@@ -23,14 +23,14 @@ import (
 )
 
 type HookUnit struct {
-	Namespace    string
-	FnName       string
-	RequestId    string
-	RequestUser  User
-	RequestSize  int64
-	ResponseSize int64
-	Latency      time.Duration
-	HandleError  errors.CodeError
+	Namespace     string
+	FnName        string
+	RequestId     string
+	Authorization []byte
+	RequestSize   int64
+	ResponseSize  int64
+	Latency       time.Duration
+	HandleError   errors.CodeError
 }
 
 type Hook interface {

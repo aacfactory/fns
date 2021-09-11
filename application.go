@@ -417,9 +417,36 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 		config.Cors.fill()
 		requestHandler = newCors(config.Cors).handler(requestHandler)
 	}
+	// buffer size
+	readBufferSize := 64 * KB
+	if config.ReadBufferSize != "" {
+		bs := strings.ToUpper(strings.TrimSpace(config.ReadBufferSize))
+		if bs != "" {
+			bs0, bsErr := commons.ToBytes(bs)
+			if bsErr != nil {
+				err = fmt.Errorf("fns Build: invalid http readBufferSize in config")
+				return
+			}
+			readBufferSize = int(bs0)
+		}
+	}
+	writeBufferSize := 4 * MB
+	if config.WriteBufferSize != "" {
+		bs := strings.ToUpper(strings.TrimSpace(config.WriteBufferSize))
+		if bs != "" {
+			bs0, bsErr := commons.ToBytes(bs)
+			if bsErr != nil {
+				err = fmt.Errorf("fns Build: invalid http writeBufferSize in config")
+				return
+			}
+			writeBufferSize = int(bs0)
+		}
+	}
+
 	app.server = &fasthttp.Server{
-		Handler:        requestHandler,
-		ReadBufferSize: 64 * KB,
+		Handler:         requestHandler,
+		ReadBufferSize:  readBufferSize,
+		WriteBufferSize: writeBufferSize,
 		ErrorHandler: func(ctx *fasthttp.RequestCtx, err error) {
 			ctx.ResetBody()
 			ctx.SetStatusCode(555)

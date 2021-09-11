@@ -69,6 +69,8 @@ type HttpConfig struct {
 	KeepAlive                bool       `json:"keepAlive,omitempty"`
 	KeepalivePeriodSecond    int        `json:"keepalivePeriodSecond,omitempty"`
 	RequestTimeoutSeconds    int        `json:"requestTimeoutSeconds,omitempty"`
+	ReadBufferSize           string     `json:"readBufferSize"`
+	WriteBufferSize          string     `json:"writeBufferSize"`
 	Cors                     CorsConfig `json:"cors,omitempty"`
 }
 

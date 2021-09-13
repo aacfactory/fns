@@ -126,11 +126,16 @@ func WithNamespace(ctx Context, namespace string) Context {
 		return ctx0
 	}
 	app := &appRuntime{
-		publicAddress: ctx0.app.publicAddress,
-		appLog:        ctx0.app.appLog,
-		nsLog:         ctx0.app.appLog.With("namespace", namespace),
-		validate:      ctx0.app.validate,
-		discovery:     ctx0.app.discovery,
+		clusterMode:    ctx0.app.clusterMode,
+		publicAddress:  ctx0.app.publicAddress,
+		appLog:         ctx0.app.appLog,
+		nsLog:          ctx0.app.appLog.With("namespace", namespace),
+		fnLog:          nil,
+		validate:       ctx0.app.validate,
+		discovery:      ctx0.app.discovery,
+		authorizations: ctx0.app.authorizations,
+		permissions:    ctx0.app.permissions,
+		httpClients:    ctx0.app.httpClients,
 	}
 	return &context{
 		Context: ctx0.Context,

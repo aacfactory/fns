@@ -20,6 +20,7 @@ import (
 	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
+	"reflect"
 )
 
 func AsyncResult() Result {
@@ -34,7 +35,17 @@ type futureResult struct {
 
 func (r *futureResult) Succeed(v interface{}) {
 	if v == nil {
-		r.ch <- []byte("+")
+		rt := reflect.TypeOf(v)
+		if rt.Kind() == reflect.Ptr {
+			rt = rt.Elem()
+		}
+		if rt.Kind() == reflect.Struct {
+			r.ch <- []byte("+{}")
+		} else if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
+			r.ch <- []byte("+[]")
+		} else {
+			r.ch <- []byte("+")
+		}
 		return
 	}
 
@@ -115,6 +126,15 @@ type syncResult struct {
 
 func (r *syncResult) Succeed(v interface{}) {
 	if v == nil {
+		rt := reflect.TypeOf(v)
+		if rt.Kind() == reflect.Ptr {
+			rt = rt.Elem()
+		}
+		if rt.Kind() == reflect.Struct {
+			r.data = []byte("{}")
+		} else if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
+			r.data = []byte("[]")
+		}
 		return
 	}
 	data, ok := v.([]byte)

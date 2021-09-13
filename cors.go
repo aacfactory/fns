@@ -17,7 +17,6 @@
 package fns
 
 import (
-	"bytes"
 	"github.com/aacfactory/fns/commons"
 	"github.com/valyala/fasthttp"
 	"net/http"
@@ -32,7 +31,6 @@ var (
 	corsAccessControlHeader = []byte("Access-Control-Request-Method")
 	requestOriginHeader     = []byte("Origin")
 	requestSecFetchMode     = []byte("Sec-Fetch-Mode")
-	requestSecFetchModeCors = []byte("cors")
 )
 
 func newCors(config CorsConfig) *cors {
@@ -102,23 +100,27 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 			accessControlRequestMethod := string(ctx.Request.Header.PeekBytes(corsAccessControlHeader))
 			if accessControlRequestMethod == "" {
 				h(ctx)
+				c.writeAccessControlAllowOrigin(ctx)
 				return
 			}
 			c.handlePreflight(ctx)
 			ctx.SetStatusCode(204)
 		} else {
 			h(ctx)
-			mode := ctx.Request.Header.PeekBytes(requestSecFetchMode)
-			if bytes.Equal(mode, requestSecFetchModeCors) {
-				if c.allowedOriginsAll {
-					ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
-				} else {
-					ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
-				}
-			}
+			c.writeAccessControlAllowOrigin(ctx)
 		}
 	}
 	return
+}
+func (c *cors) writeAccessControlAllowOrigin(ctx *fasthttp.RequestCtx) {
+	mode := ctx.Request.Header.PeekBytes(requestSecFetchMode)
+	if mode != nil && len(mode) > 0 {
+		if c.allowedOriginsAll {
+			ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
+		} else {
+			ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
+		}
+	}
 }
 
 func (c *cors) handlePreflight(ctx *fasthttp.RequestCtx) {

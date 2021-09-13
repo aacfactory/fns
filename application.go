@@ -655,7 +655,11 @@ var (
 
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
 	body, _ := json.Marshal(err)
-	request.SetStatusCode(err.Code())
+	if err.Contains(errors.NilError()) {
+		request.SetStatusCode(errors.NilError().Code())
+	} else {
+		request.SetStatusCode(err.Code())
+	}
 	request.SetContentTypeBytes(jsonUTF8ContentType)
 	request.SetBody(body)
 }

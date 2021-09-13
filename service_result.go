@@ -35,8 +35,9 @@ type futureResult struct {
 
 func (r *futureResult) Succeed(v interface{}) {
 	rv := reflect.ValueOf(v)
-	if rv.Type().Kind() == reflect.Ptr && rv.IsNil() {
-		rt := rv.Type().Elem()
+	rt := reflect.TypeOf(v)
+	if rt.Kind() == reflect.Ptr && rv.IsNil() {
+		rt = rt.Elem()
 		if rt.Kind() == reflect.Struct {
 			r.ch <- []byte("+{}")
 		} else if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
@@ -124,8 +125,9 @@ type syncResult struct {
 
 func (r *syncResult) Succeed(v interface{}) {
 	rv := reflect.ValueOf(v)
-	if rv.Type().Kind() == reflect.Ptr && rv.IsNil() {
-		rt := rv.Type().Elem()
+	rt := reflect.TypeOf(v)
+	if rt.Kind() == reflect.Ptr && rv.IsNil() {
+		rt = rt.Elem()
 		if rt.Kind() == reflect.Struct {
 			r.data = []byte("{}")
 		} else if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {

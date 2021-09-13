@@ -37,14 +37,10 @@ func (r *futureResult) Succeed(v interface{}) {
 	rv := reflect.ValueOf(v)
 	rt := reflect.TypeOf(v)
 	if rt.Kind() == reflect.Ptr && rv.IsNil() {
-		rt = rt.Elem()
-		if rt.Kind() == reflect.Struct {
-			r.ch <- []byte("+{}")
-		} else if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
-			r.ch <- []byte("+[]")
-		} else {
-			r.ch <- []byte("+")
-		}
+		r.ch <- []byte("+{}")
+		return
+	} else if (rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array) && rv.Len() == 0 {
+		r.ch <- []byte("+[]")
 		return
 	}
 
@@ -127,14 +123,10 @@ func (r *syncResult) Succeed(v interface{}) {
 	rv := reflect.ValueOf(v)
 	rt := reflect.TypeOf(v)
 	if rt.Kind() == reflect.Ptr && rv.IsNil() {
-		rt = rt.Elem()
-		if rt.Kind() == reflect.Struct {
-			r.data = []byte("{}")
-		} else if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
-			r.data = []byte("[]")
-		} else {
-			r.data = nullJson
-		}
+		r.data = []byte("{}")
+		return
+	} else if (rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array) && rv.Len() == 0 {
+		r.data = []byte("[]")
 		return
 	}
 	data, ok := v.([]byte)

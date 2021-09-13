@@ -31,8 +31,3 @@ func (auth *fakeAuthorizations) Decode(_ Context, _ []byte) (err errors.CodeErro
 	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
 	return
 }
-
-func (auth *fakeAuthorizations) Revoke(_ Context) (err errors.CodeError) {
-	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
-	return
-}

@@ -43,6 +43,9 @@ func (proxy *LocaledServiceProxy) Request(ctx Context, fn string, argument Argum
 		result.Failed(err)
 		return
 	}
+	if v == nil {
+		v = &Empty{}
+	}
 	result.Succeed(v)
 	return
 }

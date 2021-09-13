@@ -413,7 +413,7 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 
 	// server
 	requestHandler := fasthttp.CompressHandler(app.handleHttpRequest)
-	if config.Cors.Enabled {
+	if config.Cors.Enable {
 		config.Cors.fill()
 		requestHandler = newCors(config.Cors).handler(requestHandler)
 	}

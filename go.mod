@@ -3,7 +3,7 @@ module github.com/aacfactory/fns
 go 1.17
 
 require (
-	github.com/aacfactory/configuares v1.2.2
+	github.com/aacfactory/configuares v1.2.3
 	github.com/aacfactory/errors v1.6.0
 	github.com/aacfactory/json v1.4.2
 	github.com/aacfactory/logs v1.1.3

@@ -71,7 +71,7 @@ type HttpConfig struct {
 	RequestTimeoutSeconds    int        `json:"requestTimeoutSeconds,omitempty"`
 	ReadBufferSize           string     `json:"readBufferSize"`
 	WriteBufferSize          string     `json:"writeBufferSize"`
-	Cors                     CorsConfig `json:"cors,omitempty"`
+	Cors                     CorsConfig `json:"cors"`
 }
 
 const (
@@ -111,7 +111,7 @@ func getPublicHostFromHostname() (host string, has bool) {
 }
 
 type CorsConfig struct {
-	Enabled          bool     `json:"enabled,omitempty"`
+	Enable           bool     `json:"enable,omitempty"`
 	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`
 	AllowedMethods   []string `json:"allowedMethods,omitempty"`
 	AllowedHeaders   []string `json:"allowedHeaders,omitempty"`

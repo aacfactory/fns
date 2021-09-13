@@ -17,6 +17,7 @@
 package fns
 
 import (
+	"bytes"
 	"github.com/aacfactory/fns/commons"
 	"github.com/valyala/fasthttp"
 	"net/http"
@@ -27,8 +28,11 @@ import (
 const toLower = 'a' - 'A'
 
 var (
+	corsAccessOrigin        = []byte("Access-Control-Allow-Origin")
 	corsAccessControlHeader = []byte("Access-Control-Request-Method")
 	requestOriginHeader     = []byte("Origin")
+	requestSecFetchMode     = []byte("Sec-Fetch-Mode")
+	requestSecFetchModeCors = []byte("cors")
 )
 
 func newCors(config CorsConfig) *cors {
@@ -104,6 +108,14 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 			ctx.SetStatusCode(204)
 		} else {
 			h(ctx)
+			mode := ctx.Request.Header.PeekBytes(requestSecFetchMode)
+			if bytes.Equal(mode, requestSecFetchModeCors) {
+				if c.allowedOriginsAll {
+					ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
+				} else {
+					ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
+				}
+			}
 		}
 	}
 	return
@@ -115,6 +127,7 @@ func (c *cors) handlePreflight(ctx *fasthttp.RequestCtx) {
 	ctx.Response.Header.Add("Vary", "Access-Control-Request-Headers")
 
 	origin := string(ctx.Request.Header.PeekBytes(requestOriginHeader))
+
 	if origin == "" {
 		return
 	}
@@ -123,7 +136,7 @@ func (c *cors) handlePreflight(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	reqMethod := string(ctx.Request.Header.Peek("Access-Control-Request-Method"))
+	reqMethod := string(ctx.Request.Header.PeekBytes(corsAccessControlHeader))
 	if !c.isMethodAllowed(reqMethod) {
 		return
 	}
@@ -133,9 +146,9 @@ func (c *cors) handlePreflight(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	if c.allowedOriginsAll {
-		ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+		ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
 	} else {
-		ctx.Response.Header.Set("Access-Control-Allow-Origin", origin)
+		ctx.Response.Header.SetBytesK(corsAccessOrigin, origin)
 	}
 
 	ctx.Response.Header.Set("Access-Control-Allow-Methods", strings.ToUpper(reqMethod))
@@ -247,4 +260,3 @@ func (c *cors) parseHeaderList(headerList string) []string {
 	}
 	return headers
 }
-

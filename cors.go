@@ -113,13 +113,10 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 	return
 }
 func (c *cors) writeAccessControlAllowOrigin(ctx *fasthttp.RequestCtx) {
-	mode := ctx.Request.Header.PeekBytes(requestSecFetchMode)
-	if mode != nil && len(mode) > 0 {
-		if c.allowedOriginsAll {
-			ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
-		} else {
-			ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
-		}
+	if c.allowedOriginsAll {
+		ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
+	} else {
+		ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
 	}
 }
 

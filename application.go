@@ -607,7 +607,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		request.SetContentTypeBytes(jsonUTF8ContentType)
 		request.Response.Header.SetBytesK(requestIdHeader, requestId)
 		request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
-		if len(data) > 0 && !bytes.Equal(data, nullJson) {
+		if len(data) > 0 {
 			request.SetBody(data)
 		}
 

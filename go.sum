@@ -1,7 +1,7 @@
 github.com/aacfactory/configuares v1.2.3 h1:XqLfkke8XKQoXLlbkioCFTN9yPyUIc+0+pRfmJr1QXw=
 github.com/aacfactory/configuares v1.2.3/go.mod h1:oaKvHPJ0KYw5e80P/dwvkQiLtQjp8kwiEvTOqGHrOtc=
-github.com/aacfactory/errors v1.6.1 h1:65ZFNrEozt79sb367xfOeLjBTlS/aAGEMliaFgKxiBs=
-github.com/aacfactory/errors v1.6.1/go.mod h1:QP1ow7NtrClLDRpecZcLJs1wPCyyuz+HyVf77oSAt4M=
+github.com/aacfactory/errors v1.6.2 h1:3iutxMHMeWwNEURe4NpxKF4+mc8ae0IuNk5u+44GUa8=
+github.com/aacfactory/errors v1.6.2/go.mod h1:QP1ow7NtrClLDRpecZcLJs1wPCyyuz+HyVf77oSAt4M=
 github.com/aacfactory/json v1.2.0/go.mod h1:q4DDnE7pLma8fj/Ag0pbHwrDUv77d5VWS66Oyqbeke8=
 github.com/aacfactory/json v1.4.2 h1:6lR/4QV4JJZ88ixsPYyClL/ISxN9h8M2ZEEHHOrw5yU=
 github.com/aacfactory/json v1.4.2/go.mod h1:D+nYAVtrJQ8QUaHELJg/8IrmVlj66ydEeyNrfxf1IOY=

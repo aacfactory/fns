@@ -23,11 +23,14 @@ import (
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/go-playground/validator/v10"
+	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
+	"google.golang.org/protobuf/proto"
 	"net"
 	"os"
 	"os/signal"
@@ -567,13 +570,8 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			sendError(request, errors.NotFound(fmt.Sprintf("%s was not found", namespace)))
 			return
 		}
-
-		// body
-		arg, argErr := NewArgument(request.PostBody())
-		if argErr != nil {
-			sendError(request, errors.BadRequest("fns Http: request body must be json content"))
-			return
-		}
+		// fn
+		fn := string(items[1])
 
 		// authorization
 		authorization := request.Request.Header.PeekBytes(authorizationHeader)
@@ -581,19 +579,58 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			authorization = make([]byte, 0, 1)
 		}
 		// requestId
-		requestId := string(request.Request.Header.PeekBytes(requestIdHeader))
-		if requestId == "" {
-			requestId = UID()
-		}
-		// requestMeta
-		requestMeta := request.Request.Header.PeekBytes(requestMetaHeader)
+		requestId := ""
 
-		// fn
-		fn := string(items[1])
+		isInnerRequest := false
+		contentType := request.Request.Header.ContentType()
+		if contentType != nil && len(contentType) > 0 {
+			isInnerRequest = bytes.Equal(protobufContentType, contentType)
+		}
+		var arg Argument
+		var argErr error
+		var meta []byte
+		if isInnerRequest {
+			signHeader := request.Request.Header.PeekBytes(requestSignHeader)
+			if signHeader == nil || len(signHeader) == 0 {
+				sendError(request, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", namespace, fn)))
+				return
+			}
+			requestId = string(request.Request.Header.PeekBytes(requestIdHeader))
+			body := request.PostBody()
+			buf := bytebufferpool.Get()
+			_, _ = buf.WriteString(requestId)
+			_, _ = buf.Write(body)
+			signedTarget := buf.Bytes()
+			bytebufferpool.Put(buf)
+			if !secret.Verify(signedTarget, signHeader, secretKey) {
+				sendError(request, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", namespace, fn)))
+				return
+			}
+			remoteRequest := RemoteRequest{}
+			decodeErr := proto.Unmarshal(body, &remoteRequest)
+			if decodeErr != nil {
+				sendError(request, errors.Warning(fmt.Sprintf("fns Http: decode request body of %s/%s failed", namespace, fn)))
+				return
+			}
+			arg, argErr = NewArgument(request.PostBody())
+			if argErr != nil {
+				sendError(request, errors.BadRequest("fns Http: request body must be json content"))
+				return
+			}
+			meta = remoteRequest.Meta
+		} else {
+			requestId = UID()
+			arg, argErr = NewArgument(request.PostBody())
+			if argErr != nil {
+				sendError(request, errors.BadRequest("fns Http: request body must be json content"))
+				return
+			}
+			meta = emptyMeta
+		}
 
 		// request
 		handleBeg := time.Now()
-		result := app.svc.Request(requestId, requestMeta, authorization, namespace, fn, arg)
+		result := app.svc.Request(isInnerRequest, requestId, meta, authorization, namespace, fn, arg)
 		latency := time.Now().Sub(handleBeg)
 		data := json.RawMessage{}
 		handleErr := result.Get(sc.TODO(), &data)
@@ -635,6 +672,7 @@ var (
 	jsonUTF8ContentType = []byte("application/json;charset=utf-8")
 
 	emptyBody = []byte("{}")
+	emptyMeta = []byte("{}")
 
 	healthCheckPath = "/health"
 
@@ -646,7 +684,7 @@ var (
 
 	requestIdHeader = []byte("X-Fns-Request-Id")
 
-	requestMetaHeader = []byte("X-Fns-Meta")
+	requestSignHeader = []byte("X-Fns-Signature")
 
 	responseLatencyHeader = []byte("X-Fns-Latency")
 

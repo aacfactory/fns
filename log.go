@@ -27,6 +27,6 @@ type printf struct {
 
 func (p *printf) Printf(layout string, v ...interface{}) {
 	if p.core.DebugEnabled() {
-		p.core.Debug().Message(fmt.Sprintf("fns %s", fmt.Sprintf(layout, v)))
+		p.core.Debug().Message(fmt.Sprintf("fns %s", fmt.Sprintf(layout, v...)))
 	}
 }

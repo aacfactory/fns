@@ -17,12 +17,10 @@
 package fns
 
 import (
-	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons"
-	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/go-playground/validator/v10"
@@ -157,16 +155,10 @@ func WithFn(ctx Context, fn string) Context {
 }
 
 func newContext(_ctx sc.Context, id string, authorization []byte, metaData []byte, app *appRuntime) (ctx *context, err error) {
-	var meta *contextMeta
-	if metaData == nil || len(metaData) == 0 {
-		meta = newContextMeta()
-	} else {
-		_meta, metaErr := newContextMetaFromValue(metaData)
-		if metaErr != nil {
-			err = metaErr
-			return
-		}
-		meta = _meta
+	meta, metaErr := newContextMeta(metaData)
+	if metaErr != nil {
+		err = metaErr
+		return
 	}
 	ctx = &context{
 		Context: _ctx,
@@ -215,15 +207,9 @@ func (ctx *context) Timeout() (has bool) {
 	return
 }
 
-func newContextMetaFromValue(p []byte) (meta *contextMeta, err error) {
-	if !secret.Verify(p, secretKey) {
-		err = fmt.Errorf("invalid request meta")
-		return
-	}
-	idx := bytes.LastIndexByte(p, '.')
-	src := p[:idx]
+func newContextMeta(p []byte) (meta *contextMeta, err error) {
 	obj := json.NewObject()
-	err = obj.UnmarshalJSON(src)
+	err = obj.UnmarshalJSON(p)
 	if err != nil {
 		return
 	}
@@ -231,12 +217,6 @@ func newContextMetaFromValue(p []byte) (meta *contextMeta, err error) {
 		obj: obj,
 	}
 	return
-}
-
-func newContextMeta() *contextMeta {
-	return &contextMeta{
-		obj: json.NewObject(),
-	}
 }
 
 type contextMeta struct {
@@ -409,6 +389,6 @@ func (meta *contextMeta) UnmarshalJSON(b []byte) (err error) {
 }
 
 func (meta *contextMeta) Encode() (value []byte) {
-	value = secret.Sign(meta.obj.Raw(), secretKey)
+	value = meta.obj.Raw()
 	return
 }

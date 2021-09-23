@@ -227,7 +227,7 @@ func (s *services) Permissions() (p Permissions) {
 	return
 }
 
-func (s *services) Request(requestId string, meta []byte, authorization []byte, namespace string, fn string, argument Argument) (result Result) {
+func (s *services) Request(isInnerRequest bool, requestId string, meta []byte, authorization []byte, namespace string, fn string, argument Argument) (result Result) {
 
 	if !s.discovery.IsLocal(namespace) {
 		result = SyncResult()
@@ -236,6 +236,7 @@ func (s *services) Request(requestId string, meta []byte, authorization []byte, 
 	}
 
 	payload := s.payloads.Get().(*servicesRequestPayload)
+	payload.isInnerRequest = isInnerRequest
 	payload.requestId = requestId
 	payload.meta = meta
 	payload.authorization = authorization
@@ -287,7 +288,7 @@ func (s *services) Handle(action string, _payload interface{}) {
 	}
 
 	// ctx
-	if (payload.meta == nil || len(payload.meta) == 0) && s.IsInternal(payload.namespace) {
+	if payload.isInnerRequest && s.IsInternal(payload.namespace) {
 		payload.result.Failed(errors.Warning("fns Services: can not access an internal service"))
 		return
 	}
@@ -325,15 +326,17 @@ func (s *services) Handle(action string, _payload interface{}) {
 	} else {
 		payload.result.Succeed(raw)
 	}
+	s.payloads.Put(payload)
 	cancel()
 }
 
 type servicesRequestPayload struct {
-	requestId     string
-	meta          []byte
-	authorization []byte
-	namespace     string
-	fn            string
-	argument      Argument
-	result        Result
+	isInnerRequest bool
+	requestId      string
+	meta           []byte
+	authorization  []byte
+	namespace      string
+	fn             string
+	argument       Argument
+	result         Result
 }

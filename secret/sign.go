@@ -17,37 +17,24 @@
 package secret
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 )
 
-func Sign(src []byte, key []byte) (signed []byte) {
+func Sign(target []byte, key []byte) (signature []byte) {
 	h := hmac.New(sha256.New, key)
-	dst := make([]byte, 0, len(src))
-	copy(dst, src)
-	dst = append(src, '.')
-	signature := base64.URLEncoding.EncodeToString(h.Sum(src)[len(src):])
-	signed = append(dst, []byte(signature)...)
+	signature = []byte(base64.URLEncoding.EncodeToString(h.Sum(target)))
 	return
 }
 
-func Verify(signed []byte, key []byte) (ok bool) {
-	idx := bytes.LastIndexByte(signed, '.')
-	if idx < 1 {
-		return
-	}
-	src := signed[:idx]
-	fmt.Println(string(src))
-	hashed, hashedErr := base64.URLEncoding.DecodeString(string(signed[idx+1:]))
+func Verify(target []byte, signature []byte, key []byte) (ok bool) {
+	hashed, hashedErr := base64.URLEncoding.DecodeString(string(signature))
 	if hashedErr != nil {
 		return
 	}
-	target := append(src, hashed...)
 	h := hmac.New(sha256.New, key)
-	tmp := h.Sum(src)
-	ok = hmac.Equal(target, tmp)
+	tmp := h.Sum(target)
+	ok = hmac.Equal(tmp, hashed)
 	return
 }

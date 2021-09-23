@@ -19,8 +19,11 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
+	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/proto"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -101,8 +104,9 @@ func NewRemotedServiceProxy(clients *HttpClients, registration *Registration, pr
 }
 
 var (
-	get  = []byte("GET")
-	post = []byte("POST")
+	get                 = []byte("GET")
+	post                = []byte("POST")
+	protobufContentType = []byte("application/protobuf")
 )
 
 type RemotedServiceProxy struct {
@@ -114,20 +118,37 @@ type RemotedServiceProxy struct {
 func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
 	result = SyncResult()
 
-	body, bodyErr := argument.MarshalJSON()
-	if bodyErr != nil {
-		result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: encode argument failed")).WithCause(bodyErr))
+	argBytes, encodeArgErr := argument.MarshalJSON()
+	if encodeArgErr != nil {
+		result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: encode argument failed")).WithCause(encodeArgErr))
 		return
 	}
+	metaBytes := ctx.Meta().Encode()
+	remoteRequest := RemoteRequest{}
+	remoteRequest.Arg = argBytes
+	remoteRequest.Meta = metaBytes
+	body, encodeBodyErr := proto.Marshal(&remoteRequest)
+	if encodeBodyErr != nil {
+		result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: encode body failed")).WithCause(encodeBodyErr))
+		return
+	}
+
+	requestId := ctx.RequestId()
+	buf := bytebufferpool.Get()
+	_, _ = buf.WriteString(requestId)
+	_, _ = buf.Write(body)
+	signedTarget := buf.Bytes()
+	bytebufferpool.Put(buf)
+	signature := secret.Sign(signedTarget, secretKey)
 
 	request := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(request)
 	request.URI().SetHost(proxy.registration.Address)
 	request.URI().SetPath(fmt.Sprintf("/%s/%s", proxy.registration.Namespace, fn))
 	request.Header.SetMethodBytes(post)
-	request.Header.SetContentTypeBytes(jsonUTF8ContentType)
+	request.Header.SetContentTypeBytes(protobufContentType)
 	request.Header.SetBytesK(requestIdHeader, ctx.RequestId())
-	request.Header.SetBytesKV(requestMetaHeader, ctx.Meta().Encode())
+	request.Header.SetBytesKV(requestSignHeader, signature)
 	authorization, hasAuthorization := ctx.User().Authorization()
 	if hasAuthorization {
 		request.Header.SetBytesKV(authorizationHeader, authorization)

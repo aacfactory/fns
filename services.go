@@ -288,7 +288,7 @@ func (s *services) Handle(action string, _payload interface{}) {
 	}
 
 	// ctx
-	if payload.isInnerRequest && s.IsInternal(payload.namespace) {
+	if !payload.isInnerRequest && s.IsInternal(payload.namespace) {
 		payload.result.Failed(errors.Warning("fns Services: can not access an internal service"))
 		return
 	}

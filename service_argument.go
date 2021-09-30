@@ -21,9 +21,14 @@ import (
 	"github.com/aacfactory/json"
 )
 
+func EmptyArgument() (arg Argument) {
+	arg, _ = NewArgument(nil)
+	return
+}
+
 func NewArgument(v interface{}) (arg Argument, err errors.CodeError) {
 	if v == nil {
-		err = errors.BadRequest("fns.Argument: new with nil pointer value")
+		v = []byte("{}")
 		return
 	}
 	var p []byte

@@ -17,13 +17,13 @@
 package fns
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
-	"google.golang.org/protobuf/proto"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -106,7 +106,7 @@ func NewRemotedServiceProxy(clients *HttpClients, registration *Registration, pr
 var (
 	get                 = []byte("GET")
 	post                = []byte("POST")
-	protobufContentType = []byte("application/protobuf")
+	fnsProxyContentType = []byte("application/fns+proxy")
 )
 
 type RemotedServiceProxy struct {
@@ -117,22 +117,11 @@ type RemotedServiceProxy struct {
 
 func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
 	result = SyncResult()
-
-	argBytes, encodeArgErr := argument.MarshalJSON()
-	if encodeArgErr != nil {
-		result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: encode argument failed")).WithCause(encodeArgErr))
-		return
-	}
-	metaBytes := ctx.Meta().Encode()
-	remoteRequest := RemoteRequest{}
-	remoteRequest.Arg = argBytes
-	remoteRequest.Meta = metaBytes
-	body, encodeBodyErr := proto.Marshal(&remoteRequest)
+	body, encodeBodyErr := proxyMessageEncode(ctx.Meta(), argument)
 	if encodeBodyErr != nil {
 		result.Failed(errors.New(555, "***WARNING***", fmt.Sprintf("fns Proxy Request: encode body failed")).WithCause(encodeBodyErr))
 		return
 	}
-
 	requestId := ctx.RequestId()
 	buf := bytebufferpool.Get()
 	_, _ = buf.WriteString(requestId)
@@ -140,25 +129,21 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 	signedTarget := buf.Bytes()
 	bytebufferpool.Put(buf)
 	signature := secret.Sign(signedTarget, secretKey)
-
 	request := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(request)
 	request.URI().SetHost(proxy.registration.Address)
 	request.URI().SetPath(fmt.Sprintf("/%s/%s", proxy.registration.Namespace, fn))
 	request.Header.SetMethodBytes(post)
-	request.Header.SetContentTypeBytes(protobufContentType)
+	request.Header.SetContentTypeBytes(fnsProxyContentType)
 	request.Header.SetBytesK(requestIdHeader, ctx.RequestId())
 	request.Header.SetBytesKV(requestSignHeader, signature)
 	authorization, hasAuthorization := ctx.User().Authorization()
 	if hasAuthorization {
 		request.Header.SetBytesKV(authorizationHeader, authorization)
 	}
-
 	request.SetBody(body)
-
 	response := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(response)
-
 	doErr := proxy.client.DoTimeout(request, response, 5*time.Second)
 	if doErr != nil {
 		if doErr == fasthttp.ErrTimeout {
@@ -171,7 +156,6 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 		}
 		return
 	}
-
 	if response.StatusCode() == 200 {
 		if response.Body() == nil || len(response.Body()) == 0 {
 			result.Succeed(nil)
@@ -187,6 +171,34 @@ func (proxy *RemotedServiceProxy) Request(ctx Context, fn string, argument Argum
 		}
 		result.Failed(err)
 	}
+	return
+}
 
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func proxyMessageEncode(meta ContextMeta, argument Argument) (p []byte, err errors.CodeError) {
+	buf := bytebufferpool.Get()
+	defer bytebufferpool.Put(buf)
+	metaValue := meta.Encode()
+	argumentValue, encodeArgErr := argument.MarshalJSON()
+	if encodeArgErr != nil {
+		err = errors.Warning("fns Proxy: encode message failed").WithCause(encodeArgErr)
+		return
+	}
+	lewErr := binary.Write(buf, binary.LittleEndian, uint32(len(metaValue)))
+	if lewErr != nil {
+		err = errors.Warning("fns Proxy: encode message failed").WithCause(lewErr)
+		return
+	}
+	_, _ = buf.Write(metaValue)
+	_, _ = buf.Write(argumentValue)
+	p = buf.Bytes()
+	return
+}
+
+func proxyMessageDecode(p []byte) (meta []byte, argument []byte) {
+	n := binary.LittleEndian.Uint32(p[0:4])
+	meta = p[4 : 4+n]
+	argument = p[4+n:]
 	return
 }

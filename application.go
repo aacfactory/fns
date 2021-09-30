@@ -30,7 +30,6 @@ import (
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
-	"google.golang.org/protobuf/proto"
 	"net"
 	"os"
 	"os/signal"
@@ -584,7 +583,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		isInnerRequest := false
 		contentType := request.Request.Header.ContentType()
 		if contentType != nil && len(contentType) > 0 {
-			isInnerRequest = bytes.Equal(protobufContentType, contentType)
+			isInnerRequest = bytes.Equal(fnsProxyContentType, contentType)
 		}
 		var arg Argument
 		var argErr error
@@ -606,18 +605,13 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 				sendError(request, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", namespace, fn)))
 				return
 			}
-			remoteRequest := RemoteRequest{}
-			decodeErr := proto.Unmarshal(body, &remoteRequest)
-			if decodeErr != nil {
-				sendError(request, errors.Warning(fmt.Sprintf("fns Http: decode request body of %s/%s failed", namespace, fn)))
-				return
-			}
-			arg, argErr = NewArgument(request.PostBody())
+			metaValue, argValue := proxyMessageDecode(body)
+			arg, argErr = NewArgument(argValue)
 			if argErr != nil {
 				sendError(request, errors.BadRequest("fns Http: request body must be json content"))
 				return
 			}
-			meta = remoteRequest.Meta
+			meta = metaValue
 		} else {
 			requestId = UID()
 			arg, argErr = NewArgument(request.PostBody())

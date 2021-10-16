@@ -44,6 +44,7 @@ type AppRuntime interface {
 
 type Context interface {
 	sc.Context
+	InternalRequested() (ok bool)
 	RequestId() (id string)
 	User() (user User)
 	Meta() (meta ContextMeta)

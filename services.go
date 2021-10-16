@@ -293,7 +293,7 @@ func (s *services) Handle(action string, _payload interface{}) {
 		return
 	}
 	timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), s.fnHandleTimeout)
-	ctx, ctxErr := newContext(timeoutCtx, payload.requestId, payload.authorization, payload.meta, &appRuntime{
+	ctx, ctxErr := newContext(timeoutCtx, payload.isInnerRequest, payload.requestId, payload.authorization, payload.meta, &appRuntime{
 		clusterMode:    s.clusterMode,
 		publicAddress:  s.publicAddress,
 		appLog:         s.log,

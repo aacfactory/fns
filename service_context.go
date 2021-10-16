@@ -154,32 +154,39 @@ func WithFn(ctx Context, fn string) Context {
 	return ctx0
 }
 
-func newContext(_ctx sc.Context, id string, authorization []byte, metaData []byte, app *appRuntime) (ctx *context, err error) {
+func newContext(_ctx sc.Context, internal bool, id string, authorization []byte, metaData []byte, app *appRuntime) (ctx *context, err error) {
 	meta, metaErr := newContextMeta(metaData)
 	if metaErr != nil {
 		err = metaErr
 		return
 	}
 	ctx = &context{
-		Context: _ctx,
-		id:      id,
-		user:    newUser(authorization),
-		meta:    meta,
-		app:     app,
+		Context:  _ctx,
+		id:       id,
+		internal: internal,
+		user:     newUser(authorization),
+		meta:     meta,
+		app:      app,
 	}
 	return
 }
 
 type context struct {
 	sc.Context
-	id   string
-	user User
-	meta *contextMeta
-	app  *appRuntime
+	id       string
+	internal bool
+	user     User
+	meta     *contextMeta
+	app      *appRuntime
 }
 
 func (ctx *context) RequestId() (id string) {
 	id = ctx.id
+	return
+}
+
+func (ctx *context) InternalRequested() (ok bool) {
+	ok = ctx.internal
 	return
 }
 

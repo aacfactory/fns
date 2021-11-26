@@ -25,7 +25,6 @@ import (
 	"github.com/aacfactory/workers"
 	"github.com/go-playground/validator/v10"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -59,7 +58,6 @@ type services struct {
 	authorizations  Authorizations
 	permissions     Permissions
 	clients         *HttpClients
-	payloads        sync.Pool
 	version         string
 	serverId        string
 	clusterMode     bool
@@ -181,11 +179,6 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		s.permissions = &fakePermissions{}
 	}
 
-	// payloads
-	s.payloads.New = func() interface{} {
-		return &servicesRequestPayload{}
-	}
-
 	s.wp.Start()
 
 	return
@@ -235,7 +228,7 @@ func (s *services) Request(isInnerRequest bool, requestId string, meta []byte, a
 		return
 	}
 
-	payload := s.payloads.Get().(*servicesRequestPayload)
+	payload := &servicesRequestPayload{}
 	payload.isInnerRequest = isInnerRequest
 	payload.requestId = requestId
 	payload.meta = meta
@@ -248,7 +241,6 @@ func (s *services) Request(isInnerRequest bool, requestId string, meta []byte, a
 	result = payload.result
 
 	if !s.wp.Execute(fnRequestWorkHandleAction, payload) {
-		s.payloads.Put(payload)
 		result = SyncResult()
 		result.Failed(errors.New(429, "***TOO MANY REQUEST***", fmt.Sprintf("fns Services: no work unit remains for %s/%s", namespace, fn)))
 		return
@@ -278,7 +270,6 @@ func (s *services) Close() {
 }
 
 func (s *services) Handle(action string, _payload interface{}) {
-	defer s.payloads.Put(_payload)
 
 	payload := _payload.(*servicesRequestPayload)
 
@@ -326,7 +317,6 @@ func (s *services) Handle(action string, _payload interface{}) {
 	} else {
 		payload.result.Succeed(raw)
 	}
-	s.payloads.Put(payload)
 	cancel()
 }
 

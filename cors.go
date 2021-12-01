@@ -96,7 +96,7 @@ type cors struct {
 
 func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 	ch = func(ctx *fasthttp.RequestCtx) {
-		if ctx.IsOptions() {
+		if strings.ToLower(string(ctx.Request.Header.Method())) == "OPTIONS" {
 			accessControlRequestMethod := string(ctx.Request.Header.PeekBytes(corsAccessControlHeader))
 			if accessControlRequestMethod == "" {
 				h(ctx)
@@ -104,10 +104,10 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 				return
 			}
 			c.handlePreflight(ctx)
-			ctx.SetStatusCode(204)
+			ctx.Response.SetStatusCode(204)
 		} else {
 			h(ctx)
-			c.writeAccessControlAllowOrigin(ctx)
+			//c.writeAccessControlAllowOrigin(ctx)
 		}
 	}
 	return

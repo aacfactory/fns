@@ -96,7 +96,7 @@ type cors struct {
 
 func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 	ch = func(ctx *fasthttp.RequestCtx) {
-		if strings.ToLower(string(ctx.Request.Header.Method())) == "OPTIONS" && string(ctx.Request.Header.PeekBytes(corsAccessControlHeader)) != "" {
+		if strings.ToUpper(string(ctx.Request.Header.Method())) == "OPTIONS" && string(ctx.Request.Header.PeekBytes(corsAccessControlHeader)) != "" {
 			c.handlePreflight(ctx)
 			ctx.Response.SetStatusCode(204)
 		} else {
@@ -107,34 +107,11 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 	return
 }
 
-func (c *cors) handler2(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
-	ch = func(ctx *fasthttp.RequestCtx) {
-		if strings.ToLower(string(ctx.Request.Header.Method())) == "OPTIONS" {
-			accessControlRequestMethod := string(ctx.Request.Header.PeekBytes(corsAccessControlHeader))
-			if accessControlRequestMethod == "" {
-				h(ctx)
-				c.writeAccessControlAllowOrigin(ctx)
-				return
-			}
-			c.handlePreflight(ctx)
-			ctx.Response.SetStatusCode(204)
-		} else {
-			h(ctx)
-			c.writeAccessControlAllowOrigin(ctx)
-		}
-	}
-	return
-}
-
-func (c *cors) writeAccessControlAllowOrigin(ctx *fasthttp.RequestCtx) {
-	if c.allowedOriginsAll {
-		ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
-	} else {
-		ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
-	}
-}
-
 func (c *cors) handlePreflight(ctx *fasthttp.RequestCtx) {
+	if strings.ToUpper(string(ctx.Request.Header.Method())) != "OPTIONS" {
+		return
+	}
+
 	ctx.Response.Header.Add("Vary", "Origin")
 	ctx.Response.Header.Add("Vary", "Access-Control-Request-Method")
 	ctx.Response.Header.Add("Vary", "Access-Control-Request-Headers")

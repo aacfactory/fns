@@ -96,6 +96,19 @@ type cors struct {
 
 func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 	ch = func(ctx *fasthttp.RequestCtx) {
+		if strings.ToLower(string(ctx.Request.Header.Method())) == "OPTIONS" && string(ctx.Request.Header.PeekBytes(corsAccessControlHeader)) != "" {
+			c.handlePreflight(ctx)
+			ctx.Response.SetStatusCode(204)
+		} else {
+			c.handleActualRequest(ctx)
+			h(ctx)
+		}
+	}
+	return
+}
+
+func (c *cors) handler2(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
+	ch = func(ctx *fasthttp.RequestCtx) {
 		if strings.ToLower(string(ctx.Request.Header.Method())) == "OPTIONS" {
 			accessControlRequestMethod := string(ctx.Request.Header.PeekBytes(corsAccessControlHeader))
 			if accessControlRequestMethod == "" {
@@ -107,11 +120,12 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 			ctx.Response.SetStatusCode(204)
 		} else {
 			h(ctx)
-			//c.writeAccessControlAllowOrigin(ctx)
+			c.writeAccessControlAllowOrigin(ctx)
 		}
 	}
 	return
 }
+
 func (c *cors) writeAccessControlAllowOrigin(ctx *fasthttp.RequestCtx) {
 	if c.allowedOriginsAll {
 		ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
@@ -159,6 +173,34 @@ func (c *cors) handlePreflight(ctx *fasthttp.RequestCtx) {
 	}
 	if c.maxAge > 0 {
 		ctx.Response.Header.Set("Access-Control-Max-Age", strconv.Itoa(c.maxAge))
+	}
+}
+
+func (c *cors) handleActualRequest(ctx *fasthttp.RequestCtx) {
+	origin := string(ctx.Request.Header.PeekBytes(requestOriginHeader))
+	ctx.Response.Header.Add("Vary", "Origin")
+	if origin == "" {
+		return
+	}
+	if !c.isOriginAllowed(origin) {
+		return
+	}
+	reqMethod := string(ctx.Request.Header.PeekBytes(corsAccessControlHeader))
+	if !c.isMethodAllowed(reqMethod) {
+		return
+	}
+
+	if c.allowedOriginsAll {
+		ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
+	} else {
+		ctx.Response.Header.SetBytesKV(corsAccessOrigin, ctx.Request.Header.PeekBytes(requestOriginHeader))
+	}
+
+	if len(c.exposedHeaders) > 0 {
+		ctx.Response.Header.Set("Access-Control-Expose-Headers", strings.Join(c.exposedHeaders, ", "))
+	}
+	if c.allowCredentials {
+		ctx.Response.Header.Set("Access-Control-Allow-Credentials", "true")
 	}
 }
 

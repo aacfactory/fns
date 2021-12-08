@@ -17,11 +17,12 @@
 package fns
 
 import (
-	"github.com/aacfactory/fns/commons"
-	"github.com/valyala/fasthttp"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/aacfactory/fns/commons"
+	"github.com/valyala/fasthttp"
 )
 
 const toLower = 'a' - 'A'
@@ -113,6 +114,10 @@ func (c *cors) handler(h fasthttp.RequestHandler) (ch fasthttp.RequestHandler) {
 	return
 }
 func (c *cors) writeAccessControlAllowOrigin(ctx *fasthttp.RequestCtx) {
+	origin := string(ctx.Request.Header.PeekBytes(requestOriginHeader))
+	if origin == "" {
+		return
+	}
 	if c.allowedOriginsAll {
 		ctx.Response.Header.SetBytesK(corsAccessOrigin, "*")
 	} else {

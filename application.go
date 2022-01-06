@@ -30,6 +30,7 @@ import (
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
+	"golang.org/x/sync/singleflight"
 	"net"
 	"os"
 	"os/signal"
@@ -204,6 +205,7 @@ type application struct {
 	validate       *validator.Validate
 	serviceMap     map[string]Service
 	svc            *services
+	docSync        singleflight.Group
 	requestCounter sync.WaitGroup
 	ln             net.Listener
 	server         *fasthttp.Server
@@ -226,14 +228,14 @@ func (app *application) Deploy(services ...Service) (err error) {
 		if service == nil {
 			continue
 		}
-		_, has := app.serviceMap[service.Namespace()]
+		_, has := app.serviceMap[service.namespace()]
 		if has {
-			err = fmt.Errorf("fns Deploy: service %s is duplicated", service.Namespace())
+			err = fmt.Errorf("fns Deploy: service %s is duplicated", service.namespace())
 			return
 		}
-		app.serviceMap[service.Namespace()] = service
+		app.serviceMap[service.namespace()] = service
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: deploy %s service succeed", service.Namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: deploy %s service succeed", service.namespace()))
 		}
 	}
 	return
@@ -266,13 +268,13 @@ func (app *application) Run(ctx sc.Context) (err error) {
 		return
 	}
 	for _, service := range app.serviceMap {
-		serviceErr := service.Build(app.config)
+		serviceErr := service.build(app.config)
 		if serviceErr != nil {
-			err = fmt.Errorf("fns Run: build %s service failed, %v", service.Namespace(), serviceErr)
+			err = fmt.Errorf("fns Run: build %s service failed, %v", service.namespace(), serviceErr)
 			return
 		}
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.Namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.namespace()))
 		}
 	}
 	// GOMAXPROCS
@@ -291,14 +293,14 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	for _, service := range app.serviceMap {
 		mountErr := app.svc.Mount(service)
 		if mountErr != nil {
-			err = fmt.Errorf("fns Run: mount %s service failed, %v", service.Namespace(), mountErr)
+			err = fmt.Errorf("fns Run: mount %s service failed, %v", service.namespace(), mountErr)
 			app.stop(10 * time.Second)
 			return
 		}
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Run: mount %s service succeed", service.Namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Run: mount %s service succeed", service.namespace()))
 		}
-		delete(app.serviceMap, service.Namespace())
+		delete(app.serviceMap, service.namespace())
 	}
 
 	atomic.StoreInt64(&app.running, int64(1))
@@ -503,6 +505,72 @@ func (app *application) serve(ctx sc.Context) (err error) {
 	return
 }
 
+func (app *application) getDocuments() (p []byte) {
+	b, err, _ := app.docSync.Do("doc", func() (v interface{}, err error) {
+		documents := make(map[string]*ServiceDocument)
+		registrations := app.svc.discovery.Registrations()
+		for _, registration := range registrations {
+			_, loaded := documents[registration.Namespace]
+			if loaded {
+				continue
+			}
+			if app.svc.discovery.IsLocal(registration.Namespace) {
+				doc, hasDoc := app.svc.Documents()[registration.Namespace]
+				if !hasDoc {
+					continue
+				}
+				documents[registration.Namespace] = doc
+			} else {
+				result := app.svc.RemoteRequest(false, "", nil, nil, registration.Namespace, "_document", EmptyArgument())
+				doc := &ServiceDocument{}
+				handleErr := result.Get(sc.TODO(), &doc)
+				if handleErr != nil {
+					continue
+				}
+				documents[registration.Namespace] = doc
+			}
+		}
+		return
+	})
+	if err != nil {
+		app.docSync.Forget("doc")
+		doc := json.NewObject()
+		_ = doc.Put("swagger", "2.0")
+		info := json.NewObject()
+		_ = info.Put("version", "x.y.z")
+		_ = info.Put("title", "fns")
+		_ = info.Put("description", fmt.Sprintf("Failed: %s", err.Error()))
+		_ = doc.Put("info", info)
+		paths := json.NewObject()
+		healthPath := json.NewObject()
+		healthPathGet := json.NewObject()
+		_ = healthPathGet.Put("summary", "服务状态健康检查")
+		_ = healthPathGet.Put("description", "服务状态健康检查")
+		_ = healthPathGet.Put("operationId", "_health")
+		_ = healthPathGet.Put("produces", []string{"application/json"})
+		healthPathGetResponse := json.NewObject()
+		healthPathGetResponse200 := json.NewObject()
+		_ = healthPathGetResponse200.Put("description", "服务信息")
+		healthPathGetResponse200Schema := json.NewObject()
+		_ = healthPathGetResponse200Schema.Put("type", "object")
+		healthPathGetResponse200SchemaProperties := json.NewObject()
+		_ = healthPathGetResponse200SchemaProperties.Put("name", map[string]string{"type": "string"})
+		_ = healthPathGetResponse200SchemaProperties.Put("version", map[string]string{"type": "string"})
+		_ = healthPathGetResponse200Schema.Put("properties", healthPathGetResponse200SchemaProperties)
+		_ = healthPathGetResponse200.Put("schema", healthPathGetResponse200Schema)
+		_ = healthPathGetResponse.Put("200", healthPathGetResponse200)
+		_ = healthPathGet.Put("responses", healthPathGetResponse)
+		_ = healthPath.Put("get", healthPathGet)
+		_ = paths.Put("/health", healthPath)
+		_ = doc.Put("paths", paths)
+		p, _ = doc.MarshalJSON()
+		return
+	}
+	app.docSync.Forget("doc")
+	p = b.([]byte)
+	return
+}
+
 func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 	if atomic.LoadInt64(&app.running) != int64(1) {
 		sendError(request, errors.New(555, "***WARNING***", "fns Http: fns is not ready or closing"))
@@ -515,37 +583,18 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			return
 		}
 		p := uri.Path()
-		// health check
-		if string(p) == healthCheckPath {
+		switch string(p) {
+		case healthCheckPath:
+			// health check
 			request.SetStatusCode(200)
 			request.SetContentTypeBytes(jsonUTF8ContentType)
 			request.SetBody([]byte(fmt.Sprintf("{\"name\": \"%s\", \"version\": \"%s\"}", app.name, app.version)))
-			return
-		}
-		// description
-		items := bytes.Split(p[1:], pathSplitter)
-		if len(items) != 2 {
-			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
-			return
-		}
-		namespace := string(items[0])
-		if app.svc.IsInternal(namespace) {
-			sendError(request, errors.New(555, "***WARNING***", "fns Http: can not access an internal service"))
-			return
-		}
-		if string(items[1]) == descriptionPathItem {
-			description := app.svc.Description(namespace)
-			if description == nil || len(description) == 0 {
-				request.SetStatusCode(200)
-				request.SetContentTypeBytes(jsonUTF8ContentType)
-				request.SetBody(emptyBody)
-			} else {
-				request.SetStatusCode(200)
-				request.SetContentTypeBytes(jsonUTF8ContentType)
-				request.SetBody(description)
-			}
-			return
-		} else {
+		case documentsPath:
+			// documents
+			request.SetStatusCode(200)
+			request.SetContentTypeBytes(jsonUTF8ContentType)
+			request.SetBody(app.getDocuments())
+		default:
 			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return
 		}
@@ -670,7 +719,7 @@ var (
 
 	healthCheckPath = "/health"
 
-	descriptionPathItem = "description"
+	documentsPath = "/_documents"
 
 	pathSplitter = []byte("/")
 

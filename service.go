@@ -80,15 +80,31 @@ type ContextMeta interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type ServiceDocument struct {
+	// Namespace
+	// as tag
+	Namespace string `json:"namespace,omitempty"`
+	// Description
+	// as description of tag, support markdown
+	Description string `json:"description,omitempty"`
+	// Fns
+	// key: path, value: 200 object
+	Fns map[string]*json.Object `json:"fns,omitempty"`
+	// key: #/definitions/{namespace}/{name}, value: Schema Object
+	Definitions map[string]*json.Object `json:"definitions,omitempty"`
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 // Service
 // 管理 Fn 的服务
 type Service interface {
-	Namespace() (namespace string)
-	Internal() (internal bool)
-	Build(config configuares.Config) (err error)
-	Description() (description []byte)
-	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
-	Close() (err error)
+	namespace() (namespace string)
+	internal() (internal bool)
+	build(config configuares.Config) (err error)
+	document() (doc *ServiceDocument)
+	handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
+	shutdown() (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -310,7 +326,6 @@ type RegistrationsManager struct {
 }
 
 func (manager *RegistrationsManager) Registrations() (v []Registration) {
-
 	v = make([]Registration, 0, 1)
 	manager.registrationMap.Range(func(_, value interface{}) bool {
 		registrations := value.(*Registrations)
@@ -424,6 +439,7 @@ type ServiceDiscovery interface {
 	Publish(service Service) (err error)
 	IsLocal(namespace string) (ok bool)
 	Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError)
+	Registrations() (registrations map[string]*Registration)
 	Close()
 }
 

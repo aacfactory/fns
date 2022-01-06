@@ -39,7 +39,7 @@ func newServices(serverId string, version string, publicAddress string, concurre
 	}
 	v = &services{
 		concurrency:   concurrency,
-		descriptions:  make(map[string][]byte),
+		documents:     make(map[string]*ServiceDocument),
 		internals:     make(map[string]int64),
 		version:       version,
 		serverId:      serverId,
@@ -53,7 +53,7 @@ func newServices(serverId string, version string, publicAddress string, concurre
 type services struct {
 	concurrency     int
 	wp              workers.Workers
-	descriptions    map[string][]byte
+	documents       map[string]*ServiceDocument
 	internals       map[string]int64
 	discovery       ServiceDiscovery
 	authorizations  Authorizations
@@ -132,6 +132,7 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		return
 	}
 	s.discovery = discovery
+	//
 
 	// authorizations
 	if config.Authorization.Enable {
@@ -191,12 +192,12 @@ func (s *services) Mount(service Service) (err error) {
 		err = fmt.Errorf("fns Services: mount failed, %v", pubErr)
 		return
 	}
-	description := service.Description()
-	if description != nil {
-		s.descriptions[service.Namespace()] = description
+	document := service.document()
+	if document != nil {
+		s.documents[service.namespace()] = document
 	}
-	if service.Internal() {
-		s.internals[service.Namespace()] = 0
+	if service.internal() {
+		s.internals[service.namespace()] = 0
 	}
 	return
 }
@@ -221,11 +222,44 @@ func (s *services) Permissions() (p Permissions) {
 	return
 }
 
+func (s *services) RemoteRequest(isInnerRequest bool, requestId string, meta []byte, authorization []byte, namespace string, fn string, argument Argument) (result Result) {
+	payload := &servicesRequestPayload{}
+	payload.isInnerRequest = isInnerRequest
+	payload.requestId = requestId
+	payload.meta = meta
+	payload.authorization = authorization
+	payload.namespace = namespace
+	payload.fn = fn
+	payload.argument = argument
+	payload.result = AsyncResult()
+
+	result = payload.result
+
+	if !s.wp.Execute(fnRequestWorkHandleAction, payload) {
+		result = SyncResult()
+		result.Failed(errors.New(429, "***TOO MANY REQUEST***", fmt.Sprintf("fns Services: no work unit remains for %s/%s", namespace, fn)))
+		return
+	}
+	return
+}
+
 func (s *services) Request(isInnerRequest bool, requestId string, meta []byte, authorization []byte, namespace string, fn string, argument Argument) (result Result) {
 
 	if !s.discovery.IsLocal(namespace) {
 		result = SyncResult()
 		result.Failed(errors.NotFound(fmt.Sprintf("fns Services: %s service was not found", namespace)))
+		return
+	}
+
+	// document
+	if fn == "_document" {
+		result = SyncResult()
+		doc, has := s.documents[namespace]
+		if has {
+			result.Succeed(doc)
+		} else {
+			result.Failed(errors.Warning(fmt.Sprintf("fns Services: doc of %s service was not found", namespace)))
+		}
 		return
 	}
 
@@ -250,18 +284,8 @@ func (s *services) Request(isInnerRequest bool, requestId string, meta []byte, a
 	return
 }
 
-func (s *services) Description(namespace string) (description []byte) {
-	description0, has := s.descriptions[namespace]
-	if !has {
-		return
-	}
-	obj := json.NewObjectFromBytes(description0)
-	setErr := obj.Put("info.version", s.version)
-	if setErr != nil {
-		description = description0
-		return
-	}
-	description = obj.Raw()
+func (s *services) Documents() (documents map[string]*ServiceDocument) {
+	documents = s.documents
 	return
 }
 

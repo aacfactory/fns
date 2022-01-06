@@ -268,7 +268,7 @@ func (app *application) Run(ctx sc.Context) (err error) {
 		return
 	}
 	for _, service := range app.serviceMap {
-		serviceErr := service.build(app.config)
+		serviceErr := service.Build(app.config)
 		if serviceErr != nil {
 			err = fmt.Errorf("fns Run: build %s service failed, %v", service.Namespace(), serviceErr)
 			return

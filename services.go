@@ -192,11 +192,11 @@ func (s *services) Mount(service Service) (err error) {
 		err = fmt.Errorf("fns Services: mount failed, %v", pubErr)
 		return
 	}
-	document := service.document()
+	document := service.Document()
 	if document != nil {
 		s.documents[service.Namespace()] = document
 	}
-	if service.internal() {
+	if service.Internal() {
 		s.internals[service.Namespace()] = 0
 	}
 	return

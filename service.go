@@ -100,11 +100,11 @@ type ServiceDocument struct {
 // 管理 Fn 的服务
 type Service interface {
 	Namespace() (namespace string)
-	internal() (internal bool)
-	build(config configuares.Config) (err error)
-	document() (doc *ServiceDocument)
-	handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
-	shutdown() (err error)
+	Internal() (internal bool)
+	Build(config configuares.Config) (err error)
+	Document() (doc *ServiceDocument)
+	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
+	Shutdown() (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

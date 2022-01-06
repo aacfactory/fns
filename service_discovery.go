@@ -38,7 +38,7 @@ func (discovery *standaloneServiceDiscovery) Publish(service Service) (err error
 		err = fmt.Errorf("fns ServiceDiscovery Publish: nil pointer service")
 		return
 	}
-	namespace := strings.TrimSpace(service.namespace())
+	namespace := strings.TrimSpace(service.Namespace())
 	if namespace == "" {
 		err = fmt.Errorf("fns ServiceDiscovery Publish: no namespace service")
 		return
@@ -71,7 +71,7 @@ func (discovery *standaloneServiceDiscovery) Proxy(_ Context, namespace string) 
 func (discovery *standaloneServiceDiscovery) Registrations() (registrations map[string]*Registration) {
 	registrations = make(map[string]*Registration)
 	for _, proxy := range discovery.proxyMap {
-		rid := proxy.service.namespace()
+		rid := proxy.service.Namespace()
 		registrations[rid] = &Registration{
 			Id:        rid,
 			Namespace: rid,

@@ -99,7 +99,7 @@ type ServiceDocument struct {
 // Service
 // 管理 Fn 的服务
 type Service interface {
-	namespace() (namespace string)
+	Namespace() (namespace string)
 	internal() (internal bool)
 	build(config configuares.Config) (err error)
 	document() (doc *ServiceDocument)

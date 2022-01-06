@@ -228,14 +228,14 @@ func (app *application) Deploy(services ...Service) (err error) {
 		if service == nil {
 			continue
 		}
-		_, has := app.serviceMap[service.namespace()]
+		_, has := app.serviceMap[service.Namespace()]
 		if has {
-			err = fmt.Errorf("fns Deploy: service %s is duplicated", service.namespace())
+			err = fmt.Errorf("fns Deploy: service %s is duplicated", service.Namespace())
 			return
 		}
-		app.serviceMap[service.namespace()] = service
+		app.serviceMap[service.Namespace()] = service
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: deploy %s service succeed", service.namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: deploy %s service succeed", service.Namespace()))
 		}
 	}
 	return
@@ -270,11 +270,11 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	for _, service := range app.serviceMap {
 		serviceErr := service.build(app.config)
 		if serviceErr != nil {
-			err = fmt.Errorf("fns Run: build %s service failed, %v", service.namespace(), serviceErr)
+			err = fmt.Errorf("fns Run: build %s service failed, %v", service.Namespace(), serviceErr)
 			return
 		}
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.Namespace()))
 		}
 	}
 	// GOMAXPROCS
@@ -293,14 +293,14 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	for _, service := range app.serviceMap {
 		mountErr := app.svc.Mount(service)
 		if mountErr != nil {
-			err = fmt.Errorf("fns Run: mount %s service failed, %v", service.namespace(), mountErr)
+			err = fmt.Errorf("fns Run: mount %s service failed, %v", service.Namespace(), mountErr)
 			app.stop(10 * time.Second)
 			return
 		}
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Run: mount %s service succeed", service.namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Run: mount %s service succeed", service.Namespace()))
 		}
-		delete(app.serviceMap, service.namespace())
+		delete(app.serviceMap, service.Namespace())
 	}
 
 	atomic.StoreInt64(&app.running, int64(1))

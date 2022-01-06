@@ -194,10 +194,10 @@ func (s *services) Mount(service Service) (err error) {
 	}
 	document := service.document()
 	if document != nil {
-		s.documents[service.namespace()] = document
+		s.documents[service.Namespace()] = document
 	}
 	if service.internal() {
-		s.internals[service.namespace()] = 0
+		s.internals[service.Namespace()] = 0
 	}
 	return
 }

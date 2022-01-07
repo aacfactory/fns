@@ -151,6 +151,14 @@ func (doc *document) mapToOpenApi() (v []byte) {
 		swagger.Produces = []string{doc.produces}
 		// tags
 		tags := make([]spec.Tag, 0, 1)
+		tags = append(tags, spec.Tag{
+			VendorExtensible: spec.VendorExtensible{},
+			TagProps: spec.TagProps{
+				Description:  "fns group",
+				Name:         "fns",
+				ExternalDocs: nil,
+			},
+		})
 		for _, tag := range doc.tags {
 			tags = append(tags, spec.Tag{
 				VendorExtensible: spec.VendorExtensible{},
@@ -167,6 +175,50 @@ func (doc *document) mapToOpenApi() (v []byte) {
 			VendorExtensible: spec.VendorExtensible{},
 			Paths:            make(map[string]spec.PathItem),
 		}
+		healthCheckPathItem := spec.PathItem{
+			Refable:          spec.Refable{},
+			VendorExtensible: spec.VendorExtensible{},
+			PathItemProps:    spec.PathItemProps{},
+		}
+		healthCheckPathItem.Get = &spec.Operation{
+			VendorExtensible: spec.VendorExtensible{},
+			OperationProps: spec.OperationProps{
+				Description:  "health check",
+				Consumes:     nil,
+				Produces:     []string{doc.produces},
+				Tags:         []string{"fns"},
+				Summary:      "health check",
+				ExternalDocs: nil,
+				ID:           "fns_health_check",
+				Deprecated:   false,
+				Security:     nil,
+				Parameters:   nil,
+				Responses: &spec.Responses{
+					VendorExtensible: spec.VendorExtensible{},
+					ResponsesProps: spec.ResponsesProps{
+						StatusCodeResponses: map[int]spec.Response{
+							200: {
+								Refable: spec.Refable{},
+								ResponseProps: spec.ResponseProps{
+									Description: "result",
+									Schema: &spec.Schema{
+										VendorExtensible: spec.VendorExtensible{},
+										SchemaProps: spec.SchemaProps{
+											Type: []string{"object"},
+											Properties: map[string]spec.Schema{
+												"name":    *spec.StringProperty(),
+												"version": *spec.StringProperty(),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		paths.Paths[healthCheckPath] = healthCheckPathItem
 		for _, serviceDocument := range doc.services {
 			for path, fnDocument := range serviceDocument.Fns {
 				pathItem := spec.PathItem{

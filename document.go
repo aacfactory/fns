@@ -335,6 +335,14 @@ type documentTag struct {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+func NewServiceDocument(namespace string, description string) *ServiceDocument {
+	return &ServiceDocument{
+		Namespace:   namespace,
+		Description: description,
+		Fns:         make(map[string]FnDocument),
+	}
+}
+
 type ServiceDocument struct {
 	// Namespace
 	// as tag
@@ -394,6 +402,20 @@ func (doc *ServiceDocument) objects() (v map[string]ObjectDocument) {
 	return
 }
 
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func NewFnDocument(name string, title string, description string, hasAuthorization bool, deprecated bool) *FnDocument {
+	return &FnDocument{
+		Name:             name,
+		Title:            title,
+		Description:      description,
+		HasAuthorization: hasAuthorization,
+		Argument:         RawObjectDocument(),
+		Result:           RawObjectDocument(),
+		Deprecated:       deprecated,
+	}
+}
+
 type FnDocument struct {
 	Name             string         `json:"name,omitempty"`
 	Title            string         `json:"title,omitempty"`
@@ -406,6 +428,162 @@ type FnDocument struct {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+func RawObjectDocument() ObjectDocument {
+	return ObjectDocument{
+		Name:        "",
+		Title:       "",
+		Description: "",
+		Type:        "raw",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func StringObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "string",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func IntObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "int",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func Int64ObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "int64",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func Float32ObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "float32",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func Float64ObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "float64",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func BoolObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "bool",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func DateObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "date",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func DateTimeObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "datetime",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func EmptyObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "object",
+		Format:      "",
+		Enum:        nil,
+		Properties:  nil,
+	}
+}
+
+func ObjectObjectDocument(name string, title string, description string) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "object",
+		Format:      "",
+		Enum:        nil,
+		Properties:  make([]ObjectPropertyDocument, 0, 1),
+	}
+}
+
+func ArrayObjectDocument(name string, title string, description string, item ObjectPropertyDocument) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "map",
+		Format:      "",
+		Enum:        nil,
+		Properties:  []ObjectPropertyDocument{item},
+	}
+}
+
+func MapObjectDocument(name string, title string, description string, item ObjectPropertyDocument) ObjectDocument {
+	return ObjectDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Type:        "array",
+		Format:      "",
+		Enum:        nil,
+		Properties:  []ObjectPropertyDocument{item},
+	}
+}
+
 type ObjectDocument struct {
 	// Name
 	// when type is object, name is {pkg.path_struct_name}
@@ -417,6 +595,12 @@ type ObjectDocument struct {
 	Format      string                   `json:"format,omitempty"`
 	Enum        []interface{}            `json:"enum,omitempty"`
 	Properties  []ObjectPropertyDocument `json:"properties,omitempty"`
+}
+
+func (obj ObjectDocument) AddProperty(prop ObjectPropertyDocument) {
+	if obj.isObject() {
+		obj.Properties = append(obj.Properties, prop)
+	}
 }
 
 func (obj ObjectDocument) mapToSwaggerDefinitionSchema() (v *spec.Schema) {
@@ -862,6 +1046,177 @@ func (obj ObjectDocument) mapResultToOpenApiResponses() (v *spec.Responses) {
 		VendorExtensible: spec.VendorExtensible{},
 	}
 	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func RawObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "raw",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func StringObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "string",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func IntObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "int",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func Int32ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "int32",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func Int64ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "int64",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func Float32ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "float32",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func Float64ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "float64",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func BoolObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "bool",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func DateObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "date",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func DateTimeObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "datetime",
+		Required:    false,
+		Reference:   nil,
+	}
+}
+
+func ArrayObjectPropertyDocument(name string, title string, description string, item ObjectDocument) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "array",
+		Required:    false,
+		Reference:   &item,
+	}
+}
+
+func MapObjectPropertyDocument(name string, title string, description string, item ObjectDocument) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "map",
+		Required:    false,
+		Reference:   &item,
+	}
+}
+
+func RefObjectPropertyDocument(name string, title string, description string, ref ObjectDocument) ObjectPropertyDocument {
+	return ObjectPropertyDocument{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Format:      "",
+		Enum:        nil,
+		Type:        "object",
+		Required:    false,
+		Reference:   &ref,
+	}
 }
 
 type ObjectPropertyDocument struct {

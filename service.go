@@ -80,22 +80,6 @@ type ContextMeta interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type ServiceDocument struct {
-	// Namespace
-	// as tag
-	Namespace string `json:"namespace,omitempty"`
-	// Description
-	// as description of tag, support markdown
-	Description string `json:"description,omitempty"`
-	// Fns
-	// key: path, value: 200 object
-	Fns map[string]*json.Object `json:"fns,omitempty"`
-	// key: #/definitions/{namespace}/{name}, value: Schema Object
-	Definitions map[string]*json.Object `json:"definitions,omitempty"`
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 // Service
 // 管理 Fn 的服务
 type Service interface {

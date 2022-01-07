@@ -17,13 +17,18 @@
 package fns
 
 import (
+	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/fns/commons"
+	"github.com/valyala/fasthttp"
+	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -51,6 +56,10 @@ func defaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 
 type ApplicationConfig struct {
 	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Terms       string         `json:"terms,omitempty"`
+	Contact     *appContact    `json:"contact,omitempty"`
+	License     *appLicense    `json:"license,omitempty"`
 	Concurrency int            `json:"concurrency,omitempty"`
 	Http        HttpConfig     `json:"http,omitempty"`
 	Log         LogConfig      `json:"log,omitempty"`
@@ -60,18 +69,86 @@ type ApplicationConfig struct {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HttpConfig struct {
-	Host                     string     `json:"host,omitempty"`
-	Port                     int        `json:"port,omitempty"`
-	PublicHost               string     `json:"publicHost,omitempty"`
-	PublicPort               int        `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int        `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int        `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool       `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int        `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int        `json:"requestTimeoutSeconds,omitempty"`
-	ReadBufferSize           string     `json:"readBufferSize"`
-	WriteBufferSize          string     `json:"writeBufferSize"`
-	Cors                     CorsConfig `json:"cors"`
+	Host                     string         `json:"host,omitempty"`
+	Port                     int            `json:"port,omitempty"`
+	PublicHost               string         `json:"publicHost,omitempty"`
+	PublicPort               int            `json:"publicPort,omitempty"`
+	MaxConnectionsPerIP      int            `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int            `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool           `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int            `json:"keepalivePeriodSecond,omitempty"`
+	RequestTimeoutSeconds    int            `json:"requestTimeoutSeconds,omitempty"`
+	ReadBufferSize           string         `json:"readBufferSize"`
+	WriteBufferSize          string         `json:"writeBufferSize"`
+	Cors                     CorsConfig     `json:"cors"`
+	TLS                      *HttpTlsConfig `json:"tls,omitempty"`
+}
+
+type HttpTlsConfig struct {
+	Enable     bool   `json:"enable,omitempty"`
+	PublicKey  string `json:"publicKey,omitempty"`
+	PrivateKey string `json:"privateKey,omitempty"`
+}
+
+func (c *HttpTlsConfig) mapToTLS() (config *tls.Config, err error) {
+	// pub
+	pub, pubErr := c.readFile(c.PublicKey)
+	if pubErr != nil {
+		err = fmt.Errorf("fns: read public key failed, %v", pubErr)
+		return
+	}
+	// pri
+	pri, priErr := c.readFile(c.PrivateKey)
+	if priErr != nil {
+		err = fmt.Errorf("fns: read private key failed, %v", priErr)
+		return
+	}
+
+	certificate, certificateErr := tls.X509KeyPair(pub, pri)
+	if certificateErr != nil {
+		err = fmt.Errorf("fns: parse key pair failed, %v", certificateErr)
+		return
+	}
+	config = &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+	}
+
+	return
+}
+
+func (c *HttpTlsConfig) readFile(s string) (p []byte, err error) {
+	u, urlErr := url.Parse(s)
+	if urlErr != nil {
+		err = fmt.Errorf("parse url failed, %v", urlErr)
+		return
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "file", "":
+		pubFilePath := filepath.Join(u.Host, u.Path)
+		p, err = ioutil.ReadFile(pubFilePath)
+	case "env":
+		pubFilePath, has := os.LookupEnv(u.Host)
+		if !has {
+			err = fmt.Errorf("url is invalid, %s was not found", u.Host)
+			return
+		}
+		p, err = ioutil.ReadFile(pubFilePath)
+	case "http", "https":
+		status, body, getErr := fasthttp.GetTimeout(make([]byte, 0, 1), s, 30*time.Second)
+		if getErr != nil {
+			err = fmt.Errorf("url is invalid, get from %s failed, %v", s, getErr)
+			return
+		}
+		if status != 200 {
+			err = fmt.Errorf("url is invalid, get from %s failed, %v", s, status)
+			return
+		}
+		p = body
+	default:
+		err = fmt.Errorf("url is invalid, schema is not supported")
+		return
+	}
+	return
 }
 
 const (

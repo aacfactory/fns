@@ -19,6 +19,7 @@ package fns
 import (
 	"bytes"
 	sc "context"
+	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
@@ -101,6 +102,14 @@ func New(options ...Option) (app Application, err error) {
 		err = fmt.Errorf("fns create failed, no name in config")
 		return
 	}
+	// description
+	description := strings.TrimSpace(appConfig.Description)
+	// terms
+	terms := strings.TrimSpace(appConfig.Terms)
+	// contact
+	contact := appConfig.Contact
+	// license
+	license := appConfig.License
 
 	// concurrency
 	concurrency := appConfig.Concurrency
@@ -157,9 +166,14 @@ func New(options ...Option) (app Application, err error) {
 	app0 := &application{
 		id:             UID(),
 		name:           name,
+		description:    description,
+		terms:          terms,
+		contact:        contact,
+		license:        license,
 		version:        opt.Version,
 		address:        "",
 		publicAddress:  "",
+		https:          false,
 		minPROCS:       opt.MinPROCS,
 		maxPROCS:       opt.MaxPROCS,
 		running:        0,
@@ -190,12 +204,28 @@ func New(options ...Option) (app Application, err error) {
 	return
 }
 
+type appContact struct {
+	name  string
+	url   string
+	email string
+}
+
+type appLicense struct {
+	name string
+	url  string
+}
+
 type application struct {
 	id             string
 	name           string
+	description    string
+	terms          string
+	contact        *appContact
+	license        *appLicense
 	version        string
 	address        string
 	publicAddress  string
+	https          bool
 	minPROCS       int
 	maxPROCS       int
 	undoMAXPROCS   func()
@@ -338,19 +368,15 @@ func (app *application) build(config ApplicationConfig) (err error) {
 }
 
 func (app *application) buildServices(_config ApplicationConfig) (err error) {
-
 	config := _config.Services
-
 	svc := newServices(app.id, app.version, app.publicAddress, _config.Concurrency, app.log, app.validate)
-
+	svc.buildDocument(app.name, app.description, app.terms, app.https, app.contact, app.license)
 	buildErr := svc.Build(config)
 	if buildErr != nil {
 		err = buildErr
 		return
 	}
-
 	app.svc = svc
-
 	return
 }
 
@@ -372,13 +398,29 @@ func (app *application) buildListener(_config ApplicationConfig) (err error) {
 	}
 	serverAddr := fmt.Sprintf("%s:%d", serverHost, serverPort)
 
-	ln, lnErr := net.Listen("tcp", serverAddr)
-	if lnErr != nil {
-		err = fmt.Errorf("fns build http server failed, %v", lnErr)
-		return
+	if httpConfig.TLS.Enable {
+		httpsConfig, httpsConfigErr := httpConfig.TLS.mapToTLS()
+		if httpsConfigErr != nil {
+			err = httpsConfigErr
+			return
+		}
+		ln, lnErr := tls.Listen("tcp", serverAddr, httpsConfig)
+		if lnErr != nil {
+			err = fmt.Errorf("fns build http server failed, %v", lnErr)
+			return
+		}
+		app.ln = ln
+		app.https = true
+	} else {
+		ln, lnErr := net.Listen("tcp", serverAddr)
+		if lnErr != nil {
+			err = fmt.Errorf("fns build http server failed, %v", lnErr)
+			return
+		}
+		app.ln = ln
+		app.https = false
 	}
 
-	app.ln = ln
 	app.address = serverAddr
 
 	// public address
@@ -505,72 +547,6 @@ func (app *application) serve(ctx sc.Context) (err error) {
 	return
 }
 
-func (app *application) getDocuments() (p []byte) {
-	b, err, _ := app.docSync.Do("doc", func() (v interface{}, err error) {
-		documents := make(map[string]*ServiceDocument)
-		registrations := app.svc.discovery.Registrations()
-		for _, registration := range registrations {
-			_, loaded := documents[registration.Namespace]
-			if loaded {
-				continue
-			}
-			if app.svc.discovery.IsLocal(registration.Namespace) {
-				doc, hasDoc := app.svc.Documents()[registration.Namespace]
-				if !hasDoc {
-					continue
-				}
-				documents[registration.Namespace] = doc
-			} else {
-				result := app.svc.RemoteRequest(false, "", nil, nil, registration.Namespace, "_document", EmptyArgument())
-				doc := &ServiceDocument{}
-				handleErr := result.Get(sc.TODO(), &doc)
-				if handleErr != nil {
-					continue
-				}
-				documents[registration.Namespace] = doc
-			}
-		}
-		return
-	})
-	if err != nil {
-		app.docSync.Forget("doc")
-		doc := json.NewObject()
-		_ = doc.Put("swagger", "2.0")
-		info := json.NewObject()
-		_ = info.Put("version", "x.y.z")
-		_ = info.Put("title", "fns")
-		_ = info.Put("description", fmt.Sprintf("Failed: %s", err.Error()))
-		_ = doc.Put("info", info)
-		paths := json.NewObject()
-		healthPath := json.NewObject()
-		healthPathGet := json.NewObject()
-		_ = healthPathGet.Put("summary", "服务状态健康检查")
-		_ = healthPathGet.Put("description", "服务状态健康检查")
-		_ = healthPathGet.Put("operationId", "_health")
-		_ = healthPathGet.Put("produces", []string{"application/json"})
-		healthPathGetResponse := json.NewObject()
-		healthPathGetResponse200 := json.NewObject()
-		_ = healthPathGetResponse200.Put("description", "服务信息")
-		healthPathGetResponse200Schema := json.NewObject()
-		_ = healthPathGetResponse200Schema.Put("type", "object")
-		healthPathGetResponse200SchemaProperties := json.NewObject()
-		_ = healthPathGetResponse200SchemaProperties.Put("name", map[string]string{"type": "string"})
-		_ = healthPathGetResponse200SchemaProperties.Put("version", map[string]string{"type": "string"})
-		_ = healthPathGetResponse200Schema.Put("properties", healthPathGetResponse200SchemaProperties)
-		_ = healthPathGetResponse200.Put("schema", healthPathGetResponse200Schema)
-		_ = healthPathGetResponse.Put("200", healthPathGetResponse200)
-		_ = healthPathGet.Put("responses", healthPathGetResponse)
-		_ = healthPath.Put("get", healthPathGet)
-		_ = paths.Put("/health", healthPath)
-		_ = doc.Put("paths", paths)
-		p, _ = doc.MarshalJSON()
-		return
-	}
-	app.docSync.Forget("doc")
-	p = b.([]byte)
-	return
-}
-
 func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 	if atomic.LoadInt64(&app.running) != int64(1) {
 		sendError(request, errors.New(555, "***WARNING***", "fns Http: fns is not ready or closing"))
@@ -593,7 +569,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			// documents
 			request.SetStatusCode(200)
 			request.SetContentTypeBytes(jsonUTF8ContentType)
-			request.SetBody(app.getDocuments())
+			request.SetBody(app.svc.doc.mapToOpenApi())
 		default:
 			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 			return

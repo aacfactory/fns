@@ -565,7 +565,7 @@ func ArrayObjectDocument(name string, title string, description string, item Obj
 		Name:        name,
 		Title:       title,
 		Description: description,
-		Type:        "map",
+		Type:        "array",
 		Format:      "",
 		Enum:        nil,
 		Properties:  []ObjectPropertyDocument{item},
@@ -577,7 +577,7 @@ func MapObjectDocument(name string, title string, description string, item Objec
 		Name:        name,
 		Title:       title,
 		Description: description,
-		Type:        "array",
+		Type:        "map",
 		Format:      "",
 		Enum:        nil,
 		Properties:  []ObjectPropertyDocument{item},
@@ -647,17 +647,17 @@ func (obj ObjectDocument) mapToSwaggerDefinitionSchema() (v *spec.Schema) {
 			if property.Required {
 				requiredItems = append(requiredItems, property.Name)
 			}
-			v.Properties[property.Name] = *property.mapToSwaggerDefinitionSchema()
+			v.Properties[property.Name] = *property.mapToSwaggerRequestSchema()
 		}
 	} else if obj.isArray() {
 		item := obj.Properties[0]
-		v = spec.ArrayProperty(item.mapToSwaggerDefinitionSchema())
+		v = spec.ArrayProperty(item.mapToSwaggerRequestSchema())
 	} else if obj.isMap() {
 		if obj.Properties == nil || len(obj.Properties) == 0 {
 			v = spec.MapProperty(spec.StringProperty())
 		} else {
 			item := obj.Properties[0]
-			v = spec.MapProperty(item.mapToSwaggerDefinitionSchema())
+			v = spec.MapProperty(item.mapToSwaggerRequestSchema())
 		}
 	}
 
@@ -1296,13 +1296,13 @@ func (prop ObjectPropertyDocument) mapToSwaggerDefinitionSchema() (v *spec.Schem
 		v = spec.RefSchema(fmt.Sprintf("#/definitions/%s", prop.Name))
 	} else if prop.isArray() {
 		item := prop.Reference
-		v = spec.ArrayProperty(item.mapToSwaggerDefinitionSchema())
+		v = spec.ArrayProperty(item.mapToSwaggerRequestSchema())
 	} else if prop.isMap() {
 		if prop.Reference == nil {
 			v = spec.MapProperty(spec.StringProperty())
 		} else {
 			item := prop.Reference
-			v = spec.MapProperty(item.mapToSwaggerDefinitionSchema())
+			v = spec.MapProperty(item.mapToSwaggerRequestSchema())
 		}
 	}
 	v.Title = prop.Title

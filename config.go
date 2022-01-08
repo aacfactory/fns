@@ -69,19 +69,19 @@ type ApplicationConfig struct {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HttpConfig struct {
-	Host                     string         `json:"host,omitempty"`
-	Port                     int            `json:"port,omitempty"`
-	PublicHost               string         `json:"publicHost,omitempty"`
-	PublicPort               int            `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int            `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int            `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool           `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int            `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int            `json:"requestTimeoutSeconds,omitempty"`
-	ReadBufferSize           string         `json:"readBufferSize"`
-	WriteBufferSize          string         `json:"writeBufferSize"`
-	Cors                     CorsConfig     `json:"cors"`
-	TLS                      *HttpTlsConfig `json:"tls,omitempty"`
+	Host                     string        `json:"host,omitempty"`
+	Port                     int           `json:"port,omitempty"`
+	PublicHost               string        `json:"publicHost,omitempty"`
+	PublicPort               int           `json:"publicPort,omitempty"`
+	MaxConnectionsPerIP      int           `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int           `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool          `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int           `json:"keepalivePeriodSecond,omitempty"`
+	RequestTimeoutSeconds    int           `json:"requestTimeoutSeconds,omitempty"`
+	ReadBufferSize           string        `json:"readBufferSize"`
+	WriteBufferSize          string        `json:"writeBufferSize"`
+	Cors                     CorsConfig    `json:"cors"`
+	TLS                      HttpTlsConfig `json:"tls,omitempty"`
 }
 
 type HttpTlsConfig struct {

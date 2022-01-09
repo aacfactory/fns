@@ -351,13 +351,12 @@ type ServiceDocument struct {
 	// as description of tag, support markdown
 	Description string `json:"description,omitempty"`
 	// Fns
-	// key: path
+	// key: fn
 	Fns map[string]FnDocument `json:"fns,omitempty"`
 }
 
 func (doc *ServiceDocument) AddFn(fn FnDocument) {
-	key := fmt.Sprintf("/%s/%s", doc.Namespace, fn.Name)
-	doc.Fns[key] = fn
+	doc.Fns[fn.Name] = fn
 }
 
 func (doc *ServiceDocument) objects() (v map[string]ObjectDocument) {
@@ -410,8 +409,8 @@ func NewFnDocument(name string, title string, description string, hasAuthorizati
 		Title:            title,
 		Description:      description,
 		HasAuthorization: hasAuthorization,
-		Argument:         RawObjectDocument(),
-		Result:           RawObjectDocument(),
+		Argument:         JsonRawObjectDocument(),
+		Result:           JsonRawObjectDocument(),
 		Deprecated:       deprecated,
 	}
 }
@@ -428,262 +427,144 @@ type FnDocument struct {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func RawObjectDocument() ObjectDocument {
-	return ObjectDocument{
-		Name:        "",
-		Title:       "",
-		Description: "",
-		Type:        "raw",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
+func JsonRawObjectDocument() *ObjectDocument {
+	return &ObjectDocument{
+		Package:     "fns",
+		Name:        "JsonRawMessage",
+		Title:       "Json Raw",
+		Description: "Json Raw Message",
+		Type:        "additional",
+		Properties:  make([]*ObjectPropertyDocument, 0, 1),
 	}
 }
 
-func StringObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "string",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
+func EmptyObjectDocument() *ObjectDocument {
+	return &ObjectDocument{
+		Package:     "fns",
+		Name:        "Empty",
+		Title:       "Empty",
+		Description: "Empty Struct",
+		Type:        "object",
+		Properties:  make([]*ObjectPropertyDocument, 0, 1),
 	}
 }
 
-func IntObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "int",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func Int64ObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "int64",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func Float32ObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "float32",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func Float64ObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "float64",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func BoolObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "bool",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func DateObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "date",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func DateTimeObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "datetime",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
-	}
-}
-
-func EmptyObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
+func NewObjectDocument(pkg string, name string, title string, description string) *ObjectDocument {
+	return &ObjectDocument{
+		Package:     pkg,
 		Name:        name,
 		Title:       title,
 		Description: description,
 		Type:        "object",
-		Format:      "",
-		Enum:        nil,
-		Properties:  nil,
+		Properties:  make([]*ObjectPropertyDocument, 0, 1),
 	}
 }
 
-func ObjectObjectDocument(name string, title string, description string) ObjectDocument {
-	return ObjectDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Type:        "object",
-		Format:      "",
-		Enum:        nil,
-		Properties:  make([]ObjectPropertyDocument, 0, 1),
+func ArrayObjectDocument(name string, title string, description string, item *ObjectPropertyDocument) *ObjectDocument {
+	pkg := ""
+	if item.Reference != nil {
+		pkg = item.Reference.Package
+	} else {
+		pkg = item.Package
 	}
-}
-
-func ArrayObjectDocument(name string, title string, description string, item ObjectPropertyDocument) ObjectDocument {
-	return ObjectDocument{
+	v := &ObjectDocument{
+		Package:     pkg,
 		Name:        name,
 		Title:       title,
 		Description: description,
 		Type:        "array",
-		Format:      "",
-		Enum:        nil,
-		Properties:  []ObjectPropertyDocument{item},
+		Properties:  make([]*ObjectPropertyDocument, 0, 1),
 	}
+	v.AddProperty(item)
+	return v
 }
 
-func MapObjectDocument(name string, title string, description string, item ObjectPropertyDocument) ObjectDocument {
-	return ObjectDocument{
+func MapObjectDocument(name string, title string, description string, item *ObjectPropertyDocument) *ObjectDocument {
+	pkg := ""
+	if item.Reference != nil {
+		pkg = item.Reference.Package
+	} else {
+		pkg = item.Package
+	}
+	v := &ObjectDocument{
+		Package:     pkg,
 		Name:        name,
 		Title:       title,
 		Description: description,
 		Type:        "map",
-		Format:      "",
-		Enum:        nil,
-		Properties:  []ObjectPropertyDocument{item},
+		Properties:  make([]*ObjectPropertyDocument, 0, 1),
 	}
+	v.AddProperty(item)
+	return v
 }
 
 type ObjectDocument struct {
-	// Name
-	// when type is object, name is {pkg.path_struct_name}
-	// when type is builtin, name is {fn.name}_{arg.name}
-	Name        string                   `json:"name,omitempty"`
-	Title       string                   `json:"title,omitempty"`
-	Description string                   `json:"description,omitempty"`
-	Type        string                   `json:"type,omitempty"`
-	Format      string                   `json:"format,omitempty"`
-	Enum        []interface{}            `json:"enum,omitempty"`
-	Properties  []ObjectPropertyDocument `json:"properties,omitempty"`
+	Package     string                    `json:"package,omitempty"`
+	Name        string                    `json:"name,omitempty"`
+	Title       string                    `json:"title,omitempty"`
+	Description string                    `json:"description,omitempty"`
+	Type        string                    `json:"type,omitempty"`
+	Properties  []*ObjectPropertyDocument `json:"properties,omitempty"`
 }
 
-func (obj ObjectDocument) AddProperty(prop ObjectPropertyDocument) {
+func (obj *ObjectDocument) isEmpty() (ok bool) {
+	ok = obj.isObject() && len(obj.Properties) == 0
+	return
+}
+
+func (obj *ObjectDocument) isObject() (ok bool) {
+	ok = obj.Type == "object"
+	return
+}
+
+func (obj *ObjectDocument) isArray() (ok bool) {
+	ok = obj.Type == "array"
+	return
+}
+
+func (obj *ObjectDocument) isMap() (ok bool) {
+	ok = obj.Type == "map"
+	return
+}
+
+func (obj *ObjectDocument) AddProperty(prop *ObjectPropertyDocument) {
 	if obj.isObject() {
 		obj.Properties = append(obj.Properties, prop)
 	}
 }
 
-func (obj ObjectDocument) mapToSwaggerDefinitionSchema() (v *spec.Schema) {
-	v = &spec.Schema{}
+func (obj *ObjectDocument) mapToOpenAPISchemaURI() (v string) {
+	v = fmt.Sprintf("#/components/%s", obj.mapToOpenAPIComponentsKey())
+	return
+}
 
-	// required
-	requiredItems := make([]string, 0, 1)
+func (obj *ObjectDocument) mapToOpenAPIComponentsKey() (v string) {
+	v = fmt.Sprintf("%s+%s", strings.ReplaceAll(obj.Package, "/", "."), obj.Name)
+	return
+}
 
-	if obj.isSimple() {
-		switch obj.Type {
-		case "string":
-			v = spec.StringProperty()
-		case "int":
-			v = spec.Int64Property()
-		case "int32":
-			v = spec.Int64Property()
-		case "int64":
-			v = spec.Int64Property()
-		case "float32":
-			v = spec.Float32Property()
-		case "float64":
-			v = spec.Float64Property()
-		case "bool":
-			v = spec.BoolProperty()
-		case "date":
-			v = spec.DateProperty()
-		case "datetime":
-			v = spec.DateTimeProperty()
-		case "raw":
-			v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_raw"))
-		default:
-			panic(fmt.Sprintf("fns: create swagger schema failed, type(%s) is not supported", obj.Type))
-		}
-		if obj.Format != "" {
-			v.Format = obj.Format
-		}
-		if obj.Enum != nil && len(obj.Enum) > 0 {
-			v.Enum = obj.Enum
-		}
-	} else if obj.isEmpty() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_empty"))
-	} else if obj.isObject() {
-		for _, property := range obj.Properties {
-			if property.Required {
-				requiredItems = append(requiredItems, property.Name)
-			}
-			v.Properties[property.Name] = *property.mapToSwaggerRequestSchema()
-		}
-	} else if obj.isArray() {
-		item := obj.Properties[0]
-		v = spec.ArrayProperty(item.mapToSwaggerRequestSchema())
-	} else if obj.isMap() {
-		if obj.Properties == nil || len(obj.Properties) == 0 {
-			v = spec.MapProperty(spec.StringProperty())
-		} else {
-			item := obj.Properties[0]
-			v = spec.MapProperty(item.mapToSwaggerRequestSchema())
-		}
-	}
-
-	v.Title = obj.Title
-	v.Description = obj.Description
-	v.Required = requiredItems
+func (obj *ObjectDocument) mapToOpenAPIComponent() (v []byte) {
+	// todo
+	// v = json bytes
 	return
 
 }
 
-func (obj ObjectDocument) getDeps() (v map[string]ObjectDocument) {
-	v = make(map[string]ObjectDocument)
-	if obj.isSimple() || obj.isEmpty() {
+func (obj *ObjectDocument) getDeps() (v map[string]*ObjectDocument) {
+	v = make(map[string]*ObjectDocument)
+	if obj.isEmpty() {
 		return
 	}
 	if obj.Properties == nil || len(obj.Properties) == 0 {
 		return
 	}
-
 	for _, property := range obj.Properties {
-		if !property.isSimple() && !property.isEmpty() {
+		ref := property.Reference
+		if ref == nil {
 			continue
 		}
-		ref := property.Reference
-		if _, has := v[ref.Name]; !has {
-			v[ref.Name] = *ref
+		if _, has := v[ref.mapToOpenAPIComponentsKey()]; !has {
+			v[ref.mapToOpenAPIComponentsKey()] = ref
 		}
 		refDeps := ref.getDeps()
 		if len(refDeps) > 0 {
@@ -697,85 +578,8 @@ func (obj ObjectDocument) getDeps() (v map[string]ObjectDocument) {
 	return
 }
 
-func (obj ObjectDocument) isEmpty() (ok bool) {
-	ok = obj.isObject() && len(obj.Properties) == 0
-	return
-}
-
-func (obj ObjectDocument) isSimple() (ok bool) {
-	ok = !obj.isObject() && !obj.isArray() && !obj.isMap()
-	return
-}
-
-func (obj ObjectDocument) isObject() (ok bool) {
-	ok = obj.Type == "object"
-	return
-}
-
-func (obj ObjectDocument) isArray() (ok bool) {
-	ok = obj.Type == "array"
-	return
-}
-
-func (obj ObjectDocument) isMap() (ok bool) {
-	ok = obj.Type == "map"
-	return
-}
-
-func (obj ObjectDocument) mapToSwaggerRequestSchema() (v *spec.Schema) {
-	v = &spec.Schema{}
-	if obj.isSimple() {
-		switch obj.Type {
-		case "string":
-			v = spec.StringProperty()
-		case "int":
-			v = spec.Int64Property()
-		case "int32":
-			v = spec.Int64Property()
-		case "int64":
-			v = spec.Int64Property()
-		case "float32":
-			v = spec.Float32Property()
-		case "float64":
-			v = spec.Float64Property()
-		case "bool":
-			v = spec.BoolProperty()
-		case "date":
-			v = spec.DateProperty()
-		case "datetime":
-			v = spec.DateTimeProperty()
-		case "raw":
-			v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_raw"))
-		default:
-			panic(fmt.Sprintf("fns: create swagger schema failed, type(%s) is not supported", obj.Type))
-		}
-		if obj.Format != "" {
-			v.Format = obj.Format
-		}
-		if obj.Enum != nil && len(obj.Enum) > 0 {
-			v.Enum = obj.Enum
-		}
-	} else if obj.isEmpty() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_empty"))
-	} else if obj.isObject() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/%s", obj.Name))
-	} else if obj.isArray() {
-		item := obj.Properties[0]
-		v = spec.ArrayProperty(item.mapToSwaggerRequestSchema())
-	} else if obj.isMap() {
-		if obj.Properties == nil || len(obj.Properties) == 0 {
-			v = spec.MapProperty(spec.StringProperty())
-		} else {
-			item := obj.Properties[0]
-			v = spec.MapProperty(item.mapToSwaggerRequestSchema())
-		}
-	}
-	v.Title = obj.Title
-	v.Description = obj.Description
-	return
-}
-
 func (obj ObjectDocument) mapResultToOpenApiResponses() (v *spec.Responses) {
+	// todo: mv to path response
 	headers := map[string]spec.Header{
 		"Server":           *spec.ResponseHeader().Typed("string", ""),
 		"X-Fns-Request-Id": *spec.ResponseHeader().Typed("string", ""),
@@ -1065,6 +869,7 @@ func RawObjectPropertyDocument(name string, title string, description string) Ob
 
 func StringObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1078,6 +883,7 @@ func StringObjectPropertyDocument(name string, title string, description string)
 
 func IntObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1091,6 +897,7 @@ func IntObjectPropertyDocument(name string, title string, description string) Ob
 
 func Int32ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1104,6 +911,7 @@ func Int32ObjectPropertyDocument(name string, title string, description string) 
 
 func Int64ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1117,6 +925,7 @@ func Int64ObjectPropertyDocument(name string, title string, description string) 
 
 func Float32ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1130,6 +939,7 @@ func Float32ObjectPropertyDocument(name string, title string, description string
 
 func Float64ObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1143,6 +953,7 @@ func Float64ObjectPropertyDocument(name string, title string, description string
 
 func BoolObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -1156,12 +967,13 @@ func BoolObjectPropertyDocument(name string, title string, description string) O
 
 func DateObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
-		Format:      "",
+		Format:      "date",
 		Enum:        nil,
-		Type:        "date",
+		Type:        "string",
 		Required:    false,
 		Reference:   nil,
 	}
@@ -1169,12 +981,13 @@ func DateObjectPropertyDocument(name string, title string, description string) O
 
 func DateTimeObjectPropertyDocument(name string, title string, description string) ObjectPropertyDocument {
 	return ObjectPropertyDocument{
+		Package:     "builtin",
 		Name:        name,
 		Title:       title,
 		Description: description,
-		Format:      "",
+		Format:      "datetime",
 		Enum:        nil,
-		Type:        "datetime",
+		Type:        "string",
 		Required:    false,
 		Reference:   nil,
 	}
@@ -1220,15 +1033,15 @@ func RefObjectPropertyDocument(name string, title string, description string, re
 }
 
 type ObjectPropertyDocument struct {
-	Name  string `json:"name,omitempty"`
-	Title string `json:"title,omitempty"`
-	// Description
-	// markdown(description + required)
+	Package     string          `json:"package,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Title       string          `json:"title,omitempty"`
 	Description string          `json:"description,omitempty"`
 	Format      string          `json:"format,omitempty"`
 	Enum        []interface{}   `json:"enum,omitempty"`
 	Type        string          `json:"type,omitempty"`
 	Required    bool            `json:"required,omitempty"`
+	Validation  string          `json:"validation,omitempty"`
 	Reference   *ObjectDocument `json:"reference,omitempty"`
 }
 

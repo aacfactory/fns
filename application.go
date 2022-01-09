@@ -369,8 +369,7 @@ func (app *application) build(config ApplicationConfig) (err error) {
 
 func (app *application) buildServices(_config ApplicationConfig) (err error) {
 	config := _config.Services
-	svc := newServices(app.id, app.version, app.publicAddress, _config.Concurrency, app.log, app.validate)
-	svc.buildDocument(app.name, app.description, app.terms, app.https, app.contact, app.license)
+	svc := newServices(app, _config.Concurrency)
 	buildErr := svc.Build(config)
 	if buildErr != nil {
 		err = buildErr
@@ -569,6 +568,11 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 			// documents
 			request.SetStatusCode(200)
 			request.SetContentTypeBytes(jsonUTF8ContentType)
+			request.SetBody(json.UnsafeMarshal(app.svc.doc))
+		case documentsOASPath:
+			// documents oas
+			request.SetStatusCode(200)
+			request.SetContentTypeBytes(jsonUTF8ContentType)
 			request.SetBody(app.svc.doc.mapToOpenApi())
 		default:
 			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
@@ -696,6 +700,8 @@ var (
 	healthCheckPath = "/health"
 
 	documentsPath = "/_documents"
+
+	documentsOASPath = "/_documents.json"
 
 	pathSplitter = []byte("/")
 

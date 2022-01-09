@@ -33,19 +33,19 @@ const (
 	fnRequestWorkHandleAction = "+"
 )
 
-func newServices(serverId string, version string, publicAddress string, concurrency int, log logs.Logger, validate *validator.Validate) (v *services) {
+func newServices(app *application, concurrency int) (v *services) {
 	if concurrency < 1 {
 		concurrency = workers.DefaultConcurrency
 	}
 	v = &services{
 		concurrency:   concurrency,
-		doc:           nil,
+		doc:           newDocument(app.name, app.description, app.terms, app.contact, app.license, app.version, app.publicAddress, app.https),
 		internals:     make(map[string]int64),
-		version:       version,
-		serverId:      serverId,
-		publicAddress: publicAddress,
-		log:           log,
-		validate:      validate,
+		version:       app.version,
+		serverId:      app.id,
+		publicAddress: app.publicAddress,
+		log:           app.log,
+		validate:      app.validate,
 	}
 	return
 }
@@ -66,31 +66,6 @@ type services struct {
 	log             logs.Logger
 	validate        *validator.Validate
 	fnHandleTimeout time.Duration
-}
-
-func (s *services) buildDocument(appName string, appDesc string, appTerm string, https bool, contact *appContact, license *appLicense) {
-	info := documentInfo{
-		Title:          appName,
-		Description:    appDesc,
-		TermsOfService: appTerm,
-		Contact:        nil,
-		License:        nil,
-		version:        s.version,
-	}
-	if contact != nil {
-		info.Contact = &documentInfoContact{
-			Name:  contact.name,
-			Url:   contact.url,
-			Email: contact.email,
-		}
-	}
-	if license != nil {
-		info.License = &documentInfoLicense{
-			Name: license.name,
-			Url:  license.url,
-		}
-	}
-	s.doc = newDocument(info, s.publicAddress, https)
 }
 
 func (s *services) Build(config ServicesConfig) (err error) {

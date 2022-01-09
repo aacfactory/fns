@@ -18,319 +18,356 @@ package fns
 
 import (
 	"fmt"
-	"github.com/go-openapi/spec"
+	"github.com/aacfactory/fns/oas"
+	"github.com/aacfactory/json"
+	"os"
 	"strings"
 	"sync"
 )
 
-func newDocument(info documentInfo, publicAddress string, https bool) (doc *document) {
+func newDocument(title string, description string, terms string, contact *appContact, license *appLicense, version string, publicAddress string, https bool) (doc *document) {
 	scheme := "http"
 	if https {
 		scheme = "https"
 	}
 	doc = &document{
-		mapOnce:  sync.Once{},
-		info:     info,
-		host:     publicAddress,
-		scheme:   scheme,
-		consumes: "application/json",
-		produces: "application/json",
-		services: make(map[string]*ServiceDocument),
-		objects:  make(map[string]*ObjectDocument),
-		tags:     make(map[string]*documentTag),
+		mapOnce:     sync.Once{},
+		openAPI:     nil,
+		title:       title,
+		description: description,
+		terms:       terms,
+		contact:     contact,
+		license:     license,
+		host:        publicAddress,
+		scheme:      scheme,
+		version:     version,
+		Services:    make(map[string]*ServiceDocument),
 	}
 	return
 }
 
 type document struct {
-	mapOnce  sync.Once
-	openAPI  []byte
-	info     documentInfo
-	host     string
-	scheme   string
-	consumes string
-	produces string
-	services map[string]*ServiceDocument
-	objects  map[string]*ObjectDocument
-	tags     map[string]*documentTag
+	mapOnce     sync.Once
+	openAPI     []byte
+	title       string
+	description string
+	terms       string
+	contact     *appContact
+	license     *appLicense
+	host        string
+	scheme      string
+	version     string
+	Services    map[string]*ServiceDocument `json:"services,omitempty"`
 }
 
 func (doc *document) addServiceDocument(s *ServiceDocument) {
-	if _, has := doc.services[s.Namespace]; has {
+	if _, has := doc.Services[s.Namespace]; has {
 		return
 	}
-	doc.services[s.Namespace] = s
-	// tags
-	doc.tags[s.Namespace] = &documentTag{
-		Name:        s.Namespace,
-		Description: s.Description,
-	}
-	// definitions
-	objects := s.objects()
-	for key, object := range objects {
-		if _, has := doc.objects[key]; !has {
-			doc.objects[key] = &object
-		}
-	}
-}
-
-func (doc *document) mapToFailedOpenApi(err interface{}) {
-	p := `{
-	"swagger": "2.0",
-    "info": {
-        "description": "#description",
-        "title": "fns",
-    },
-	"paths": {
-		"/health": {
-			"get": {
-                "summary": "health check",
-                "description": "",
-                "operationId": "health_check",
-                "produces": [
-                    "application/json"
-                ],
-                "parameters": [],
-                "responses": {
-                    "200": {
-                        "description": "successful operation"
-                    }
-                }
-            }
-		}
-	}
-}`
-	p = strings.ReplaceAll(p, "#description", fmt.Sprintf("%v", err))
-	doc.openAPI = []byte(p)
-	return
+	doc.Services[s.Namespace] = s
 }
 
 func (doc *document) mapToOpenApi() (v []byte) {
 	doc.mapOnce.Do(func() {
-		defer func() {
-			if err := recover(); err != nil {
-				doc.mapToFailedOpenApi(err)
-			}
-		}()
-		swagger := spec.Swagger{}
-		swagger.Swagger = "2.0"
-		// info
-		swagger.Info = &spec.Info{}
-		swagger.Info.Title = doc.info.Title
-		swagger.Info.Description = doc.info.Description
-		swagger.Info.TermsOfService = doc.info.TermsOfService
-		swagger.Info.Version = doc.info.version
-		if doc.info.Contact != nil {
-			swagger.Info.Contact = &spec.ContactInfo{
-				ContactInfoProps: spec.ContactInfoProps{
-					Name:  doc.info.Contact.Name,
-					URL:   doc.info.Contact.Url,
-					Email: doc.info.Contact.Email,
-				},
-				VendorExtensible: spec.VendorExtensible{},
-			}
-		}
-		if doc.info.License != nil {
-			swagger.Info.License = &spec.License{
-				LicenseProps: spec.LicenseProps{
-					Name: doc.info.License.Name,
-					URL:  doc.info.License.Url,
-				},
-				VendorExtensible: spec.VendorExtensible{},
-			}
-		}
-		// host
-		swagger.Host = doc.host
-		// basePath
-		swagger.BasePath = ""
-		// schemes
-		swagger.Schemes = []string{doc.scheme}
-		// consumes
-		swagger.Consumes = []string{doc.consumes}
-		// produces
-		swagger.Produces = []string{doc.produces}
-		// tags
-		tags := make([]spec.Tag, 0, 1)
-		tags = append(tags, spec.Tag{
-			VendorExtensible: spec.VendorExtensible{},
-			TagProps: spec.TagProps{
-				Description:  "fns group",
-				Name:         "fns",
-				ExternalDocs: nil,
+		api := &oas.API{
+			Openapi: "3.0.3",
+			Info: &oas.Info{
+				Title:          doc.title,
+				Description:    doc.description,
+				TermsOfService: doc.terms,
+				Contact:        nil,
+				License:        nil,
+				Version:        doc.version,
 			},
-		})
-		for _, tag := range doc.tags {
-			tags = append(tags, spec.Tag{
-				VendorExtensible: spec.VendorExtensible{},
-				TagProps: spec.TagProps{
-					Description:  tag.Description,
-					Name:         tag.Name,
-					ExternalDocs: nil,
+			Servers: []*oas.Server{
+				{
+					Url: func() string {
+						return fmt.Sprintf("%s://%s", doc.scheme, doc.host)
+					}(),
+					Description: func() string {
+						active, _ := os.LookupEnv(activeSystemEnvKey)
+						return active
+					}(),
 				},
+			},
+			Paths: make(map[string]*oas.Path),
+			Components: &oas.Components{
+				Schemas:   make(map[string]*oas.Schema),
+				Responses: make(map[string]*oas.Response),
+			},
+			Tags: make([]*oas.Tag, 0, 1),
+		}
+		// info
+		if doc.contact != nil {
+			api.Info.SetContact(doc.contact.name, doc.contact.url, doc.contact.email)
+		}
+		if doc.license != nil {
+			api.Info.SetLicense(doc.license.name, doc.license.url)
+		}
+		// fns schemas
+		api.Components.Schemas["fns_CodeError"] = &oas.Schema{
+			Key:         "fns_CodeError",
+			Title:       "CodeError",
+			Description: "Fns Code Error",
+			Type:        "object",
+			Required:    []string{"id", "code", "name", "message", "stacktrace"},
+			Properties: map[string]*oas.Schema{
+				"id": {
+					Title: "error id",
+					Type:  "string",
+				},
+				"code": {
+					Title: "error code",
+					Type:  "string",
+				},
+				"name": {
+					Title: "error name",
+					Type:  "string",
+				},
+				"message": {
+					Title: "error message",
+					Type:  "string",
+				},
+				"meta": {
+					Title:                "error meta",
+					Type:                 "object",
+					AdditionalProperties: &oas.Schema{Type: "string"},
+				},
+				"stacktrace": {
+					Title: "error stacktrace",
+					Type:  "object",
+					Properties: map[string]*oas.Schema{
+						"fn":   {Type: "string"},
+						"file": {Type: "string"},
+						"line": {Type: "string"},
+					},
+				},
+				"cause": oas.RefSchema("fns_CodeError"),
+			},
+		}
+		api.Components.Schemas["fns_JsonRawMessage"] = &oas.Schema{
+			Key:         "fns_JsonRawMessage",
+			Title:       "JsonRawMessage",
+			Description: "Json Raw Message",
+			Type:        "object",
+		}
+		api.Components.Schemas["fns_Empty"] = &oas.Schema{
+			Key:         "fns_Empty",
+			Title:       "Empty",
+			Description: "",
+			Type:        "object",
+		}
+
+		// headers
+		authorizationHeaderParams := []*oas.Parameter{
+			{
+				Name:        "Authorization",
+				In:          "header",
+				Description: "Authorization Key",
+				Required:    true,
+			},
+		}
+		responseHeader := map[string]*oas.Header{
+			"X-Fns-Request-Id": {
+				Description: "request id",
+				Schema: &oas.Schema{
+					Type: "string",
+				},
+			},
+			"X-Fns-Latency": {
+				Description: "request latency",
+				Schema: &oas.Schema{
+					Type: "string",
+				},
+			},
+		}
+		// responses
+		api.Components.Responses["400"] = &oas.Response{
+			Description: "***BAD REQUEST***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["401"] = &oas.Response{
+			Description: "***UNAUTHORIZED***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["403"] = &oas.Response{
+			Description: "***FORBIDDEN***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["404"] = &oas.Response{
+			Description: "***NOT FOUND***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["406"] = &oas.Response{
+			Description: "***NOT ACCEPTABLE***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["408"] = &oas.Response{
+			Description: "***TIMEOUT***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["500"] = &oas.Response{
+			Description: "***SERVICE EXECUTE FAILED***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["501"] = &oas.Response{
+			Description: "***SERVICE NOT IMPLEMENTED***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["503"] = &oas.Response{
+			Description: "***SERVICE UNAVAILABLE***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		api.Components.Responses["555"] = &oas.Response{
+			Description: "***WARNING***",
+			Header:      responseHeader,
+			Content: map[string]*oas.MediaType{
+				"application/json": {
+					Schema: oas.RefSchema("fns_CodeError"),
+				},
+			},
+		}
+		//
+		// range
+		for _, service := range doc.Services {
+			// tags
+			api.Tags = append(api.Tags, &oas.Tag{
+				Name:        service.Namespace,
+				Description: service.Description,
 			})
-		}
-		swagger.Tags = tags
-		// path
-		paths := &spec.Paths{
-			VendorExtensible: spec.VendorExtensible{},
-			Paths:            make(map[string]spec.PathItem),
-		}
-		healthCheckPathItem := spec.PathItem{
-			Refable:          spec.Refable{},
-			VendorExtensible: spec.VendorExtensible{},
-			PathItemProps:    spec.PathItemProps{},
-		}
-		healthCheckPathItem.Get = &spec.Operation{
-			VendorExtensible: spec.VendorExtensible{},
-			OperationProps: spec.OperationProps{
-				Description:  "health check",
-				Consumes:     nil,
-				Produces:     []string{doc.produces},
-				Tags:         []string{"fns"},
-				Summary:      "health check",
-				ExternalDocs: nil,
-				ID:           "fns_health_check",
-				Deprecated:   false,
-				Security:     nil,
-				Parameters:   nil,
-				Responses: &spec.Responses{
-					VendorExtensible: spec.VendorExtensible{},
-					ResponsesProps: spec.ResponsesProps{
-						StatusCodeResponses: map[int]spec.Response{
-							200: {
-								Refable: spec.Refable{},
-								ResponseProps: spec.ResponseProps{
-									Description: "result",
-									Schema: &spec.Schema{
-										VendorExtensible: spec.VendorExtensible{},
-										SchemaProps: spec.SchemaProps{
-											Type: []string{"object"},
-											Properties: map[string]spec.Schema{
-												"name":    *spec.StringProperty(),
-												"version": *spec.StringProperty(),
-											},
-										},
-									},
-								},
+			// fn
+			for _, fn := range service.Fns {
+				// path
+				path := &oas.Path{
+					Post: &oas.Operation{
+						OperationId: fmt.Sprintf("%s_%s", service.Namespace, fn.Name),
+						Tags:        []string{service.Namespace},
+						Summary:     fn.Title,
+						Description: fn.Description,
+						Deprecated:  fn.Deprecated,
+						Parameters: func() []*oas.Parameter {
+							if fn.HasAuthorization {
+								return authorizationHeaderParams
+							}
+							return nil
+						}(),
+						RequestBody: &oas.RequestBody{
+							Required:    func() bool { return fn.Argument != nil }(),
+							Description: "",
+							Content: func() (c map[string]*oas.MediaType) {
+								if fn.Argument == nil {
+									return
+								}
+								if fn.Argument.isBuiltin() {
+									c = oas.ApplicationJsonContent(fn.Argument.schema())
+									return
+								}
+								c = oas.ApplicationJsonContent(oas.RefSchema(fn.Argument.key()))
+								return
+							}(),
+						},
+						Responses: map[string]oas.Response{
+							"200": {
+								Content: func() (c map[string]*oas.MediaType) {
+									if fn.Result == nil {
+										c = oas.ApplicationJsonContent(oas.RefSchema("fns_Empty"))
+										return
+									}
+									if fn.Argument.isBuiltin() {
+										c = oas.ApplicationJsonContent(fn.Result.schema())
+										return
+									}
+									c = oas.ApplicationJsonContent(oas.RefSchema(fn.Result.key()))
+									return
+								}(),
 							},
+							"400": {Ref: "#/components/responses/400"},
+							"401": {Ref: "#/components/responses/401"},
+							"403": {Ref: "#/components/responses/403"},
+							"404": {Ref: "#/components/responses/404"},
+							"406": {Ref: "#/components/responses/406"},
+							"408": {Ref: "#/components/responses/408"},
+							"500": {Ref: "#/components/responses/500"},
+							"501": {Ref: "#/components/responses/501"},
+							"503": {Ref: "#/components/responses/503"},
+							"555": {Ref: "#/components/responses/555"},
 						},
 					},
-				},
-			},
-		}
-		paths.Paths[healthCheckPath] = healthCheckPathItem
-		for _, serviceDocument := range doc.services {
-			for path, fnDocument := range serviceDocument.Fns {
-				pathItem := spec.PathItem{
-					Refable:          spec.Refable{},
-					VendorExtensible: spec.VendorExtensible{},
-					PathItemProps:    spec.PathItemProps{},
 				}
-				parameters := make([]spec.Parameter, 0, 1)
-				if fnDocument.HasAuthorization {
-					parameters = append(parameters, *spec.HeaderParam("Authorization").Typed("string", "").AsRequired())
+				api.Paths[fmt.Sprintf("/%s/%s", service.Namespace, fn.Name)] = path
+				// schemas
+				if fn.Argument != nil && fn.Argument.objects() != nil && len(fn.Argument.objects()) > 0 {
+					for key, obj := range fn.Argument.objects() {
+						if _, has := api.Components.Schemas[key]; has {
+							continue
+						}
+						api.Components.Schemas[key] = obj.schema()
+					}
 				}
-				parameters = append(parameters, *spec.BodyParam("body", fnDocument.Argument.mapToSwaggerRequestSchema()).AsRequired())
-
-				pathItem.Post = &spec.Operation{
-					VendorExtensible: spec.VendorExtensible{},
-					OperationProps: spec.OperationProps{
-						Description:  fnDocument.Description,
-						Consumes:     []string{doc.consumes},
-						Produces:     []string{doc.produces},
-						Schemes:      []string{doc.scheme},
-						Tags:         []string{serviceDocument.Namespace},
-						Summary:      fnDocument.Title,
-						ExternalDocs: nil,
-						ID:           fmt.Sprintf("%s:%s", serviceDocument.Namespace, fnDocument.Name),
-						Deprecated:   fnDocument.Deprecated,
-						Security:     nil,
-						Parameters:   parameters,
-						Responses:    fnDocument.Result.mapResultToOpenApiResponses(),
-					},
+				if fn.Result != nil && fn.Result.objects() != nil && len(fn.Result.objects()) > 0 {
+					for key, obj := range fn.Result.objects() {
+						if _, has := api.Components.Schemas[key]; has {
+							continue
+						}
+						api.Components.Schemas[key] = obj.schema()
+					}
 				}
-
-				paths.Paths[path] = pathItem
 			}
 		}
-		swagger.Paths = paths
-
-		// definitions
-		swagger.Definitions = make(map[string]spec.Schema)
-		// codeError
-		codeErrorDefinition := spec.Schema{}
-		codeErrorDefinition.Type = []string{"object"}
-		codeErrorDefinition.Properties = spec.SchemaProperties{}
-		codeErrorDefinition.Properties["id"] = *spec.StringProperty().WithDescription("")
-		codeErrorDefinition.Properties["code"] = *spec.Int32Property().WithDescription("")
-		codeErrorDefinition.Properties["name"] = *spec.StringProperty().WithDescription("")
-		codeErrorDefinition.Properties["message"] = *spec.StringProperty().WithDescription("")
-		codeErrorDefinition.Properties["meta"] = *spec.MapProperty(spec.StringProperty())
-		codeErrorStacktraceSchema := spec.Schema{}
-		codeErrorStacktraceSchema.Type = []string{"object"}
-		codeErrorStacktraceSchema.Properties = spec.SchemaProperties{}
-		codeErrorStacktraceSchema.Properties["fn"] = *spec.StringProperty().WithDescription("")
-		codeErrorStacktraceSchema.Properties["file"] = *spec.StringProperty().WithDescription("")
-		codeErrorStacktraceSchema.Properties["line"] = *spec.Int32Property().WithDescription("")
-		codeErrorDefinition.Properties["stacktrace"] = codeErrorStacktraceSchema
-		codeErrorDefinition.Properties["cause"] = *spec.RefSchema("#/definitions/fns_errors_CodeError")
-		swagger.Definitions["fns_errors_CodeError"] = codeErrorDefinition
-		// empty
-		emptyDefinition := spec.Schema{}
-		emptyDefinition.Description = "empty"
-		emptyDefinition.Example = struct{}{}
-		emptyDefinition.Type = []string{"object"}
-		codeErrorDefinition.Properties = spec.SchemaProperties{}
-		swagger.Definitions["fns_empty"] = emptyDefinition
-		// raw
-		rawDefinition := spec.StringProperty()
-		rawDefinition.Description = "raw"
-		rawDefinition.Example = "application/json"
-		rawDefinition.Type = []string{"string"}
-		swagger.Definitions["fns_raw"] = *rawDefinition
-		//
-		for key, object := range doc.objects {
-			swagger.Definitions[key] = *object.mapToSwaggerDefinitionSchema()
-		}
-		// json
-		p, encodeErr := swagger.MarshalJSON()
+		p, encodeErr := json.Marshal(api)
 		if encodeErr != nil {
-			panic(fmt.Sprintf("fns: encode open api failed, %v", encodeErr))
-			return
+			doc.openAPI = []byte(fmt.Sprintf("{\"failed\": \"%s\"}", encodeErr.Error()))
+		} else {
+			doc.openAPI = p
 		}
-		doc.openAPI = p
 	})
 	v = doc.openAPI
 	return
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type documentInfo struct {
-	Title          string               `json:"title,omitempty"`
-	Description    string               `json:"description,omitempty"`
-	TermsOfService string               `json:"termsOfService,omitempty"`
-	Contact        *documentInfoContact `json:"contact,omitempty"`
-	License        *documentInfoLicense `json:"license,omitempty"`
-	version        string
-}
-
-type documentInfoContact struct {
-	Name  string `json:"name,omitempty"`
-	Url   string `json:"url,omitempty"`
-	Email string `json:"email,omitempty"`
-}
-
-type documentInfoLicense struct {
-	Name string `json:"name,omitempty"`
-	Url  string `json:"url,omitempty"`
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type documentTag struct {
-	Name        string
-	Description string
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -339,7 +376,7 @@ func NewServiceDocument(namespace string, description string) *ServiceDocument {
 	return &ServiceDocument{
 		Namespace:   namespace,
 		Description: description,
-		Fns:         make(map[string]FnDocument),
+		Fns:         make(map[string]*FnDocument),
 	}
 }
 
@@ -352,52 +389,39 @@ type ServiceDocument struct {
 	Description string `json:"description,omitempty"`
 	// Fns
 	// key: fn
-	Fns map[string]FnDocument `json:"fns,omitempty"`
+	Fns map[string]*FnDocument `json:"fns,omitempty"`
 }
 
-func (doc *ServiceDocument) AddFn(fn FnDocument) {
+func (doc *ServiceDocument) AddFn(fn *FnDocument) {
 	doc.Fns[fn.Name] = fn
 }
 
-func (doc *ServiceDocument) objects() (v map[string]ObjectDocument) {
-	v = make(map[string]ObjectDocument)
+func (doc *ServiceDocument) objects() (v map[string]*ObjectDocument) {
+	v = make(map[string]*ObjectDocument)
 	if doc.Fns == nil || len(doc.Fns) == 0 {
 		return
 	}
 
 	for _, fn := range doc.Fns {
 		// argument
-		if !fn.Argument.isSimple() && !fn.Argument.isEmpty() {
-			key := fn.Argument.Name
-			if _, has := v[key]; !has {
-				v[key] = fn.Argument
-			}
-			deps := fn.Argument.getDeps()
-			if len(deps) > 0 {
-				for depKey, dep := range deps {
-					if _, has := v[depKey]; !has {
-						v[depKey] = dep
-					}
+		argObjects := fn.Argument.objects()
+		if argObjects != nil && len(argObjects) > 0 {
+			for k, obj := range argObjects {
+				if _, has := v[k]; !has {
+					v[k] = obj
 				}
 			}
 		}
 		// result
-		if !fn.Result.isSimple() && !fn.Result.isEmpty() {
-			key := fn.Result.Name
-			if _, has := v[key]; !has {
-				v[key] = fn.Result
-			}
-			deps := fn.Result.getDeps()
-			if len(deps) > 0 {
-				for depKey, dep := range deps {
-					if _, has := v[depKey]; !has {
-						v[depKey] = dep
-					}
+		resultObjects := fn.Result.objects()
+		if resultObjects != nil && len(resultObjects) > 0 {
+			for k, obj := range resultObjects {
+				if _, has := v[k]; !has {
+					v[k] = obj
 				}
 			}
 		}
 	}
-
 	return
 }
 
@@ -435,94 +459,125 @@ func (doc *FnDocument) SetResult(v *ObjectDocument) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func NewObjectDocument(pkg string, name string, typ string, title string, description string) *ObjectDocument {
+func NewObjectDocument(pkg string, name string, typ string, format string, title string, description string) *ObjectDocument {
 	return &ObjectDocument{
 		Package:     pkg,
 		Name:        name,
 		Title:       title,
 		Description: description,
 		Type:        typ,
-		Properties:  make([]*ObjectPropertyDocument, 0, 1),
-		X:           nil,
+		Format:      format,
+		Enum:        make([]interface{}, 0, 1),
+		Required:    false,
+		Validation:  "",
+		Properties:  make(map[string]*ObjectDocument),
+		Additional:  false,
+		Deprecated:  false,
 	}
 }
 
 func StringObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "string", "string", "String", "String")
+	return NewObjectDocument("builtin", "string", "string", "", "String", "String")
 }
 
 func BoolObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "bool", "bool", "Bool", "Bool")
+	return NewObjectDocument("builtin", "bool", "bool", "", "Bool", "Bool")
 }
 
 func IntObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "int", "int", "Int", "Int")
+	return Int64ObjectDocument()
+}
+
+func Int32ObjectDocument() *ObjectDocument {
+	return NewObjectDocument("builtin", "int32", "integer", "int32", "Int32", "Int32")
 }
 
 func Int64ObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "int64", "int64", "Int64", "Int64")
-}
-
-func UIntObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "uint", "uint", "UInt", "UInt")
-}
-
-func UInt32ObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "uint32", "uint32", "UInt32", "UInt32")
-}
-
-func UInt64ObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "uint64", "uint64", "UInt64", "UInt64")
+	return NewObjectDocument("builtin", "int64", "integer", "int64", "Int64", "Int64")
 }
 
 func Float32ObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "float32", "float32", "Float32", "Float32")
+	return NewObjectDocument("builtin", "float32", "number", "float", "Float", "Float")
 }
 
 func Float64ObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "float64", "float64", "Float64", "Float64")
+	return NewObjectDocument("builtin", "float64", "number", "double", "Double", "Double")
 }
 
 func DateObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "date", "string", "Date", "Date")
+	return NewObjectDocument("builtin", "date", "string", "date", "Date", "Date")
 }
 
 func DateTimeObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "datetime", "string", "Datetime", "Datetime")
+	return NewObjectDocument("builtin", "datetime", "string", "date-time", "Datetime", "Datetime")
 }
 
 func JsonRawObjectDocument() *ObjectDocument {
-	return NewObjectDocument("fns", "JsonRawMessage", "additional", "Json Raw", "Json Raw Message")
+	v := NewObjectDocument("fns", "JsonRawMessage", "object", "", "Json Raw", "Json Raw Message")
+	v.Additional = true
+	v.AddProperty("", EmptyObjectDocument())
+	return v
 }
 
 func EmptyObjectDocument() *ObjectDocument {
-	return NewObjectDocument("fns", "Empty", "object", "Empty", "Empty Struct")
+	return NewObjectDocument("fns", "Empty", "object", "", "Empty", "Empty Struct")
 }
 
 func ArrayObjectDocument(name string, title string, description string, item *ObjectDocument) *ObjectDocument {
-	v := NewObjectDocument(item.Package, name, "array", title, description)
-	v.X = item
+	v := NewObjectDocument(item.Package, name, "array", "", title, description)
+	v.AddProperty("", item)
 	return v
 }
 
 func MapObjectDocument(name string, title string, description string, item *ObjectDocument) *ObjectDocument {
-	v := NewObjectDocument(item.Package, name, "additional", title, description)
-	v.X = item
+	v := NewObjectDocument(item.Package, name, "object", "", title, description)
+	v.Additional = true
+	v.AddProperty("", item)
 	return v
 }
 
 type ObjectDocument struct {
-	Package     string                    `json:"package,omitempty"`
-	Name        string                    `json:"name,omitempty"`
-	Title       string                    `json:"title,omitempty"`
-	Description string                    `json:"description,omitempty"`
-	Type        string                    `json:"type,omitempty"`
-	Properties  []*ObjectPropertyDocument `json:"properties,omitempty"`
-	X           *ObjectDocument           `json:"'x',omitempty"`
+	Package     string                     `json:"package,omitempty"`
+	Name        string                     `json:"name,omitempty"`
+	Title       string                     `json:"title,omitempty"`
+	Description string                     `json:"description,omitempty"`
+	Type        string                     `json:"type,omitempty"`
+	Format      string                     `json:"format,omitempty"`
+	Enum        []interface{}              `json:"enum,omitempty"`
+	Required    bool                       `json:"required,omitempty"`
+	Validation  string                     `json:"validation,omitempty"`
+	Properties  map[string]*ObjectDocument `json:"properties,omitempty"`
+	Additional  bool                       `json:"additional,omitempty"`
+	Deprecated  bool                       `json:"deprecated,omitempty"`
+}
+
+func (obj *ObjectDocument) AsRequired(validation string) *ObjectDocument {
+	obj.Required = true
+	obj.Validation = validation
+	return obj
+}
+func (obj *ObjectDocument) AsDeprecated() *ObjectDocument {
+	obj.Deprecated = true
+	return obj
+}
+
+func (obj *ObjectDocument) AddEnum(v ...interface{}) *ObjectDocument {
+	obj.Enum = append(obj.Enum, v...)
+	return obj
 }
 
 func (obj *ObjectDocument) isEmpty() (ok bool) {
 	ok = obj.isObject() && len(obj.Properties) == 0
+	return
+}
+
+func (obj *ObjectDocument) isBuiltin() (ok bool) {
+	ok = obj.Type == "builtin"
+	return
+}
+
+func (obj *ObjectDocument) isFns() (ok bool) {
+	ok = obj.Type == "fns"
 	return
 }
 
@@ -537,666 +592,97 @@ func (obj *ObjectDocument) isArray() (ok bool) {
 }
 
 func (obj *ObjectDocument) isAdditional() (ok bool) {
-	ok = obj.Type == "additional"
+	ok = obj.isObject() && obj.Additional
 	return
 }
 
-func (obj *ObjectDocument) AddProperty(prop *ObjectPropertyDocument) {
+func (obj *ObjectDocument) AddProperty(name string, prop *ObjectDocument) {
 	if obj.isObject() {
-		obj.Properties = append(obj.Properties, prop)
+		obj.Properties[name] = prop
 	}
 }
 
-func (obj *ObjectDocument) mapToOpenAPISchemaURI() (v string) {
-	v = fmt.Sprintf("#/components/%s", obj.mapToOpenAPIComponentsKey())
+func (obj *ObjectDocument) objects() (v map[string]*ObjectDocument) {
+	v = make(map[string]*ObjectDocument)
+	if !obj.isBuiltin() && !obj.isFns() {
+		key := obj.key()
+		if _, has := v[key]; !has {
+			v[key] = obj
+			for _, property := range obj.Properties {
+				deps := property.objects()
+				if deps != nil && len(deps) > 0 {
+					for depKey, dep := range deps {
+						if _, hasDep := v[depKey]; !hasDep {
+							v[depKey] = dep
+						}
+					}
+				}
+			}
+		}
+	}
 	return
 }
 
-func (obj *ObjectDocument) mapToOpenAPIComponentsKey() (v string) {
+func (obj *ObjectDocument) key() (v string) {
 	v = fmt.Sprintf("%s_%s", strings.ReplaceAll(obj.Package, "/", "."), obj.Name)
 	return
 }
 
-func (obj *ObjectDocument) mapToOpenAPIComponent() (v []byte) {
-	// todo
-	// v = json bytes
-	return
-
-}
-
-func (obj *ObjectDocument) deps() (v map[string]*ObjectDocument) {
-	v = make(map[string]*ObjectDocument)
-	if obj.isEmpty() {
+func (obj *ObjectDocument) schema() (v *oas.Schema) {
+	// fns
+	if obj.isFns() {
+		v = oas.RefSchema(obj.key())
 		return
 	}
-	if obj.X != nil {
-		if _, has := v[obj.X.mapToOpenAPIComponentsKey()]; !has {
-			v[obj.X.mapToOpenAPIComponentsKey()] = obj.X
-			xDeps := obj.X.deps()
-			if len(xDeps) > 0 {
-				for key, xDep := range xDeps {
-					if _, xHas := v[key]; !xHas {
-						v[key] = xDep
-					}
-				}
+	v = &oas.Schema{
+		Key:                  obj.key(),
+		Title:                obj.Title,
+		Description:          "",
+		Type:                 obj.Type,
+		Required:             nil,
+		Format:               obj.Format,
+		Enum:                 obj.Enum,
+		Properties:           nil,
+		Items:                nil,
+		AdditionalProperties: nil,
+		Deprecated:           obj.Deprecated,
+		Ref:                  "",
+	}
+	// Description
+	description := "### Description" + " "
+	description = description + obj.Description + " "
+	if obj.Validation != "" {
+		description = description + "**Validation**" + " "
+		description = description + obj.Validation + " "
+	}
+	if obj.Enum != nil && len(obj.Enum) > 0 {
+		description = description + "**Enum**" + " "
+		description = description + fmt.Sprintf("%v", obj.Enum) + " "
+	}
+	// builtin
+	if obj.isBuiltin() {
+		return
+	}
+	// object
+	if obj.isObject() && !obj.isEmpty() {
+		required := make([]string, 0, 1)
+		v.Properties = make(map[string]*oas.Schema)
+		for name, prop := range obj.Properties {
+			if prop.Required {
+				required = append(required, name)
+				v.Properties[name] = prop.schema()
 			}
 		}
+		v.Required = required
+		return
 	}
-	if obj.Properties != nil {
-		for _, property := range obj.Properties {
-			ref := property.Reference
-			if ref == nil {
-				continue
-			}
-			if _, has := v[ref.mapToOpenAPIComponentsKey()]; !has {
-				v[ref.mapToOpenAPIComponentsKey()] = ref
-			}
-			refDeps := ref.deps()
-			if len(refDeps) > 0 {
-				for key, refDep := range refDeps {
-					if _, has := v[key]; !has {
-						v[key] = refDep
-					}
-				}
-			}
-		}
+	// array
+	if obj.isArray() {
+		v.Items = obj.Properties[""].schema()
 	}
-
-	return
-}
-
-func (obj ObjectDocument) mapResultToOpenApiResponses() (v *spec.Responses) {
-	// todo: mv to fn document response
-	headers := map[string]spec.Header{
-		"Server":           *spec.ResponseHeader().Typed("string", ""),
-		"X-Fns-Request-Id": *spec.ResponseHeader().Typed("string", ""),
-		"X-Fns-Latency":    *spec.ResponseHeader().Typed("string", ""),
-	}
-
-	v = &spec.Responses{}
-	v.StatusCodeResponses = make(map[int]spec.Response)
-	// 200
-	v.StatusCodeResponses[200] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "SUCCEED",
-			Schema:      spec.RefSchema(fmt.Sprintf("#/definitions/%s", obj.Name)),
-			Headers:     headers,
-			Examples:    nil,
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 400
-	v.StatusCodeResponses[400] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "BAD REQUEST",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    400,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 401
-	v.StatusCodeResponses[401] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "UNAUTHORIZED",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    401,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 403
-	v.StatusCodeResponses[403] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "FORBIDDEN",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    403,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 404
-	v.StatusCodeResponses[404] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "NOT FOUND",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    404,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 406
-	v.StatusCodeResponses[406] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "NOT ACCEPTABLE",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    406,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 408
-	v.StatusCodeResponses[408] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "TIMEOUT",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    408,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 500
-	v.StatusCodeResponses[500] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "SERVICE EXECUTE FAILED",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    500,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 501
-	v.StatusCodeResponses[501] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "SERVICE NOT IMPLEMENTED",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    501,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 503
-	v.StatusCodeResponses[503] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "SERVICE UNAVAILABLE",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    503,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	// 555
-	v.StatusCodeResponses[555] = spec.Response{
-		Refable: spec.Refable{},
-		ResponseProps: spec.ResponseProps{
-			Description: "WARNING",
-			Schema:      spec.RefSchema("#/definitions/fns_errors_CodeError"),
-			Headers:     headers,
-			Examples: map[string]interface{}{
-				"id":      "id of error",
-				"code":    555,
-				"name":    "name of error",
-				"message": "message of error",
-				"meta": map[string]string{
-					"foo": "bar",
-				},
-				"stacktrace": map[string]interface{}{
-					"fn":   "fn name",
-					"file": "source code file path",
-					"line": 10,
-				},
-				"cause": struct{}{},
-			},
-		},
-		VendorExtensible: spec.VendorExtensible{},
-	}
-	return
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func RawObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "additional",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func StringObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "string",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func IntObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "int",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func Int32ObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "int32",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func Int64ObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "int64",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func Float32ObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "float32",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func Float64ObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "float64",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func BoolObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "bool",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func DateObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "date",
-		Enum:        nil,
-		Type:        "string",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func DateTimeObjectPropertyDocument(name string, title string, description string) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Package:     "builtin",
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "datetime",
-		Enum:        nil,
-		Type:        "string",
-		Required:    false,
-		Reference:   nil,
-	}
-}
-
-func ArrayObjectPropertyDocument(name string, title string, description string, item ObjectDocument) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "array",
-		Required:    false,
-		Reference:   &item,
-	}
-}
-
-func MapObjectPropertyDocument(name string, title string, description string, item ObjectDocument) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "map",
-		Required:    false,
-		Reference:   &item,
-	}
-}
-
-func RefObjectPropertyDocument(name string, title string, description string, ref ObjectDocument) *ObjectPropertyDocument {
-	return &ObjectPropertyDocument{
-		Name:        name,
-		Title:       title,
-		Description: description,
-		Format:      "",
-		Enum:        nil,
-		Type:        "object",
-		Required:    false,
-		Reference:   &ref,
-	}
-}
-
-type ObjectPropertyDocument struct {
-	Package     string          `json:"package,omitempty"`
-	Name        string          `json:"name,omitempty"`
-	Title       string          `json:"title,omitempty"`
-	Description string          `json:"description,omitempty"`
-	Format      string          `json:"format,omitempty"`
-	Enum        []interface{}   `json:"enum,omitempty"`
-	Type        string          `json:"type,omitempty"`
-	Required    bool            `json:"required,omitempty"`
-	Validation  string          `json:"validation,omitempty"`
-	Reference   *ObjectDocument `json:"reference,omitempty"`
-}
-
-func (prop *ObjectPropertyDocument) isEmpty() (ok bool) {
-	ok = prop.isObject() && prop.Reference == nil
-	return
-}
-
-func (prop *ObjectPropertyDocument) isBuiltin() (ok bool) {
-	ok = prop.Type == "builtin"
-	return
-}
-
-func (prop *ObjectPropertyDocument) isObject() (ok bool) {
-	ok = prop.Type == "object" && prop.Reference != nil
-	return
-}
-
-func (prop *ObjectPropertyDocument) isArray() (ok bool) {
-	ok = prop.Type == "array"
-	return
-}
-
-func (prop *ObjectPropertyDocument) isAdditional() (ok bool) {
-	ok = prop.Type == "additional"
-	return
-}
-
-func (prop ObjectPropertyDocument) mapToSwaggerDefinitionSchema() (v *spec.Schema) {
-	v = &spec.Schema{}
-	if prop.isSimple() {
-		switch prop.Type {
-		case "string":
-			v = spec.StringProperty()
-		case "int":
-			v = spec.Int64Property()
-		case "int32":
-			v = spec.Int64Property()
-		case "int64":
-			v = spec.Int64Property()
-		case "float32":
-			v = spec.Float32Property()
-		case "float64":
-			v = spec.Float64Property()
-		case "bool":
-			v = spec.BoolProperty()
-		case "date":
-			v = spec.DateProperty()
-		case "datetime":
-			v = spec.DateTimeProperty()
-		case "raw":
-			v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_raw"))
-		default:
-			panic(fmt.Sprintf("fns: create swagger schema failed, type(%s) is not supported", prop.Type))
-		}
-		if prop.Format != "" {
-			v.Format = prop.Format
-		}
-		if prop.Enum != nil && len(prop.Enum) > 0 {
-			v.Enum = prop.Enum
-		}
-	} else if prop.isEmpty() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_empty"))
-	} else if prop.isObject() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/%s", prop.Name))
-	} else if prop.isArray() {
-		item := prop.Reference
-		v = spec.ArrayProperty(item.mapToSwaggerRequestSchema())
-	} else if prop.isMap() {
-		if prop.Reference == nil {
-			v = spec.MapProperty(spec.StringProperty())
-		} else {
-			item := prop.Reference
-			v = spec.MapProperty(item.mapToSwaggerRequestSchema())
-		}
-	}
-	v.Title = prop.Title
-	v.Description = prop.Description
-	return
-}
-
-func (prop ObjectPropertyDocument) mapToSwaggerRequestSchema() (v *spec.Schema) {
-	v = &spec.Schema{}
-	if prop.isSimple() {
-		switch prop.Type {
-		case "string":
-			v = spec.StringProperty()
-		case "int":
-			v = spec.Int64Property()
-		case "int32":
-			v = spec.Int64Property()
-		case "int64":
-			v = spec.Int64Property()
-		case "float32":
-			v = spec.Float32Property()
-		case "float64":
-			v = spec.Float64Property()
-		case "bool":
-			v = spec.BoolProperty()
-		case "date":
-			v = spec.DateProperty()
-		case "datetime":
-			v = spec.DateTimeProperty()
-		case "raw":
-			v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_raw"))
-		default:
-			panic(fmt.Sprintf("fns: create swagger schema failed, type(%s) is not supported", prop.Type))
-		}
-		if prop.Format != "" {
-			v.Format = prop.Format
-		}
-		if prop.Enum != nil && len(prop.Enum) > 0 {
-			v.Enum = prop.Enum
-		}
-	} else if prop.isEmpty() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/fns_empty"))
-	} else if prop.isObject() {
-		v = spec.RefSchema(fmt.Sprintf("#/definitions/%s", prop.Name))
-	} else if prop.isArray() {
-		item := prop.Reference
-		v = spec.ArrayProperty(item.mapToSwaggerRequestSchema())
-	} else if prop.isMap() {
-		if prop.Reference == nil {
-			v = spec.MapProperty(spec.StringProperty())
-		} else {
-			item := prop.Reference
-			v = spec.MapProperty(item.mapToSwaggerRequestSchema())
-		}
+	// map
+	if obj.isAdditional() {
+		v.AdditionalProperties = obj.Properties[""].schema()
 	}
 	return
 }

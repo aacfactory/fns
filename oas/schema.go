@@ -41,5 +41,6 @@ type Schema struct {
 	Items                *Schema            `json:"items,omitempty"`
 	AdditionalProperties *Schema            `json:"additionalProperties,omitempty"`
 	Deprecated           bool               `json:"deprecated,omitempty"`
+	Example              interface{}        `json:"example,omitempty"`
 	Ref                  string             `json:"$ref,omitempty"`
 }

@@ -509,7 +509,7 @@ func DateObjectDocument() *ObjectDocument {
 }
 
 func DateTimeObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "datetime", "string", "date-time", "Datetime", "Datetime")
+	return NewObjectDocument("builtin", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "Datetime").SetExample("2022-01-10T19:13:07+08:00")
 }
 
 func StructObjectDocument(pkg string, name string, title string, description string) *ObjectDocument {
@@ -553,6 +553,7 @@ type ObjectDocument struct {
 	Properties  map[string]*ObjectDocument `json:"properties,omitempty"`
 	Additional  bool                       `json:"additional,omitempty"`
 	Deprecated  bool                       `json:"deprecated,omitempty"`
+	Example     interface{}                `json:"example,omitempty"`
 }
 
 func (obj *ObjectDocument) AsRequired(validation string) *ObjectDocument {
@@ -578,6 +579,11 @@ func (obj *ObjectDocument) SetTitle(title string) *ObjectDocument {
 
 func (obj *ObjectDocument) SetDescription(description string) *ObjectDocument {
 	obj.Description = description
+	return obj
+}
+
+func (obj *ObjectDocument) SetExample(example interface{}) *ObjectDocument {
+	obj.Example = example
 	return obj
 }
 
@@ -622,7 +628,7 @@ func (obj *ObjectDocument) isAdditional() (ok bool) {
 }
 
 func (obj *ObjectDocument) AddProperty(name string, prop *ObjectDocument) *ObjectDocument {
-	if obj.isObject() {
+	if obj.isObject() || obj.isArray() || obj.isAdditional() {
 		obj.Properties[name] = prop
 	}
 	return obj
@@ -672,6 +678,7 @@ func (obj *ObjectDocument) schema() (v *oas.Schema) {
 		Items:                nil,
 		AdditionalProperties: nil,
 		Deprecated:           obj.Deprecated,
+		Example:              obj.Example,
 		Ref:                  "",
 	}
 	// Description
@@ -685,6 +692,7 @@ func (obj *ObjectDocument) schema() (v *oas.Schema) {
 		description = description + "**Enum**" + " "
 		description = description + fmt.Sprintf("%v", obj.Enum) + " "
 	}
+	v.Description = description
 	// builtin
 	if obj.isBuiltin() {
 		return
@@ -705,10 +713,12 @@ func (obj *ObjectDocument) schema() (v *oas.Schema) {
 	// array
 	if obj.isArray() {
 		v.Items = obj.Properties[""].schema()
+		return
 	}
 	// map
 	if obj.isAdditional() {
 		v.AdditionalProperties = obj.Properties[""].schema()
+		return
 	}
 	return
 }

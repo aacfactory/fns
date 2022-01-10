@@ -512,6 +512,10 @@ func DateTimeObjectDocument() *ObjectDocument {
 	return NewObjectDocument("builtin", "datetime", "string", "date-time", "Datetime", "Datetime")
 }
 
+func StructObjectDocument(pkg string, name string, title string, description string) *ObjectDocument {
+	return NewObjectDocument(pkg, name, "object", "", title, description)
+}
+
 func JsonRawObjectDocument() *ObjectDocument {
 	v := NewObjectDocument("fns", "JsonRawMessage", "object", "", "Json Raw", "Json Raw Message")
 	v.Additional = true
@@ -556,8 +560,29 @@ func (obj *ObjectDocument) AsRequired(validation string) *ObjectDocument {
 	obj.Validation = validation
 	return obj
 }
+
 func (obj *ObjectDocument) AsDeprecated() *ObjectDocument {
 	obj.Deprecated = true
+	return obj
+}
+
+func (obj *ObjectDocument) SetValidation(validation string) *ObjectDocument {
+	obj.Validation = validation
+	return obj
+}
+
+func (obj *ObjectDocument) SetTitle(title string) *ObjectDocument {
+	obj.Title = title
+	return obj
+}
+
+func (obj *ObjectDocument) SetDescription(description string) *ObjectDocument {
+	obj.Description = description
+	return obj
+}
+
+func (obj *ObjectDocument) SetFormat(format string) *ObjectDocument {
+	obj.Format = format
 	return obj
 }
 
@@ -653,7 +678,7 @@ func (obj *ObjectDocument) schema() (v *oas.Schema) {
 	description = description + obj.Description + " "
 	if obj.Validation != "" {
 		description = description + "**Validation**" + " "
-		description = description + obj.Validation + " "
+		description = description + "`" + obj.Validation + "`" + " "
 	}
 	if obj.Enum != nil && len(obj.Enum) > 0 {
 		description = description + "**Enum**" + " "

@@ -341,22 +341,30 @@ func (doc *document) mapToOpenApi() (v []byte) {
 				}
 				api.Paths[fmt.Sprintf("/%s/%s", service.Namespace, fn.Name)] = path
 				// schemas
-				if fn.Argument != nil && fn.Argument.objects() != nil && len(fn.Argument.objects()) > 0 {
-					for key, obj := range fn.Argument.objects() {
-						if _, has := api.Components.Schemas[key]; has {
-							continue
-						}
-						api.Components.Schemas[key] = obj.schema()
-					}
+				if fn.Argument != nil {
+					api.Components.Schemas[fn.Argument.key()] = fn.Argument.schema()
 				}
-				if fn.Result != nil && fn.Result.objects() != nil && len(fn.Result.objects()) > 0 {
-					for key, obj := range fn.Result.objects() {
-						if _, has := api.Components.Schemas[key]; has {
-							continue
-						}
-						api.Components.Schemas[key] = obj.schema()
-					}
+				if fn.Result != nil {
+					api.Components.Schemas[fn.Result.key()] = fn.Result.schema()
 				}
+				/*
+					if fn.Argument != nil && fn.Argument.objects() != nil && len(fn.Argument.objects()) > 0 {
+						for key, obj := range fn.Argument.objects() {
+							if _, has := api.Components.Schemas[key]; has {
+								continue
+							}
+							api.Components.Schemas[key] = obj.schema()
+						}
+					}
+					if fn.Result != nil && fn.Result.objects() != nil && len(fn.Result.objects()) > 0 {
+						for key, obj := range fn.Result.objects() {
+							if _, has := api.Components.Schemas[key]; has {
+								continue
+							}
+							api.Components.Schemas[key] = obj.schema()
+						}
+					}
+				*/
 			}
 		}
 		p, encodeErr := json.Marshal(api)
@@ -695,8 +703,8 @@ func (obj *ObjectDocument) schema() (v *oas.Schema) {
 		for name, prop := range obj.Properties {
 			if prop.Required {
 				required = append(required, name)
-				v.Properties[name] = prop.schema()
 			}
+			v.Properties[name] = prop.schema()
 		}
 		v.Required = required
 		return

@@ -621,10 +621,11 @@ func (obj *ObjectDocument) isAdditional() (ok bool) {
 	return
 }
 
-func (obj *ObjectDocument) AddProperty(name string, prop *ObjectDocument) {
+func (obj *ObjectDocument) AddProperty(name string, prop *ObjectDocument) *ObjectDocument {
 	if obj.isObject() {
 		obj.Properties[name] = prop
 	}
+	return obj
 }
 
 func (obj *ObjectDocument) objects() (v map[string]*ObjectDocument) {

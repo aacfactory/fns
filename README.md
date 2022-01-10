@@ -1,17 +1,5 @@
 # fns
 
-## 集群
-### public host and public port
-* docker
-  * 默认 public host 使用 docker container 的 hostname ip，如果非容器内访问，则需要在 config 中设置，或者设置 `PUBLIC_HOST` 环境变量。
-  * 默认 public port 为 port，如果 expose port，则需要在 config 中设置，或者设置 `PUBLIC_PORT` 环境变量。
-* kubernetes
-  * 设置 config 中的 public host，或者设置 `PUBLIC_HOST` 环境变量，值为 POD IP。[设置参考](https://kubernetes.io/zh/docs/tasks/inject-data-application/environment-variable-expose-pod-information/) 
-  * 设置 config 中的 public port，或者设置 `PUBLIC_PORT` 环境变量，值为 名称为 fns 的 POD PORT。[设置参考](https://kubernetes.io/zh/docs/tasks/inject-data-application/environment-variable-expose-pod-information/)
-* 其它环境
-  * 默认 public host 使用 config 中的 host，优先使用 config 中的设置，其次为 环境变量，最后是默认。
-  * 默认 public port 使用 config 中的 port，优先使用 config 中的设置，其次为 环境变量，最后是默认。
-
 
 ## 压力测试
 K6 结果（50 VUS 30s）

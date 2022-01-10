@@ -303,11 +303,7 @@ func (doc *document) mapToOpenApi() (v []byte) {
 								if fn.Argument == nil {
 									return
 								}
-								if fn.Argument.isBuiltin() {
-									c = oas.ApplicationJsonContent(fn.Argument.schema())
-									return
-								}
-								c = oas.ApplicationJsonContent(oas.RefSchema(fn.Argument.key()))
+								c = oas.ApplicationJsonContent(fn.Argument.schema())
 								return
 							}(),
 						},
@@ -318,11 +314,7 @@ func (doc *document) mapToOpenApi() (v []byte) {
 										c = oas.ApplicationJsonContent(oas.RefSchema("fns_Empty"))
 										return
 									}
-									if fn.Argument.isBuiltin() {
-										c = oas.ApplicationJsonContent(fn.Result.schema())
-										return
-									}
-									c = oas.ApplicationJsonContent(oas.RefSchema(fn.Result.key()))
+									c = oas.ApplicationJsonContent(fn.Result.schema())
 									return
 								}(),
 							},
@@ -341,12 +333,12 @@ func (doc *document) mapToOpenApi() (v []byte) {
 				}
 				api.Paths[fmt.Sprintf("/%s/%s", service.Namespace, fn.Name)] = path
 				// schemas
-				if fn.Argument != nil {
-					api.Components.Schemas[fn.Argument.key()] = fn.Argument.schema()
-				}
-				if fn.Result != nil {
-					api.Components.Schemas[fn.Result.key()] = fn.Result.schema()
-				}
+				//if fn.Argument != nil {
+				//	api.Components.Schemas[fn.Argument.key()] = fn.Argument.schema()
+				//}
+				//if fn.Result != nil {
+				//	api.Components.Schemas[fn.Result.key()] = fn.Result.schema()
+				//}
 				/*
 					if fn.Argument != nil && fn.Argument.objects() != nil && len(fn.Argument.objects()) > 0 {
 						for key, obj := range fn.Argument.objects() {

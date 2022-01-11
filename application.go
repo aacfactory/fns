@@ -180,7 +180,6 @@ func New(options ...Option) (app Application, err error) {
 		config:         config,
 		log:            log,
 		validate:       validate,
-		serviceMap:     make(map[string]Service),
 		svc:            nil,
 		requestCounter: sync.WaitGroup{},
 		ln:             nil,
@@ -233,7 +232,6 @@ type application struct {
 	config         configuares.Config
 	log            logs.Logger
 	validate       *validator.Validate
-	serviceMap     map[string]Service
 	svc            *services
 	docSync        singleflight.Group
 	requestCounter sync.WaitGroup
@@ -258,14 +256,24 @@ func (app *application) Deploy(services ...Service) (err error) {
 		if service == nil {
 			continue
 		}
-		_, has := app.serviceMap[service.Namespace()]
-		if has {
+		if app.svc.Exist(service.Namespace()) {
 			err = fmt.Errorf("fns Deploy: service %s is duplicated", service.Namespace())
 			return
 		}
-		app.serviceMap[service.Namespace()] = service
+		config, _ := app.config.Node(service.Namespace())
+		buildErr := service.Build(config)
+		if buildErr != nil {
+			err = fmt.Errorf("fns Deploy: service %s build failed, %v", service.Namespace(), buildErr)
+			return
+		}
+		mountErr := app.svc.Mount(service)
+		if mountErr != nil {
+			err = fmt.Errorf("fns Deploy: mount %s service failed, %v", service.Namespace(), mountErr)
+			app.stop(10 * time.Second)
+			return
+		}
 		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: deploy %s service succeed", service.Namespace()))
+			app.Log().Debug().Message(fmt.Sprintf("fns Deploy: mount %s service succeed", service.Namespace()))
 		}
 	}
 	return
@@ -293,23 +301,14 @@ func (app *application) setGOMAXPROCS() {
 func (app *application) Run(ctx sc.Context) (err error) {
 
 	// build services
-	if len(app.serviceMap) == 0 {
+	if len(app.svc.items) == 0 {
 		err = fmt.Errorf("fns Run: no services")
 		return
 	}
-	for _, service := range app.serviceMap {
-		serviceErr := service.Build(app.config)
-		if serviceErr != nil {
-			err = fmt.Errorf("fns Run: build %s service failed, %v", service.Namespace(), serviceErr)
-			return
-		}
-		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Run: build %s service succeed", service.Namespace()))
-		}
-	}
 	// GOMAXPROCS
 	app.setGOMAXPROCS()
-	// serve http
+
+	// http
 	serveErr := app.serve(ctx)
 	if serveErr != nil {
 		err = serveErr
@@ -319,18 +318,12 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	if app.Log().DebugEnabled() {
 		app.Log().Debug().Message(fmt.Sprintf("fns Run: listen %s succeed", app.address))
 	}
-	// mount
-	for _, service := range app.serviceMap {
-		mountErr := app.svc.Mount(service)
-		if mountErr != nil {
-			err = fmt.Errorf("fns Run: mount %s service failed, %v", service.Namespace(), mountErr)
-			app.stop(10 * time.Second)
-			return
-		}
-		if app.Log().DebugEnabled() {
-			app.Log().Debug().Message(fmt.Sprintf("fns Run: mount %s service succeed", service.Namespace()))
-		}
-		delete(app.serviceMap, service.Namespace())
+	// services
+	runServiceErr := app.svc.Run()
+	if runServiceErr != nil {
+		err = fmt.Errorf("fns Run: run services failed, %v", runServiceErr)
+		app.stop(10 * time.Second)
+		return
 	}
 
 	atomic.StoreInt64(&app.running, int64(1))

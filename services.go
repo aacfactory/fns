@@ -40,7 +40,7 @@ func newServices(app *application, concurrency int) (v *services) {
 	v = &services{
 		concurrency:   concurrency,
 		doc:           newDocument(app.name, app.description, app.terms, app.contact, app.license, app.version, app.publicAddress, app.https),
-		internals:     make(map[string]int64),
+		items:         make(map[string]Service),
 		version:       app.version,
 		serverId:      app.id,
 		publicAddress: app.publicAddress,
@@ -54,7 +54,7 @@ type services struct {
 	concurrency     int
 	wp              workers.Workers
 	doc             *document
-	internals       map[string]int64
+	items           map[string]Service
 	discovery       ServiceDiscovery
 	authorizations  Authorizations
 	permissions     Permissions
@@ -181,20 +181,24 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		s.permissions = &fakePermissions{}
 	}
 
-	s.wp.Start()
+	return
+}
 
+func (s *services) Run() (err error) {
+	for _, service := range s.items {
+		pubErr := s.discovery.Publish(service)
+		if pubErr != nil {
+			err = fmt.Errorf("fns Services: mount failed, %v", pubErr)
+			return
+		}
+	}
+	s.wp.Start()
 	return
 }
 
 func (s *services) Mount(service Service) (err error) {
-	pubErr := s.discovery.Publish(service)
-	if pubErr != nil {
-		err = fmt.Errorf("fns Services: mount failed, %v", pubErr)
-		return
-	}
-	if service.Internal() {
-		s.internals[service.Namespace()] = 0
-	} else {
+	s.items[service.Namespace()] = service
+	if !service.Internal() {
 		doc := service.Document()
 		if doc != nil {
 			s.doc.addServiceDocument(doc)
@@ -209,7 +213,12 @@ func (s *services) Exist(namespace string) (ok bool) {
 }
 
 func (s *services) IsInternal(namespace string) (ok bool) {
-	_, ok = s.internals[namespace]
+	service, has := s.items[namespace]
+	if !has {
+		ok = true
+		return
+	}
+	ok = service.Internal()
 	return
 }
 

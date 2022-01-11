@@ -35,6 +35,7 @@ type AppRuntime interface {
 	Log() (log logs.Logger)
 	Validate(v interface{}) (err errors.CodeError)
 	ServiceProxy(ctx Context, namespace string) (proxy ServiceProxy, err error)
+	ServiceMeta() (meta ServiceMeta)
 	Authorizations() (authorizations Authorizations)
 	Permissions() (permissions Permissions)
 	HttpClient() (client HttpClient)
@@ -79,6 +80,74 @@ type ContextMeta interface {
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
+
+func NewServiceMeta() ServiceMeta {
+	return make(map[string]interface{})
+}
+
+type ServiceMeta map[string]interface{}
+
+func (meta ServiceMeta) Get(key string) (v interface{}, has bool) {
+	v, has = meta[key]
+	return
+}
+
+func (meta ServiceMeta) Set(key string, value interface{}) {
+	meta[key] = value
+	return
+}
+
+func (meta ServiceMeta) merge(o ServiceMeta) {
+	if o == nil || len(o) == 0 {
+		return
+	}
+	for k, v := range o {
+		meta[k] = v
+	}
+	return
+}
+
+type ServiceOption struct {
+	MetaBuilder ServiceMetaBuilder
+}
+
+type ServiceMetaBuilder func(config configuares.Config) (meta ServiceMeta, err error)
+
+func NewAbstractService() AbstractService {
+	return AbstractService{
+		option: ServiceOption{},
+		meta:   make(map[string]interface{}),
+	}
+}
+
+func NewAbstractServiceWithOption(option ServiceOption) AbstractService {
+	return AbstractService{
+		option: option,
+		meta:   make(map[string]interface{}),
+	}
+}
+
+type AbstractService struct {
+	option ServiceOption
+	meta   ServiceMeta
+}
+
+func (s AbstractService) Meta() (v ServiceMeta) {
+	v = s.meta
+	return
+}
+
+func (s AbstractService) Build(config configuares.Config) (err error) {
+	if config != nil && s.option.MetaBuilder != nil {
+		meta, metaErr := s.option.MetaBuilder(config)
+		if metaErr != nil {
+			err = metaErr
+			return metaErr
+		}
+		s.meta.merge(meta)
+	}
+	return
+}
 
 // Service
 // 管理 Fn 的服务

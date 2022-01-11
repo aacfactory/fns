@@ -40,6 +40,7 @@ type appRuntime struct {
 	authorizations Authorizations
 	permissions    Permissions
 	httpClients    *HttpClients
+	serviceMeta    ServiceMeta
 }
 
 func (app *appRuntime) ClusterMode() (ok bool) {
@@ -100,6 +101,11 @@ func (app *appRuntime) ServiceProxy(ctx Context, namespace string) (proxy Servic
 	return
 }
 
+func (app *appRuntime) ServiceMeta() (meta ServiceMeta) {
+	meta = app.serviceMeta
+	return
+}
+
 func (app *appRuntime) Authorizations() (authorizations Authorizations) {
 	authorizations = app.authorizations
 	return
@@ -115,6 +121,12 @@ func (app *appRuntime) HttpClient() (client HttpClient) {
 		client: app.httpClients.next(),
 	}
 	return
+}
+
+func WithServiceMeta(ctx Context, meta ServiceMeta) Context {
+	ctx0 := ctx.(*context)
+	ctx0.app.serviceMeta = meta
+	return ctx
 }
 
 func WithNamespace(ctx Context, namespace string) Context {

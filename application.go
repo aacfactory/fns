@@ -712,7 +712,7 @@ var (
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
 	body, _ := json.Marshal(err)
 	if err.Contains(errors.NilError()) {
-		request.SetStatusCode(444)
+		request.SetStatusCode(404)
 	} else {
 		request.SetStatusCode(err.Code())
 	}

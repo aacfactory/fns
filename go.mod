@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/aacfactory/configuares v1.3.0
-	github.com/aacfactory/errors v1.6.2
+	github.com/aacfactory/errors v1.6.3
 	github.com/aacfactory/json v1.5.0
 	github.com/aacfactory/logs v1.2.0
 	github.com/aacfactory/workers v1.2.0

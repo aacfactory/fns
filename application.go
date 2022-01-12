@@ -710,11 +710,11 @@ var (
 )
 
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
-	body, _ := json.Marshal(err)
-	if err.Contains(errors.NilError()) {
-		request.SetStatusCode(404)
-	} else {
-		request.SetStatusCode(err.Code())
+	body, encodeErr := json.Marshal(err)
+	if encodeErr != nil {
+		err = errors.Warning("encoding failed").WithCause(encodeErr)
+		sendError(request, err)
+		return
 	}
 	request.SetContentTypeBytes(jsonUTF8ContentType)
 	request.SetBody(body)

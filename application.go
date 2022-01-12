@@ -308,6 +308,14 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	// GOMAXPROCS
 	app.setGOMAXPROCS()
 
+	// services
+	runServiceErr := app.svc.Run()
+	if runServiceErr != nil {
+		err = fmt.Errorf("fns Run: run services failed, %v", runServiceErr)
+		app.stop(10 * time.Second)
+		return
+	}
+
 	// http
 	serveErr := app.serve(ctx)
 	if serveErr != nil {
@@ -317,13 +325,6 @@ func (app *application) Run(ctx sc.Context) (err error) {
 	}
 	if app.Log().DebugEnabled() {
 		app.Log().Debug().Message(fmt.Sprintf("fns Run: listen %s succeed", app.address))
-	}
-	// services
-	runServiceErr := app.svc.Run()
-	if runServiceErr != nil {
-		err = fmt.Errorf("fns Run: run services failed, %v", runServiceErr)
-		app.stop(10 * time.Second)
-		return
 	}
 
 	atomic.StoreInt64(&app.running, int64(1))
@@ -342,7 +343,7 @@ func (app *application) build(config ApplicationConfig) (err error) {
 		return
 	}
 
-	err = app.buildListener(config)
+	err = app.buildPublicAddr(config)
 	if err != nil {
 		return
 	}
@@ -360,63 +361,10 @@ func (app *application) build(config ApplicationConfig) (err error) {
 	return
 }
 
-func (app *application) buildServices(_config ApplicationConfig) (err error) {
-	config := _config.Services
-	svc := newServices(app, _config.Concurrency)
-	buildErr := svc.Build(config)
-	if buildErr != nil {
-		err = buildErr
-		return
-	}
-	app.svc = svc
-	return
-}
-
-func (app *application) buildListener(_config ApplicationConfig) (err error) {
-	// config
-	httpConfig := _config.Http
-
-	serverHost := strings.TrimSpace(httpConfig.Host)
-	if serverHost == "" {
-		serverHost = "0.0.0.0"
-	}
-	serverPort := httpConfig.Port
-	if serverPort <= 0 {
-		serverPort = 80
-	}
-	if serverPort < 1 || serverPort > 65535 {
-		err = fmt.Errorf("fns get http config failed for bad port, %v", serverPort)
-		return
-	}
-	serverAddr := fmt.Sprintf("%s:%d", serverHost, serverPort)
-
-	if httpConfig.TLS.Enable {
-		httpsConfig, httpsConfigErr := httpConfig.TLS.mapToTLS()
-		if httpsConfigErr != nil {
-			err = httpsConfigErr
-			return
-		}
-		ln, lnErr := tls.Listen("tcp", serverAddr, httpsConfig)
-		if lnErr != nil {
-			err = fmt.Errorf("fns build http server failed, %v", lnErr)
-			return
-		}
-		app.ln = ln
-		app.https = true
-	} else {
-		ln, lnErr := net.Listen("tcp", serverAddr)
-		if lnErr != nil {
-			err = fmt.Errorf("fns build http server failed, %v", lnErr)
-			return
-		}
-		app.ln = ln
-		app.https = false
-	}
-
-	app.address = serverAddr
-
+func (app *application) buildPublicAddr(_config ApplicationConfig) (err error) {
+	config := _config.Http
 	// public address
-	publicHost := strings.TrimSpace(httpConfig.PublicHost)
+	publicHost := strings.TrimSpace(config.PublicHost)
 	if publicHost == "" {
 		// from env
 		publicHost, _ = getPublicHostFromEnv()
@@ -426,20 +374,39 @@ func (app *application) buildListener(_config ApplicationConfig) (err error) {
 		}
 	}
 	if publicHost != "" {
-		publicPort := httpConfig.PublicPort
+		publicPort := config.PublicPort
 		if publicPort == 0 {
 			publicPort, _ = getPublicPortFromEnv()
 			if publicPort == 0 {
+				serverPort := config.Port
+				if serverPort <= 0 {
+					serverPort = 80
+				}
+				if serverPort < 1 || serverPort > 65535 {
+					err = fmt.Errorf("http port is invalid, %v", serverPort)
+					return
+				}
 				publicPort = serverPort
 			}
 		}
 		if publicPort < 1 || publicPort > 65535 {
-			err = fmt.Errorf("invalid public port, %v", publicPort)
+			err = fmt.Errorf("http public port is invalid, %v", publicPort)
 			return
 		}
 		app.publicAddress = fmt.Sprintf("%s:%d", publicHost, publicPort)
 	}
+	return
+}
 
+func (app *application) buildServices(_config ApplicationConfig) (err error) {
+	config := _config.Services
+	svc := newServices(app, _config.Concurrency)
+	buildErr := svc.Build(config)
+	if buildErr != nil {
+		err = buildErr
+		return
+	}
+	app.svc = svc
 	return
 }
 
@@ -509,6 +476,61 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	return
 }
 
+func (app *application) listen() (err error) {
+	// config
+	config := HttpConfig{}
+	has, configErr := app.config.Get("http", &config)
+	if !has {
+		err = fmt.Errorf("http config was not found")
+		return
+	}
+	if configErr != nil {
+		err = fmt.Errorf("get http config failed, %v", configErr)
+		return
+	}
+
+	serverHost := strings.TrimSpace(config.Host)
+	if serverHost == "" {
+		serverHost = "0.0.0.0"
+	}
+	serverPort := config.Port
+	if serverPort <= 0 {
+		serverPort = 80
+	}
+	if serverPort < 1 || serverPort > 65535 {
+		err = fmt.Errorf("fns get http config failed for bad port, %v", serverPort)
+		return
+	}
+	serverAddr := fmt.Sprintf("%s:%d", serverHost, serverPort)
+
+	if config.TLS.Enable {
+		httpsConfig, httpsConfigErr := config.TLS.mapToTLS()
+		if httpsConfigErr != nil {
+			err = httpsConfigErr
+			return
+		}
+		ln, lnErr := tls.Listen("tcp", serverAddr, httpsConfig)
+		if lnErr != nil {
+			err = fmt.Errorf("fns build http server failed, %v", lnErr)
+			return
+		}
+		app.ln = ln
+		app.https = true
+	} else {
+		ln, lnErr := net.Listen("tcp", serverAddr)
+		if lnErr != nil {
+			err = fmt.Errorf("fns build http server failed, %v", lnErr)
+			return
+		}
+		app.ln = ln
+		app.https = false
+	}
+
+	app.address = serverAddr
+
+	return
+}
+
 func (app *application) serve(ctx sc.Context) (err error) {
 
 	errCh := make(chan error, 1)
@@ -522,11 +544,19 @@ func (app *application) serve(ctx sc.Context) (err error) {
 	}
 
 	go func(a *application, errCh chan error) {
+		lnErr := a.listen()
+		if lnErr != nil {
+			errCh <- fmt.Errorf("fns http serve failed, %v", lnErr)
+			close(errCh)
+			a.stop(10 * time.Second)
+			return
+		}
 		serveErr := a.server.Serve(a.ln)
 		if serveErr != nil {
 			errCh <- fmt.Errorf("fns http serve failed, %v", serveErr)
 			close(errCh)
 			a.stop(10 * time.Second)
+			return
 		}
 	}(app, errCh)
 

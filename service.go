@@ -114,11 +114,14 @@ type ServiceOption struct {
 
 type ServiceMetaBuilder func(config configuares.Config) (meta ServiceMeta, err error)
 
+func fakeServiceMetaBuilder(config configuares.Config) (meta ServiceMeta, err error) {
+	return
+}
+
 func NewAbstractService() AbstractService {
-	return AbstractService{
-		option: ServiceOption{},
-		meta:   make(map[string]interface{}),
-	}
+	return NewAbstractServiceWithOption(ServiceOption{
+		MetaBuilder: fakeServiceMetaBuilder,
+	})
 }
 
 func NewAbstractServiceWithOption(option ServiceOption) AbstractService {

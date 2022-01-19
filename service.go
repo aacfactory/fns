@@ -25,6 +25,7 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
+	"golang.org/x/sync/singleflight"
 	"sync"
 	"time"
 )
@@ -124,12 +125,14 @@ func NewAbstractServiceWithOption(option ServiceOption) AbstractService {
 	return AbstractService{
 		option: option,
 		meta:   make(map[string]interface{}),
+		group:  new(singleflight.Group),
 	}
 }
 
 type AbstractService struct {
 	option ServiceOption
 	meta   ServiceMeta
+	group  *singleflight.Group
 }
 
 func (s AbstractService) Meta() (v ServiceMeta) {
@@ -146,6 +149,21 @@ func (s AbstractService) Build(config configuares.Config) (err error) {
 		}
 		s.meta.merge(meta)
 	}
+	return
+}
+
+func (s AbstractService) HandleInGroup(ctx Context, fn string, arg Argument, handle func() (v interface{}, err errors.CodeError)) (v interface{}, err errors.CodeError) {
+	key := fmt.Sprintf("%s:%s", fn, arg.Hash(ctx))
+	v0, err0, _ := s.group.Do(key, func() (v interface{}, err error) {
+		v, err = handle()
+		return
+	})
+	s.group.Forget(key)
+	if err0 != nil {
+		err = err0.(errors.CodeError)
+		return
+	}
+	v = v0
 	return
 }
 
@@ -166,6 +184,7 @@ type Argument interface {
 	json.Marshaler
 	json.Unmarshaler
 	As(v interface{}) (err errors.CodeError)
+	Hash(ctx Context) (p string)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

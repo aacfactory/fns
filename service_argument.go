@@ -17,6 +17,8 @@
 package fns
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 )
@@ -89,5 +91,13 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 	if decodeErr != nil {
 		err = errors.BadRequest("fns.Argument: As failed")
 	}
+	return
+}
+
+func (arg *argument) Hash(ctx Context) (p string) {
+	hash := md5.New()
+	hash.Write(*arg)
+	hash.Write([]byte(ctx.User().Id()))
+	p = hex.EncodeToString(hash.Sum(nil))
 	return
 }

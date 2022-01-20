@@ -148,7 +148,7 @@ func (s AbstractService) Build(config configuares.Config) (err error) {
 		meta, metaErr := s.option.MetaBuilder(config)
 		if metaErr != nil {
 			err = metaErr
-			return metaErr
+			return
 		}
 		s.meta.merge(meta)
 	}

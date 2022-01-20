@@ -38,32 +38,41 @@ type user struct {
 }
 
 func (u *user) Exists() (ok bool) {
-	ok = !u.principals.Empty()
+	ok = !u.attributes.Empty()
+	return
+}
+
+func (u *user) SetId(v interface{}) (err error) {
+	switch v.(type) {
+	case string:
+		_ = u.attributes.Put("id", v)
+	case int, int32, int64:
+		_ = u.attributes.Put("id", v)
+	default:
+		err = fmt.Errorf("fns: set user id failed for type is invalid, only support int or string")
+	}
 	return
 }
 
 func (u *user) Id() (id UserId) {
 	value := json.RawMessage(make([]byte, 0, 1))
-	if u.Principals().Contains("sub") {
-		_ = u.Principals().Get("sub", &value)
-	}
 	if u.Attributes().Contains("id") {
 		_ = u.Attributes().Get("id", &value)
-	}
-	if len(value) == 0 {
-		id = &userId{
-			value: "",
+		if len(value) > 0 {
+			content := ""
+			if value[0] == '"' {
+				content = string(value[1 : len(value)-1])
+			} else {
+				content = string(value)
+			}
+			id = &userId{
+				value: content,
+			}
+			return
 		}
-		return
-	}
-	content := ""
-	if value[0] == '"' {
-		content = string(value[1 : len(value)-1])
-	} else {
-		content = string(value)
 	}
 	id = &userId{
-		value: content,
+		value: "",
 	}
 	return
 }
@@ -99,7 +108,15 @@ type userId struct {
 }
 
 func (u *userId) Int() (v int) {
-	v, _ = strconv.Atoi(u.value)
+	if u.value == "" {
+		v = 0
+		return
+	}
+	n, decodeErr := strconv.Atoi(u.value)
+	if decodeErr != nil {
+		panic(fmt.Errorf("fns: decode user id in context failed, it is not int"))
+	}
+	v = n
 	return
 }
 

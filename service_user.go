@@ -19,6 +19,7 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/json"
+	"strconv"
 )
 
 func newUser(authorization []byte) (u User) {
@@ -41,14 +42,28 @@ func (u *user) Exists() (ok bool) {
 	return
 }
 
-func (u *user) Id() (id string) {
+func (u *user) Id() (id UserId) {
+	value := json.RawMessage(make([]byte, 0, 1))
 	if u.Principals().Contains("sub") {
-		_ = u.Principals().Get("sub", &id)
-		return
+		_ = u.Principals().Get("sub", &value)
 	}
 	if u.Attributes().Contains("id") {
-		_ = u.Attributes().Get("id", &id)
+		_ = u.Attributes().Get("id", &value)
+	}
+	if len(value) == 0 {
+		id = &userId{
+			value: "",
+		}
 		return
+	}
+	content := ""
+	if value[0] == '"' {
+		content = string(value[1 : len(value)-1])
+	} else {
+		content = string(value)
+	}
+	id = &userId{
+		value: content,
 	}
 	return
 }
@@ -76,5 +91,19 @@ func (u *user) Attributes() (attributes *json.Object) {
 
 func (u *user) String() (value string) {
 	value = fmt.Sprintf("User: {authorization: %s, principals: %s, attributes: %s}", string(u.authorization), string(u.principals.Raw()), string(u.attributes.Raw()))
+	return
+}
+
+type userId struct {
+	value string
+}
+
+func (u *userId) Int() (v int) {
+	v, _ = strconv.Atoi(u.value)
+	return
+}
+
+func (u *userId) String() (v string) {
+	v = u.value
 	return
 }

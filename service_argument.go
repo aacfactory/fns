@@ -97,7 +97,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 func (arg *argument) Hash(ctx Context) (p string) {
 	hash := md5.New()
 	hash.Write(*arg)
-	hash.Write([]byte(ctx.User().Id()))
+	hash.Write([]byte(ctx.User().Id().String()))
 	p = hex.EncodeToString(hash.Sum(nil))
 	return
 }

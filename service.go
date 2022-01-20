@@ -202,12 +202,17 @@ type Result interface {
 
 type User interface {
 	Exists() (ok bool)
-	Id() (id string)
+	Id() (id UserId)
 	Principals() (principal *json.Object)
 	Attributes() (attributes *json.Object)
 	Authorization() (authorization []byte, has bool)
 	SetAuthorization(authorization []byte)
 	String() (value string)
+}
+
+type UserId interface {
+	Int() (v int)
+	String() (v string)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

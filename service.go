@@ -226,7 +226,7 @@ func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetrie
 }
 
 type Authorizations interface {
-	Encode(ctx Context) (token []byte, err errors.CodeError)
+	Encode(ctx Context, claims interface{}) (token []byte, err errors.CodeError)
 	Decode(ctx Context, token []byte) (err errors.CodeError)
 }
 

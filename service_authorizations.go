@@ -22,7 +22,7 @@ import (
 
 type fakeAuthorizations struct{}
 
-func (auth *fakeAuthorizations) Encode(_ Context) (token []byte, err errors.CodeError) {
+func (auth *fakeAuthorizations) Encode(_ Context, _ interface{}) (token []byte, err errors.CodeError) {
 	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
 	return
 }

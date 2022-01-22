@@ -175,7 +175,7 @@ func (s AbstractService) HandleInGroup(ctx Context, fn string, arg Argument, han
 type Service interface {
 	Namespace() (namespace string)
 	Internal() (internal bool)
-	Build(config configuares.Config) (err error)
+	Build(context Context, config configuares.Config) (err error)
 	Document() (doc *ServiceDocument)
 	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
 	Shutdown() (err error)

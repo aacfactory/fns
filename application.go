@@ -261,7 +261,8 @@ func (app *application) Deploy(services ...Service) (err error) {
 			return
 		}
 		config, _ := app.config.Node(service.Namespace())
-		buildErr := service.Build(config)
+		ctx, _ := newContext(sc.TODO(), true, "-", []byte(""), nil, app.svc.app)
+		buildErr := service.Build(ctx, config)
 		if buildErr != nil {
 			err = fmt.Errorf("fns Deploy: service %s build failed, %v", service.Namespace(), buildErr)
 			return

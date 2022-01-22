@@ -52,6 +52,7 @@ func newServices(app *application, concurrency int) (v *services) {
 
 type services struct {
 	concurrency     int
+	app             *appRuntime
 	wp              workers.Workers
 	doc             *document
 	items           map[string]Service
@@ -181,6 +182,17 @@ func (s *services) Build(config ServicesConfig) (err error) {
 		s.permissions = &fakePermissions{}
 	}
 
+	s.app = &appRuntime{
+		clusterMode:    s.clusterMode,
+		publicAddress:  s.publicAddress,
+		appLog:         s.log,
+		validate:       s.validate,
+		discovery:      s.discovery,
+		authorizations: s.authorizations,
+		permissions:    s.permissions,
+		httpClients:    s.clients,
+	}
+
 	return
 }
 
@@ -281,16 +293,7 @@ func (s *services) Handle(action string, _payload interface{}) {
 		return
 	}
 	timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), s.fnHandleTimeout)
-	ctx, ctxErr := newContext(timeoutCtx, payload.isInnerRequest, payload.requestId, payload.authorization, payload.meta, &appRuntime{
-		clusterMode:    s.clusterMode,
-		publicAddress:  s.publicAddress,
-		appLog:         s.log,
-		validate:       s.validate,
-		discovery:      s.discovery,
-		authorizations: s.authorizations,
-		permissions:    s.permissions,
-		httpClients:    s.clients,
-	})
+	ctx, ctxErr := newContext(timeoutCtx, payload.isInnerRequest, payload.requestId, payload.authorization, payload.meta, s.app)
 	if ctxErr != nil {
 		payload.result.Failed(errors.Warning("fns Context: create context from request failed").WithCause(ctxErr))
 		cancel()

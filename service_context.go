@@ -233,6 +233,9 @@ func (ctx *context) Timeout() (has bool) {
 }
 
 func newContextMeta(p []byte) (meta *contextMeta, err error) {
+	if p == nil || len(p) == 0 {
+		p = []byte{'{', '}'}
+	}
 	obj := json.NewObject()
 	err = obj.UnmarshalJSON(p)
 	if err != nil {

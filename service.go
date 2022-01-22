@@ -112,9 +112,9 @@ type ServiceOption struct {
 	MetaBuilder ServiceMetaBuilder
 }
 
-type ServiceMetaBuilder func(config configuares.Config) (meta ServiceMeta, err error)
+type ServiceMetaBuilder func(ctx Context, config configuares.Config) (meta ServiceMeta, err error)
 
-func fakeServiceMetaBuilder(config configuares.Config) (meta ServiceMeta, err error) {
+func fakeServiceMetaBuilder(ctx Context, config configuares.Config) (meta ServiceMeta, err error) {
 	return
 }
 
@@ -143,9 +143,9 @@ func (s AbstractService) Meta() (v ServiceMeta) {
 	return
 }
 
-func (s AbstractService) Build(config configuares.Config) (err error) {
+func (s AbstractService) Build(ctx Context, config configuares.Config) (err error) {
 	if config != nil && s.option.MetaBuilder != nil {
-		meta, metaErr := s.option.MetaBuilder(config)
+		meta, metaErr := s.option.MetaBuilder(ctx, config)
 		if metaErr != nil {
 			err = metaErr
 			return

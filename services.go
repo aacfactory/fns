@@ -197,18 +197,16 @@ func (s *services) Build(config ServicesConfig) (err error) {
 }
 
 func (s *services) Run() (err error) {
-	for _, service := range s.items {
-		pubErr := s.discovery.Publish(service)
-		if pubErr != nil {
-			err = fmt.Errorf("fns Services: mount failed, %v", pubErr)
-			return
-		}
-	}
 	s.wp.Start()
 	return
 }
 
 func (s *services) Mount(service Service) (err error) {
+	pubErr := s.discovery.Publish(service)
+	if pubErr != nil {
+		err = fmt.Errorf("mount failed, %v", pubErr)
+		return
+	}
 	s.items[service.Namespace()] = service
 	if !service.Internal() {
 		doc := service.Document()

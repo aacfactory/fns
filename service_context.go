@@ -166,6 +166,12 @@ func WithFn(ctx Context, fn string) Context {
 	return ctx0
 }
 
+func WithInternalRequest(ctx Context) Context {
+	ctx0 := ctx.(*context)
+	ctx0.internal = true
+	return ctx0
+}
+
 func newContext(_ctx sc.Context, internal bool, id string, authorization []byte, metaData []byte, app *appRuntime) (ctx *context, err error) {
 	meta, metaErr := newContextMeta(metaData)
 	if metaErr != nil {

@@ -481,7 +481,7 @@ func StringObjectDocument() *ObjectDocument {
 }
 
 func BoolObjectDocument() *ObjectDocument {
-	return NewObjectDocument("builtin", "bool", "bool", "", "Bool", "Bool")
+	return NewObjectDocument("builtin", "bool", "boolean", "", "Bool", "Bool")
 }
 
 func IntObjectDocument() *ObjectDocument {

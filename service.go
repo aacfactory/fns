@@ -98,7 +98,7 @@ func (meta ServiceMeta) Set(key string, value interface{}) {
 	return
 }
 
-func (meta ServiceMeta) merge(o ServiceMeta) {
+func (meta ServiceMeta) Merge(o ServiceMeta) {
 	if o == nil || len(o) == 0 {
 		return
 	}
@@ -150,7 +150,7 @@ func (s AbstractService) Build(ctx Context, config configuares.Config) (err erro
 			err = metaErr
 			return
 		}
-		s.meta.merge(meta)
+		s.meta.Merge(meta)
 	}
 	return
 }

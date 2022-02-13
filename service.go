@@ -165,11 +165,11 @@ func (s *AbstractService) HandleInGroup(ctx Context, barrierName string, fn stri
 		return
 	}
 	key := fmt.Sprintf("%s:%s", fn, arg.Hash(ctx))
-	v0, err0, _ := barrier.Do(key, func() (v interface{}, err error) {
+	v0, err0, _ := barrier.Do(ctx, key, func() (v interface{}, err error) {
 		v, err = handle()
 		return
 	})
-	barrier.Forget(key)
+	barrier.Forget(ctx, key)
 	if err0 != nil {
 		err = err0.(errors.CodeError)
 		return

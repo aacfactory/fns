@@ -36,8 +36,8 @@ func localServiceBarrierRetriever() (b ServiceBarrier) {
 }
 
 type ServiceBarrier interface {
-	Do(key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool)
-	Forget(key string)
+	Do(ctx Context, key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool)
+	Forget(ctx Context, key string)
 }
 
 func newLocalServiceBarrier() ServiceBarrier {
@@ -50,11 +50,11 @@ type localServiceBarrier struct {
 	v *singleflight.Group
 }
 
-func (b *localServiceBarrier) Do(key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool) {
+func (b *localServiceBarrier) Do(_ Context, key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool) {
 	v, err, shared = b.v.Do(key, fn)
 	return
 }
 
-func (b *localServiceBarrier) Forget(key string) {
+func (b *localServiceBarrier) Forget(_ Context, key string) {
 	b.v.Forget(key)
 }

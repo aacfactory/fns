@@ -20,12 +20,14 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-var serviceBarrierRetrievers = map[string]ServiceBarrierRetriever{
-	"local": localServiceBarrierRetriever,
-}
+var serviceBarrierRetriever = localServiceBarrierRetriever
 
-func RegisterServiceBarrierRetriever(name string, retriever ServiceBarrierRetriever) {
-	serviceBarrierRetrievers[name] = retriever
+func RegisterServiceBarrierRetriever(retriever ServiceBarrierRetriever) {
+	if retriever == nil {
+		panic("fns: register service barrier retriever failed for retriever is nil")
+		return
+	}
+	serviceBarrierRetriever = retriever
 }
 
 type ServiceBarrierRetriever func() (b ServiceBarrier)

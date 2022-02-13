@@ -124,21 +124,17 @@ func NewAbstractService() AbstractService {
 }
 
 func NewAbstractServiceWithOption(option ServiceOption) AbstractService {
-	barriers := make(map[string]ServiceBarrier)
-	for name, retriever := range serviceBarrierRetrievers {
-		barriers[name] = retriever()
-	}
 	return AbstractService{
-		option:   option,
-		meta:     make(map[string]interface{}),
-		barriers: barriers,
+		option:  option,
+		meta:    make(map[string]interface{}),
+		barrier: serviceBarrierRetriever(),
 	}
 }
 
 type AbstractService struct {
-	option   ServiceOption
-	meta     ServiceMeta
-	barriers map[string]ServiceBarrier
+	option  ServiceOption
+	meta    ServiceMeta
+	barrier ServiceBarrier
 }
 
 func (s AbstractService) Meta() (v ServiceMeta) {
@@ -158,18 +154,13 @@ func (s AbstractService) Build(ctx Context, config configuares.Config) (err erro
 	return
 }
 
-func (s *AbstractService) HandleInGroup(ctx Context, barrierName string, fn string, arg Argument, handle func() (v interface{}, err errors.CodeError)) (v interface{}, err errors.CodeError) {
-	barrier, hasBarrier := s.barriers[barrierName]
-	if !hasBarrier {
-		err = errors.Warning(fmt.Sprintf("fns: execute %s failed, can not find %s barrier in service", fn, barrierName))
-		return
-	}
+func (s *AbstractService) HandleInGroup(ctx Context, fn string, arg Argument, handle func() (v interface{}, err errors.CodeError)) (v interface{}, err errors.CodeError) {
 	key := fmt.Sprintf("%s:%s", fn, arg.Hash(ctx))
-	v0, err0, _ := barrier.Do(ctx, key, func() (v interface{}, err error) {
+	v0, err0, _ := s.barrier.Do(ctx, key, func() (v interface{}, err error) {
 		v, err = handle()
 		return
 	})
-	barrier.Forget(ctx, key)
+	s.barrier.Forget(ctx, key)
 	if err0 != nil {
 		err = err0.(errors.CodeError)
 		return

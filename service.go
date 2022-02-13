@@ -25,7 +25,6 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
-	"golang.org/x/sync/singleflight"
 	"sync"
 	"time"
 )
@@ -125,17 +124,21 @@ func NewAbstractService() AbstractService {
 }
 
 func NewAbstractServiceWithOption(option ServiceOption) AbstractService {
+	barriers := make(map[string]ServiceBarrier)
+	for name, retriever := range serviceBarrierRetrievers {
+		barriers[name] = retriever()
+	}
 	return AbstractService{
-		option: option,
-		meta:   make(map[string]interface{}),
-		group:  new(singleflight.Group),
+		option:   option,
+		meta:     make(map[string]interface{}),
+		barriers: barriers,
 	}
 }
 
 type AbstractService struct {
-	option ServiceOption
-	meta   ServiceMeta
-	group  *singleflight.Group
+	option   ServiceOption
+	meta     ServiceMeta
+	barriers map[string]ServiceBarrier
 }
 
 func (s AbstractService) Meta() (v ServiceMeta) {
@@ -155,13 +158,18 @@ func (s AbstractService) Build(ctx Context, config configuares.Config) (err erro
 	return
 }
 
-func (s AbstractService) HandleInGroup(ctx Context, fn string, arg Argument, handle func() (v interface{}, err errors.CodeError)) (v interface{}, err errors.CodeError) {
+func (s *AbstractService) HandleInGroup(ctx Context, barrierName string, fn string, arg Argument, handle func() (v interface{}, err errors.CodeError)) (v interface{}, err errors.CodeError) {
+	barrier, hasBarrier := s.barriers[barrierName]
+	if !hasBarrier {
+		err = errors.Warning(fmt.Sprintf("fns: execute %s failed, can not find %s barrier in service", fn, barrierName))
+		return
+	}
 	key := fmt.Sprintf("%s:%s", fn, arg.Hash(ctx))
-	v0, err0, _ := s.group.Do(key, func() (v interface{}, err error) {
+	v0, err0, _ := barrier.Do(key, func() (v interface{}, err error) {
 		v, err = handle()
 		return
 	})
-	s.group.Forget(key)
+	barrier.Forget(key)
 	if err0 != nil {
 		err = err0.(errors.CodeError)
 		return

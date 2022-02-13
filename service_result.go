@@ -96,11 +96,18 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 			// empty
 			return
 		}
-		decodeErr := json.Unmarshal(data[1:], v)
-		if decodeErr != nil {
-			err = errors.Map(decodeErr)
-			return
+		switch v.(type) {
+		case *[]byte:
+			vv := v.(*[]byte)
+			*vv = append(*vv, data[1:]...)
+		default:
+			decodeErr := json.Unmarshal(data[1:], v)
+			if decodeErr != nil {
+				err = errors.Map(decodeErr)
+				return
+			}
 		}
+
 	}
 	return
 }
@@ -154,10 +161,16 @@ func (r *syncResult) Get(_ sc.Context, v interface{}) (err errors.CodeError) {
 	if r.data == nil {
 		return
 	}
-	decodeErr := json.Unmarshal(r.data, v)
-	if decodeErr != nil {
-		err = errors.Map(decodeErr)
-		return
+	switch v.(type) {
+	case *[]byte:
+		vv := v.(*[]byte)
+		*vv = append(*vv, r.data...)
+	default:
+		decodeErr := json.Unmarshal(r.data, v)
+		if decodeErr != nil {
+			err = errors.Map(decodeErr)
+			return
+		}
 	}
 	return
 }

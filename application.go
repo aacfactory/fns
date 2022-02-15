@@ -747,6 +747,7 @@ func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
 		sendError(request, err)
 		return
 	}
+	request.SetStatusCode(err.Code())
 	request.SetContentTypeBytes(jsonUTF8ContentType)
 	request.SetBody(body)
 }

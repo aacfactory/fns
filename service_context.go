@@ -232,6 +232,18 @@ func (ctx *context) Timeout() (has bool) {
 	return
 }
 
+func (ctx *context) Fork() (v Context) {
+	v = &context{
+		Context:  sc.TODO(),
+		id:       UID(),
+		internal: ctx.internal,
+		user:     ctx.user,
+		meta:     ctx.meta.fork(),
+		app:      ctx.app,
+	}
+	return
+}
+
 func newContextMeta(p []byte) (meta *contextMeta, err error) {
 	if p == nil || len(p) == 0 {
 		p = []byte{'{', '}'}

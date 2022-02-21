@@ -51,6 +51,7 @@ type Context interface {
 	Meta() (meta ContextMeta)
 	Timeout() (has bool)
 	App() (app AppRuntime)
+	Fork() (v Context)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

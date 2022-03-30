@@ -53,6 +53,19 @@ const (
 	EB
 )
 
+var (
+	jsonUTF8ContentType   = []byte("application/json;charset=utf-8")
+	emptyJson             = []byte("{}")
+	healthCheckPath       = "/health"
+	documentsPath         = "/_documents"
+	documentsOASPath      = "/_documents.json"
+	pathSplitter          = []byte("/")
+	authorizationHeader   = []byte("Authorization")
+	requestIdHeader       = []byte("X-Fns-Request-Id")
+	requestSignHeader     = []byte("X-Fns-Signature")
+	responseLatencyHeader = []byte("X-Fns-Latency")
+)
+
 type Application interface {
 	Log() (log logs.Logger)
 	Deploy(service ...Service) (err error)
@@ -672,7 +685,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 				sendError(request, errors.BadRequest("fns Http: request body must be json content"))
 				return
 			}
-			meta = emptyMeta
+			meta = emptyJson
 		}
 
 		// request
@@ -714,31 +727,6 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 	}
 
 }
-
-var (
-	jsonUTF8ContentType = []byte("application/json;charset=utf-8")
-
-	emptyBody = []byte("{}")
-	emptyMeta = []byte("{}")
-
-	healthCheckPath = "/health"
-
-	documentsPath = "/_documents"
-
-	documentsOASPath = "/_documents.json"
-
-	pathSplitter = []byte("/")
-
-	authorizationHeader = []byte("Authorization")
-
-	requestIdHeader = []byte("X-Fns-Request-Id")
-
-	requestSignHeader = []byte("X-Fns-Signature")
-
-	responseLatencyHeader = []byte("X-Fns-Latency")
-
-	nullJson = []byte("null")
-)
 
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {
 	body, encodeErr := json.Marshal(err)

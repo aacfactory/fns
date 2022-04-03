@@ -23,7 +23,7 @@ import (
 )
 
 type HookUnit struct {
-	Namespace     string
+	Service       string
 	FnName        string
 	RequestId     string
 	Authorization []byte

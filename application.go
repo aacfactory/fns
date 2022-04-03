@@ -27,6 +27,8 @@ import (
 	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/fasthttp/router"
+	"github.com/fasthttp/websocket"
 	"github.com/go-playground/validator/v10"
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
@@ -197,10 +199,18 @@ func New(options ...Option) (app Application, err error) {
 		requestCounter: sync.WaitGroup{},
 		ln:             nil,
 		server:         nil,
-		hasHook:        false,
-		hookUnitCh:     nil,
-		hookStopCh:     nil,
-		hooks:          opt.Hooks,
+		websocketUpgrader: &websocket.FastHTTPUpgrader{
+			ReadBufferSize:    4096,
+			WriteBufferSize:   4096,
+			EnableCompression: true,
+			CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
+				return true
+			},
+		},
+		hasHook:    false,
+		hookUnitCh: nil,
+		hookStopCh: nil,
+		hooks:      opt.Hooks,
 	}
 
 	// build
@@ -228,32 +238,33 @@ type appLicense struct {
 }
 
 type application struct {
-	id             string
-	name           string
-	description    string
-	terms          string
-	contact        *appContact
-	license        *appLicense
-	version        string
-	address        string
-	publicAddress  string
-	https          bool
-	minPROCS       int
-	maxPROCS       int
-	undoMAXPROCS   func()
-	running        int64
-	config         configuares.Config
-	log            logs.Logger
-	validate       *validator.Validate
-	svc            *services
-	docSync        singleflight.Group
-	requestCounter sync.WaitGroup
-	ln             net.Listener
-	server         *fasthttp.Server
-	hasHook        bool
-	hookUnitCh     chan *HookUnit
-	hookStopCh     chan chan struct{}
-	hooks          []Hook
+	id                string
+	name              string
+	description       string
+	terms             string
+	contact           *appContact
+	license           *appLicense
+	version           string
+	address           string
+	publicAddress     string
+	https             bool
+	minPROCS          int
+	maxPROCS          int
+	undoMAXPROCS      func()
+	running           int64
+	config            configuares.Config
+	log               logs.Logger
+	validate          *validator.Validate
+	svc               *services
+	docSync           singleflight.Group
+	requestCounter    sync.WaitGroup
+	ln                net.Listener
+	server            *fasthttp.Server
+	websocketUpgrader *websocket.FastHTTPUpgrader
+	hasHook           bool
+	hookUnitCh        chan *HookUnit
+	hookStopCh        chan chan struct{}
+	hooks             []Hook
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -431,7 +442,7 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	reduceMemoryUsage := _config.Services.ReduceMemoryUsage
 
 	// server
-	requestHandler := fasthttp.CompressHandler(app.handleHttpRequest)
+	requestHandler := fasthttp.CompressHandler(app.httpRouter().Handler)
 	if config.Cors.Enable {
 		config.Cors.fill()
 		requestHandler = newCors(config.Cors).handler(requestHandler)
@@ -583,6 +594,125 @@ func (app *application) serve(ctx sc.Context) (err error) {
 	return
 }
 
+func (app *application) httpRouter() (r *router.Router) {
+	r = router.New()
+	r.GET("/health", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+		ctx.SetStatusCode(200)
+		ctx.SetContentTypeBytes(jsonUTF8ContentType)
+		ctx.SetBody([]byte(fmt.Sprintf("{\"name\": \"%s\", \"version\": \"%s\"}", app.name, app.version)))
+	}))
+	r.GET("/_documents", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+		ctx.SetStatusCode(200)
+		ctx.SetContentTypeBytes(jsonUTF8ContentType)
+		ctx.SetBody(json.UnsafeMarshal(app.svc.doc))
+	}))
+	r.GET("/_documents.json", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+		ctx.SetStatusCode(200)
+		ctx.SetContentTypeBytes(jsonUTF8ContentType)
+		ctx.SetBody(app.svc.doc.mapToOpenApi())
+	}))
+	r.GET("/{service}/{fn}", func(ctx *fasthttp.RequestCtx) {
+		// todo check http schema
+		app.websocketUpgrader.Upgrade(ctx, func(conn *websocket.Conn) {
+
+		})
+	})
+	r.POST("/{service}/{fn}", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+		app.requestCounter.Add(1)
+		defer app.requestCounter.Done()
+		service := ctx.UserValue("service").(string)
+		fn := ctx.UserValue("fn").(string)
+		// authorization
+		authorization := ctx.Request.Header.PeekBytes(authorizationHeader)
+		if authorization == nil {
+			authorization = make([]byte, 0, 1)
+		}
+		// requestId
+		requestId := ""
+
+		isInnerRequest := false
+		contentType := ctx.Request.Header.ContentType()
+		if contentType != nil && len(contentType) > 0 {
+			isInnerRequest = bytes.Equal(fnsProxyContentType, contentType)
+		}
+		var arg Argument
+		var argErr error
+		var meta []byte
+		if isInnerRequest {
+			signHeader := ctx.Request.Header.PeekBytes(requestSignHeader)
+			if signHeader == nil || len(signHeader) == 0 {
+				sendError(ctx, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", service, fn)))
+				return
+			}
+			requestId = string(ctx.Request.Header.PeekBytes(requestIdHeader))
+			body := ctx.PostBody()
+			buf := bytebufferpool.Get()
+			_, _ = buf.WriteString(requestId)
+			_, _ = buf.Write(body)
+			signedTarget := buf.Bytes()
+			bytebufferpool.Put(buf)
+			if !secret.Verify(signedTarget, signHeader, secretKey) {
+				sendError(ctx, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", service, fn)))
+				return
+			}
+			metaValue, argValue := proxyMessageDecode(body)
+			arg, argErr = NewArgument(argValue)
+			if argErr != nil {
+				sendError(ctx, errors.BadRequest("fns Http: request body must be json content"))
+				return
+			}
+			meta = metaValue
+		} else {
+			requestId = UID()
+			arg, argErr = NewArgument(ctx.PostBody())
+			if argErr != nil {
+				sendError(ctx, errors.BadRequest("fns Http: request body must be json content"))
+				return
+			}
+			meta = emptyJson
+		}
+
+		// request
+		handleBeg := time.Now()
+		result := app.svc.Request(isInnerRequest, requestId, meta, authorization, service, fn, arg)
+		latency := time.Now().Sub(handleBeg)
+		data := json.RawMessage{}
+		handleErr := result.Get(sc.TODO(), &data)
+		if handleErr != nil {
+			ctx.Response.Header.SetBytesK(requestIdHeader, requestId)
+			ctx.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
+			sendError(ctx, handleErr)
+			return
+		}
+		ctx.SetStatusCode(200)
+		ctx.SetContentTypeBytes(jsonUTF8ContentType)
+		ctx.Response.Header.SetBytesK(requestIdHeader, requestId)
+		ctx.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
+		if len(data) > 0 {
+			ctx.SetBody(data)
+		}
+
+		// hook
+		if app.hasHook {
+			unit := &HookUnit{}
+			unit.Service = service
+			unit.FnName = fn
+			unit.RequestId = requestId
+			unit.Authorization = authorization
+			unit.RequestSize = int64(len(ctx.PostBody()))
+			unit.ResponseSize = int64(len(data))
+			unit.Latency = latency
+			unit.HandleError = handleErr
+			app.hookUnitCh <- unit
+		}
+
+	}))
+	r.NotFound = func(ctx *fasthttp.RequestCtx) {
+		sendError(ctx, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
+	}
+	return
+}
+
 func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 	if atomic.LoadInt64(&app.running) != int64(1) {
 		sendError(request, errors.New(555, "***WARNING***", "fns Http: fns is not ready or closing"))
@@ -711,7 +841,7 @@ func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
 		// hook
 		if app.hasHook {
 			unit := &HookUnit{}
-			unit.Namespace = namespace
+			unit.Service = namespace
 			unit.FnName = fn
 			unit.RequestId = requestId
 			unit.Authorization = authorization

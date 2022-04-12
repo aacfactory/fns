@@ -442,7 +442,7 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 	reduceMemoryUsage := _config.Services.ReduceMemoryUsage
 
 	// server
-	requestHandler := fasthttp.CompressHandler(app.httpRouter().Handler)
+	requestHandler := app.httpRouter().Handler
 	if config.Cors.Enable {
 		config.Cors.fill()
 		requestHandler = newCors(config.Cors).handler(requestHandler)

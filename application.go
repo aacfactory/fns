@@ -179,38 +179,31 @@ func New(options ...Option) (app Application, err error) {
 	}
 
 	app0 := &application{
-		id:             UID(),
-		name:           name,
-		description:    description,
-		terms:          terms,
-		contact:        contact,
-		license:        license,
-		version:        opt.Version,
-		address:        "",
-		publicAddress:  "",
-		https:          false,
-		minPROCS:       opt.MinPROCS,
-		maxPROCS:       opt.MaxPROCS,
-		running:        0,
-		config:         config,
-		log:            log,
-		validate:       validate,
-		svc:            nil,
-		requestCounter: sync.WaitGroup{},
-		ln:             nil,
-		server:         nil,
-		websocketUpgrader: &websocket.FastHTTPUpgrader{
-			ReadBufferSize:    4096,
-			WriteBufferSize:   4096,
-			EnableCompression: true,
-			CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
-				return true
-			},
-		},
-		hasHook:    false,
-		hookUnitCh: nil,
-		hookStopCh: nil,
-		hooks:      opt.Hooks,
+		id:                UID(),
+		name:              name,
+		description:       description,
+		terms:             terms,
+		contact:           contact,
+		license:           license,
+		version:           opt.Version,
+		address:           "",
+		publicAddress:     "",
+		https:             false,
+		minPROCS:          opt.MinPROCS,
+		maxPROCS:          opt.MaxPROCS,
+		running:           0,
+		config:            config,
+		log:               log,
+		validate:          validate,
+		svc:               nil,
+		requestCounter:    sync.WaitGroup{},
+		ln:                nil,
+		server:            nil,
+		websocketUpgrader: nil,
+		hasHook:           false,
+		hookUnitCh:        nil,
+		hookStopCh:        nil,
+		hooks:             opt.Hooks,
 	}
 
 	// build
@@ -238,33 +231,34 @@ type appLicense struct {
 }
 
 type application struct {
-	id                string
-	name              string
-	description       string
-	terms             string
-	contact           *appContact
-	license           *appLicense
-	version           string
-	address           string
-	publicAddress     string
-	https             bool
-	minPROCS          int
-	maxPROCS          int
-	undoMAXPROCS      func()
-	running           int64
-	config            configuares.Config
-	log               logs.Logger
-	validate          *validator.Validate
-	svc               *services
-	docSync           singleflight.Group
-	requestCounter    sync.WaitGroup
-	ln                net.Listener
-	server            *fasthttp.Server
-	websocketUpgrader *websocket.FastHTTPUpgrader
-	hasHook           bool
-	hookUnitCh        chan *HookUnit
-	hookStopCh        chan chan struct{}
-	hooks             []Hook
+	id                       string
+	name                     string
+	description              string
+	terms                    string
+	contact                  *appContact
+	license                  *appLicense
+	version                  string
+	address                  string
+	publicAddress            string
+	https                    bool
+	minPROCS                 int
+	maxPROCS                 int
+	undoMAXPROCS             func()
+	running                  int64
+	config                   configuares.Config
+	log                      logs.Logger
+	validate                 *validator.Validate
+	svc                      *services
+	docSync                  singleflight.Group
+	requestCounter           sync.WaitGroup
+	ln                       net.Listener
+	server                   *fasthttp.Server
+	websocketUpgrader        *websocket.FastHTTPUpgrader
+	websocketConnectionAgent WebsocketConnectionAgent
+	hasHook                  bool
+	hookUnitCh               chan *HookUnit
+	hookStopCh               chan chan struct{}
+	hooks                    []Hook
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -472,7 +466,14 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 			writeBufferSize = int(bs0)
 		}
 	}
-
+	// websocket
+	upgrader, upgraderErr := config.Websocket.upgrader()
+	if upgraderErr != nil {
+		err = upgraderErr
+		return
+	}
+	app.websocketUpgrader = upgrader
+	// server
 	app.server = &fasthttp.Server{
 		Handler:         requestHandler,
 		ReadBufferSize:  readBufferSize,
@@ -611,11 +612,14 @@ func (app *application) httpRouter() (r *router.Router) {
 		ctx.SetContentTypeBytes(jsonUTF8ContentType)
 		ctx.SetBody(app.svc.doc.mapToOpenApi())
 	}))
-	r.GET("/{service}/{fn}", func(ctx *fasthttp.RequestCtx) {
+	r.GET("/websocket", func(ctx *fasthttp.RequestCtx) {
 		// todo check http schema
-		app.websocketUpgrader.Upgrade(ctx, func(conn *websocket.Conn) {
-
+		upgradeErr := app.websocketUpgrader.Upgrade(ctx, func(conn *websocket.Conn) {
+			handleWebsocketConnection(conn, app.svc, app.websocketConnectionAgent)
 		})
+		if upgradeErr != nil {
+			sendError(ctx, errors.New(555, "***WARNING***", "fns Http: upgrade the HTTP server connection to the WebSocket protocol failed").WithCause(upgradeErr))
+		}
 	})
 	r.POST("/{service}/{fn}", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
 		app.requestCounter.Add(1)

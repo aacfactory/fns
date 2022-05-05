@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/fns/commons"
+	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
 	"io/ioutil"
 	"net/url"
@@ -69,19 +70,80 @@ type ApplicationConfig struct {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HttpConfig struct {
-	Host                     string        `json:"host,omitempty"`
-	Port                     int           `json:"port,omitempty"`
-	PublicHost               string        `json:"publicHost,omitempty"`
-	PublicPort               int           `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int           `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int           `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool          `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int           `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int           `json:"requestTimeoutSeconds,omitempty"`
-	ReadBufferSize           string        `json:"readBufferSize"`
-	WriteBufferSize          string        `json:"writeBufferSize"`
-	Cors                     CorsConfig    `json:"cors"`
-	TLS                      HttpTlsConfig `json:"tls,omitempty"`
+	Host                     string          `json:"host,omitempty"`
+	Port                     int             `json:"port,omitempty"`
+	PublicHost               string          `json:"publicHost,omitempty"`
+	PublicPort               int             `json:"publicPort,omitempty"`
+	MaxConnectionsPerIP      int             `json:"maxConnectionsPerIp,omitempty"`
+	MaxRequestsPerConnection int             `json:"maxRequestsPerConnection,omitempty"`
+	KeepAlive                bool            `json:"keepAlive,omitempty"`
+	KeepalivePeriodSecond    int             `json:"keepalivePeriodSecond,omitempty"`
+	RequestTimeoutSeconds    int             `json:"requestTimeoutSeconds,omitempty"`
+	ReadBufferSize           string          `json:"readBufferSize"`
+	WriteBufferSize          string          `json:"writeBufferSize"`
+	Cors                     CorsConfig      `json:"cors"`
+	TLS                      HttpTlsConfig   `json:"tls,omitempty"`
+	Websocket                WebsocketConfig `json:"websocket"`
+}
+
+type WebsocketConfig struct {
+	HandshakeTimeoutSeconds int      `json:"handshakeTimeoutSeconds"`
+	ReadBufferSize          string   `json:"readBufferSize"`
+	WriteBufferSize         string   `json:"writeBufferSize"`
+	EnableOrigins           []string `json:"enableOrigins"`
+	EnableCompression       bool     `json:"enableCompression"`
+}
+
+func (config WebsocketConfig) upgrader() (v *websocket.FastHTTPUpgrader, err error) {
+	readBufferSize := 4096
+	if config.ReadBufferSize != "" {
+		bs := strings.ToUpper(strings.TrimSpace(config.ReadBufferSize))
+		if bs != "" {
+			bs0, bsErr := commons.ToBytes(bs)
+			if bsErr != nil {
+				err = fmt.Errorf("fns Build: invalid websocket readBufferSize in config")
+				return
+			}
+			readBufferSize = int(bs0)
+		}
+	}
+	writeBufferSize := 4 * MB
+	if config.WriteBufferSize != "" {
+		bs := strings.ToUpper(strings.TrimSpace(config.WriteBufferSize))
+		if bs != "" {
+			bs0, bsErr := commons.ToBytes(bs)
+			if bsErr != nil {
+				err = fmt.Errorf("fns Build: invalid websocket writeBufferSize in config")
+				return
+			}
+			writeBufferSize = int(bs0)
+		}
+	}
+	v = &websocket.FastHTTPUpgrader{
+		ReadBufferSize:    readBufferSize,
+		WriteBufferSize:   writeBufferSize,
+		EnableCompression: config.EnableCompression,
+		CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
+			if config.EnableOrigins == nil || len(config.EnableOrigins) == 0 {
+				return false
+			}
+			if config.EnableOrigins[0] == "*" {
+				return true
+			}
+			originBytes := ctx.Request.Header.PeekBytes(requestOriginHeader)
+			if originBytes == nil || len(originBytes) == 0 {
+				return false
+			}
+			origin := string(originBytes)
+			for _, enableOrigin := range config.EnableOrigins {
+				if enableOrigin == origin {
+					return true
+				}
+			}
+			return false
+		},
+	}
+	return
 }
 
 type HttpTlsConfig struct {

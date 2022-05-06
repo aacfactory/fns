@@ -231,34 +231,34 @@ type appLicense struct {
 }
 
 type application struct {
-	id                       string
-	name                     string
-	description              string
-	terms                    string
-	contact                  *appContact
-	license                  *appLicense
-	version                  string
-	address                  string
-	publicAddress            string
-	https                    bool
-	minPROCS                 int
-	maxPROCS                 int
-	undoMAXPROCS             func()
-	running                  int64
-	config                   configuares.Config
-	log                      logs.Logger
-	validate                 *validator.Validate
-	svc                      *services
-	docSync                  singleflight.Group
-	requestCounter           sync.WaitGroup
-	ln                       net.Listener
-	server                   *fasthttp.Server
-	websocketUpgrader        *websocket.FastHTTPUpgrader
-	websocketConnectionAgent WebsocketConnectionAgent
-	hasHook                  bool
-	hookUnitCh               chan *HookUnit
-	hookStopCh               chan chan struct{}
-	hooks                    []Hook
+	id                   string
+	name                 string
+	description          string
+	terms                string
+	contact              *appContact
+	license              *appLicense
+	version              string
+	address              string
+	publicAddress        string
+	https                bool
+	minPROCS             int
+	maxPROCS             int
+	undoMAXPROCS         func()
+	running              int64
+	config               configuares.Config
+	log                  logs.Logger
+	validate             *validator.Validate
+	svc                  *services
+	docSync              singleflight.Group
+	requestCounter       sync.WaitGroup
+	ln                   net.Listener
+	server               *fasthttp.Server
+	websocketUpgrader    *websocket.FastHTTPUpgrader
+	websocketConnections WebsocketConnections
+	hasHook              bool
+	hookUnitCh           chan *HookUnit
+	hookStopCh           chan chan struct{}
+	hooks                []Hook
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -473,6 +473,7 @@ func (app *application) buildHttpServer(_config ApplicationConfig) (err error) {
 		return
 	}
 	app.websocketUpgrader = upgrader
+	app.websocketConnections = websocketConnectionsRetriever()
 	// server
 	app.server = &fasthttp.Server{
 		Handler:         requestHandler,

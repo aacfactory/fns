@@ -17,78 +17,144 @@
 package fns
 
 import (
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
 	"github.com/fasthttp/websocket"
 	"io"
 )
 
-type WebsocketConnection interface {
-	Read() (p []byte, closed bool, err error)
-	Write(p []byte) (err error)
-	Close() (err error)
+type WebsocketConnectionProxy interface {
+	Write(ctx Context, response *WebsocketResponse) (err error)
 }
 
-type WebsocketContext interface {
-	Context
-	ConnectionId() (id string)
-	Write(p []byte) (err error)
-	WriteTo(socketId string, p []byte) (err error)
-	Close() (err error)
+type WebsocketConnections interface {
+	// 在这里进行监听消息
+	Register(ctx Context, conn WebsocketConnection) (err error)
+	Deregister(ctx Context, conn WebsocketConnection) (err error)
+	Proxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error)
 }
 
-func WithWebsocket(ctx Context, connection WebsocketConnection) (wsCtx WebsocketContext) {
+var websocketConnectionsRetriever = localWebsocketConnectionsRetriever
 
+type WebsocketConnectionsRetriever func() (v WebsocketConnections)
+
+func localWebsocketConnectionsRetriever() (v WebsocketConnections) {
+	v = newLocalWebsocketConnections()
 	return
 }
 
-func MapToWebsocketContext(ctx Context) (wsCtx WebsocketContext, ok bool) {
+const (
+	contextWebsocketConnectionsKey = "_websocket_"
+)
 
+func WithWebsocket(ctx Context, connections WebsocketConnections) Context {
+	ctx.App().ServiceMeta().Set(contextWebsocketConnectionsKey, connections)
+	return ctx
+}
+
+func GetWebsocketConnectionProxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error) {
+	connections0, hasConnections := ctx.App().ServiceMeta().Get(contextWebsocketConnectionsKey)
+	if !hasConnections {
+		err = errors.Warning("there is no websocket in context")
+		return
+	}
+	connections, ok := connections0.(WebsocketConnections)
+	if !ok {
+		err = errors.Warning("type of websocket in context is not fns.WebsocketConnections")
+		return
+	}
+	proxy, has, err = connections.Proxy(ctx, id)
 	return
 }
 
-type WebsocketConnectionAgent interface {
-	ConnectionId() string
-	Register() (err error)
-	Deregister() (err error)
-	Send(ctx Context, p []byte) (err error)
+type WebsocketRequest struct {
+	Authorization string            `json:"authorization"`
+	Service       string            `json:"service"`
+	Fn            string            `json:"fn"`
+	Meta          map[string]string `json:"meta"`
+	Argument      json.RawMessage   `json:"argument"`
 }
 
-func newLocalWebsocketConnectionAgent() {
-
+func (r *WebsocketRequest) DecodeArgument(v interface{}) (err error) {
+	err = json.Unmarshal(r.Argument, v)
+	return
 }
 
-type localWebsocketConnectionProxy struct {
+type WebsocketResponse struct {
+	Succeed bool             `json:"succeed"`
+	Error   errors.CodeError `json:"error"`
+	Data    interface{}      `json:"data"`
 }
 
-func handleWebsocketConnection(conn *websocket.Conn, svc *services, proxy WebsocketConnectionAgent) {
+func newWebsocketConnection(conn *websocket.Conn, svc *services) *WebsocketConnection {
+	return &WebsocketConnection{
+		id:   UID(),
+		conn: conn,
+		svc:  svc,
+	}
+}
 
-	// 全在这里处理，fn中使用WithSocketDestinations([]id)来发送定向结果，当有定向时且正确时，当前链接返回空。
+type WebsocketConnection struct {
+	id   string
+	conn *websocket.Conn
+	svc  *services
+}
 
-	// 使用GetWebsocketConnectionId(ctx)来获取链接id。
+func (conn *WebsocketConnection) Id() string {
+	return conn.id
+}
 
-	socketId := UID()
-	// proxy
-
+func (conn *WebsocketConnection) Handle() (err error) {
 	for {
-		messageType, reader, nextReaderErr := conn.NextReader()
-		if nextReaderErr != nil {
-			if nextReaderErr != io.EOF {
-				if svc.log.ErrorEnabled() {
-					svc.log.Error().Cause(nextReaderErr).With("websocket", "next_reader").Message("fns Http: websocket get reader failed")
-				}
-			}
+		request := &WebsocketRequest{}
+		readErr := conn.conn.ReadJSON(request)
+		if readErr == io.ErrUnexpectedEOF {
 			break
 		}
+		// handle service
+		// write response
 
-		if messageType == websocket.TextMessage {
-			r = &validator{r: r}
-		}
 	}
-	// wait proxy close
-
-	_ = conn.Close()
+	return
 }
 
-type WebsocketHandler struct {
-	socketId string
-	svc      *services
+func (conn *WebsocketConnection) Close() (err error) {
+	err = conn.conn.Close()
+	return
+}
+
+func (conn *WebsocketConnection) Write(response *WebsocketResponse) (err error) {
+	if response == nil {
+		return
+	}
+	p, encodeErr := json.Marshal(response)
+	if encodeErr != nil {
+		err = encodeErr
+		return
+	}
+	err = conn.conn.WriteMessage(websocket.TextMessage, p)
+	return
+}
+
+func newLocalWebsocketConnections() (v WebsocketConnections) {
+
+	return
+}
+
+type localWebsocketConnections struct {
+}
+
+func (wcs *localWebsocketConnections) Register(ctx Context, conn WebsocketConnection) (err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wcs *localWebsocketConnections) Deregister(ctx Context, conn WebsocketConnection) (err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wcs *localWebsocketConnections) Proxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error) {
+	//TODO implement me
+	panic("implement me")
 }

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"github.com/go-playground/validator/v10"
@@ -279,20 +278,20 @@ func (s *services) Handle(action string, _payload interface{}) {
 		payload.result.Failed(errors.Unavailable("fns Services: not fn request"))
 		return
 	}
-	// proxy
-	proxy, proxyErr := s.discovery.Proxy(payload.ctx, payload.namespace)
-	if proxyErr != nil {
-		payload.result.Failed(proxyErr)
+	service, has := s.items[payload.namespace]
+	if !has {
+		payload.result.Failed(errors.Unavailable("fns Services: service was not found"))
 		return
 	}
-	// request
-	r := proxy.Request(payload.ctx, payload.fn, payload.argument)
-	raw := json.RawMessage{}
-	err := r.Get(payload.ctx, &raw)
-	if err != nil {
-		payload.result.Failed(err)
+	ctx := WithNamespace(payload.ctx, service.Namespace())
+	result, handErr := service.Handle(ctx, payload.fn, payload.argument)
+	if handErr != nil {
+		payload.result.Failed(handErr)
 	} else {
-		payload.result.Succeed(raw)
+		if result == nil {
+			result = &Empty{}
+		}
+		payload.result.Succeed(result)
 	}
 }
 

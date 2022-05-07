@@ -147,7 +147,7 @@ func (conn *WebsocketConnection) Handle() (err error) {
 			return
 		}
 		// handle service
-		result := conn.svc.Request(ctx, request.Service, request.Fn, arg)
+		result := conn.svc.Request(WithWebsocket(ctx, conn.conns), request.Service, request.Fn, arg)
 		response := &WebsocketResponse{}
 		data := json.RawMessage{}
 		handleErr := result.Get(ctx, &data)

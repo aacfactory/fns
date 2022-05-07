@@ -59,9 +59,9 @@ var (
 	jsonUTF8ContentType   = []byte("application/json;charset=utf-8")
 	emptyJson             = []byte("{}")
 	healthCheckPath       = "/health"
-	documentsPath         = "/_documents"
-	documentsOASPath      = "/_documents.json"
-	pathSplitter          = []byte("/")
+	servicesPath          = "/services"
+	oasPath               = "/oas.json"
+	websocketPath         = "/websocket"
 	authorizationHeader   = []byte("Authorization")
 	requestIdHeader       = []byte("X-Fns-Request-Id")
 	requestSignHeader     = []byte("X-Fns-Signature")
@@ -587,22 +587,22 @@ func (app *application) serve(_ sc.Context) (err error) {
 
 func (app *application) httpRouter() (r *router.Router) {
 	r = router.New()
-	r.GET("/health", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+	r.GET(healthCheckPath, fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(200)
 		ctx.SetContentTypeBytes(jsonUTF8ContentType)
 		ctx.SetBody([]byte(fmt.Sprintf("{\"name\": \"%s\", \"version\": \"%s\"}", app.name, app.version)))
 	}))
-	r.GET("/_documents", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+	r.GET(servicesPath, fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(200)
 		ctx.SetContentTypeBytes(jsonUTF8ContentType)
 		ctx.SetBody(json.UnsafeMarshal(app.svc.doc))
 	}))
-	r.GET("/_documents.json", fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
+	r.GET(oasPath, fasthttp.CompressHandler(func(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(200)
 		ctx.SetContentTypeBytes(jsonUTF8ContentType)
 		ctx.SetBody(app.svc.doc.mapToOpenApi())
 	}))
-	r.GET("/websocket", func(ctx *fasthttp.RequestCtx) {
+	r.GET(websocketPath, func(ctx *fasthttp.RequestCtx) {
 		// todo check http schema
 		upgradeErr := app.websocketUpgrader.Upgrade(ctx, func(conn *websocket.Conn) {
 			connection, connErr := newWebsocketConnection(conn, app.svc, app.websocketConnections)

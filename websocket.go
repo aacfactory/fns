@@ -55,7 +55,7 @@ func WithWebsocket(ctx Context, connections WebsocketConnections) Context {
 	return ctx
 }
 
-func GetWebsocketConnectionProxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error) {
+func GetWebsocketConnectionProxy(ctx Context, requestId string) (proxy WebsocketConnectionProxy, has bool, err error) {
 	connections0, hasConnections := ctx.App().ServiceMeta().Get(contextWebsocketConnectionsKey)
 	if !hasConnections {
 		err = errors.Warning("there is no websocket in context")
@@ -66,7 +66,7 @@ func GetWebsocketConnectionProxy(ctx Context, id string) (proxy WebsocketConnect
 		err = errors.Warning("type of websocket in context is not fns.WebsocketConnections")
 		return
 	}
-	proxy, has, err = connections.Proxy(ctx, id)
+	proxy, has, err = connections.Proxy(ctx, requestId)
 	return
 }
 

@@ -41,7 +41,10 @@ type LocaledServiceProxy struct {
 
 func (proxy *LocaledServiceProxy) Request(ctx Context, fn string, argument Argument) (result Result) {
 	result = SyncResult()
-	ctx = WithInternalRequest(WithNamespace(ctx, proxy.service.Namespace()))
+	if ctx.InternalRequested() {
+		ctx = WithInternalRequest(ctx)
+	}
+	ctx = WithNamespace(ctx, proxy.service.Namespace())
 	v, err := proxy.service.Handle(ctx, fn, argument)
 	if err != nil {
 		result.Failed(err)

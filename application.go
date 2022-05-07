@@ -558,41 +558,30 @@ func (app *application) listen() (err error) {
 	return
 }
 
-func (app *application) serve(ctx sc.Context) (err error) {
-
+func (app *application) serve(_ sc.Context) (err error) {
 	errCh := make(chan error, 1)
-	var cancel sc.CancelFunc
-
-	_, hasDeadline := ctx.Deadline()
-	if !hasDeadline {
-		ctx, cancel = sc.WithTimeout(ctx, 1*time.Second)
-	} else {
-		ctx, cancel = sc.WithCancel(ctx)
-	}
-
 	go func(a *application, errCh chan error) {
 		lnErr := a.listen()
 		if lnErr != nil {
 			errCh <- fmt.Errorf("fns http serve failed, %v", lnErr)
 			close(errCh)
-			a.stop(10 * time.Second)
+			a.stop(1 * time.Second)
 			return
 		}
 		serveErr := a.server.Serve(a.ln)
 		if serveErr != nil {
 			errCh <- fmt.Errorf("fns http serve failed, %v", serveErr)
 			close(errCh)
-			a.stop(10 * time.Second)
+			a.stop(1 * time.Second)
 			return
 		}
 	}(app, errCh)
-
 	select {
-	case <-ctx.Done():
 	case serveErr := <-errCh:
 		err = serveErr
+	case <-time.After(1 * time.Second):
+		close(errCh)
 	}
-	cancel()
 	return
 }
 
@@ -616,7 +605,21 @@ func (app *application) httpRouter() (r *router.Router) {
 	r.GET("/websocket", func(ctx *fasthttp.RequestCtx) {
 		// todo check http schema
 		upgradeErr := app.websocketUpgrader.Upgrade(ctx, func(conn *websocket.Conn) {
-			handleWebsocketConnection(conn, app.svc, app.websocketConnectionAgent)
+			connection, connErr := newWebsocketConnection(conn, app.svc, app.websocketConnections)
+			if connErr != nil {
+				_ = conn.WriteControl(websocket.CloseInternalServerErr, []byte(connErr.Error()), time.Time{})
+				_ = conn.Close()
+				return
+			}
+			handleErr := connection.Handle()
+			if handleErr != nil {
+				_ = conn.WriteControl(websocket.CloseInternalServerErr, []byte(handleErr.Error()), time.Time{})
+			}
+			closeErr := connection.Close()
+			if closeErr != nil {
+				app.log.Warn().Cause(closeErr).Message("fns Http: close websocket connection failed")
+				return
+			}
 		})
 		if upgradeErr != nil {
 			sendError(ctx, errors.New(555, "***WARNING***", "fns Http: upgrade the HTTP server connection to the WebSocket protocol failed").WithCause(upgradeErr))
@@ -679,16 +682,29 @@ func (app *application) httpRouter() (r *router.Router) {
 
 		// request
 		handleBeg := time.Now()
-		result := app.svc.Request(isInnerRequest, requestId, meta, authorization, service, fn, arg)
-		latency := time.Now().Sub(handleBeg)
+		timeoutCtx, cancel := sc.WithTimeout(ctx, app.svc.fnHandleTimeout)
+		requestCtx, ctxErr := newContext(timeoutCtx, isInnerRequest, requestId, authorization, meta, app.svc.app)
+		if ctxErr != nil {
+			latency := time.Now().Sub(handleBeg)
+			ctx.Response.Header.SetBytesK(requestIdHeader, requestId)
+			ctx.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
+			sendError(ctx, errors.Warning("fns Http: create context failed").WithCause(ctxErr))
+			cancel()
+			return
+		}
+		result := app.svc.Request(requestCtx, service, fn, arg)
+
 		data := json.RawMessage{}
-		handleErr := result.Get(sc.TODO(), &data)
+		handleErr := result.Get(requestCtx, &data)
+		latency := time.Now().Sub(handleBeg)
 		if handleErr != nil {
 			ctx.Response.Header.SetBytesK(requestIdHeader, requestId)
 			ctx.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
 			sendError(ctx, handleErr)
+			cancel()
 			return
 		}
+		cancel()
 		ctx.SetStatusCode(200)
 		ctx.SetContentTypeBytes(jsonUTF8ContentType)
 		ctx.Response.Header.SetBytesK(requestIdHeader, requestId)
@@ -696,7 +712,6 @@ func (app *application) httpRouter() (r *router.Router) {
 		if len(data) > 0 {
 			ctx.SetBody(data)
 		}
-
 		// hook
 		if app.hasHook {
 			unit := &HookUnit{}
@@ -716,151 +731,6 @@ func (app *application) httpRouter() (r *router.Router) {
 		sendError(ctx, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
 	}
 	return
-}
-
-func (app *application) handleHttpRequest(request *fasthttp.RequestCtx) {
-	if atomic.LoadInt64(&app.running) != int64(1) {
-		sendError(request, errors.New(555, "***WARNING***", "fns Http: fns is not ready or closing"))
-		return
-	}
-	if request.IsGet() {
-		uri := request.URI()
-		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
-			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
-			return
-		}
-		p := uri.Path()
-		switch string(p) {
-		case healthCheckPath:
-			// health check
-			request.SetStatusCode(200)
-			request.SetContentTypeBytes(jsonUTF8ContentType)
-			request.SetBody([]byte(fmt.Sprintf("{\"name\": \"%s\", \"version\": \"%s\"}", app.name, app.version)))
-		case documentsPath:
-			// documents
-			request.SetStatusCode(200)
-			request.SetContentTypeBytes(jsonUTF8ContentType)
-			request.SetBody(json.UnsafeMarshal(app.svc.doc))
-		case documentsOASPath:
-			// documents oas
-			request.SetStatusCode(200)
-			request.SetContentTypeBytes(jsonUTF8ContentType)
-			request.SetBody(app.svc.doc.mapToOpenApi())
-		default:
-			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
-			return
-		}
-	} else if request.IsPost() {
-		app.requestCounter.Add(1)
-		defer app.requestCounter.Done()
-
-		uri := request.URI()
-		if uri == nil || uri.Path() == nil || len(uri.Path()) == 0 {
-			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
-			return
-		}
-		p := uri.Path()
-		items := bytes.Split(p[1:], pathSplitter)
-		if len(items) != 2 {
-			sendError(request, errors.New(555, "***WARNING***", "fns Http: uri is invalid"))
-			return
-		}
-		namespace := string(items[0])
-		if !app.svc.Exist(namespace) {
-			sendError(request, errors.NotFound(fmt.Sprintf("%s was not found", namespace)))
-			return
-		}
-		// fn
-		fn := string(items[1])
-
-		// authorization
-		authorization := request.Request.Header.PeekBytes(authorizationHeader)
-		if authorization == nil {
-			authorization = make([]byte, 0, 1)
-		}
-		// requestId
-		requestId := ""
-
-		isInnerRequest := false
-		contentType := request.Request.Header.ContentType()
-		if contentType != nil && len(contentType) > 0 {
-			isInnerRequest = bytes.Equal(fnsProxyContentType, contentType)
-		}
-		var arg Argument
-		var argErr error
-		var meta []byte
-		if isInnerRequest {
-			signHeader := request.Request.Header.PeekBytes(requestSignHeader)
-			if signHeader == nil || len(signHeader) == 0 {
-				sendError(request, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", namespace, fn)))
-				return
-			}
-			requestId = string(request.Request.Header.PeekBytes(requestIdHeader))
-			body := request.PostBody()
-			buf := bytebufferpool.Get()
-			_, _ = buf.WriteString(requestId)
-			_, _ = buf.Write(body)
-			signedTarget := buf.Bytes()
-			bytebufferpool.Put(buf)
-			if !secret.Verify(signedTarget, signHeader, secretKey) {
-				sendError(request, errors.Warning(fmt.Sprintf("fns Http: invalid request of %s/%s failed", namespace, fn)))
-				return
-			}
-			metaValue, argValue := proxyMessageDecode(body)
-			arg, argErr = NewArgument(argValue)
-			if argErr != nil {
-				sendError(request, errors.BadRequest("fns Http: request body must be json content"))
-				return
-			}
-			meta = metaValue
-		} else {
-			requestId = UID()
-			arg, argErr = NewArgument(request.PostBody())
-			if argErr != nil {
-				sendError(request, errors.BadRequest("fns Http: request body must be json content"))
-				return
-			}
-			meta = emptyJson
-		}
-
-		// request
-		handleBeg := time.Now()
-		result := app.svc.Request(isInnerRequest, requestId, meta, authorization, namespace, fn, arg)
-		latency := time.Now().Sub(handleBeg)
-		data := json.RawMessage{}
-		handleErr := result.Get(sc.TODO(), &data)
-		if handleErr != nil {
-			request.Response.Header.SetBytesK(requestIdHeader, requestId)
-			request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
-			sendError(request, handleErr)
-			return
-		}
-		request.SetStatusCode(200)
-		request.SetContentTypeBytes(jsonUTF8ContentType)
-		request.Response.Header.SetBytesK(requestIdHeader, requestId)
-		request.Response.Header.SetBytesK(responseLatencyHeader, latency.String())
-		if len(data) > 0 {
-			request.SetBody(data)
-		}
-
-		// hook
-		if app.hasHook {
-			unit := &HookUnit{}
-			unit.Service = namespace
-			unit.FnName = fn
-			unit.RequestId = requestId
-			unit.Authorization = authorization
-			unit.RequestSize = int64(len(request.PostBody()))
-			unit.ResponseSize = int64(len(data))
-			unit.Latency = latency
-			unit.HandleError = handleErr
-			app.hookUnitCh <- unit
-		}
-	} else {
-		sendError(request, errors.New(555, "***WARNING***", "fns Http: method is invalid"))
-		return
-	}
-
 }
 
 func sendError(request *fasthttp.RequestCtx, err errors.CodeError) {

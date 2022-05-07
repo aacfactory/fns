@@ -17,10 +17,13 @@
 package fns
 
 import (
+	sc "context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"github.com/fasthttp/websocket"
-	"io"
+	"io/ioutil"
+	"unicode/utf8"
 )
 
 type WebsocketConnectionProxy interface {
@@ -29,8 +32,8 @@ type WebsocketConnectionProxy interface {
 
 type WebsocketConnections interface {
 	// 在这里进行监听消息
-	Register(ctx Context, conn WebsocketConnection) (err error)
-	Deregister(ctx Context, conn WebsocketConnection) (err error)
+	Register(ctx Context, conn *WebsocketConnection) (err error)
+	Deregister(ctx Context, conn *WebsocketConnection) (err error)
 	Proxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error)
 }
 
@@ -68,11 +71,10 @@ func GetWebsocketConnectionProxy(ctx Context, id string) (proxy WebsocketConnect
 }
 
 type WebsocketRequest struct {
-	Authorization string            `json:"authorization"`
-	Service       string            `json:"service"`
-	Fn            string            `json:"fn"`
-	Meta          map[string]string `json:"meta"`
-	Argument      json.RawMessage   `json:"argument"`
+	Authorization string          `json:"authorization"`
+	Service       string          `json:"service"`
+	Fn            string          `json:"fn"`
+	Argument      json.RawMessage `json:"argument"`
 }
 
 func (r *WebsocketRequest) DecodeArgument(v interface{}) (err error) {
@@ -83,21 +85,26 @@ func (r *WebsocketRequest) DecodeArgument(v interface{}) (err error) {
 type WebsocketResponse struct {
 	Succeed bool             `json:"succeed"`
 	Error   errors.CodeError `json:"error"`
-	Data    interface{}      `json:"data"`
+	Data    json.RawMessage  `json:"data"`
 }
 
-func newWebsocketConnection(conn *websocket.Conn, svc *services) *WebsocketConnection {
-	return &WebsocketConnection{
-		id:   UID(),
-		conn: conn,
-		svc:  svc,
+func newWebsocketConnection(conn *websocket.Conn, svc *services, conns WebsocketConnections) (v *WebsocketConnection, err error) {
+	v = &WebsocketConnection{
+		id:    UID(),
+		conn:  conn,
+		svc:   svc,
+		conns: conns,
 	}
+	ctx, _ := newContext(sc.TODO(), true, "-", []byte(""), nil, svc.app)
+	err = conns.Register(ctx, v)
+	return
 }
 
 type WebsocketConnection struct {
-	id   string
-	conn *websocket.Conn
-	svc  *services
+	id    string
+	conn  *websocket.Conn
+	svc   *services
+	conns WebsocketConnections
 }
 
 func (conn *WebsocketConnection) Id() string {
@@ -106,20 +113,78 @@ func (conn *WebsocketConnection) Id() string {
 
 func (conn *WebsocketConnection) Handle() (err error) {
 	for {
+		_, reader, nextReaderErr := conn.conn.NextReader()
+		if nextReaderErr != nil {
+			err = nextReaderErr
+			return
+		}
+		message, readErr := ioutil.ReadAll(reader)
+		if readErr != nil {
+			err = readErr
+			return
+		}
+		if !utf8.Valid(message) {
+			err = errors.Warning("invalid utf8")
+			return
+		}
 		request := &WebsocketRequest{}
-		readErr := conn.conn.ReadJSON(request)
-		if readErr == io.ErrUnexpectedEOF {
-			break
+		decodeErr := json.Unmarshal(message, request)
+		if decodeErr != nil {
+			err = readErr
+			return
+		}
+		timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), conn.svc.fnHandleTimeout)
+		ctx, ctxErr := newContext(timeoutCtx, false, conn.id, []byte(request.Authorization), nil, conn.svc.app)
+		if ctxErr != nil {
+			err = ctxErr
+			cancel()
+			return
+		}
+		arg, argErr := NewArgument(request.Argument)
+		if argErr != nil {
+			err = argErr
+			cancel()
+			return
 		}
 		// handle service
+		result := conn.svc.Request(ctx, request.Service, request.Fn, arg)
+		response := &WebsocketResponse{}
+		data := json.RawMessage{}
+		handleErr := result.Get(ctx, &data)
+		cancel()
+		if handleErr == nil {
+			response.Succeed = true
+			response.Data = data
+		} else {
+			response.Error = handleErr
+		}
+		p, encodeErr := json.Marshal(response)
+		if encodeErr != nil {
+			err = encodeErr
+			return
+		}
 		// write response
-
+		writeErr := conn.conn.WriteMessage(websocket.TextMessage, p)
+		if writeErr != nil {
+			return
+		}
 	}
-	return
 }
 
 func (conn *WebsocketConnection) Close() (err error) {
-	err = conn.conn.Close()
+	closeErr := conn.conn.Close()
+	if closeErr != nil {
+		err = closeErr
+	}
+	ctx, _ := newContext(sc.TODO(), true, "-", []byte(""), nil, conn.svc.app)
+	deregisterErr := conn.conns.Deregister(ctx, conn)
+	if deregisterErr != nil {
+		if err != nil {
+			err = fmt.Errorf("close websocket conn failed, %v, %v", err, deregisterErr)
+		} else {
+			err = deregisterErr
+		}
+	}
 	return
 }
 

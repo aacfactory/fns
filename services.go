@@ -17,7 +17,6 @@
 package fns
 
 import (
-	sc "context"
 	"fmt"
 	"strings"
 	"time"
@@ -242,28 +241,26 @@ func (s *services) Permissions() (p Permissions) {
 	return
 }
 
-func (s *services) Request(isInnerRequest bool, requestId string, meta []byte, authorization []byte, namespace string, fn string, argument Argument) (result Result) {
-
+func (s *services) Request(ctx Context, namespace string, fn string, argument Argument) (result Result) {
 	if !s.discovery.IsLocal(namespace) {
 		result = SyncResult()
 		result.Failed(errors.NotFound(fmt.Sprintf("fns Services: %s service was not found", namespace)))
 		return
 	}
-
-	payload := &servicesRequestPayload{}
-	payload.isInnerRequest = isInnerRequest
-	payload.requestId = requestId
-	payload.meta = meta
-	payload.authorization = authorization
-	payload.namespace = namespace
-	payload.fn = fn
-	payload.argument = argument
-	payload.result = AsyncResult()
-
-	result = payload.result
-
-	if !s.wp.Execute(fnRequestWorkHandleAction, payload) {
+	if !ctx.InternalRequested() && s.IsInternal(namespace) {
 		result = SyncResult()
+		result.Failed(errors.Warning("fns Services: can not access an internal service"))
+		return
+	}
+	result = AsyncResult()
+	payload := &servicesRequestPayload{
+		ctx:       ctx,
+		namespace: namespace,
+		fn:        fn,
+		argument:  argument,
+		result:    result,
+	}
+	if !s.wp.Execute(fnRequestWorkHandleAction, payload) {
 		result.Failed(errors.New(429, "***TOO MANY REQUEST***", fmt.Sprintf("fns Services: no work unit remains for %s/%s", namespace, fn)))
 		return
 	}
@@ -277,54 +274,32 @@ func (s *services) Close() {
 }
 
 func (s *services) Handle(action string, _payload interface{}) {
-
 	payload := _payload.(*servicesRequestPayload)
-
 	if action != fnRequestWorkHandleAction {
 		payload.result.Failed(errors.Unavailable("fns Services: not fn request"))
 		return
 	}
-
-	// ctx
-	if !payload.isInnerRequest && s.IsInternal(payload.namespace) {
-		payload.result.Failed(errors.Warning("fns Services: can not access an internal service"))
-		return
-	}
-	timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), s.fnHandleTimeout)
-	ctx, ctxErr := newContext(timeoutCtx, payload.isInnerRequest, payload.requestId, payload.authorization, payload.meta, s.app)
-	if ctxErr != nil {
-		payload.result.Failed(errors.Warning("fns Context: create context from request failed").WithCause(ctxErr))
-		cancel()
-		return
-	}
-
 	// proxy
-	proxy, proxyErr := s.discovery.Proxy(ctx, payload.namespace)
+	proxy, proxyErr := s.discovery.Proxy(payload.ctx, payload.namespace)
 	if proxyErr != nil {
 		payload.result.Failed(proxyErr)
-		cancel()
 		return
 	}
-
 	// request
-	r := proxy.Request(ctx, payload.fn, payload.argument)
+	r := proxy.Request(payload.ctx, payload.fn, payload.argument)
 	raw := json.RawMessage{}
-	err := r.Get(ctx, &raw)
+	err := r.Get(payload.ctx, &raw)
 	if err != nil {
 		payload.result.Failed(err)
 	} else {
 		payload.result.Succeed(raw)
 	}
-	cancel()
 }
 
 type servicesRequestPayload struct {
-	isInnerRequest bool
-	requestId      string
-	meta           []byte
-	authorization  []byte
-	namespace      string
-	fn             string
-	argument       Argument
-	result         Result
+	ctx       Context
+	namespace string
+	fn        string
+	argument  Argument
+	result    Result
 }

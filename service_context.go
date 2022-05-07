@@ -234,7 +234,7 @@ func (ctx *context) Timeout() (has bool) {
 
 func (ctx *context) Fork() (v Context) {
 	v = &context{
-		Context:  sc.TODO(),
+		Context:  ctx.Context,
 		id:       UID(),
 		internal: ctx.internal,
 		user:     ctx.user,

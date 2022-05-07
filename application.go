@@ -829,6 +829,8 @@ func (app *application) stop(timeout time.Duration) {
 		if app.Log().DebugEnabled() {
 			app.Log().Debug().Message("fns Close: wait for the remaining requests to be processed successfully")
 		}
+		// close websocket
+		_ = app.websocketConnections.Close()
 		// unmount services
 		app.svc.Close()
 		if app.Log().DebugEnabled() {

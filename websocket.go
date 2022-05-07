@@ -23,6 +23,8 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/fasthttp/websocket"
 	"io/ioutil"
+	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -35,6 +37,7 @@ type WebsocketConnections interface {
 	Register(ctx Context, conn *WebsocketConnection) (err error)
 	Deregister(ctx Context, conn *WebsocketConnection) (err error)
 	Proxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error)
+	Close() (err error)
 }
 
 var websocketConnectionsRetriever = localWebsocketConnectionsRetriever
@@ -90,10 +93,12 @@ type WebsocketResponse struct {
 
 func newWebsocketConnection(conn *websocket.Conn, svc *services, conns WebsocketConnections) (v *WebsocketConnection, err error) {
 	v = &WebsocketConnection{
-		id:    UID(),
-		conn:  conn,
-		svc:   svc,
-		conns: conns,
+		online: true,
+		mutex:  new(sync.Mutex),
+		id:     UID(),
+		conn:   conn,
+		svc:    svc,
+		conns:  conns,
 	}
 	ctx, _ := newContext(sc.TODO(), true, "-", []byte(""), nil, svc.app)
 	err = conns.Register(ctx, v)
@@ -101,10 +106,12 @@ func newWebsocketConnection(conn *websocket.Conn, svc *services, conns Websocket
 }
 
 type WebsocketConnection struct {
-	id    string
-	conn  *websocket.Conn
-	svc   *services
-	conns WebsocketConnections
+	online bool
+	mutex  *sync.Mutex
+	id     string
+	conn   *websocket.Conn
+	svc    *services
+	conns  WebsocketConnections
 }
 
 func (conn *WebsocketConnection) Id() string {
@@ -172,54 +179,97 @@ func (conn *WebsocketConnection) Handle() (err error) {
 }
 
 func (conn *WebsocketConnection) Close() (err error) {
-	closeErr := conn.conn.Close()
-	if closeErr != nil {
-		err = closeErr
-	}
+	conn.mutex.Lock()
+	conn.online = false
 	ctx, _ := newContext(sc.TODO(), true, "-", []byte(""), nil, conn.svc.app)
 	deregisterErr := conn.conns.Deregister(ctx, conn)
 	if deregisterErr != nil {
+		err = deregisterErr
+	}
+	closeErr := conn.conn.Close()
+	if closeErr != nil {
 		if err != nil {
-			err = fmt.Errorf("close websocket conn failed, %v, %v", err, deregisterErr)
+			err = fmt.Errorf("close websocket conn failed, %v, %v", err, closeErr)
 		} else {
-			err = deregisterErr
+			err = closeErr
 		}
 	}
+	conn.mutex.Unlock()
 	return
 }
 
 func (conn *WebsocketConnection) Write(response *WebsocketResponse) (err error) {
+	conn.mutex.Lock()
+	if !conn.online {
+		err = fmt.Errorf("fns Http: websocket connection is closed")
+		conn.mutex.Unlock()
+		return
+	}
 	if response == nil {
+		conn.mutex.Unlock()
 		return
 	}
 	p, encodeErr := json.Marshal(response)
 	if encodeErr != nil {
 		err = encodeErr
+		conn.mutex.Unlock()
 		return
 	}
 	err = conn.conn.WriteMessage(websocket.TextMessage, p)
+	conn.mutex.Unlock()
+	return
+}
+
+type localWebsocketConnectionProxy struct {
+	conn *WebsocketConnection
+}
+
+func (proxy *localWebsocketConnectionProxy) Write(_ Context, response *WebsocketResponse) (err error) {
+	err = proxy.conn.Write(response)
 	return
 }
 
 func newLocalWebsocketConnections() (v WebsocketConnections) {
-
+	v = &localWebsocketConnections{
+		items: &sync.Map{},
+	}
 	return
 }
 
 type localWebsocketConnections struct {
+	items *sync.Map
 }
 
-func (wcs *localWebsocketConnections) Register(ctx Context, conn WebsocketConnection) (err error) {
-	//TODO implement me
-	panic("implement me")
+func (wcs *localWebsocketConnections) Register(_ Context, conn *WebsocketConnection) (err error) {
+	wcs.items.Store(conn.Id(), &localWebsocketConnectionProxy{
+		conn: conn,
+	})
+	return
 }
 
-func (wcs *localWebsocketConnections) Deregister(ctx Context, conn WebsocketConnection) (err error) {
-	//TODO implement me
-	panic("implement me")
+func (wcs *localWebsocketConnections) Deregister(_ Context, conn *WebsocketConnection) (err error) {
+	wcs.items.Delete(conn.Id())
+	return
 }
 
-func (wcs *localWebsocketConnections) Proxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error) {
-	//TODO implement me
-	panic("implement me")
+func (wcs *localWebsocketConnections) Proxy(_ Context, id string) (proxy WebsocketConnectionProxy, has bool, err error) {
+	v, exist := wcs.items.Load(id)
+	if !exist {
+		return
+	}
+	proxy, has = v.(*localWebsocketConnectionProxy)
+	return
+}
+
+func (wcs *localWebsocketConnections) Close() (err error) {
+	conns := make([]*WebsocketConnection, 0, 1)
+	wcs.items.Range(func(_, value interface{}) bool {
+		conns = append(conns, value.(*WebsocketConnection))
+		return true
+	})
+	for _, conn := range conns {
+		_ = conn.conn.WriteControl(websocket.CloseNormalClosure, []byte("close"), time.Time{})
+		_ = conn.Close()
+	}
+	return
 }

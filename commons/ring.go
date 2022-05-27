@@ -110,6 +110,23 @@ func (r *Ring) Next() (value Keyable) {
 	return
 }
 
+func (r *Ring) Get(key string) (value Keyable) {
+	r.mutex.RLock()
+	if r.size == 0 {
+		r.mutex.RUnlock()
+		return
+	}
+	for i := 0; i < r.size; i++ {
+		n := r.next().value
+		if n.Key() == key {
+			value = n
+			break
+		}
+	}
+	r.mutex.RUnlock()
+	return
+}
+
 func (r *Ring) Size() (size int) {
 	r.mutex.RLock()
 	size = r.size

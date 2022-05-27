@@ -14,32 +14,24 @@
  * limitations under the License.
  */
 
-package fns
+package websocket
 
 import (
-	"golang.org/x/sync/singleflight"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns"
 )
 
-type Barrier interface {
-	Do(ctx Context, key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool)
-	Forget(ctx Context, key string)
+type Message struct {
+	DestinationSocketIds []string    `json:"destinationSocketIds"`
+	Content              interface{} `json:"content"`
 }
 
-func defaultBarrier() Barrier {
-	return &standaloneBarrier{
-		v: &singleflight.Group{},
-	}
+type Affected struct {
+	Id      string `json:"id"`
+	Succeed bool   `json:"succeed"`
 }
 
-type standaloneBarrier struct {
-	v *singleflight.Group
-}
-
-func (b *standaloneBarrier) Do(_ Context, key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool) {
-	v, err, shared = b.v.Do(key, fn)
+func SendMessageToDevices(ctx fns.Context, msg Message) (affects []*Affected, err errors.CodeError) {
+	// todo proxy
 	return
-}
-
-func (b *standaloneBarrier) Forget(_ Context, key string) {
-	b.v.Forget(key)
 }

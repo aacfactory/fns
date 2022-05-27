@@ -17,6 +17,7 @@
 package commons
 
 import (
+	"fmt"
 	"github.com/go-playground/validator/v10"
 	"reflect"
 	"regexp"
@@ -53,8 +54,8 @@ func ValidateFieldMessage(_type reflect.Type, exp string) (key string, msg strin
 	return
 }
 
-func ValidateRegisterRegex(validate *validator.Validate) {
-	_ = validate.RegisterValidation("regexp", func(fl validator.FieldLevel) (ok bool) {
+func ValidateRegisterRegex(validate *validator.Validate) *validator.Validate {
+	err := validate.RegisterValidation("regexp", func(fl validator.FieldLevel) (ok bool) {
 		if fl.Field().Type().Kind() != reflect.String {
 			return
 		}
@@ -66,30 +67,42 @@ func ValidateRegisterRegex(validate *validator.Validate) {
 		ok, _ = regexp.MatchString(exp, value)
 		return
 	})
+	if err != nil {
+		panic(fmt.Errorf("fns: validate register regex failed, %v", err))
+	}
+	return validate
 }
 
-func ValidateRegisterNotBlank(validate *validator.Validate) {
-	_ = validate.RegisterValidation("not_blank", func(fl validator.FieldLevel) (ok bool) {
+func ValidateRegisterNotBlank(validate *validator.Validate) *validator.Validate {
+	err := validate.RegisterValidation("not_blank", func(fl validator.FieldLevel) (ok bool) {
 		if fl.Field().Type().Kind() != reflect.String {
 			return
 		}
 		ok = strings.TrimSpace(fl.Field().String()) != ""
 		return
 	})
+	if err != nil {
+		panic(fmt.Errorf("fns: validate register not_blank failed, %v", err))
+	}
+	return validate
 }
 
-func ValidateRegisterNotEmpty(validate *validator.Validate) {
-	_ = validate.RegisterValidation("not_empty", func(fl validator.FieldLevel) (ok bool) {
+func ValidateRegisterNotEmpty(validate *validator.Validate) *validator.Validate {
+	err := validate.RegisterValidation("not_empty", func(fl validator.FieldLevel) (ok bool) {
 		if fl.Field().Type().Kind() != reflect.Slice {
 			return
 		}
 		ok = !fl.Field().IsNil() && fl.Field().Len() > 0
 		return
 	})
+	if err != nil {
+		panic(fmt.Errorf("fns: validate register not_empty failed, %v", err))
+	}
+	return validate
 }
 
-func ValidateRegisterDefault(validate *validator.Validate) {
-	_ = validate.RegisterValidation("default", func(fl validator.FieldLevel) (ok bool) {
+func ValidateRegisterDefault(validate *validator.Validate) *validator.Validate {
+	err := validate.RegisterValidation("default", func(fl validator.FieldLevel) (ok bool) {
 		if fl.Field().Type().Kind() != reflect.String {
 			return
 		}
@@ -100,4 +113,8 @@ func ValidateRegisterDefault(validate *validator.Validate) {
 		ok = true
 		return
 	})
+	if err != nil {
+		panic(fmt.Errorf("fns: validate register default failed, %v", err))
+	}
+	return validate
 }

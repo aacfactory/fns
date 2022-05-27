@@ -14,27 +14,4 @@
  * limitations under the License.
  */
 
-package fns_test
-
-import (
-	"context"
-	"fmt"
-	"github.com/aacfactory/fns"
-	"github.com/aacfactory/json"
-	"testing"
-)
-
-type sampleResult struct {
-	Id int
-}
-
-func TestAsyncResult(t *testing.T) {
-	p, _ := json.Marshal(&sampleResult{
-		Id: 1,
-	})
-	r := fns.AsyncResult()
-	r.Succeed(p)
-	v := json.RawMessage(make([]byte, 0))
-	err := r.Get(context.TODO(), &v)
-	fmt.Println(string(v), err)
-}
+package authorizations

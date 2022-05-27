@@ -27,19 +27,6 @@ import (
 	"time"
 )
 
-type HttpResponse struct {
-	Status int
-	Head   http.Header
-	Body   []byte
-}
-
-type HttpClient interface {
-	Get(url string, head http.Header, timeout time.Duration) (response *HttpResponse, err error)
-	Post(url string, head http.Header, body []byte, timeout time.Duration) (response *HttpResponse, err error)
-	Put(url string, head http.Header, body []byte, timeout time.Duration) (response *HttpResponse, err error)
-	Delete(url string, head http.Header, timeout time.Duration) (response *HttpResponse, err error)
-}
-
 type httpClient struct {
 	client *fasthttp.Client
 }
@@ -90,7 +77,7 @@ func (c *httpClient) acquireRequest(_url string, head http.Header, body []byte) 
 	return
 }
 
-func (c *httpClient) Get(url string, head http.Header, timeout time.Duration) (response *HttpResponse, err error) {
+func (c *httpClient) Get(url string, head http.Header, timeout time.Duration) (err error) {
 	req, reqErr := c.acquireRequest(url, head, nil)
 	if reqErr != nil {
 		err = reqErr
@@ -120,15 +107,10 @@ func (c *httpClient) Get(url string, head http.Header, timeout time.Duration) (r
 		httpHeader.Add(string(key), string(value))
 	})
 
-	response = &HttpResponse{
-		Status: resp.StatusCode(),
-		Head:   httpHeader,
-		Body:   resp.Body(),
-	}
 	return
 }
 
-func (c *httpClient) Post(url string, head http.Header, body []byte, timeout time.Duration) (response *HttpResponse, err error) {
+func (c *httpClient) Post(url string, head http.Header, body []byte, timeout time.Duration) (err error) {
 	req, reqErr := c.acquireRequest(url, head, body)
 	if reqErr != nil {
 		err = reqErr
@@ -158,15 +140,10 @@ func (c *httpClient) Post(url string, head http.Header, body []byte, timeout tim
 		httpHeader.Add(string(key), string(value))
 	})
 
-	response = &HttpResponse{
-		Status: resp.StatusCode(),
-		Head:   httpHeader,
-		Body:   resp.Body(),
-	}
 	return
 }
 
-func (c *httpClient) Put(url string, head http.Header, body []byte, timeout time.Duration) (response *HttpResponse, err error) {
+func (c *httpClient) Put(url string, head http.Header, body []byte, timeout time.Duration) (err error) {
 	req, reqErr := c.acquireRequest(url, head, body)
 	if reqErr != nil {
 		err = reqErr
@@ -196,48 +173,13 @@ func (c *httpClient) Put(url string, head http.Header, body []byte, timeout time
 		httpHeader.Add(string(key), string(value))
 	})
 
-	response = &HttpResponse{
-		Status: resp.StatusCode(),
-		Head:   httpHeader,
-		Body:   resp.Body(),
-	}
 	return
 }
 
-func (c *httpClient) Delete(url string, head http.Header, timeout time.Duration) (response *HttpResponse, err error) {
-	req, reqErr := c.acquireRequest(url, head, nil)
-	if reqErr != nil {
-		err = reqErr
-		return
-	}
-	defer fasthttp.ReleaseRequest(req)
-	req.Header.SetMethod("DELETE")
-	resp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(resp)
-
-	if timeout < 1*time.Second {
-		timeout = 5 * time.Second
-	}
-
-	doErr := c.client.DoTimeout(req, resp, timeout)
-	if doErr != nil {
-		if doErr == fasthttp.ErrTimeout {
-			err = fmt.Errorf("timeout")
-		} else {
-			err = doErr
-		}
-		return
-	}
-
-	httpHeader := http.Header{}
-	resp.Header.VisitAll(func(key, value []byte) {
-		httpHeader.Add(string(key), string(value))
-	})
-
-	response = &HttpResponse{
-		Status: resp.StatusCode(),
-		Head:   httpHeader,
-		Body:   resp.Body(),
-	}
+func (c *httpClient) Close() {
+	c.client.CloseIdleConnections()
 	return
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+
+

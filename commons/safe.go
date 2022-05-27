@@ -14,20 +14,39 @@
  * limitations under the License.
  */
 
-package fns
+package commons
 
-import (
-	"github.com/aacfactory/errors"
-)
+import "sync/atomic"
 
-type fakeAuthorizations struct{}
+func NewSafeFlag(on bool) *SafeFlag {
+	return &SafeFlag{
+		value: func(on bool) int64 {
+			if on {
+				return int64(1)
+			}
+			return int64(0)
+		}(on),
+	}
+}
 
-func (auth *fakeAuthorizations) Encode(_ Context, _ interface{}) (token []byte, err errors.CodeError) {
-	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
+type SafeFlag struct {
+	value int64
+}
+
+func (f *SafeFlag) On() {
+	atomic.StoreInt64(&f.value, 1)
+}
+
+func (f *SafeFlag) Off() {
+	atomic.StoreInt64(&f.value, 0)
+}
+
+func (f *SafeFlag) IsOn() (ok bool) {
+	ok = atomic.LoadInt64(&f.value) == 1
 	return
 }
 
-func (auth *fakeAuthorizations) Decode(_ Context, _ []byte) (err errors.CodeError) {
-	err = errors.Warning("fns Authorizations: authorizations was not enabled, please use fns.RegisterAuthorizationsRetriever() to setup")
+func (f *SafeFlag) IsOff() (ok bool) {
+	ok = atomic.LoadInt64(&f.value) == 0
 	return
 }

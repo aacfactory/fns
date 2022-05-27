@@ -17,24 +17,105 @@
 package fns
 
 import (
-	"github.com/aacfactory/configuares"
+	"fmt"
 	"github.com/aacfactory/errors"
+	"sync"
 	"time"
 )
 
 type HookUnit struct {
-	Service       string
-	FnName        string
-	RequestId     string
-	Authorization []byte
-	RequestSize   int64
-	ResponseSize  int64
-	Latency       time.Duration
-	HandleError   errors.CodeError
+	mutex       sync.Mutex
+	confirmed   bool
+	counter     *sync.WaitGroup
+	Service     string
+	Fn          string
+	Request     Request
+	Result      []byte
+	Failed      bool
+	FailedCause errors.CodeError
+	Latency     time.Duration
+}
+
+func newHookUnit(service string, fn string, request Request, result []byte, failedCause errors.CodeError, latency time.Duration) *HookUnit {
+	return &HookUnit{
+		mutex:       sync.Mutex{},
+		confirmed:   false,
+		counter:     nil,
+		Service:     service,
+		Fn:          fn,
+		Request:     request,
+		Result:      result,
+		Failed:      failedCause != nil,
+		FailedCause: failedCause,
+		Latency:     latency,
+	}
+}
+
+func (unit *HookUnit) Confirm() {
+	unit.mutex.Lock()
+	defer unit.mutex.Unlock()
+	if unit.confirmed {
+		return
+	}
+	unit.counter.Done()
+	unit.confirmed = true
 }
 
 type Hook interface {
-	Build(config configuares.Config) (err error)
+	Build(env Environments) (err error)
 	Handle(unit HookUnit)
 	Close()
+}
+
+func newHooks(env Environments, items []Hook) (v *hooks, err error) {
+	if items == nil {
+		items = make([]Hook, 0, 1)
+	}
+	builds := make([]Hook, 0, 1)
+	for _, hook := range items {
+		buildErr := hook.Build(env)
+		if buildErr != nil {
+			err = buildErr
+			break
+		}
+		builds = append(builds, hook)
+	}
+	if err != nil {
+		for _, build := range builds {
+			build.Close()
+		}
+		err = fmt.Errorf("create hooks handler failed for build hook, %v", err)
+		return
+	}
+	v = &hooks{
+		empty:   len(builds) == 0,
+		hooks:   builds,
+		hookCh:  make(chan HookUnit, 1024),
+		counter: &sync.WaitGroup{},
+	}
+	return
+}
+
+type hooks struct {
+	empty   bool
+	hooks   []Hook
+	hookCh  chan HookUnit
+	counter *sync.WaitGroup
+}
+
+func (h *hooks) send(unit *HookUnit) {
+	if h.empty {
+		return
+	}
+	unit.counter = h.counter
+	// ch <- unit
+}
+
+func (h *hooks) close() (err error) {
+	h.counter.Wait()
+	close(h.hookCh)
+	for _, hook := range h.hooks {
+		hook.Close()
+	}
+	return
 }

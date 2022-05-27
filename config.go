@@ -18,21 +18,30 @@ package fns
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"github.com/aacfactory/configuares"
-	"github.com/aacfactory/fns/commons"
-	"github.com/fasthttp/websocket"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
 	"github.com/valyala/fasthttp"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const (
+	B = 1 << (10 * iota)
+	KB
+	MB
+	GB
+	TB
+	PB
+	EB
+
 	activeSystemEnvKey = "FNS-ACTIVE"
 )
 
@@ -55,269 +64,327 @@ func defaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type ApplicationConfig struct {
-	Name        string         `json:"name,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Terms       string         `json:"terms,omitempty"`
-	Contact     *appContact    `json:"contact,omitempty"`
-	License     *appLicense    `json:"license,omitempty"`
-	Concurrency int            `json:"concurrency,omitempty"`
-	Http        HttpConfig     `json:"http,omitempty"`
-	Log         LogConfig      `json:"log,omitempty"`
-	Services    ServicesConfig `json:"services,omitempty"`
+type Config struct {
+	Log  logConfig  `json:"log,omitempty"`
+	Http HttpConfig `json:"http,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type HttpConfig struct {
-	Host                     string          `json:"host,omitempty"`
-	Port                     int             `json:"port,omitempty"`
-	PublicHost               string          `json:"publicHost,omitempty"`
-	PublicPort               int             `json:"publicPort,omitempty"`
-	MaxConnectionsPerIP      int             `json:"maxConnectionsPerIp,omitempty"`
-	MaxRequestsPerConnection int             `json:"maxRequestsPerConnection,omitempty"`
-	KeepAlive                bool            `json:"keepAlive,omitempty"`
-	KeepalivePeriodSecond    int             `json:"keepalivePeriodSecond,omitempty"`
-	RequestTimeoutSeconds    int             `json:"requestTimeoutSeconds,omitempty"`
-	ReadBufferSize           string          `json:"readBufferSize"`
-	WriteBufferSize          string          `json:"writeBufferSize"`
-	Cors                     CorsConfig      `json:"cors"`
-	TLS                      HttpTlsConfig   `json:"tls,omitempty"`
-	Websocket                WebsocketConfig `json:"websocket"`
-}
-
-type WebsocketConfig struct {
-	HandshakeTimeoutSeconds int      `json:"handshakeTimeoutSeconds"`
-	ReadBufferSize          string   `json:"readBufferSize"`
-	WriteBufferSize         string   `json:"writeBufferSize"`
-	EnableOrigins           []string `json:"enableOrigins"`
-	EnableCompression       bool     `json:"enableCompression"`
-}
-
-func (config WebsocketConfig) upgrader() (v *websocket.FastHTTPUpgrader, err error) {
-	readBufferSize := 4096
-	if config.ReadBufferSize != "" {
-		bs := strings.ToUpper(strings.TrimSpace(config.ReadBufferSize))
-		if bs != "" {
-			bs0, bsErr := commons.ToBytes(bs)
-			if bsErr != nil {
-				err = fmt.Errorf("fns Build: invalid websocket readBufferSize in config")
-				return
-			}
-			readBufferSize = int(bs0)
-		}
-	}
-	writeBufferSize := 4 * MB
-	if config.WriteBufferSize != "" {
-		bs := strings.ToUpper(strings.TrimSpace(config.WriteBufferSize))
-		if bs != "" {
-			bs0, bsErr := commons.ToBytes(bs)
-			if bsErr != nil {
-				err = fmt.Errorf("fns Build: invalid websocket writeBufferSize in config")
-				return
-			}
-			writeBufferSize = int(bs0)
-		}
-	}
-	v = &websocket.FastHTTPUpgrader{
-		ReadBufferSize:    readBufferSize,
-		WriteBufferSize:   writeBufferSize,
-		EnableCompression: config.EnableCompression,
-		CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
-			if config.EnableOrigins == nil || len(config.EnableOrigins) == 0 {
-				return false
-			}
-			if config.EnableOrigins[0] == "*" {
-				return true
-			}
-			originBytes := ctx.Request.Header.PeekBytes(requestOriginHeader)
-			if originBytes == nil || len(originBytes) == 0 {
-				return false
-			}
-			origin := string(originBytes)
-			for _, enableOrigin := range config.EnableOrigins {
-				if enableOrigin == origin {
-					return true
-				}
-			}
-			return false
-		},
-	}
-	return
-}
-
-type HttpTlsConfig struct {
-	Enable     bool   `json:"enable,omitempty"`
-	PublicKey  string `json:"publicKey,omitempty"`
-	PrivateKey string `json:"privateKey,omitempty"`
-}
-
-func (c *HttpTlsConfig) mapToTLS() (config *tls.Config, err error) {
-	// pub
-	pub, pubErr := c.readFile(c.PublicKey)
-	if pubErr != nil {
-		err = fmt.Errorf("fns: read public key failed, %v", pubErr)
-		return
-	}
-	// pri
-	pri, priErr := c.readFile(c.PrivateKey)
-	if priErr != nil {
-		err = fmt.Errorf("fns: read private key failed, %v", priErr)
-		return
-	}
-
-	certificate, certificateErr := tls.X509KeyPair(pub, pri)
-	if certificateErr != nil {
-		err = fmt.Errorf("fns: parse key pair failed, %v", certificateErr)
-		return
-	}
-	config = &tls.Config{
-		Certificates: []tls.Certificate{certificate},
-	}
-
-	return
-}
-
-func (c *HttpTlsConfig) readFile(s string) (p []byte, err error) {
-	u, urlErr := url.Parse(s)
-	if urlErr != nil {
-		err = fmt.Errorf("parse url failed, %v", urlErr)
-		return
-	}
-	switch strings.ToLower(u.Scheme) {
-	case "file", "":
-		pubFilePath := filepath.Join(u.Host, u.Path)
-		p, err = ioutil.ReadFile(pubFilePath)
-	case "env":
-		pubFilePath, has := os.LookupEnv(u.Host)
-		if !has {
-			err = fmt.Errorf("url is invalid, %s was not found", u.Host)
-			return
-		}
-		p, err = ioutil.ReadFile(pubFilePath)
-	case "http", "https":
-		status, body, getErr := fasthttp.GetTimeout(make([]byte, 0, 1), s, 30*time.Second)
-		if getErr != nil {
-			err = fmt.Errorf("url is invalid, get from %s failed, %v", s, getErr)
-			return
-		}
-		if status != 200 {
-			err = fmt.Errorf("url is invalid, get from %s failed, %v", s, status)
-			return
-		}
-		p = body
-	default:
-		err = fmt.Errorf("url is invalid, schema is not supported")
-		return
-	}
-	return
-}
-
-const (
-	publicHostEnv = "PUBLIC_HOST"
-	publicPortEnv = "PUBLIC_PORT"
-)
-
-func getPublicHostFromEnv() (host string, has bool) {
-	host, has = os.LookupEnv(publicHostEnv)
-	if has {
-		host = strings.TrimSpace(host)
-		has = host != ""
-	}
-	return
-}
-
-func getPublicPortFromEnv() (port int, has bool) {
-	portStr, ok := os.LookupEnv(publicPortEnv)
-	if ok {
-		portInt, parseErr := strconv.Atoi(strings.TrimSpace(portStr))
-		if parseErr == nil {
-			port = portInt
-			has = true
-		}
-	}
-	return
-}
-
-func getPublicHostFromHostname() (host string, has bool) {
-	ip, err := commons.IpFromHostname(false)
-	if err != nil {
-		return
-	}
-	host = ip
-	has = true
-	return
-}
-
-type CorsConfig struct {
-	Enable           bool     `json:"enable,omitempty"`
+type httpCorsConfig struct {
 	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`
-	AllowedMethods   []string `json:"allowedMethods,omitempty"`
 	AllowedHeaders   []string `json:"allowedHeaders,omitempty"`
 	ExposedHeaders   []string `json:"exposedHeaders,omitempty"`
 	AllowCredentials bool     `json:"allowCredentials,omitempty"`
 	MaxAge           int      `json:"maxAge,omitempty"`
 }
 
-func (cors *CorsConfig) fill() {
-	if cors.ExposedHeaders == nil || len(cors.ExposedHeaders) == 0 {
-		cors.ExposedHeaders = make([]string, 0, 1)
-	}
-	cors.ExposedHeaders = append(cors.ExposedHeaders, string(requestIdHeader))
-	cors.ExposedHeaders = append(cors.ExposedHeaders, string(responseLatencyHeader))
-	cors.ExposedHeaders = append(cors.ExposedHeaders, "Server")
-	return
+type websocketConfig struct {
+	HandshakeTimeoutSeconds int    `json:"handshakeTimeoutSeconds"`
+	ReadBufferSize          string `json:"readBufferSize"`
+	WriteBufferSize         string `json:"writeBufferSize"`
 }
 
-func (cors *CorsConfig) originAllowed(origin string) (ok bool) {
-	origin = strings.ToLower(origin)
-	for _, allowedOrigin := range cors.AllowedOrigins {
-		if allowedOrigin == "*" {
-			ok = true
-			return
-		}
-		if allowedOrigin == origin {
-			ok = true
-			return
-		}
-	}
-	return
+type HttpConfig struct {
+	Port    int             `json:"port"`
+	TLS     *TLSConfig      `json:"tls"`
+	Options json.RawMessage `json:"options"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type ServicesConfig struct {
-	HandleTimeoutSecond int                  `json:"handleTimeoutSecond,omitempty"`
-	MaxIdleTimeSecond   int                  `json:"maxIdleTimeSecond,omitempty"`
-	ReduceMemoryUsage   bool                 `json:"reduceMemoryUsage,omitempty"`
-	Discovery           DiscoveryConfig      `json:"discovery,omitempty"`
-	Authorization       AuthorizationsConfig `json:"authorization,omitempty"`
-	Permission          PermissionsConfig    `json:"permission,omitempty"`
-	HttpClientPoolSize  int                  `json:"httpClientPoolSize,omitempty"`
+type ServerTLSConfig struct {
+	Cert           string   `json:"cert"`
+	Key            string   `json:"key"`
+	ClientCAs      []string `json:"clientCAs"`
+	ClientAuthType string   `json:"clientAuthType"`
 }
 
-type DiscoveryConfig struct {
-	Enable bool            `json:"enable,omitempty"`
-	Kind   string          `json:"kind,omitempty"`
-	Config configuares.Raw `json:"config,omitempty"`
+func (config *ServerTLSConfig) Config() (v *tls.Config, err error) {
+	clientAuthType := tls.NoClientCert
+	config.ClientAuthType = strings.ToLower(strings.TrimSpace(config.ClientAuthType))
+	switch config.ClientAuthType {
+	case "no":
+		clientAuthType = tls.NoClientCert
+	case "request":
+		clientAuthType = tls.RequestClientCert
+	case "require":
+		clientAuthType = tls.RequireAnyClientCert
+	case "verify":
+		clientAuthType = tls.VerifyClientCertIfGiven
+	case "require+verify":
+		clientAuthType = tls.RequireAndVerifyClientCert
+	default:
+		err = fmt.Errorf("fns: server clientAuthType is invalid")
+		return
+	}
+	cert := strings.TrimSpace(config.Cert)
+	if cert == "" {
+		err = fmt.Errorf("fns: server cert is empty")
+		return
+	}
+	certPEM, certErr := decodeTlsSource(cert)
+	if certErr != nil {
+		err = fmt.Errorf("fns: read server cert failed, %v", certErr)
+		return
+	}
+	key := strings.TrimSpace(config.Key)
+	if key == "" {
+		err = fmt.Errorf("fns: server key is empty")
+		return
+	}
+	keyPEM, keyErr := decodeTlsSource(key)
+	if keyErr != nil {
+		err = fmt.Errorf("fns: read server key failed, %v", keyErr)
+		return
+	}
+	certificate, certificateErr := tls.X509KeyPair(certPEM, keyPEM)
+	if certificateErr != nil {
+		err = fmt.Errorf("fns: create server x509 keypair failed, %v", certificateErr)
+		return
+	}
+	var clientCAs *x509.CertPool
+	if config.ClientCAs != nil && len(config.ClientCAs) > 0 {
+		clientCAs = x509.NewCertPool()
+		for _, ca := range config.ClientCAs {
+			ca = strings.TrimSpace(ca)
+			if ca == "" {
+				err = fmt.Errorf("fns: one of client ca is empty")
+				return
+			}
+			caPEM, caErr := decodeTlsSource(ca)
+			if caErr != nil {
+				err = fmt.Errorf("fns: read client ca failed, %v", caErr)
+				return
+			}
+			if ok := clientCAs.AppendCertsFromPEM(caPEM); !ok {
+				err = fmt.Errorf("fns: append client ca cert failed")
+				return
+			}
+		}
+	}
+	v = &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		ClientCAs:    clientCAs,
+		ClientAuth:   clientAuthType,
+	}
+	return
 }
 
-type AuthorizationsConfig struct {
-	Enable bool            `json:"enable,omitempty"`
-	Kind   string          `json:"kind,omitempty"`
-	Config configuares.Raw `json:"config,omitempty"`
+type ClientTLSConfig struct {
+	Trusted            bool     `json:"trusted"`
+	Cert               string   `json:"cert"`
+	Key                string   `json:"key"`
+	RootCAs            []string `json:"rootCAs"`
+	InsecureSkipVerify bool     `json:"insecureSkipVerify"`
 }
 
-type PermissionsConfig struct {
-	Enable bool            `json:"enable,omitempty"`
-	Loader string          `json:"loader,omitempty"`
-	Config configuares.Raw `json:"config,omitempty"`
+func (config *ClientTLSConfig) Load() (err error) {
+	if config.Trusted {
+		return
+	}
+	if config.RootCAs != nil && len(config.RootCAs) > 0 {
+		encodedCAs := make([]string, 0, 1)
+		for _, ca := range config.RootCAs {
+			ca = strings.TrimSpace(ca)
+			if ca == "" {
+				err = fmt.Errorf("fns: one of root ca is empty")
+				return
+			}
+			caPEM, caErr := decodeTlsSource(ca)
+			if caErr != nil {
+				err = fmt.Errorf("fns: read root ca failed, %v", caErr)
+				return
+			}
+			block, _ := pem.Decode(caPEM)
+			if block == nil {
+				err = fmt.Errorf("fns: root ca pem is invalid")
+				return
+			}
+			if block.Type != "CERTIFICATE" {
+				err = fmt.Errorf("fns: root ca pem is not CERTIFICATE")
+				return
+			}
+			_, parseErr := x509.ParseCertificate(block.Bytes)
+			if parseErr != nil {
+				err = fmt.Errorf("fns: parse root ca failed, %v", parseErr)
+				return
+			}
+			encodedCAs = append(encodedCAs, encodeTlsSource(caPEM))
+		}
+		config.RootCAs = encodedCAs
+	}
+	cert := strings.TrimSpace(config.Cert)
+	if cert == "" {
+		err = fmt.Errorf("fns: client cert is empty")
+		return
+	}
+	certPEM, certErr := decodeTlsSource(cert)
+	if certErr != nil {
+		err = fmt.Errorf("fns: read client cert failed, %v", certErr)
+		return
+	}
+	key := strings.TrimSpace(config.Key)
+	if key == "" {
+		err = fmt.Errorf("fns: client key is empty")
+		return
+	}
+	keyPEM, keyErr := decodeTlsSource(key)
+	if keyErr != nil {
+		err = fmt.Errorf("fns: read client key failed, %v", keyErr)
+		return
+	}
+	_, certificateErr := tls.X509KeyPair(certPEM, keyPEM)
+	if certificateErr != nil {
+		err = fmt.Errorf("fns: create client x509 keypair failed, %v", certificateErr)
+		return
+	}
+	config.Cert = encodeTlsSource(certPEM)
+	config.Key = encodeTlsSource(keyPEM)
+	return
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
+var defaultCertificateRequestConfig = &CertificateRequestConfig{
+	KeyBits:            2048,
+	Country:            "CN",
+	Province:           "Shanghai",
+	City:               "Shanghai",
+	Organization:       "AACFACTORY",
+	OrganizationalUnit: "Tech",
+	CommonName:         "FNS",
+	IPs:                nil,
+	DelegationEnabled:  true,
+	ExpirationMonths:   12,
+}
 
-type LogConfig struct {
-	Level     string `json:"level,omitempty"`
-	Formatter string `json:"formatter,omitempty"`
-	Color     bool   `json:"color,omitempty"`
+type CertificateRequestConfig struct {
+	KeyBits            int      `json:"keyBits"`
+	Country            string   `json:"country"`
+	Province           string   `json:"province"`
+	City               string   `json:"city"`
+	Organization       string   `json:"organization"`
+	OrganizationalUnit string   `json:"organizationalUnit"`
+	CommonName         string   `json:"commonName"`
+	IPs                []string `json:"ips"`
+	DelegationEnabled  bool     `json:"delegationEnabled"`
+	ExpirationMonths   int      `json:"expirationMonths"`
+}
+
+type TLSConfig struct {
+	// Kind
+	// ACME
+	// ASSC(AUTO-SELF-SIGN-CERT)
+	// DEFAULT
+	Kind    string           `json:"kind"`
+	Server  *ServerTLSConfig `json:"server"`
+	Client  *ClientTLSConfig `json:"client"`
+	Options json.RawMessage  `json:"options"`
+}
+
+func (config *TLSConfig) Config() (srvTLS *tls.Config, err error) {
+	config.Kind = strings.ToUpper(strings.TrimSpace(config.Kind))
+	switch config.Kind {
+	case "ACME":
+		// TODO
+		err = errors.Warning("fns: acme is unavailable")
+	case "ASSC", "AUTO-SELF-SIGN-CERT":
+		var csr *CertificateRequestConfig = nil
+		options := config.Options
+		if options == nil {
+			csr = defaultCertificateRequestConfig
+		} else {
+			csr = &CertificateRequestConfig{}
+			decodeErr := json.Unmarshal(options, csr)
+			if decodeErr != nil {
+				err = errors.Warning("fns: load tls config failed").WithCause(decodeErr)
+				return
+			}
+		}
+		// todo auto generate ssl, and set server and client
+
+	default:
+		if config.Server == nil {
+			err = errors.Warning("fns: load tls config failed").WithCause(fmt.Errorf("no server in tls config"))
+			return
+		}
+		srvTLS, err = config.Server.Config()
+		if err != nil {
+			err = errors.Warning("fns: load tls config failed").WithCause(err)
+			return
+		}
+		if config.Client == nil {
+			config.Client = &ClientTLSConfig{
+				Trusted:            true,
+				Cert:               "",
+				Key:                "",
+				RootCAs:            nil,
+				InsecureSkipVerify: false,
+			}
+		}
+		err = config.Client.Load()
+	}
+	return
+}
+
+func encodeTlsSource(p []byte) (s string) {
+	s = fmt.Sprintf("base64:%s", base64.StdEncoding.EncodeToString(p))
+	return
+}
+
+func decodeTlsSource(s string) (p []byte, err error) {
+	if strings.Index(s, "base64:") == 0 {
+		s = strings.TrimSpace(s[7:])
+		p, err = base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			err = fmt.Errorf("read source from %s failed, %v", s, err)
+			return
+		}
+	} else if strings.Index(s, "http:") == 0 || strings.Index(s, "https:") == 0 {
+		status, body, getErr := fasthttp.GetTimeout(make([]byte, 0, 1), s, 30*time.Second)
+		if getErr != nil {
+			err = fmt.Errorf("read source from %s failed, %v", s, getErr)
+			return
+		}
+		if status != 200 {
+			err = fmt.Errorf("read source from %s failed, %v", s, status)
+			return
+		}
+		p = body
+	} else {
+		p, err = ioutil.ReadFile(s)
+		if err != nil {
+			err = fmt.Errorf("read source from %s failed, %v", s, err)
+			return
+		}
+	}
+	return
+}
+
+func getRegistrationClientTLS(env Environments) (v RegistrationClientTLS) {
+	config, hasConfig := env.Config("http")
+	if !hasConfig {
+		return
+	}
+	tlsConfigRaw, hasTLS := config.Node("tls")
+	if !hasTLS {
+		return
+	}
+	tlsConfig := &TLSConfig{}
+	decodeErr := tlsConfigRaw.As(tlsConfig)
+	if decodeErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: get client tls failed").WithCause(decodeErr)))
+	}
+	_, configErr := tlsConfig.Config()
+	if decodeErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: get client tls failed").WithCause(configErr)))
+	}
+	v = RegistrationClientTLS{
+		Enable:             true,
+		Trusted:            tlsConfig.Client.Trusted,
+		Cert:               tlsConfig.Client.Cert,
+		Key:                tlsConfig.Client.Key,
+		RootCAs:            tlsConfig.Client.RootCAs,
+		InsecureSkipVerify: tlsConfig.Client.InsecureSkipVerify,
+	}
+	return
 }

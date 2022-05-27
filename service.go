@@ -19,166 +19,139 @@ package fns
 import (
 	sc "context"
 	"fmt"
-	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"github.com/valyala/fasthttp"
-	"sync"
-	"time"
 )
 
-type AppRuntime interface {
-	ClusterMode() (ok bool)
-	PublicAddress() (address string)
-	Log() (log logs.Logger)
-	Validate(v interface{}) (err errors.CodeError)
-	ServiceProxy(ctx Context, namespace string) (proxy ServiceProxy, err error)
-	ServiceMeta() (meta ServiceMeta)
-	Authorizations() (authorizations Authorizations)
-	Permissions() (permissions Permissions)
-	HttpClient() (client HttpClient)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type Context interface {
-	sc.Context
-	InternalRequested() (ok bool)
-	RequestId() (id string)
-	User() (user User)
-	Meta() (meta ContextMeta)
-	Timeout() (has bool)
-	App() (app AppRuntime)
-	Fork() (v Context)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-const (
-	serviceExactProxyMetaKeyPrefix = "exact_proxy"
-)
-
-type ContextMeta interface {
-	Exists(key string) (has bool)
-	Put(key string, value interface{})
-	Get(key string, value interface{}) (err error)
-	Remove(key string)
-	GetString(key string) (value string, has bool)
-	GetInt(key string) (value int, has bool)
-	GetInt32(key string) (value int32, has bool)
-	GetInt64(key string) (value int64, has bool)
-	GetFloat32(key string) (value float32, has bool)
-	GetFloat64(key string) (value float64, has bool)
-	GetBool(key string) (value bool, has bool)
-	GetTime(key string) (value time.Time, has bool)
-	GetDuration(key string) (value time.Duration, has bool)
-	SetExactProxyServiceAddress(namespace string, address string)
-	GetExactProxyServiceAddress(namespace string) (address string, has bool)
-	DelExactProxyServiceAddress(namespace string)
-	Encode() (value []byte)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func NewServiceMeta() ServiceMeta {
-	return make(map[string]interface{})
-}
-
-type ServiceMeta map[string]interface{}
-
-func (meta ServiceMeta) Get(key string) (v interface{}, has bool) {
-	v, has = meta[key]
-	return
-}
-
-func (meta ServiceMeta) Set(key string, value interface{}) {
-	meta[key] = value
-	return
-}
-
-func (meta ServiceMeta) Merge(o ServiceMeta) {
-	if o == nil || len(o) == 0 {
-		return
-	}
-	for k, v := range o {
-		meta[k] = v
-	}
-	return
-}
-
-type ServiceOption struct {
-	MetaBuilder ServiceMetaBuilder
-}
-
-type ServiceMetaBuilder func(ctx Context, config configuares.Config) (meta ServiceMeta, err error)
-
-func fakeServiceMetaBuilder(ctx Context, config configuares.Config) (meta ServiceMeta, err error) {
-	return
-}
-
-func NewAbstractService() AbstractService {
-	return NewAbstractServiceWithOption(ServiceOption{
-		MetaBuilder: fakeServiceMetaBuilder,
-	})
-}
-
-func NewAbstractServiceWithOption(option ServiceOption) AbstractService {
-	return AbstractService{
-		option:  option,
-		meta:    make(map[string]interface{}),
-		barrier: serviceBarrierRetriever(),
-	}
-}
-
-type AbstractService struct {
-	option  ServiceOption
-	meta    ServiceMeta
-	barrier ServiceBarrier
-}
-
-func (s AbstractService) Meta() (v ServiceMeta) {
-	v = s.meta
-	return
-}
-
-func (s AbstractService) Build(ctx Context, config configuares.Config) (err error) {
-	if config != nil && s.option.MetaBuilder != nil {
-		meta, metaErr := s.option.MetaBuilder(ctx, config)
-		if metaErr != nil {
-			err = metaErr
-			return
-		}
-		s.meta.Merge(meta)
-	}
-	return
-}
-
-func (s *AbstractService) HandleInGroup(ctx Context, fn string, arg Argument, handle func() (v interface{}, err errors.CodeError)) (v interface{}, err errors.CodeError) {
-	key := fmt.Sprintf("%s:%s", fn, arg.Hash(ctx))
-	v0, err0, _ := s.barrier.Do(ctx, key, func() (v interface{}, err error) {
-		v, err = handle()
-		return
-	})
-	s.barrier.Forget(ctx, key)
-	if err0 != nil {
-		err = err0.(errors.CodeError)
-		return
-	}
-	v = v0
-	return
+type ServiceComponent interface {
+	Name() (name string)
+	Build(env Environments) (err error)
 }
 
 // Service
 // 管理 Fn 的服务
 type Service interface {
-	Namespace() (namespace string)
+	Name() (name string)
 	Internal() (internal bool)
-	Build(context Context, config configuares.Config) (err error)
+	Build(env Environments) (err error)
+	Components() (components map[string]ServiceComponent)
 	Document() (doc *ServiceDocument)
 	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
 	Shutdown() (err error)
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type ServiceOptions struct {
+	components map[string]ServiceComponent
+}
+
+type ServiceOption func(*ServiceOptions) error
+
+func ServiceComponents(components ...ServiceComponent) (opt ServiceOption) {
+	return func(options *ServiceOptions) (err error) {
+		if components == nil || len(components) == 0 {
+			err = fmt.Errorf("fns: append service components failed for components is empty")
+			return
+		}
+		if options.components == nil {
+			options.components = make(map[string]ServiceComponent)
+		}
+		for _, component := range components {
+			if component == nil {
+				err = fmt.Errorf("fns: append service components failed for one of components is nil")
+				return
+			}
+			name := component.Name()
+			if name == "" {
+				err = fmt.Errorf("fns: append service components failed for one of components's name is empty")
+				return
+			}
+			_, has := options.components[name]
+			if has {
+				err = fmt.Errorf("fns: append service components failed for %s has appended", component.Name())
+				return
+			}
+			options.components[name] = component
+		}
+		return
+	}
+}
+
+func NewAbstractService(options ...ServiceOption) AbstractService {
+	opt := &ServiceOptions{
+		components: make(map[string]ServiceComponent),
+	}
+	if options != nil {
+		for _, option := range options {
+			if option != nil {
+				optErr := option(opt)
+				if optErr != nil {
+					panic(optErr)
+				}
+			}
+		}
+	}
+	return AbstractService{
+		components: opt.components,
+	}
+}
+
+type AbstractService struct {
+	components map[string]ServiceComponent
+}
+
+func (s *AbstractService) Components() (components map[string]ServiceComponent) {
+	components = s.components
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type Runtime interface {
+	AppId() (id string)
+	Log() (log logs.Logger)
+	Endpoints() (endpoints Endpoints)
+	Validator() (v Validator)
+}
+
+func newServiceRuntime(env Environments, endpoints Endpoints, validator Validator) (rt *serviceRuntime) {
+	rt = &serviceRuntime{
+		appId:     env.AppId(),
+		log:       env.Log(),
+		endpoints: endpoints,
+		validator: validator,
+	}
+	return
+}
+
+type serviceRuntime struct {
+	appId     string
+	log       logs.Logger
+	endpoints Endpoints
+	validator Validator
+}
+
+func (rt *serviceRuntime) AppId() (id string) {
+	id = rt.appId
+	return
+}
+
+func (rt *serviceRuntime) Log() (log logs.Logger) {
+	log = rt.log
+	return
+}
+
+func (rt *serviceRuntime) Endpoints() (endpoints Endpoints) {
+	endpoints = rt.endpoints
+	return
+}
+
+func (rt *serviceRuntime) Validator() (v Validator) {
+	v = rt.validator
+	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -187,7 +160,89 @@ type Argument interface {
 	json.Marshaler
 	json.Unmarshaler
 	As(v interface{}) (err errors.CodeError)
-	Hash(ctx Context) (p string)
+}
+
+func EmptyArgument() (arg Argument) {
+	arg = NewArgument(nil)
+	return
+}
+
+func NewArgument(v interface{}) (arg Argument) {
+	arg = &argument{
+		value: v,
+	}
+	return
+}
+
+type argument struct {
+	value interface{}
+}
+
+func (arg argument) MarshalJSON() (data []byte, err error) {
+	if arg.value == nil {
+		data = nullJson
+		return
+	}
+	switch arg.value.(type) {
+	case []byte:
+		value := arg.value.([]byte)
+		if !json.Validate(value) {
+			err = errors.Warning("fns: type of argument is not json bytes").WithMeta("scope", "argument")
+			return
+		}
+		data = value
+	case json.RawMessage:
+		data = arg.value.(json.RawMessage)
+	default:
+		data, err = json.Marshal(arg.value)
+		if err != nil {
+			err = errors.Warning("fns: encode argument to json failed").WithMeta("scope", "argument").WithCause(err)
+			return
+		}
+	}
+	return
+}
+
+func (arg *argument) UnmarshalJSON(data []byte) (err error) {
+	arg.value = json.RawMessage(data)
+	return
+}
+
+func (arg *argument) As(v interface{}) (err errors.CodeError) {
+	if arg.value == nil {
+		return
+	}
+	switch arg.value.(type) {
+	case []byte:
+		value := arg.value.([]byte)
+		if json.Validate(value) {
+			decodeErr := json.Unmarshal(value, v)
+			if decodeErr != nil {
+				err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(decodeErr)
+				return
+			}
+		} else {
+			cpErr := commons.CopyInterface(v, arg.value)
+			if cpErr != nil {
+				err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(cpErr)
+				return
+			}
+		}
+	case json.RawMessage:
+		value := arg.value.(json.RawMessage)
+		decodeErr := json.Unmarshal(value, v)
+		if decodeErr != nil {
+			err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(decodeErr)
+			return
+		}
+	default:
+		cpErr := commons.CopyInterface(v, arg.value)
+		if cpErr != nil {
+			err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(cpErr)
+			return
+		}
+	}
+	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -198,333 +253,111 @@ type Result interface {
 	Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type User interface {
-	Exists() (ok bool)
-	Id() (id UserId)
-	Principals() (principal *json.Object)
-	Attributes() (attributes *json.Object)
-	Authorization() (authorization []byte, has bool)
-	SetAuthorization(authorization []byte)
-	String() (value string)
+func NewResult() Result {
+	return &futureResult{
+		ch: make(chan interface{}, 1),
+	}
 }
 
-type UserId interface {
-	Int() (v int)
-	String() (v string)
+type futureResult struct {
+	ch chan interface{}
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
-
-var authorizationsRetrieverMap = make(map[string]AuthorizationsRetriever)
-
-type AuthorizationsRetriever func(config configuares.Raw) (authorizations Authorizations, err error)
-
-func RegisterAuthorizationsRetriever(kind string, retriever AuthorizationsRetriever) {
-	authorizationsRetrieverMap[kind] = retriever
-}
-
-type Authorizations interface {
-	Encode(ctx Context, claims interface{}) (token []byte, err errors.CodeError)
-	Decode(ctx Context, token []byte) (err errors.CodeError)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-var permissionsDefinitionsLoaderRetrieverMap = make(map[string]PermissionsDefinitionsLoaderRetriever)
-
-type PermissionsDefinitionsLoaderRetriever func(config configuares.Raw) (loader PermissionsDefinitionsLoader, err error)
-
-func RegisterPermissionsDefinitionsLoaderRetriever(kind string, retriever PermissionsDefinitionsLoaderRetriever) {
-	permissionsDefinitionsLoaderRetrieverMap[kind] = retriever
-}
-
-// Permissions
-// 基于RBAC的权限控制器
-// 角色：角色树，控制器不存储用户的角色。
-// 资源：fn
-// 控制：是否可以使用（不可以使用优先于可以使用）
-type Permissions interface {
-	// Validate 验证当前 context 中 user 对 fn 的权限
-	Validate(ctx Context, namespace string, fn string) (err errors.CodeError)
-	// SaveUserRoles 将角色保存到 当前 context 的 user attributes 中
-	SaveUserRoles(ctx Context, roles ...string) (err errors.CodeError)
-}
-
-type PermissionsDefinitions struct {
-	data map[string]map[string]bool
-}
-
-func (d *PermissionsDefinitions) Add(namespace string, fn string, role string, accessible bool) {
-	if namespace == "" || fn == "" || role == "" {
+func (r *futureResult) Succeed(v interface{}) {
+	if v == nil {
+		close(r.ch)
 		return
 	}
-	if d.data == nil {
-		d.data = make(map[string]map[string]bool)
-	}
-	key := fmt.Sprintf("%s:%s", namespace, fn)
-	g, has := d.data[key]
-	if !has {
-		g = make(map[string]bool)
-	}
-	g[role] = accessible
-	d.data[key] = g
+	r.ch <- v
+	close(r.ch)
 }
-func (d *PermissionsDefinitions) Accessible(namespace string, fn string, roles []string) (accessible bool) {
-	if namespace == "" || fn == "" || d.data == nil || len(d.data) == 0 {
+
+func (r *futureResult) Failed(err errors.CodeError) {
+	if err == nil {
+		err = errors.Warning("fns: failed result").WithMeta("scope", "result")
+	}
+	r.ch <- err
+	close(r.ch)
+}
+
+func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError) {
+	select {
+	case <-ctx.Done():
+		err = errors.Timeout("timeout")
 		return
-	}
-	key := fmt.Sprintf("%s:%s", namespace, fn)
-	g, has := d.data[key]
-	if !has {
-		accessible = false
-		return
-	}
-	_, all := g["*"]
-	if all {
-		accessible = true
-		return
-	}
-	not := false
-	n := 0
-	for _, role := range roles {
-		x, hasRole := g[role]
-		if !hasRole {
-			continue
-		}
-		if !x {
-			not = true
-			break
-		}
-		n++
-	}
-	if not {
-		accessible = false
-		return
-	}
-	accessible = n > 0
-	return
-}
-
-// PermissionsDefinitionsLoader
-// 存储权限设定的加载器
-type PermissionsDefinitionsLoader interface {
-	Load() (definitions *PermissionsDefinitions, err errors.CodeError)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type ServiceProxy interface {
-	Request(ctx Context, fn string, argument Argument) (result Result)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-var serviceDiscoveryRetrieverMap = map[string]ServiceDiscoveryRetriever{
-	"default": standaloneServiceDiscoveryRetriever,
-}
-
-type ServiceDiscoveryRetriever func(option ServiceDiscoveryOption) (discovery ServiceDiscovery, err error)
-
-func RegisterServiceDiscoveryRetriever(kind string, retriever ServiceDiscoveryRetriever) {
-	if serviceDiscoveryRetrieverMap == nil {
-		serviceDiscoveryRetrieverMap = make(map[string]ServiceDiscoveryRetriever)
-	}
-	serviceDiscoveryRetrieverMap[kind] = retriever
-}
-
-type ServiceDiscoveryOption struct {
-	Address     string
-	HttpClients *HttpClients
-	Config      configuares.Raw
-}
-
-type Registration struct {
-	Id        string `json:"id"`
-	Namespace string `json:"namespace,omitempty"`
-	Address   string `json:"address"`
-	Reversion int64  `json:"-"`
-}
-
-func (r Registration) Key() (key string) {
-	key = r.Id
-	return
-}
-
-func NewRegistrations() (registrations *Registrations) {
-	registrations = &Registrations{
-		r: commons.NewRing(),
-	}
-	return
-}
-
-type Registrations struct {
-	r *commons.Ring
-}
-
-func (r *Registrations) Next() (v *Registration, has bool) {
-	p := r.r.Next()
-	if p == nil {
-		return
-	}
-	v, has = p.(*Registration)
-	return
-}
-
-func (r *Registrations) Append(v Registration) {
-	r.r.Append(v)
-	return
-}
-
-func (r *Registrations) Remove(v Registration) {
-	r.r.Remove(v)
-	return
-}
-
-func (r *Registrations) Size() (size int) {
-	size = r.r.Size()
-	return
-}
-
-func newRegistrationsManager(clients *HttpClients) (manager *RegistrationsManager) {
-	manager = &RegistrationsManager{
-		clients:         clients,
-		problemCh:       make(chan *Registration, 512),
-		stopListenCh:    make(chan struct{}, 1),
-		registrationMap: sync.Map{},
-	}
-	manager.ListenProblemChan()
-	return
-}
-
-type RegistrationsManager struct {
-	clients         *HttpClients
-	problemCh       chan *Registration
-	stopListenCh    chan struct{}
-	registrationMap sync.Map
-}
-
-func (manager *RegistrationsManager) Registrations() (v []Registration) {
-	v = make([]Registration, 0, 1)
-	manager.registrationMap.Range(func(_, value interface{}) bool {
-		registrations := value.(*Registrations)
-		for i := 0; i < registrations.Size(); i++ {
-			registration, has := registrations.Next()
-			if has {
-				v = append(v, *registration)
+	case data, ok := <-r.ch:
+		if !ok {
+			switch v.(type) {
+			case *[]byte:
+				vv := v.(*[]byte)
+				*vv = append(*vv, nullJson...)
+			case *json.RawMessage:
+				vv := v.(*json.RawMessage)
+				*vv = append(*vv, nullJson...)
 			}
+			return
 		}
-		return true
-	})
-	return
-}
-
-func (manager *RegistrationsManager) Append(registration Registration) {
-
-	var registrations *Registrations
-	value, has := manager.registrationMap.Load(registration.Namespace)
-	if has {
-		registrations = value.(*Registrations)
-	} else {
-		registrations = NewRegistrations()
-	}
-	registrations.Append(registration)
-	manager.registrationMap.Store(registration.Namespace, registrations)
-	return
-}
-
-func (manager *RegistrationsManager) Remove(registration Registration) {
-	value, has := manager.registrationMap.Load(registration.Namespace)
-	if !has {
-		return
-	}
-
-	registrations := value.(*Registrations)
-	registrations.Remove(registration)
-	if registrations.Size() == 0 {
-		manager.registrationMap.Delete(registration.Namespace)
-	}
-
-	return
-}
-
-func (manager *RegistrationsManager) Get(namespace string) (registration *Registration, exists bool) {
-	value, has := manager.registrationMap.Load(namespace)
-	if !has {
-		return
-	}
-
-	registrations := value.(*Registrations)
-	registration, exists = registrations.Next()
-	return
-}
-
-func (manager *RegistrationsManager) ProblemChan() (ch chan<- *Registration) {
-	ch = manager.problemCh
-	return
-}
-
-func (manager *RegistrationsManager) CheckRegistration(registration Registration) (ok bool) {
-	client := manager.clients.next()
-	request := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(request)
-	request.URI().SetHost(registration.Address)
-	request.URI().SetPath(healthCheckPath)
-	request.Header.SetMethodBytes(get)
-
-	response := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(response)
-
-	err := client.DoTimeout(request, response, 2*time.Second)
-	if err != nil {
-		return
-	}
-
-	ok = response.StatusCode() == 200
-	return
-}
-
-func (manager *RegistrationsManager) ListenProblemChan() {
-	go func(manager *RegistrationsManager) {
-		for {
-			stopped := false
-			select {
-			case <-manager.stopListenCh:
-				stopped = true
-				break
-			case r, ok := <-manager.problemCh:
-				if !ok {
-					stopped = true
-					break
-				}
-				if !manager.CheckRegistration(*r) {
-					manager.Remove(*r)
+		switch data.(type) {
+		case errors.CodeError:
+			err = data.(errors.CodeError)
+			return
+		case error:
+			err = errors.Warning(data.(error).Error())
+			return
+		case []byte, json.RawMessage:
+			value := data.([]byte)
+			switch v.(type) {
+			case *json.RawMessage:
+				vv := v.(*json.RawMessage)
+				*vv = append(*vv, value...)
+			case *[]byte:
+				vv := v.(*[]byte)
+				*vv = append(*vv, value...)
+			default:
+				decodeErr := json.Unmarshal(value, v)
+				if decodeErr != nil {
+					err = errors.Warning("fns: get result failed").WithMeta("scope", "result").WithCause(decodeErr)
+					return
 				}
 			}
-			if stopped {
-				break
+		default:
+			switch v.(type) {
+			case *json.RawMessage:
+				value, encodeErr := json.Marshal(data)
+				if encodeErr != nil {
+					err = errors.Warning("fns: get result failed").WithMeta("scope", "result").WithCause(encodeErr)
+					return
+				}
+				vv := v.(*json.RawMessage)
+				*vv = append(*vv, value...)
+			case *[]byte:
+				value, encodeErr := json.Marshal(data)
+				if encodeErr != nil {
+					err = errors.Warning("fns: get result failed").WithMeta("scope", "result").WithCause(encodeErr)
+					return
+				}
+				vv := v.(*[]byte)
+				*vv = append(*vv, value...)
+			default:
+				cpErr := commons.CopyInterface(v, data)
+				if cpErr != nil {
+					err = errors.Warning("fns: get result failed").WithMeta("scope", "result").WithCause(cpErr)
+					return
+				}
 			}
 		}
-	}(manager)
+	}
 	return
 }
-
-func (manager *RegistrationsManager) Close() {
-	manager.stopListenCh <- struct{}{}
-	return
-}
-
-type ServiceDiscovery interface {
-	Publish(service Service) (err error)
-	IsLocal(namespace string) (ok bool)
-	Proxy(ctx Context, namespace string) (proxy ServiceProxy, err errors.CodeError)
-	Registrations() (registrations map[string]*Registration)
-	Close()
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
 
 // Empty
 // @description Empty
 type Empty struct{}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+var embedServices = make(map[string]Service)
+
+func RegisterEmbedService(service Service) {
+	embedServices[service.Name()] = service
+}

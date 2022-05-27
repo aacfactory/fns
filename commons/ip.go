@@ -14,32 +14,30 @@
  * limitations under the License.
  */
 
-package fns
+package commons
 
 import (
-	"golang.org/x/sync/singleflight"
+	"net"
+	"os"
 )
 
-type Barrier interface {
-	Do(ctx Context, key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool)
-	Forget(ctx Context, key string)
-}
-
-func defaultBarrier() Barrier {
-	return &standaloneBarrier{
-		v: &singleflight.Group{},
+func GetGlobalUniCastIpFromHostname() (ipv4 string) {
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname, _ = os.LookupEnv("HOSTNAME")
 	}
-}
-
-type standaloneBarrier struct {
-	v *singleflight.Group
-}
-
-func (b *standaloneBarrier) Do(_ Context, key string, fn func() (v interface{}, err error)) (v interface{}, err error, shared bool) {
-	v, err, shared = b.v.Do(key, fn)
+	if hostname == "" {
+		return
+	}
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return
+	}
+	for _, ip := range ips {
+		if ip.IsGlobalUnicast() {
+			ipv4 = ip.To4().String()
+			break
+		}
+	}
 	return
-}
-
-func (b *standaloneBarrier) Forget(_ Context, key string) {
-	b.v.Forget(key)
 }

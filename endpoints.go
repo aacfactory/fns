@@ -142,31 +142,18 @@ func (s *serviceEndpoints) Get(ctx Context, name string) (endpoint Endpoint, err
 		err = errors.NotFound(fmt.Sprintf("fns: there is no %s service", name)).WithMeta("scope", "endpoints")
 		return
 	}
-	registrations, getErr := s.discovery.GetRegistrations(name)
+	registration, getErr := s.discovery.GetRegistration(name)
 	if getErr != nil {
 		if getErr.Code() == 404 {
 			err = errors.NotFound(fmt.Sprintf("fns: there is no %s service endpoint in discovery", name)).WithMeta("scope", "endpoints").WithCause(getErr)
 		} else {
 			err = errors.Warning(fmt.Sprintf("fns: get %s service endpoint from discovery failed", name)).WithMeta("scope", "endpoints").WithCause(getErr)
 		}
-	}
-	for {
-		registration, hasRegistration := registrations.Next()
-		if !hasRegistration {
-			break
-		}
-		if !registration.CheckHealth() {
-			continue
-		}
-		endpoint = &remoteEndpoint{
-			workerPool:   s.workerPool,
-			registration: registration,
-		}
-		break
-	}
-	if endpoint == nil {
-		err = errors.NotFound(fmt.Sprintf("fns: there is no %s service", name)).WithMeta("scope", "endpoints")
 		return
+	}
+	endpoint = &remoteEndpoint{
+		workerPool:   s.workerPool,
+		registration: registration,
 	}
 	return
 }
@@ -177,29 +164,33 @@ func (s *serviceEndpoints) GetExact(ctx Context, name string, registrationId str
 		err = errors.NotAcceptable(fmt.Sprintf("fns: can not access %s service", name)).WithMeta("scope", "endpoints")
 		return
 	}
-	if registrationId != s.appId {
-		err = errors.NotAcceptable(fmt.Sprintf("fns: can not access %s service", name)).WithMeta("scope", "endpoints")
-		return
-	}
-	local, got := s.endpoints[name]
-	if got {
+	if registrationId == s.appId {
+		local, got := s.endpoints[name]
+		if !got {
+			err = errors.NotFound(fmt.Sprintf("fns: there is no %s service", name)).WithMeta("scope", "endpoints")
+			return
+		}
 		endpoint = local
 		return
+	}
+	if registrationId == "" {
+		local, got := s.endpoints[name]
+		if got {
+			endpoint = local
+			return
+		}
 	}
 	if s.discovery == nil {
 		err = errors.NotFound(fmt.Sprintf("fns: there is no %s service", name)).WithMeta("scope", "endpoints")
 		return
 	}
-	registration, getErr := s.discovery.GetRegistration(name, registrationId)
+	registration, getErr := s.discovery.GetExactRegistration(name, registrationId)
 	if getErr != nil {
 		if getErr.Code() == 404 {
 			err = errors.NotFound(fmt.Sprintf("fns: there is no %s service endpoint in discovery", name)).WithMeta("scope", "endpoints").WithCause(getErr)
 		} else {
 			err = errors.Warning(fmt.Sprintf("fns: get %s service endpoint from discovery failed", name)).WithMeta("scope", "endpoints").WithCause(getErr)
 		}
-	}
-	if !registration.CheckHealth() {
-		err = errors.NotAcceptable(fmt.Sprintf("fns: can not access %s service", name)).WithMeta("scope", "endpoints")
 		return
 	}
 	endpoint = &remoteEndpoint{

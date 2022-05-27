@@ -32,8 +32,13 @@ import (
 type Discovery interface {
 	Register(registrations []*Registration) (err error)
 	Deregister(registrations []*Registration) (err error)
-	GetRegistrations(name string) (registrations *Registrations, err errors.CodeError)
-	GetRegistration(name string, registrationId string) (registration *Registration, err errors.CodeError)
+	// GetRegistration
+	// 获取逻辑节点（docker service 或 kube service）或物理节点
+	GetRegistration(name string) (registration *Registration, err errors.CodeError)
+	// GetExactRegistration
+	// 当registrationId为空时，随机取一个物理节点（container 或 pod）。
+	// 一般用于分布式数据库事务
+	GetExactRegistration(name string, registrationId string) (registration *Registration, err errors.CodeError)
 	Close() (err error)
 }
 

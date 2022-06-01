@@ -17,10 +17,14 @@
 package fns
 
 import (
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/documents"
 	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
 	"github.com/fasthttp/websocket"
 	"io/ioutil"
 	"strings"
@@ -31,29 +35,9 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newWebsocketUpgrader(env Environments) (v *websocket.Upgrader, err error) {
-	httpConfig, hasHttpConfig := env.Config("http")
-	if !hasHttpConfig {
-		v = &websocket.Upgrader{
-			HandshakeTimeout: 5 * time.Second,
-			ReadBufferSize:   4 * KB,
-			WriteBufferSize:  4 * KB,
-		}
-		return
-	}
-	config := &websocketConfig{}
-	hasWsConfig, configErr := httpConfig.Get("websocket", config)
-	if configErr != nil {
-		err = errors.Warning("fns: create websocket upgrader failed for decode config").WithCause(configErr)
-		return
-	}
-	if !hasWsConfig {
-		v = &websocket.Upgrader{
-			HandshakeTimeout: 5 * time.Second,
-			ReadBufferSize:   4 * KB,
-			WriteBufferSize:  4 * KB,
-		}
-		return
+func newWebsocketUpgrader(config WebsocketConfig) (v *websocket.Upgrader) {
+	if config.HandshakeTimeoutSeconds <= 0 {
+		config.HandshakeTimeoutSeconds = 10
 	}
 	readBufferSize := 4 * KB
 	if config.ReadBufferSize != "" {
@@ -109,18 +93,19 @@ type Websocket interface {
 }
 
 type WebsocketDiscovery interface {
-	Build(env Environments) (err error)
 	Register(ctx Context, socket Websocket) (err errors.CodeError)
 	Deregister(ctx Context, socket Websocket) (err errors.CodeError)
 	Close() (err error)
 }
 
-type memoryWebsocketDiscovery struct {
+func newMemoryWebsocketDiscovery(log logs.Logger) *memoryWebsocketDiscovery {
+	return &memoryWebsocketDiscovery{
+		log: log,
+	}
 }
 
-func (discovery *memoryWebsocketDiscovery) Build(env Environments) (err error) {
-	//TODO implement me
-	panic("implement me")
+type memoryWebsocketDiscovery struct {
+	log logs.Logger
 }
 
 func (discovery *memoryWebsocketDiscovery) Register(ctx Context, socket Websocket) (err errors.CodeError) {
@@ -134,6 +119,33 @@ func (discovery *memoryWebsocketDiscovery) Deregister(ctx Context, socket Websoc
 }
 
 func (discovery *memoryWebsocketDiscovery) Close() (err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func newClusterWebsocketDiscovery(log logs.Logger, manager *cluster.Manager) *clusterWebsocketDiscovery {
+	return &clusterWebsocketDiscovery{
+		log:     log,
+		manager: manager,
+	}
+}
+
+type clusterWebsocketDiscovery struct {
+	log     logs.Logger
+	manager *cluster.Manager
+}
+
+func (discovery *clusterWebsocketDiscovery) Register(ctx Context, socket Websocket) (err errors.CodeError) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (discovery *clusterWebsocketDiscovery) Deregister(ctx Context, socket Websocket) (err errors.CodeError) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (discovery *clusterWebsocketDiscovery) Close() (err error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -164,16 +176,16 @@ func (service *websocketService) Components() (components map[string]ServiceComp
 	return
 }
 
-func (service *websocketService) Document() (doc *ServiceDocument) {
+func (service *websocketService) Document() (doc *documents.Service) {
 	return
 }
 
-func (service *websocketService) Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError) {
+func (service *websocketService) Handle(context Context, fn string, argument Argument, result ResultWriter) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (service *websocketService) Shutdown() (err error) {
+func (service *websocketService) Shutdown(_ sc.Context) (err error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -333,8 +345,8 @@ func (proxy *localWebsocketConnectionProxy) Write(_ Context, response *Websocket
 }
 
 type remoteWebsocketConnectionProxy struct {
-	id      string
-	service ServiceProxy
+	id    string
+	proxy *serviceProxy
 }
 
 func (proxy *remoteWebsocketConnectionProxy) Write(ctx Context, response *WebsocketResponse) (err error) {

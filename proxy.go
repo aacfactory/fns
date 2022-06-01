@@ -17,12 +17,13 @@
 package fns
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/secret"
 	"github.com/aacfactory/json"
+	"github.com/valyala/bytebufferpool"
 )
 
 type serviceProxyRequest struct {
@@ -39,11 +40,13 @@ func (req *serviceProxyRequest) Encode() (p []byte, err error) {
 	signature := secret.Sign(content, secretKey)
 	head := make([]byte, 8)
 	binary.BigEndian.PutUint64(head, uint64(len(signature)))
-	buf := bytes.NewBuffer(p)
-	buf.Write(head)
-	buf.Write(signature)
-	buf.Write(content)
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write(head)
+	_, _ = buf.Write(signature)
+	_, _ = buf.Write(content)
 	p = buf.Bytes()
+	buf.Reset()
+	bytebufferpool.Put(buf)
 	return
 }
 
@@ -72,15 +75,12 @@ type serviceProxyResponse struct {
 	Error       errors.CodeError `json:"error"`
 }
 
-type ServiceProxy interface {
-	// httpConnectionHeader != Close && status != 503
-	Available() (ok bool)
-	// 在这里进行tracer合并
-	Request(ctx Context, fn string, argument Argument) (result []byte, err errors.CodeError)
-	Close()
+type serviceProxy struct {
+	client HttpClient
 }
 
-func newServiceProxy(registration *Registration) (proxy ServiceProxy) {
-	// todo 如果错误，返回一个ping false的，而不是panic
+// 在这里进行tracer合并, append child
+func (proxy *serviceProxy) Request(ctx Context, registration *cluster.Registration, fn string, argument Argument) (result []byte, err errors.CodeError) {
+	// todo
 	return
 }

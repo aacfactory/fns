@@ -19,10 +19,9 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configuares"
-	"github.com/aacfactory/workers"
+	"github.com/aacfactory/fns/documents"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -36,54 +35,36 @@ var (
 			min: 0,
 			max: 0,
 		},
-		documents: &Documents{
-			Title:         "FNS",
-			Description:   "",
-			Terms:         "",
-			Contact:       Contact{},
-			License:       License{},
-			Version:       "0.0.0",
-			Services:      make(map[string]*ServiceDocument),
-			URL:           "",
-			once:          sync.Once{},
-			oasRAW:        nil,
-			convertOasErr: nil,
-			raw:           nil,
-			encodeErr:     nil,
-		},
-		configRetrieverOption: defaultConfigRetrieverOption(),
-		concurrency:           workers.DefaultConcurrency,
-		workerMaxIdleTime:     workers.DefaultMaxIdleTime,
-		serviceRequestTimeout: 10 * time.Second,
-		barrier:               defaultBarrier(),
-		validator:             defaultValidator(),
-		tracerReporter:        defaultTracerReporter(),
-		hooks:                 make([]Hook, 0, 1),
-		server:                &fastHttp{},
-		httpVersion:           "HTTP/1.1",
-		httpHandlerWrappers:   make([]HttpHandlerWrapper, 0, 1),
-		websocketDiscovery:    &memoryWebsocketDiscovery{},
-		shutdownTimeout:       60 * time.Second,
+		document:                   documents.New(),
+		configRetrieverOption:      defaultConfigRetrieverOption(),
+		workerMaxIdleTime:          60 * time.Second,
+		handleRequestTimeout:       10 * time.Second,
+		barrier:                    defaultBarrier(),
+		validator:                  defaultValidator(),
+		tracerReporter:             defaultTracerReporter(),
+		hooks:                      make([]Hook, 0, 1),
+		serverBuilder:              fastHttpBuilder,
+		clientBuilder:              fastHttpClientBuilder,
+		httpHandlerWrapperBuilders: defaultHttpHandlerWrapperBuilders(),
+		shutdownTimeout:            60 * time.Second,
 	}
 	secretKey = []byte("+-fns")
 )
 
 type Options struct {
-	procs                 *procsOption
-	documents             *Documents
-	configRetrieverOption configuares.RetrieverOption
-	concurrency           int
-	workerMaxIdleTime     time.Duration
-	serviceRequestTimeout time.Duration
-	barrier               Barrier
-	validator             Validator
-	tracerReporter        TracerReporter
-	hooks                 []Hook
-	server                HttpServer
-	httpVersion           string
-	httpHandlerWrappers   []HttpHandlerWrapper
-	websocketDiscovery    WebsocketDiscovery
-	shutdownTimeout       time.Duration
+	procs                      *procsOption
+	document                   *documents.Application
+	configRetrieverOption      configuares.RetrieverOption
+	workerMaxIdleTime          time.Duration
+	handleRequestTimeout       time.Duration
+	barrier                    Barrier
+	validator                  Validator
+	tracerReporter             TracerReporter
+	hooks                      []Hook
+	serverBuilder              HttpServerBuilder
+	clientBuilder              HttpClientBuilder
+	httpHandlerWrapperBuilders []HttpHandlerWrapperBuilder
+	shutdownTimeout            time.Duration
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -106,6 +87,8 @@ func ConfigRetriever(path string, format string, active string, prefix string, s
 	}
 }
 
+// +-------------------------------------------------------------------------------------------------------------------+
+
 func ConfigActiveFromENV(key string) (active string) {
 	v, has := os.LookupEnv(key)
 	if !has {
@@ -117,17 +100,71 @@ func ConfigActiveFromENV(key string) (active string) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func Document(title string, description string, terms string, contact Contact, license License) Option {
+func Title(title string) Option {
 	return func(options *Options) error {
 		title = strings.TrimSpace(title)
 		if title == "" {
-			return fmt.Errorf("set title failed for empty")
+			return fmt.Errorf("title is empty")
 		}
-		options.documents.Title = title
-		options.documents.Description = description
-		options.documents.Terms = terms
-		options.documents.Contact = contact
-		options.documents.License = license
+		options.document.Title = title
+		return nil
+	}
+}
+
+func Description(description string) Option {
+	return func(options *Options) error {
+		description = strings.TrimSpace(description)
+		if description == "" {
+			return fmt.Errorf("description is empty")
+		}
+		options.document.Description = description
+		return nil
+	}
+}
+func Terms(terms string) Option {
+	return func(options *Options) error {
+		terms = strings.TrimSpace(terms)
+		if terms == "" {
+			return fmt.Errorf("terms is empty")
+		}
+		options.document.Terms = terms
+		return nil
+	}
+}
+
+func Contact(name string, email string, url string) Option {
+	return func(options *Options) error {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("name is empty")
+		}
+		email = strings.TrimSpace(email)
+		if email == "" {
+			return fmt.Errorf("email is empty")
+		}
+		url = strings.TrimSpace(url)
+		if url == "" {
+			return fmt.Errorf("url is empty")
+		}
+		options.document.Contact.Name = name
+		options.document.Contact.Email = email
+		options.document.Contact.Url = url
+		return nil
+	}
+}
+
+func License(name string, url string) Option {
+	return func(options *Options) error {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("name is empty")
+		}
+		url = strings.TrimSpace(url)
+		if url == "" {
+			return fmt.Errorf("url is empty")
+		}
+		options.document.License.Name = name
+		options.document.License.Url = url
 		return nil
 	}
 }
@@ -138,7 +175,7 @@ func Version(version string) Option {
 		if version == "" {
 			return fmt.Errorf("set version failed for empty")
 		}
-		options.documents.Version = version
+		options.document.Version = version
 		return nil
 	}
 }
@@ -164,38 +201,6 @@ func SecretKey(data string) Option {
 			return fmt.Errorf("set secret key failed for empty data")
 		}
 		secretKey = []byte(data)
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func Concurrency(concurrency int) Option {
-	return func(options *Options) error {
-		if concurrency < 1 {
-			return fmt.Errorf("set concurrency failed for empty")
-		}
-		options.concurrency = concurrency
-		return nil
-	}
-}
-
-func ServiceRequestHandleTimeout(timeout time.Duration) Option {
-	return func(options *Options) error {
-		if timeout < 1 {
-			return fmt.Errorf("set service request timeout failed for empty")
-		}
-		options.serviceRequestTimeout = timeout
-		return nil
-	}
-}
-
-func ServiceHandlerMaxIdleTime(idle time.Duration) Option {
-	return func(options *Options) error {
-		if idle < 1 {
-			return fmt.Errorf("set service handler max idle time failed for time is invalid")
-		}
-		options.workerMaxIdleTime = idle
 		return nil
 	}
 }
@@ -246,51 +251,53 @@ func CustomizeTraceReporter(reporter TracerReporter) Option {
 	}
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func CustomizeHttpServer(httpVersion string, server HttpServer) Option {
+func CustomizeWorkerMaxIdleTime(v time.Duration) Option {
 	return func(options *Options) error {
-		httpVersion = strings.ToUpper(strings.TrimSpace(httpVersion))
-		if httpVersion == "" {
-			return fmt.Errorf("set http server failed for httpVersion is invalid")
+		if v < 1 {
+			v = 60 * time.Second
 		}
-		if server == nil {
-			return fmt.Errorf("set http server failed for it is nil")
-		}
-		options.server = server
-		options.httpVersion = httpVersion
+		options.workerMaxIdleTime = v
 		return nil
 	}
 }
 
-func AppendHttpHandlerWrapper(wrappers ...HttpHandlerWrapper) Option {
+func CustomizeHandleRequestTimeout(v time.Duration) Option {
+	return func(options *Options) error {
+		if v < 1 {
+			v = 10 * time.Second
+		}
+		options.handleRequestTimeout = v
+		return nil
+	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func CustomizeHttp(server HttpServerBuilder, client HttpClientBuilder) Option {
+	return func(options *Options) error {
+		if server == nil {
+			return fmt.Errorf("customize http failed for server builder is nil")
+		}
+		if client == nil {
+			return fmt.Errorf("customize http failed for client builder is nil")
+		}
+		options.serverBuilder = server
+		options.clientBuilder = client
+		return nil
+	}
+}
+
+func AppendHttpHandlerWrapper(wrappers ...HttpHandlerWrapperBuilder) Option {
 	return func(options *Options) error {
 		if wrappers == nil {
-			return fmt.Errorf("append http handler wrappers failed for it is nil")
+			return fmt.Errorf("append http handler wrapper builder failed for it is nil")
 		}
 		for _, wrapper := range wrappers {
 			if wrapper == nil {
 				continue
 			}
-			options.httpHandlerWrappers = append(options.httpHandlerWrappers, wrapper)
+			options.httpHandlerWrapperBuilders = append(options.httpHandlerWrapperBuilders, wrapper)
 		}
-		return nil
-	}
-}
-
-func EnableCors() Option {
-	return func(options *Options) error {
-		options.httpHandlerWrappers = append(options.httpHandlerWrappers, &corsHttpHandlerWrapper{})
-		return nil
-	}
-}
-
-func CustomizeWebsocketDiscovery(discovery WebsocketDiscovery) Option {
-	return func(options *Options) error {
-		if discovery == nil {
-			return fmt.Errorf("set websocket discovery failed for nil")
-		}
-		options.websocketDiscovery = discovery
 		return nil
 	}
 }

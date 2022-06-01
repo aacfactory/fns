@@ -1,6 +1,6 @@
 module github.com/aacfactory/fns
 
-go 1.17
+go 1.18
 
 require (
 	github.com/aacfactory/configuares v1.3.1
@@ -20,6 +20,7 @@ require (
 )
 
 require (
+	github.com/aacfactory/afssl v1.4.0 // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect

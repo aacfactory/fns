@@ -28,7 +28,8 @@ type Span interface {
 	FinishedAT() (v time.Time)
 	Latency() (v time.Duration)
 	Parent() (v Span)
-	Children() (v Span)
+	Children() (v []Span)
+	AppendChild(children ...Span)
 }
 
 type Tracer interface {

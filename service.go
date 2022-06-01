@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/documents"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 )
@@ -37,9 +38,9 @@ type Service interface {
 	Internal() (internal bool)
 	Build(env Environments) (err error)
 	Components() (components map[string]ServiceComponent)
-	Document() (doc *ServiceDocument)
-	Handle(context Context, fn string, argument Argument) (result interface{}, err errors.CodeError)
-	Shutdown() (err error)
+	Document() (doc *documents.Service)
+	Handle(context Context, fn string, argument Argument, result ResultWriter)
+	Shutdown(context sc.Context) (err error)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -247,10 +248,14 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type Result interface {
+type ResultWriter interface {
 	Succeed(v interface{})
 	Failed(err errors.CodeError)
-	Get(ctx sc.Context, v interface{}) (err errors.CodeError)
+}
+
+type Result interface {
+	ResultWriter
+	Get(ctx sc.Context, v interface{}) (has bool, err errors.CodeError)
 }
 
 func NewResult() Result {
@@ -268,6 +273,11 @@ func (r *futureResult) Succeed(v interface{}) {
 		close(r.ch)
 		return
 	}
+	raw, ok := v.(json.RawMessage)
+	if ok && len(raw) == 0 {
+		close(r.ch)
+		return
+	}
 	r.ch <- v
 	close(r.ch)
 }
@@ -280,21 +290,13 @@ func (r *futureResult) Failed(err errors.CodeError) {
 	close(r.ch)
 }
 
-func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError) {
+func (r *futureResult) Get(ctx sc.Context, v interface{}) (has bool, err errors.CodeError) {
 	select {
 	case <-ctx.Done():
-		err = errors.Timeout("timeout")
+		err = errors.Timeout("fns: get result timeout").WithMeta("scope", "result")
 		return
 	case data, ok := <-r.ch:
 		if !ok {
-			switch v.(type) {
-			case *[]byte:
-				vv := v.(*[]byte)
-				*vv = append(*vv, nullJson...)
-			case *json.RawMessage:
-				vv := v.(*json.RawMessage)
-				*vv = append(*vv, nullJson...)
-			}
 			return
 		}
 		switch data.(type) {
@@ -306,6 +308,9 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 			return
 		case []byte, json.RawMessage:
 			value := data.([]byte)
+			if len(value) == 0 {
+				return
+			}
 			switch v.(type) {
 			case *json.RawMessage:
 				vv := v.(*json.RawMessage)
@@ -320,6 +325,7 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 					return
 				}
 			}
+			has = true
 		default:
 			switch v.(type) {
 			case *json.RawMessage:
@@ -345,6 +351,7 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (err errors.CodeError)
 					return
 				}
 			}
+			has = true
 		}
 	}
 	return

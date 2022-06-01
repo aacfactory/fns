@@ -29,17 +29,17 @@ type printf struct {
 
 func (p *printf) Printf(layout string, v ...interface{}) {
 	if p.core.DebugEnabled() {
-		p.core.Debug().Message(fmt.Sprintf("fns %s", fmt.Sprintf(layout, v...)))
+		p.core.Debug().Message(fmt.Sprintf("fns: %s", fmt.Sprintf(layout, v...)))
 	}
 }
 
-type logConfig struct {
+type LogConfig struct {
 	Level     string `json:"level"`
 	Formatter string `json:"formatter"`
 	Color     bool   `json:"color"`
 }
 
-func newLog(config logConfig) (v logs.Logger, err error) {
+func newLog(config LogConfig) (v logs.Logger, err error) {
 	formatter := logs.ConsoleFormatter
 	if strings.ToLower(strings.TrimSpace(config.Formatter)) == "json" {
 		formatter = logs.JsonFormatter

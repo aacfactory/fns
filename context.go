@@ -20,7 +20,7 @@ import (
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"time"

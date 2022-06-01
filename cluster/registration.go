@@ -18,7 +18,7 @@ package cluster
 
 import (
 	"crypto/tls"
-	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
 	"sync"
 	"sync/atomic"

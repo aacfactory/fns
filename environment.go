@@ -18,7 +18,7 @@ package fns
 
 import (
 	"github.com/aacfactory/configuares"
-	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
 )
 

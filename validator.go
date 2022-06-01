@@ -19,7 +19,7 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/go-playground/validator/v10"
 	"reflect"
 	"strings"

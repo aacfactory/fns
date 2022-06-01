@@ -187,7 +187,6 @@ func New(options ...Option) (app Application) {
 	document := opt.document
 
 	// endpoints
-
 	endpoints, endpointsErr := newEndpoints(env, serviceEndpointsOptions{
 		workerMaxIdleTime: opt.workerMaxIdleTime,
 		barrier:           opt.barrier,
@@ -201,6 +200,8 @@ func New(options ...Option) (app Application) {
 	// runtime
 	runtime := newServiceRuntime(env, endpoints, opt.validator)
 
+	// embedServices
+	embedServices := make([]Service, 0, 1)
 	// websocket
 	var websocketDiscovery WebsocketDiscovery
 	if clusterManager == nil {
@@ -208,7 +209,7 @@ func New(options ...Option) (app Application) {
 	} else {
 		websocketDiscovery = newClusterWebsocketDiscovery(log.With("fns", "websocket"), clusterManager)
 	}
-	RegisterEmbedService(&websocketService{
+	embedServices = append(embedServices, &websocketService{
 		discovery: websocketDiscovery,
 	})
 	websocketUpgrader := newWebsocketUpgrader(config.Websocket)
@@ -398,6 +399,8 @@ func (app *application) Run() (err error) {
 		err = httpErr
 		return
 	}
+	// hooks
+	app.hooks.start()
 	// cluster publish
 	if app.clusterManager != nil {
 		services := make([]string, 0, 1)
@@ -467,6 +470,20 @@ func (app *application) stop(ctx sc.Context, ch chan struct{}) {
 			app.log.Warn().Cause(httpCloseErr).Message("fns: stop application failed")
 		}
 	}
+	// tracerReporter
+	tracerReporterCloseErr := app.tracerReporter.Close()
+	if tracerReporterCloseErr != nil {
+		if app.log.WarnEnabled() {
+			app.log.Warn().Cause(tracerReporterCloseErr).Message("fns: stop application failed")
+		}
+	}
+	// hooks
+	hooksCloseErr := app.hooks.close()
+	if hooksCloseErr != nil {
+		if app.log.WarnEnabled() {
+			app.log.Warn().Cause(hooksCloseErr).Message("fns: stop application failed")
+		}
+	}
 	// endpoints
 	endpointsCloseErr := app.endpoints.close()
 	if endpointsCloseErr != nil {
@@ -481,21 +498,6 @@ func (app *application) stop(ctx sc.Context, ch chan struct{}) {
 			if app.log.WarnEnabled() {
 				app.log.Warn().Cause(serviceErr).Message("fns: stop application failed")
 			}
-		}
-	}
-
-	// tracerReporter
-	tracerReporterCloseErr := app.tracerReporter.Close()
-	if tracerReporterCloseErr != nil {
-		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(tracerReporterCloseErr).Message("fns: stop application failed")
-		}
-	}
-	// hooks
-	hooksCloseErr := app.hooks.close()
-	if hooksCloseErr != nil {
-		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(hooksCloseErr).Message("fns: stop application failed")
 		}
 	}
 	ch <- struct{}{}

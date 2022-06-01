@@ -362,9 +362,3 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (has bool, err errors.
 type Empty struct{}
 
 // +-------------------------------------------------------------------------------------------------------------------+
-
-var embedServices = make(map[string]Service)
-
-func RegisterEmbedService(service Service) {
-	embedServices[service.Name()] = service
-}

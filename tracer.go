@@ -47,7 +47,7 @@ func newTracer(id string) (v Tracer) {
 
 type TracerReporter interface {
 	Build(env Environments) (err error)
-	Report(tracer Tracer)
+	Report(ctx Context, tracer Tracer)
 	Close() (err error)
 }
 

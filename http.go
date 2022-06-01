@@ -626,9 +626,9 @@ func (h *httpHandler) handleRequest(response http.ResponseWriter, request *http.
 		h.failed(response, codeErr)
 	}
 	// report tracer
-	h.tracerReporter.Report(ctx.Tracer())
+	h.tracerReporter.Report(ctx.Fork(sc.TODO()), ctx.Tracer())
 	// hook
-	h.hooks.send(newHookUnit(service, fn, ctx.Request(), body, codeErr, ctx.tracer.RootSpan().Latency()))
+	h.hooks.send(newHookUnit(ctx, service, fn, body, codeErr, ctx.tracer.RootSpan().Latency()))
 	// done
 	h.requestCounter.Done()
 }
@@ -694,7 +694,7 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 	proxyResponseBytes := json.UnsafeMarshal(proxyResponse)
 	h.succeed(response, proxyResponseBytes)
 	// hook
-	h.hooks.send(newHookUnit(service, fn, ctx.Request(), body, handleErr, ctx.tracer.RootSpan().Latency()))
+	h.hooks.send(newHookUnit(ctx, service, fn, body, handleErr, ctx.tracer.RootSpan().Latency()))
 	// done
 	h.requestCounter.Done()
 }

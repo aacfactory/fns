@@ -115,7 +115,8 @@ func newEndpoints(env Environments, opt serviceEndpointsOptions) (v *serviceEndp
 	if opt.clusterManager != nil {
 		registrationManager = opt.clusterManager.Registrations()
 	}
-	workerPool, workerPoolErr := workers.New(newEndpointHandler(env, opt.client, registrationManager), workers.WithConcurrency(workers.DefaultConcurrency), workers.WithMaxIdleTime(opt.workerMaxIdleTime))
+	handler := newEndpointHandler(env, opt.client, registrationManager)
+	workerPool, workerPoolErr := workers.New(handler, workers.WithConcurrency(workers.DefaultConcurrency), workers.WithMaxIdleTime(opt.workerMaxIdleTime))
 	if workerPoolErr != nil {
 		err = fmt.Errorf("fns: create endpoints failed for unable to create workers, %s", workerPoolErr)
 		return
@@ -125,6 +126,7 @@ func newEndpoints(env Environments, opt serviceEndpointsOptions) (v *serviceEndp
 		endpoints:     make(map[string]*localEndpoint),
 		registrations: registrationManager,
 		workerPool:    workerPool,
+		handler:       handler,
 	}
 	return
 }
@@ -134,6 +136,7 @@ type serviceEndpoints struct {
 	endpoints     map[string]*localEndpoint
 	registrations *cluster.RegistrationsManager
 	workerPool    workers.Workers
+	handler       *endpointHandler
 }
 
 func (s *serviceEndpoints) Get(ctx Context, name string) (endpoint Endpoint, err errors.CodeError) {
@@ -228,6 +231,7 @@ func (s *serviceEndpoints) start() (err errors.CodeError) {
 
 func (s *serviceEndpoints) close() (err errors.CodeError) {
 	s.workerPool.Stop()
+	s.handler.close()
 	return
 }
 
@@ -358,4 +362,8 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 			break
 		}
 	}
+}
+
+func (h *endpointHandler) close() {
+	h.proxy.close()
 }

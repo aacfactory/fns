@@ -84,3 +84,8 @@ func (proxy *serviceProxy) Request(ctx Context, registration *cluster.Registrati
 	// todo
 	return
 }
+
+func (proxy *serviceProxy) close() {
+	proxy.client.Close()
+	return
+}

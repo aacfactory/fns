@@ -428,8 +428,8 @@ func (app *application) Sync() (err error) {
 	signal.Notify(ch,
 		os.Interrupt,
 		syscall.SIGINT,
-		os.Kill,
 		syscall.SIGKILL,
+		syscall.SIGQUIT,
 		syscall.SIGTERM,
 	)
 	<-ch

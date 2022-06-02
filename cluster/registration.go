@@ -17,9 +17,11 @@
 package cluster
 
 import (
-	"crypto/tls"
+	sc "context"
+	"fmt"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
+	"net/http"
 	"sync"
 	"sync/atomic"
 )
@@ -30,7 +32,20 @@ type Registration struct {
 	Internal         bool
 	Address          string
 	SSL              bool
+	client           Client
 	unavailableTimes int64
+}
+
+func (r *Registration) Request(ctx sc.Context, fn string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
+	schema := ""
+	if r.SSL {
+		schema = "https"
+	} else {
+		schema = "http"
+	}
+	url := fmt.Sprintf("%s://%s/%s/%s", schema, r.Address, r.Name, fn)
+	status, respHeader, respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
+	return
 }
 
 func (r *Registration) Key() (key string) {
@@ -94,12 +109,20 @@ func (r *Registrations) Get(id string) (v *Registration, has bool) {
 	return
 }
 
+func newRegistrationsManager(log logs.Logger) *RegistrationsManager {
+	return &RegistrationsManager{
+		log:    log.With("cluster", "registrations"),
+		mutex:  sync.Mutex{},
+		nodes:  sync.Map{},
+		values: sync.Map{},
+	}
+}
+
 type RegistrationsManager struct {
-	log       logs.Logger
-	mutex     sync.Mutex
-	clientTLS *tls.Config
-	nodes     sync.Map
-	values    sync.Map
+	log    logs.Logger
+	mutex  sync.Mutex
+	nodes  sync.Map
+	values sync.Map
 }
 
 func (manager *RegistrationsManager) members() (values []*Node) {

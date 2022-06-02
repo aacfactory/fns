@@ -54,7 +54,7 @@ func (endpoint *localEndpoint) Request(ctx Context, fn string, argument Argument
 		result:   result,
 	})
 	if !ok {
-		result.Failed(errors.Warning("fns: send request to endpoint failed").WithMeta("scope", "system"))
+		result.Failed(errors.NotAcceptable("fns: send request to endpoint failed for no workers").WithMeta("fns", "endpoints").WithMeta("cause", "out of workers"))
 	}
 	return
 }
@@ -106,7 +106,6 @@ type Endpoints interface {
 type serviceEndpointsOptions struct {
 	workerMaxIdleTime time.Duration
 	barrier           Barrier
-	client            HttpClient
 	clusterManager    *cluster.Manager
 }
 
@@ -115,7 +114,7 @@ func newEndpoints(env Environments, opt serviceEndpointsOptions) (v *serviceEndp
 	if opt.clusterManager != nil {
 		registrationManager = opt.clusterManager.Registrations()
 	}
-	handler := newEndpointHandler(env, opt.client, registrationManager)
+	handler := newEndpointHandler(env, registrationManager)
 	workerPool, workerPoolErr := workers.New(handler, workers.WithConcurrency(workers.DefaultConcurrency), workers.WithMaxIdleTime(opt.workerMaxIdleTime))
 	if workerPoolErr != nil {
 		err = fmt.Errorf("fns: create endpoints failed for unable to create workers, %s", workerPoolErr)
@@ -231,25 +230,20 @@ func (s *serviceEndpoints) start() (err errors.CodeError) {
 
 func (s *serviceEndpoints) close() (err errors.CodeError) {
 	s.workerPool.Stop()
-	s.handler.close()
 	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newEndpointHandler(env Environments, client HttpClient, registrations *cluster.RegistrationsManager) *endpointHandler {
+func newEndpointHandler(env Environments, registrations *cluster.RegistrationsManager) *endpointHandler {
 	return &endpointHandler{
-		log: env.Log().With("fns", "endpoint"),
-		proxy: &serviceProxy{
-			client: client,
-		},
+		log:           env.Log().With("fns", "endpoint"),
 		registrations: registrations,
 	}
 }
 
 type endpointHandler struct {
 	log           logs.Logger
-	proxy         *serviceProxy
 	registrations *cluster.RegistrationsManager
 }
 
@@ -307,7 +301,7 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 		}
 		span := ctx.tracer.StartSpan(registration.Name, fn)
 		span.AddTag("remote", registration.Address)
-		proxyResult, proxyErr := h.proxy.Request(ctx, registration, fn, arg)
+		proxyResult, proxyErr := proxyRequest(ctx, registration, fn, arg)
 		span.Finish()
 		if proxyErr == nil {
 			span.AddTag("status", "OK")
@@ -345,7 +339,7 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 			}
 			span := ctx.tracer.StartSpan(registration.Name, fn)
 			span.AddTag("remote", registration.Address)
-			proxyResult, proxyErr := h.proxy.Request(ctx, registration, fn, arg)
+			proxyResult, proxyErr := proxyRequest(ctx, registration, fn, arg)
 			span.Finish()
 			if proxyErr == nil {
 				span.AddTag("status", "OK")
@@ -372,8 +366,4 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 			result.Failed(errors.NotFound(fmt.Sprintf("fns: there is no %s service", payload.service)).WithMeta("scope", "endpoints"))
 		}
 	}
-}
-
-func (h *endpointHandler) close() {
-	h.proxy.close()
 }

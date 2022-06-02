@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/documents"
 	"github.com/aacfactory/fns/internal/cors"
 	"github.com/aacfactory/json"
@@ -104,21 +105,6 @@ type HttpServerBuilder func(options HttpServerOptions) (server HttpServer, err e
 type HttpServer interface {
 	ListenAndServe() (err error)
 	Close() (err error)
-}
-
-type HttpClientOptions struct {
-	Log                 logs.Logger
-	TLS                 *tls.Config
-	MaxIdleConnDuration time.Duration
-	MaxConnsPerHost     int
-	MaxIdleConnsPerHost int
-}
-
-type HttpClientBuilder func(options HttpClientOptions) (client HttpClient, err error)
-
-type HttpClient interface {
-	Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
-	Close()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -256,7 +242,7 @@ func (srv *fastHttp) Close() (err error) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func fastHttpClientBuilder(options HttpClientOptions) (client HttpClient, err error) {
+func fastHttpClientBuilder(options cluster.ClientOptions) (client cluster.Client, err error) {
 	maxIdleConnDuration := options.MaxIdleConnDuration
 	if maxIdleConnDuration < 1 {
 		maxIdleConnDuration = fasthttp.DefaultMaxIdleConnDuration

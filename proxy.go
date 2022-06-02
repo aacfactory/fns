@@ -75,17 +75,9 @@ type serviceProxyResponse struct {
 	Error       errors.CodeError `json:"error"`
 }
 
-type serviceProxy struct {
-	client HttpClient
-}
-
 // 在这里进行tracer合并, append child
-func (proxy *serviceProxy) Request(ctx Context, registration *cluster.Registration, fn string, argument Argument) (result []byte, err errors.CodeError) {
+func proxyRequest(ctx Context, registration *cluster.Registration, fn string, argument Argument) (result []byte, err errors.CodeError) {
 	// todo
-	return
-}
 
-func (proxy *serviceProxy) close() {
-	proxy.client.Close()
 	return
 }

@@ -19,6 +19,7 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/documents"
 	"os"
 	"strings"
@@ -62,7 +63,7 @@ type Options struct {
 	tracerReporter             TracerReporter
 	hooks                      []Hook
 	serverBuilder              HttpServerBuilder
-	clientBuilder              HttpClientBuilder
+	clientBuilder              cluster.ClientBuilder
 	httpHandlerWrapperBuilders []HttpHandlerWrapperBuilder
 	shutdownTimeout            time.Duration
 }
@@ -273,15 +274,21 @@ func CustomizeHandleRequestTimeout(v time.Duration) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func CustomizeHttp(server HttpServerBuilder, client HttpClientBuilder) Option {
+func CustomizeHttp(server HttpServerBuilder) Option {
 	return func(options *Options) error {
 		if server == nil {
 			return fmt.Errorf("customize http failed for server builder is nil")
 		}
-		if client == nil {
-			return fmt.Errorf("customize http failed for client builder is nil")
-		}
 		options.serverBuilder = server
+		return nil
+	}
+}
+
+func CustomizeClusterClientBuilder(client cluster.ClientBuilder) Option {
+	return func(options *Options) error {
+		if client == nil {
+			return fmt.Errorf("customize cluster client builder failed for client builder is nil")
+		}
 		options.clientBuilder = client
 		return nil
 	}

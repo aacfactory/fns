@@ -57,7 +57,6 @@ func New(options ...Option) (app Application) {
 	}
 	// app
 	appId := ""
-	appIp := ""
 	// config
 	configRetriever, configRetrieverErr := configuares.NewRetriever(opt.configRetrieverOption)
 	if configRetrieverErr != nil {
@@ -100,19 +99,6 @@ func New(options ...Option) (app Application) {
 		clientTLS = clientTLS0
 		ssl = true
 	}
-	// http client
-	clientConfig := config.Client
-	httpClient, httpClientErr := opt.clientBuilder(HttpClientOptions{
-		Log:                 log,
-		TLS:                 clientTLS,
-		MaxIdleConnDuration: time.Duration(clientConfig.MaxIdleConnSeconds) * time.Second,
-		MaxConnsPerHost:     clientConfig.MaxConnsPerHost,
-		MaxIdleConnsPerHost: clientConfig.MaxIdleConnsPerHost,
-	})
-	if httpClientErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(httpClientErr)))
-		return
-	}
 	// port
 	port := config.Port
 	if port == 0 {
@@ -131,56 +117,27 @@ func New(options ...Option) (app Application) {
 	var clusterManager *cluster.Manager
 	if config.Cluster == nil {
 		appId = UID()
-		appIp = commons.GetGlobalUniCastIpFromHostname()
-		if appIp == "" {
-			appIp, _ = os.LookupEnv("FNS-PUBLIC-HOST")
-			appIp = strings.TrimSpace(appIp)
-			if appIp == "" {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, get host ip failed failed").WithCause(fmt.Errorf("fns: can not get global uni-cast ip via hostname, please set FNS-PUBLIC-HOST system environment, e.g.: export FNS-PUBLIC-HOST=192.168.33.11"))))
-				return
-			}
-		}
 	} else {
-		kind := strings.TrimSpace(config.Cluster.Kind)
-		if kind == "" {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("kind is undefinded"))))
+		clusterManagerOptions := cluster.ManagerOptions{
+			Log:           log,
+			Port:          port,
+			Config:        config.Cluster,
+			ClientTLS:     clientTLS,
+			ClientBuilder: opt.clientBuilder,
+		}
+		var clusterManagerErr error
+		clusterManager, clusterManagerErr = cluster.NewManager(clusterManagerOptions)
+		if clusterManagerErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(clusterManagerErr)))
 			return
 		}
-		bootstrap, hasBootstrap := cluster.GetRegisteredBootstrap(kind)
-		if !hasBootstrap {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s kind bootstrap is not registerd", kind))))
-			return
-		}
-		membersOptionsConfig, hasMembersOptionsConfig := configRaw.Node("cluster.options")
-		if !hasMembersOptionsConfig {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s kind bootstrap options is undefinded", kind))))
-			return
-		}
-		bootstrapBuildErr := bootstrap.Build(cluster.BootstrapOptions{
-			Config: membersOptionsConfig,
-			Log:    log.With("fns", "cluster"),
-		})
-		if bootstrapBuildErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(bootstrapBuildErr)))
-			return
-		}
-		appId = bootstrap.Id()
-		if appId == "" {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("can not get my id from bootstrap"))))
-			return
-		}
-		appIp = bootstrap.Ip()
-		if appIp == "" {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("can not get my ip from bootstrap"))))
-			return
-		}
-		clusterManager = cluster.NewManager(log.With("fns", "cluster"), bootstrap, httpClient)
+		appId = clusterManager.Node().Id
 	}
 
 	// running
 	running := commons.NewSafeFlag(false)
 	// env
-	env := newEnvironments(appIp, opt.document.Version, running, configRaw, log)
+	env := newEnvironments(appId, opt.document.Version, running, configRaw, log)
 	// procs
 	goprocs := newPROCS(env, opt.procs)
 	// documents
@@ -190,7 +147,6 @@ func New(options ...Option) (app Application) {
 	endpoints, endpointsErr := newEndpoints(env, serviceEndpointsOptions{
 		workerMaxIdleTime: opt.workerMaxIdleTime,
 		barrier:           opt.barrier,
-		client:            httpClient,
 		clusterManager:    clusterManager,
 	})
 	if endpointsErr != nil {
@@ -403,16 +359,14 @@ func (app *application) Run() (err error) {
 	app.hooks.start()
 	// cluster publish
 	if app.clusterManager != nil {
-		services := make([]string, 0, 1)
-		internals := make([]string, 0, 1)
 		for _, service := range app.services {
 			if service.Internal() {
-				internals = append(internals, service.Name())
+				app.clusterManager.Node().AppendInternalService(service.Name())
 			} else {
-				services = append(services, service.Name())
+				app.clusterManager.Node().AppendService(service.Name())
 			}
 		}
-		app.clusterManager.Join(sc.TODO(), app.https, services, internals)
+		app.clusterManager.Join(sc.TODO())
 	}
 	// on
 	app.running.On()

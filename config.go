@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/json"
 	"os"
 	"path/filepath"
@@ -65,14 +66,7 @@ type Config struct {
 	Client        HttpClientConfig `json:"client"`
 	ServerOptions json.RawMessage  `json:"serverOptions"`
 	Log           LogConfig        `json:"log"`
-	Cluster       *ClusterConfig   `json:"cluster"`
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type ClusterConfig struct {
-	Kind    string          `json:"kind"`
-	Options json.RawMessage `json:"options"`
+	Cluster       *cluster.Config  `json:"cluster"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

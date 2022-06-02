@@ -345,8 +345,7 @@ func (proxy *localWebsocketConnectionProxy) Write(_ Context, response *Websocket
 }
 
 type remoteWebsocketConnectionProxy struct {
-	id    string
-	proxy *serviceProxy
+	id string
 }
 
 func (proxy *remoteWebsocketConnectionProxy) Write(ctx Context, response *WebsocketResponse) (err error) {

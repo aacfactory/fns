@@ -32,7 +32,7 @@ type Bootstrap interface {
 	Build(options BootstrapOptions) (err error)
 	Id() (id string)
 	Ip() (ip string)
-	FindAddresses(ctx sc.Context) (addresses []string)
+	FindMembers(ctx sc.Context) (addresses []string)
 }
 
 var (
@@ -56,7 +56,7 @@ func RegisterBootstrap(kind string, bootstrap Bootstrap) (ok bool) {
 	return
 }
 
-func GetRegisteredBootstrap(kind string) (bootstrap Bootstrap, has bool) {
+func getRegisteredBootstrap(kind string) (bootstrap Bootstrap, has bool) {
 	bootstrap, has = registeredBootstraps[kind]
 	return
 }

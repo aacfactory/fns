@@ -18,8 +18,43 @@ package cluster
 
 import (
 	sc "context"
+	"crypto/tls"
+	"github.com/aacfactory/logs"
 	"net/http"
+	"time"
 )
+
+type ClientOptions struct {
+	Log                 logs.Logger
+	TLS                 *tls.Config
+	MaxIdleConnDuration time.Duration
+	MaxConnsPerHost     int
+	MaxIdleConnsPerHost int
+}
+
+func newClientOptions(log logs.Logger, TLS *tls.Config, config ClientConfig) ClientOptions {
+	maxIdleConnDuration := time.Duration(config.MaxIdleClientConnSeconds) * time.Second
+	if maxIdleConnDuration < 1 {
+		maxIdleConnDuration = 10 * time.Second
+	}
+	maxConnsPerHost := config.MaxClientConnsPerHost
+	if maxConnsPerHost < 1 {
+		maxConnsPerHost = 512
+	}
+	maxIdleConnsPerHost := config.MaxIdleClientConnsPerHost
+	if maxIdleConnsPerHost < 1 {
+		maxConnsPerHost = 512
+	}
+	return ClientOptions{
+		Log:                 log,
+		TLS:                 TLS,
+		MaxIdleConnDuration: maxIdleConnDuration,
+		MaxConnsPerHost:     maxConnsPerHost,
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+	}
+}
+
+type ClientBuilder func(options ClientOptions) (client Client, err error)
 
 type Client interface {
 	Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)

@@ -16,7 +16,10 @@
 
 package cluster
 
-import "github.com/aacfactory/json"
+import (
+	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
+)
 
 type ResourceUpdateEvent struct {
 	Node  string          `json:"node"`
@@ -31,4 +34,26 @@ type ResourcesHandler interface {
 type Resources interface {
 	Updated(kind string, value interface{}) (err error)
 	RegisterHandler(kind string, handler ResourcesHandler) (err error)
+}
+
+func newResourcesManager(log logs.Logger, client Client) *resourcesManager {
+	return &resourcesManager{
+		log:    log.With("cluster", "resources"),
+		client: client,
+	}
+}
+
+type resourcesManager struct {
+	log    logs.Logger
+	client Client
+}
+
+func (manager *resourcesManager) Updated(kind string, value interface{}) (err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (manager *resourcesManager) RegisterHandler(kind string, handler ResourcesHandler) (err error) {
+	//TODO implement me
+	panic("implement me")
 }

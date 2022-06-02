@@ -2,6 +2,8 @@ github.com/aacfactory/afssl v1.4.0 h1:msCBEuc2quMbUaTlbZiuffQfH6ANiOBlBq7QMa5TLq
 github.com/aacfactory/afssl v1.4.0/go.mod h1:gO9Y8nwF/JS4ohdq8KgAFHnFbnLuDEOvRRYNg+nWR94=
 github.com/aacfactory/configuares v1.3.1 h1:1fsx3sxuqU1we2uoS+PUzLFSZrykn6us6UaYc8e7mGU=
 github.com/aacfactory/configuares v1.3.1/go.mod h1:OkFBIPb6RPE4ewLmsgHgDCTgWNeIQzl2obc1wgWm/xU=
+github.com/aacfactory/configuares v1.4.0 h1:pNEkkfADXOk9r3lxIEjE6ArifD3psuAOU5DG25OnN9Y=
+github.com/aacfactory/configuares v1.4.0/go.mod h1:jUHFDHDDDsJuVI2N11/wAowqJyhLCMFn0dMQm86m+tQ=
 github.com/aacfactory/errors v1.6.3 h1:IlNhh2a8PGgxBFbiify+km/0nL2bq6/d3N74M+8ohKk=
 github.com/aacfactory/errors v1.6.3/go.mod h1:Ms6xshByQL5q/R36d8lElebfNpHSdMTaS0UpQs8ihp0=
 github.com/aacfactory/json v1.5.0 h1:xGFFVyxGKyH29Ybkc75oyu1rZTYbdJvHs7y4bW8yBvM=
@@ -37,6 +39,8 @@ github.com/go-playground/validator/v10 v10.10.0 h1:I7mrTYv78z8k8VXa/qJlOlEXn/nBh
 github.com/go-playground/validator/v10 v10.10.0/go.mod h1:74x4gJWsvQexRdW8Pn3dXSGrTK4nAUsbPlLADvpJkos=
 github.com/goccy/go-yaml v1.9.4 h1:S0GCYjwHKVI6IHqio7QWNKNThUl6NLzFd/g8Z65Axw8=
 github.com/goccy/go-yaml v1.9.4/go.mod h1:U/jl18uSupI5rdI2jmuCswEA2htH9eXfferR3KfscvA=
+github.com/goccy/go-yaml v1.9.5 h1:Eh/+3uk9kLxG4koCX6lRMAPS1OaMSAi+FJcya0INdB0=
+github.com/goccy/go-yaml v1.9.5/go.mod h1:U/jl18uSupI5rdI2jmuCswEA2htH9eXfferR3KfscvA=
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
@@ -88,6 +92,8 @@ github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5Cc
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/tidwall/gjson v1.12.1 h1:ikuZsLdhr8Ws0IdROXUS1Gi4v9Z4pGqpX/CvJkxvfpo=
 github.com/tidwall/gjson v1.12.1/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
+github.com/tidwall/gjson v1.14.1 h1:iymTbGkQBhveq21bEvAQ81I0LEBork8BFe1CUZXdyuo=
+github.com/tidwall/gjson v1.14.1/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
 github.com/tidwall/match v1.1.1 h1:+Ho715JplO36QYgwN9PGYNhgZvoUSc9X2c80KVTi+GA=
 github.com/tidwall/match v1.1.1/go.mod h1:eRSPERbgtNPcGhD8UCthc6PmLEQXEWd3PRB5JTxsfmM=
 github.com/tidwall/pretty v1.2.0 h1:RWIZEg2iJ8/g6fDDYzMpobmaoGh5OLl4AXtGUGPcqCs=

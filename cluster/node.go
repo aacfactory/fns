@@ -22,6 +22,15 @@ type Node struct {
 	Address          string   `json:"address"`
 	Services         []string `json:"services"`
 	InternalServices []string `json:"internalServices"`
+	client           Client
+}
+
+func (node *Node) AppendService(services ...string) {
+	node.Services = append(node.Services, services...)
+}
+
+func (node *Node) AppendInternalService(services ...string) {
+	node.InternalServices = append(node.InternalServices, services...)
 }
 
 func (node *Node) Registrations() (registrations []*Registration) {
@@ -29,22 +38,26 @@ func (node *Node) Registrations() (registrations []*Registration) {
 	if node.Services != nil {
 		for _, service := range node.Services {
 			registrations = append(registrations, &Registration{
-				Id:       node.Id,
-				Name:     service,
-				Internal: false,
-				Address:  node.Address,
-				SSL:      node.SSL,
+				Id:               node.Id,
+				Name:             service,
+				Internal:         false,
+				Address:          node.Address,
+				SSL:              node.SSL,
+				client:           node.client,
+				unavailableTimes: 0,
 			})
 		}
 	}
 	if node.InternalServices != nil {
 		for _, service := range node.InternalServices {
 			registrations = append(registrations, &Registration{
-				Id:       node.Id,
-				Name:     service,
-				Internal: true,
-				Address:  node.Address,
-				SSL:      node.SSL,
+				Id:               node.Id,
+				Name:             service,
+				Internal:         true,
+				Address:          node.Address,
+				SSL:              node.SSL,
+				client:           node.client,
+				unavailableTimes: 0,
 			})
 		}
 	}

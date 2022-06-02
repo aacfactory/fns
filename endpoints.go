@@ -294,7 +294,6 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 	parentCtx := payload.ctx.(*context)
 	arg := payload.argument
 	result := payload.result
-
 	if payload.exact {
 		registration := payload.registration
 		ctx := &context{
@@ -310,25 +309,29 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 		span.AddTag("remote", registration.Address)
 		proxyResult, proxyErr := h.proxy.Request(ctx, registration, fn, arg)
 		span.Finish()
-		if proxyErr.Code() == http.StatusServiceUnavailable {
-			span.AddTag("status", "unavailable")
-			registration.AddUnavailableTimes()
-			if registration.Unavailable() {
-				h.registrations.RemoveUnavailableRegistration(registration.Name, registration.Id)
-			}
-		} else {
-			span.AddTag("status", "succeed")
-		}
 		if proxyErr == nil {
+			span.AddTag("status", "OK")
+			span.AddTag("handled", "succeed")
 			result.Succeed(proxyResult)
 		} else {
+			span.AddTag("status", proxyErr.Name())
+			span.AddTag("handled", "failed")
+			if proxyErr.Code() == http.StatusServiceUnavailable {
+				registration.AddUnavailableTimes()
+				if registration.Unavailable() {
+					h.registrations.RemoveUnavailableRegistration(registration.Name, registration.Id)
+				}
+			}
 			result.Failed(proxyErr)
 		}
 	} else {
-		for {
+		registrations := payload.registrations.Size()
+		handled := false
+		for i := 0; i < registrations; i++ {
 			registration, hasRegistration := payload.registrations.Next()
 			if !hasRegistration {
 				result.Failed(errors.NotFound(fmt.Sprintf("fns: there is no %s service", payload.service)).WithMeta("scope", "endpoints"))
+				handled = true
 				break
 			}
 			ctx := &context{
@@ -344,22 +347,29 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 			span.AddTag("remote", registration.Address)
 			proxyResult, proxyErr := h.proxy.Request(ctx, registration, fn, arg)
 			span.Finish()
-			if proxyErr.Code() == http.StatusServiceUnavailable {
-				span.AddTag("status", "unavailable")
-				registration.AddUnavailableTimes()
-				if registration.Unavailable() {
-					h.registrations.RemoveUnavailableRegistration(registration.Name, registration.Id)
-				}
-				continue
-			} else {
-				span.AddTag("status", "succeed")
-			}
 			if proxyErr == nil {
+				span.AddTag("status", "OK")
+				span.AddTag("handled", "succeed")
 				result.Succeed(proxyResult)
+				handled = true
+				break
 			} else {
+				span.AddTag("status", proxyErr.Name())
+				span.AddTag("handled", "failed")
+				if proxyErr.Code() == http.StatusServiceUnavailable {
+					registration.AddUnavailableTimes()
+					if registration.Unavailable() {
+						h.registrations.RemoveUnavailableRegistration(registration.Name, registration.Id)
+					}
+					continue
+				}
 				result.Failed(proxyErr)
+				handled = true
+				break
 			}
-			break
+		}
+		if !handled {
+			result.Failed(errors.NotFound(fmt.Sprintf("fns: there is no %s service", payload.service)).WithMeta("scope", "endpoints"))
 		}
 	}
 }

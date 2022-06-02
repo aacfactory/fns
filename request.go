@@ -29,6 +29,7 @@ type RequestHeader interface {
 	Contains(key string) (ok bool)
 	Get(key string) (value string)
 	Values(key string) (values []string)
+	Raw() (v http.Header)
 }
 
 func newRequestHeader(v http.Header) RequestHeader {
@@ -53,6 +54,11 @@ func (header *requestHeader) Get(key string) (value string) {
 
 func (header *requestHeader) Values(key string) (values []string) {
 	values = header.value.Values(key)
+	return
+}
+
+func (header *requestHeader) Raw() (v http.Header) {
+	v = header.value
 	return
 }
 

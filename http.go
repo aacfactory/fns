@@ -273,7 +273,7 @@ type fastHttpClient struct {
 	client *fasthttp.Client
 }
 
-func (client *fastHttpClient) Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
+func (client *fastHttpClient) Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (respBody []byte, err error) {
 	deadline, hasDeadline := ctx.Deadline()
 	req := fasthttp.AcquireRequest()
 	if !hasDeadline {
@@ -298,15 +298,9 @@ func (client *fastHttpClient) Do(ctx sc.Context, method string, url string, head
 	fasthttp.ReleaseRequest(req)
 	if doErr != nil {
 		fasthttp.ReleaseResponse(resp)
-		status = 555
 		err = errors.Warning("fns: fasthttp client do failed").WithMeta("url", url).WithCause(doErr)
 		return
 	}
-	status = resp.StatusCode()
-	respHeader = http.Header{}
-	resp.Header.VisitAll(func(key, value []byte) {
-		respHeader.Add(string(key), string(value))
-	})
 	respBody = resp.Body()
 	fasthttp.ReleaseResponse(resp)
 	return
@@ -626,26 +620,14 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 		return
 	}
 	// proxy request
-	proxyRequest := &serviceProxyRequest{}
-	decodeBodyErr := proxyRequest.Decode(body)
-	if decodeBodyErr != nil {
+	ctxData, arg, decodeErr := decodeProxyRequest(body)
+	if decodeErr != nil {
 		h.notAcceptable(response)
 		return
 	}
 
-	var arg Argument
-	if proxyRequest.Argument == nil || len(proxyRequest.Argument) == 0 || bytes.Equal(proxyRequest.Argument, nullJson) {
-		arg = EmptyArgument()
-	} else {
-		if !json.Validate(proxyRequest.Argument) {
-			h.notAcceptable(response)
-			return
-		}
-		arg = NewArgument(proxyRequest.Argument)
-	}
-
 	timeoutCtx, cancel := sc.WithTimeout(request.Context(), h.requestHandleTimeout)
-	ctx := newContext(timeoutCtx, newRequest(request), proxyRequest.ContextData, h.runtime)
+	ctx := newContext(timeoutCtx, newRequest(request), ctxData, h.runtime)
 
 	// handle
 	h.requestCounter.Add(1)
@@ -666,19 +648,16 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 	response.Header().Set(httpLatencyHeader, ctx.tracer.RootSpan().Latency().String())
 	// requestId
 	response.Header().Set(httpIdHeader, ctx.Request().Id())
-
-	proxyResponse := &serviceProxyResponse{
-		Failed:      handleErr != nil,
-		ContextData: ctx.Data(),
-		Span:        ctx.Tracer().RootSpan(),
-		Result:      resultBytes,
-		Error:       handleErr,
-	}
 	if !has {
-		proxyResponse.Result = nil
+		resultBytes = nil
 	}
-	proxyResponseBytes := json.UnsafeMarshal(proxyResponse)
-	h.succeed(response, proxyResponseBytes)
+	responseBody, responseErr := encodeProxyResponse(handleErr != nil, ctx.Tracer().RootSpan(), resultBytes, handleErr)
+	if responseErr != nil {
+		h.failed(response, responseErr)
+		h.requestCounter.Done()
+		return
+	}
+	h.succeed(response, responseBody)
 	// done
 	h.requestCounter.Done()
 	// hook

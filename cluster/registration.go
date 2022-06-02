@@ -36,7 +36,7 @@ type Registration struct {
 	unavailableTimes int64
 }
 
-func (r *Registration) Request(ctx sc.Context, fn string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
+func (r *Registration) Request(ctx sc.Context, fn string, header http.Header, body []byte) (respBody []byte, err error) {
 	schema := ""
 	if r.SSL {
 		schema = "https"
@@ -44,7 +44,7 @@ func (r *Registration) Request(ctx sc.Context, fn string, header http.Header, bo
 		schema = "http"
 	}
 	url := fmt.Sprintf("%s://%s/%s/%s", schema, r.Address, r.Name, fn)
-	status, respHeader, respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
+	respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
 	return
 }
 

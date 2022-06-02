@@ -21,6 +21,7 @@ import (
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/documents"
+	"github.com/aacfactory/fns/internal/secret"
 	"os"
 	"strings"
 	"time"
@@ -49,7 +50,6 @@ var (
 		httpHandlerWrapperBuilders: defaultHttpHandlerWrapperBuilders(),
 		shutdownTimeout:            60 * time.Second,
 	}
-	secretKey = []byte("+-fns")
 )
 
 type Options struct {
@@ -201,7 +201,7 @@ func SecretKey(data string) Option {
 		if data == "" {
 			return fmt.Errorf("set secret key failed for empty data")
 		}
-		secretKey = []byte(data)
+		secret.Key([]byte(data))
 		return nil
 	}
 }

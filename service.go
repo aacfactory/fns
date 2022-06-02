@@ -17,6 +17,7 @@
 package fns
 
 import (
+	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -180,7 +181,7 @@ type argument struct {
 }
 
 func (arg argument) MarshalJSON() (data []byte, err error) {
-	if arg.value == nil {
+	if arg.IsNil() {
 		data = nullJson
 		return
 	}
@@ -192,8 +193,10 @@ func (arg argument) MarshalJSON() (data []byte, err error) {
 			return
 		}
 		data = value
+		break
 	case json.RawMessage:
 		data = arg.value.(json.RawMessage)
+		break
 	default:
 		data, err = json.Marshal(arg.value)
 		if err != nil {
@@ -209,8 +212,26 @@ func (arg *argument) UnmarshalJSON(data []byte) (err error) {
 	return
 }
 
-func (arg *argument) As(v interface{}) (err errors.CodeError) {
+func (arg *argument) IsNil() (ok bool) {
 	if arg.value == nil {
+		ok = true
+		return
+	}
+	switch arg.value.(type) {
+	case []byte:
+		value := arg.value.([]byte)
+		ok = bytes.Equal(value, nullJson) || len(value) == 0
+		break
+	case json.RawMessage:
+		value := arg.value.(json.RawMessage)
+		ok = bytes.Equal(value, nullJson) || len(value) == 0
+		break
+	}
+	return
+}
+
+func (arg *argument) As(v interface{}) (err errors.CodeError) {
+	if arg.IsNil() {
 		return
 	}
 	switch arg.value.(type) {
@@ -229,6 +250,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 				return
 			}
 		}
+		break
 	case json.RawMessage:
 		value := arg.value.(json.RawMessage)
 		decodeErr := json.Unmarshal(value, v)
@@ -236,6 +258,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 			err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(decodeErr)
 			return
 		}
+		break
 	default:
 		cpErr := commons.CopyInterface(v, arg.value)
 		if cpErr != nil {
@@ -326,6 +349,7 @@ func (r *futureResult) Get(ctx sc.Context, v interface{}) (has bool, err errors.
 				}
 			}
 			has = true
+			return
 		default:
 			switch v.(type) {
 			case *json.RawMessage:

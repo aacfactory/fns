@@ -22,13 +22,24 @@ import (
 	"encoding/base64"
 )
 
-func Sign(target []byte, key []byte) (signature []byte) {
+var (
+	key = []byte("+-fns")
+)
+
+func Key(v []byte) {
+	if v == nil || len(v) == 0 {
+		v = []byte("+-fns")
+	}
+	key = v
+}
+
+func Sign(target []byte) (signature []byte) {
 	h := hmac.New(sha256.New, key)
 	signature = []byte(base64.URLEncoding.EncodeToString(h.Sum(target)))
 	return
 }
 
-func Verify(target []byte, signature []byte, key []byte) (ok bool) {
+func Verify(target []byte, signature []byte) (ok bool) {
 	hashed, hashedErr := base64.URLEncoding.DecodeString(string(signature))
 	if hashedErr != nil {
 		return

@@ -301,7 +301,7 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 		}
 		span := ctx.tracer.StartSpan(registration.Name, fn)
 		span.AddTag("remote", registration.Address)
-		proxyResult, proxyErr := proxyRequest(ctx, registration, fn, arg)
+		proxyResult, proxyErr := proxy(ctx, span, registration, fn, arg)
 		span.Finish()
 		if proxyErr == nil {
 			span.AddTag("status", "OK")
@@ -339,7 +339,7 @@ func (h *endpointHandler) handleRemoteAction(payload *remoteUnitPayload) {
 			}
 			span := ctx.tracer.StartSpan(registration.Name, fn)
 			span.AddTag("remote", registration.Address)
-			proxyResult, proxyErr := proxyRequest(ctx, registration, fn, arg)
+			proxyResult, proxyErr := proxy(ctx, span, registration, fn, arg)
 			span.Finish()
 			if proxyErr == nil {
 				span.AddTag("status", "OK")

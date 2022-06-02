@@ -57,5 +57,5 @@ func newClientOptions(log logs.Logger, TLS *tls.Config, config ClientConfig) Cli
 type ClientBuilder func(options ClientOptions) (client Client, err error)
 
 type Client interface {
-	Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
+	Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (respBody []byte, err error)
 }

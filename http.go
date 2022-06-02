@@ -625,12 +625,12 @@ func (h *httpHandler) handleRequest(response http.ResponseWriter, request *http.
 	} else {
 		h.failed(response, codeErr)
 	}
+	// done
+	h.requestCounter.Done()
 	// report tracer
 	h.tracerReporter.Report(ctx.Fork(sc.TODO()), ctx.Tracer())
 	// hook
 	h.hooks.send(newHookUnit(ctx, service, fn, body, codeErr, ctx.tracer.RootSpan().Latency()))
-	// done
-	h.requestCounter.Done()
 }
 
 func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, request *http.Request, service string, fn string) {
@@ -693,10 +693,10 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 	}
 	proxyResponseBytes := json.UnsafeMarshal(proxyResponse)
 	h.succeed(response, proxyResponseBytes)
-	// hook
-	h.hooks.send(newHookUnit(ctx, service, fn, body, handleErr, ctx.tracer.RootSpan().Latency()))
 	// done
 	h.requestCounter.Done()
+	// hook
+	h.hooks.send(newHookUnit(ctx, service, fn, body, handleErr, ctx.tracer.RootSpan().Latency()))
 }
 
 func (h *httpHandler) handleWebsocket(response http.ResponseWriter, request *http.Request) {

@@ -73,11 +73,11 @@ type RequestUser interface {
 	Attributes() (attributes *json.Object)
 }
 
-func newRequestUser() (u RequestUser) {
+func newRequestUser(id string, attributes *json.Object) (u RequestUser) {
 	u = &requestUser{
-		id:            "",
-		authenticated: false,
-		attributes:    json.NewObject(),
+		id:            id,
+		authenticated: id != "",
+		attributes:    attributes,
 	}
 	return
 }
@@ -153,6 +153,7 @@ type Request interface {
 	RemoteIp() (v string)
 	Header() (header RequestHeader)
 	User() (user RequestUser)
+	SetUser(id string, attr *json.Object)
 	SocketId() (id string)
 }
 
@@ -160,7 +161,7 @@ func emptyRequest() Request {
 	return &request{
 		id:     UID(),
 		header: newRequestHeader(http.Header{}),
-		user:   newRequestUser(),
+		user:   newRequestUser("", json.NewObject()),
 	}
 }
 
@@ -182,7 +183,7 @@ func newRequest(req *http.Request) Request {
 		internal: internal,
 		remoteIp: remoteIp,
 		header:   newRequestHeader(req.Header),
-		user:     newRequestUser(),
+		user:     newRequestUser("", json.NewObject()),
 	}
 }
 
@@ -194,7 +195,7 @@ func newWebsocketRequest(authorization string) (r Request) {
 	r = &request{
 		id:     UID(),
 		header: newRequestHeader(header),
-		user:   newRequestUser(),
+		user:   newRequestUser("", json.NewObject()),
 	}
 	return
 }
@@ -221,6 +222,10 @@ func (r *request) Header() (header RequestHeader) {
 func (r *request) User() (user RequestUser) {
 	user = r.user
 	return
+}
+
+func (r *request) SetUser(id string, attributes *json.Object) {
+	r.user = newRequestUser(id, attributes)
 }
 
 func (r *request) Internal() (ok bool) {

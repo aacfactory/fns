@@ -661,8 +661,10 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 }
 
 func (h *httpHandler) handleWebsocket(response http.ResponseWriter, request *http.Request) {
-	conn, connErr := h.wsm.Upgrader().Upgrade(response, request, nil)
-
+	err := h.wsm.Upgrade(response, request)
+	if err != nil {
+		h.failed(response, err)
+	}
 }
 
 func (h *httpHandler) Close() (err error) {

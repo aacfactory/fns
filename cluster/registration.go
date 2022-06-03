@@ -20,6 +20,7 @@ import (
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
 	"sync"
@@ -253,6 +254,21 @@ func (manager *RegistrationsManager) GetNodeResource(key string) (value []byte, 
 		return
 	}
 	value, has = value0.([]byte)
+	return
+}
+
+func (manager *RegistrationsManager) getNodeResources(nodeId string) (v map[string]json.RawMessage) {
+	node0, nodeLoaded := manager.nodes.Load(nodeId)
+	if !nodeLoaded {
+		return
+	}
+	node := node0.(*Node)
+	node.resources.Range(func(key0, value0 interface{}) bool {
+		key := key0.(string)
+		value := value0.([]byte)
+		v[key] = value
+		return true
+	})
 	return
 }
 

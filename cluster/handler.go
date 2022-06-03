@@ -106,8 +106,9 @@ func (handler *Handler) failed(response http.ResponseWriter, codeErr errors.Code
 }
 
 type joinResult struct {
-	Node    *Node   `json:"node"`
-	Members []*Node `json:"members"`
+	Node      *Node                      `json:"node"`
+	Resources map[string]json.RawMessage `json:"resources"`
+	Members   []*Node                    `json:"members"`
 }
 
 func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
@@ -136,8 +137,9 @@ func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeE
 	node.client = handler.manager.client
 	handler.manager.registrations.register(node)
 	jr := &joinResult{
-		Node:    handler.manager.Node(),
-		Members: members,
+		Node:      handler.manager.Node(),
+		Resources: handler.manager.registrations.getNodeResources(handler.manager.Node().Id),
+		Members:   members,
 	}
 	jrp, encodeErr := json.Marshal(jr)
 	if encodeErr != nil {

@@ -79,7 +79,8 @@ func (handler *Handler) Handler(h http.Handler) http.Handler {
 				handler.succeed(writer, result)
 				break
 			default:
-				writer.WriteHeader(404)
+				handler.failed(writer, errors.NotFound("fns: not found"))
+				break
 			}
 		} else {
 			h(writer, request)
@@ -92,17 +93,16 @@ func (handler *Handler) succeed(response http.ResponseWriter, body []byte) {
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(200)
 	if body == nil || len(body) == 0 {
-		return
+		body = []byte("{}")
 	}
-	_, _ = response.Write(body)
+	_, _ = response.Write(encodeResponseBody(body, nil))
 }
 
 func (handler *Handler) failed(response http.ResponseWriter, codeErr errors.CodeError) {
 	response.Header().Set("Server", "Fns")
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(codeErr.Code())
-	p, _ := json.Marshal(codeErr)
-	_, _ = response.Write(p)
+	_, _ = response.Write(encodeResponseBody(nil, codeErr))
 }
 
 type joinResult struct {

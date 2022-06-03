@@ -18,18 +18,11 @@ package cluster
 
 import (
 	"encoding/binary"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/secret"
+	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 )
-
-func decodeRequestBody(body []byte) (p []byte, ok bool) {
-	head := body[0:8]
-	signatureLen := binary.BigEndian.Uint64(head)
-	signature := body[8 : 8+signatureLen]
-	p = body[16+signatureLen:]
-	ok = secret.Verify(p, signature)
-	return
-}
 
 func encodeRequestBody(body []byte) (p []byte) {
 	signature := secret.Sign(body)
@@ -42,5 +35,40 @@ func encodeRequestBody(body []byte) (p []byte) {
 	p = buf.Bytes()
 	buf.Reset()
 	bytebufferpool.Put(buf)
+	return
+}
+
+func decodeRequestBody(body []byte) (p []byte, ok bool) {
+	head := body[0:8]
+	signatureLen := binary.BigEndian.Uint64(head)
+	signature := body[8 : 8+signatureLen]
+	p = body[16+signatureLen:]
+	ok = secret.Verify(p, signature)
+	return
+}
+
+func encodeResponseBody(data json.RawMessage, err errors.CodeError) (p []byte) {
+	obj := json.NewObject()
+	if err != nil {
+		_ = obj.Put("failed", true)
+		_ = obj.Put("cause", err)
+	} else {
+		_ = obj.Put("failed", false)
+		_ = obj.PutRaw("data", data)
+	}
+	p = obj.Raw()
+	return
+}
+
+func decodeResponseBody(p []byte) (data json.RawMessage, err errors.CodeError) {
+	obj := json.NewObjectFromBytes(p)
+	failed := false
+	_ = obj.Get("failed", &failed)
+	if failed {
+		err = errors.Empty()
+		_ = obj.Get("cause", err)
+	} else {
+		_ = obj.Get("data", &data)
+	}
 	return
 }

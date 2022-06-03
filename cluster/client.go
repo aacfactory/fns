@@ -19,6 +19,9 @@ package cluster
 import (
 	sc "context"
 	"crypto/tls"
+	"fmt"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
 	"time"
@@ -58,4 +61,37 @@ type ClientBuilder func(options ClientOptions) (client Client, err error)
 
 type Client interface {
 	Do(ctx sc.Context, method string, url string, header http.Header, body []byte) (respBody []byte, err error)
+}
+
+func join(ctx sc.Context, client Client, address string, node *Node) (result *joinResult, err errors.CodeError) {
+	var url string
+	if node.SSL {
+		url = fmt.Sprintf("https://%s%s", address, joinPath)
+	} else {
+		url = fmt.Sprintf("http://%s%s", address, joinPath)
+	}
+	body, encodeErr := json.Marshal(node)
+	if encodeErr != nil {
+		err = errors.BadRequest("fns: encode node failed").WithCause(encodeErr)
+		return
+	}
+	header := http.Header{}
+	header.Set("Content-Type", contentType)
+	resp, doErr := client.Do(ctx, http.MethodPost, url, header, encodeRequestBody(body))
+	if doErr != nil {
+		err = errors.Warning("fns: invoke join node failed").WithCause(doErr)
+		return
+	}
+	data, handleErr := decodeResponseBody(resp)
+	if handleErr != nil {
+		err = handleErr
+		return
+	}
+	result = &joinResult{}
+	decodeErr := json.Unmarshal(data, result)
+	if decodeErr != nil {
+		err = errors.Warning("fns: invoke join node failed").WithCause(decodeErr)
+		return
+	}
+	return
 }

@@ -161,6 +161,7 @@ func (rt *serviceRuntime) Validator() (v Validator) {
 type Argument interface {
 	json.Marshaler
 	json.Unmarshaler
+	IsNil() (ok bool)
 	As(v interface{}) (err errors.CodeError)
 }
 

@@ -153,14 +153,7 @@ type Request interface {
 	RemoteIp() (v string)
 	Header() (header RequestHeader)
 	User() (user RequestUser)
-}
-
-type request struct {
-	id       string
-	internal bool
-	remoteIp string
-	header   RequestHeader
-	user     RequestUser
+	SocketId() (id string)
 }
 
 func emptyRequest() Request {
@@ -191,6 +184,28 @@ func newRequest(req *http.Request) Request {
 		header:   newRequestHeader(req.Header),
 		user:     newRequestUser(),
 	}
+}
+
+func newWebsocketRequest(authorization string) (r Request) {
+	header := http.Header{}
+	if authorization != "" {
+		header.Set("Authorization", authorization)
+	}
+	r = &request{
+		id:     UID(),
+		header: newRequestHeader(header),
+		user:   newRequestUser(),
+	}
+	return
+}
+
+type request struct {
+	id       string
+	internal bool
+	remoteIp string
+	socketId string
+	header   RequestHeader
+	user     RequestUser
 }
 
 func (r *request) Id() (id string) {
@@ -230,6 +245,11 @@ func (r *request) RemoteIp() (v string) {
 
 func (r *request) Authorization() (v string) {
 	v = r.header.Get(httpAuthorizationHeader)
+	return
+}
+
+func (r *request) SocketId() (id string) {
+	id = r.socketId
 	return
 }
 

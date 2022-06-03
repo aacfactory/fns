@@ -158,17 +158,6 @@ func New(options ...Option) (app Application) {
 
 	// embedServices
 	embedServices := make([]Service, 0, 1)
-	// websocket
-	var websocketDiscovery WebsocketDiscovery
-	if clusterManager == nil {
-		websocketDiscovery = newMemoryWebsocketDiscovery(log.With("fns", "websocket"))
-	} else {
-		websocketDiscovery = newClusterWebsocketDiscovery(log.With("fns", "websocket"), clusterManager)
-	}
-	embedServices = append(embedServices, &websocketService{
-		discovery: websocketDiscovery,
-	})
-	websocketUpgrader := newWebsocketUpgrader(config.Websocket)
 	// todo auth
 	// todo permissions
 
@@ -186,14 +175,27 @@ func New(options ...Option) (app Application) {
 		return
 	}
 
+	// websocket
+	wsm := newWebsocketManager(websocketOptions{
+		env:                  env,
+		config:               config.Websocket,
+		runtime:              runtime,
+		barrier:              opt.barrier,
+		requestHandleTimeout: opt.handleRequestTimeout,
+		tracerReporter:       tracerReporter,
+		hooks:                hs,
+		clusterManager:       clusterManager,
+	})
+
+	embedServices = append(embedServices, wsm.Service())
+
 	// http server
 	httpServerHandler := newHttpHandler(env, httpHandlerOptions{
 		env:                  env,
 		document:             document,
 		barrier:              opt.barrier,
 		requestHandleTimeout: opt.handleRequestTimeout,
-		websocketDiscovery:   websocketDiscovery,
-		websocketUpgrader:    websocketUpgrader,
+		wsm:                  wsm,
 		runtime:              runtime,
 		tracerReporter:       tracerReporter,
 		hooks:                hs,

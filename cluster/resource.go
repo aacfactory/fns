@@ -22,18 +22,15 @@ import (
 )
 
 type ResourceUpdateEvent struct {
-	Node  string          `json:"node"`
-	Kind  string          `json:"kind"`
-	Value json.RawMessage `json:"value"`
-}
-
-type ResourcesHandler interface {
-	Handle(e *ResourceUpdateEvent)
+	NodeId string          `json:"nodeId"`
+	Key    string          `json:"key"`
+	Value  json.RawMessage `json:"value"`
 }
 
 type Resources interface {
-	Updated(kind string, value interface{}) (err error)
-	RegisterHandler(kind string, handler ResourcesHandler) (err error)
+	Load(key string) (value []byte, has bool)
+	Save(key string, value []byte)
+	Remove(key string)
 }
 
 func newResourcesManager(log logs.Logger, client Client) *resourcesManager {
@@ -48,12 +45,17 @@ type resourcesManager struct {
 	client Client
 }
 
-func (manager *resourcesManager) Updated(kind string, value interface{}) (err error) {
+func (manager *resourcesManager) Save(key string, value []byte) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (manager *resourcesManager) RegisterHandler(kind string, handler ResourcesHandler) (err error) {
+func (manager *resourcesManager) Load(key string) (value []byte, has bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (manager *resourcesManager) Remove(key string) {
 	//TODO implement me
 	panic("implement me")
 }

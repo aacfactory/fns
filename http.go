@@ -29,7 +29,6 @@ import (
 	"github.com/aacfactory/fns/internal/cors"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"io/ioutil"
@@ -361,8 +360,7 @@ type httpHandlerOptions struct {
 	document             *documents.Application
 	barrier              Barrier
 	requestHandleTimeout time.Duration
-	websocketDiscovery   WebsocketDiscovery
-	websocketUpgrader    *websocket.Upgrader
+	wsm                  *websocketManager
 	runtime              Runtime
 	tracerReporter       TracerReporter
 	hooks                *hooks
@@ -376,8 +374,7 @@ func newHttpHandler(env Environments, opt httpHandlerOptions) (handler *httpHand
 		document:             opt.document,
 		barrier:              opt.barrier,
 		requestHandleTimeout: opt.requestHandleTimeout,
-		websocketDiscovery:   opt.websocketDiscovery,
-		websocketUpgrader:    opt.websocketUpgrader,
+		wsm:                  opt.wsm,
 		runtime:              opt.runtime,
 		tracerReporter:       opt.tracerReporter,
 		hooks:                opt.hooks,
@@ -393,8 +390,7 @@ type httpHandler struct {
 	document             *documents.Application
 	barrier              Barrier
 	requestHandleTimeout time.Duration
-	websocketDiscovery   WebsocketDiscovery
-	websocketUpgrader    *websocket.Upgrader
+	wsm                  *websocketManager
 	runtime              Runtime
 	tracerReporter       TracerReporter
 	hooks                *hooks
@@ -665,12 +661,13 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 }
 
 func (h *httpHandler) handleWebsocket(response http.ResponseWriter, request *http.Request) {
+	conn, connErr := h.wsm.Upgrader().Upgrade(response, request, nil)
 
 }
 
 func (h *httpHandler) Close() (err error) {
 	h.requestCounter.Wait()
-	// todo close all websocket
+	h.wsm.Close()
 	return
 }
 

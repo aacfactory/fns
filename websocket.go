@@ -18,6 +18,8 @@ package fns
 
 import (
 	sc "context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cluster"
@@ -26,7 +28,8 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/fasthttp/websocket"
-	"io/ioutil"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -69,85 +72,443 @@ func newWebsocketUpgrader(config WebsocketConfig) (v *websocket.Upgrader) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type WebsocketRequest struct {
+type websocketRequest struct {
 	Authorization string          `json:"authorization"`
 	Service       string          `json:"service"`
 	Fn            string          `json:"fn"`
 	Argument      json.RawMessage `json:"argument"`
 }
 
-func (r *WebsocketRequest) DecodeArgument(v interface{}) (err error) {
+func (r *websocketRequest) Hash() (v string) {
+	if r.Authorization == "" && (r.Argument == nil || len(r.Argument) == 0) {
+		v = "empty"
+		return
+	}
+	hash := md5.New()
+	if r.Authorization != "" {
+		hash.Write([]byte(r.Authorization))
+	}
+	hash.Write(r.Argument)
+	v = hex.EncodeToString(hash.Sum(nil))
+	return
+}
+
+func (r *websocketRequest) DecodeArgument(v interface{}) (err error) {
 	err = json.Unmarshal(r.Argument, v)
 	return
 }
 
-type WebsocketResponse struct {
+type websocketResponse struct {
 	Succeed bool             `json:"succeed"`
 	Error   errors.CodeError `json:"error"`
 	Data    json.RawMessage  `json:"data"`
 }
 
-type Websocket interface {
-	Id() (id string)
-	Write(response *WebsocketResponse) (err errors.CodeError)
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type websocketClient interface {
+	Write(response *websocketResponse) (err error)
 }
 
-type WebsocketDiscovery interface {
-	Register(ctx Context, socket Websocket) (err errors.CodeError)
-	Deregister(ctx Context, socket Websocket) (err errors.CodeError)
-	Close() (err error)
+type websocketConnection struct {
+	env                  Environments
+	id                   string
+	mutex                sync.Mutex
+	disconnected         bool
+	conn                 *websocket.Conn
+	cancel               func()
+	discovery            *websocketDiscovery
+	counter              sync.WaitGroup
+	runtime              Runtime
+	barrier              Barrier
+	requestHandleTimeout time.Duration
+	tracerReporter       TracerReporter
+	hooks                *hooks
 }
 
-func newMemoryWebsocketDiscovery(log logs.Logger) *memoryWebsocketDiscovery {
-	return &memoryWebsocketDiscovery{
-		log: log,
+func (socket *websocketConnection) Id() (id string) {
+	id = socket.id
+	return
+}
+
+func (socket *websocketConnection) Write(response *websocketResponse) (err error) {
+	if response == nil {
+		err = errors.Warning("fns: websocket write response failed for response is nil")
+		return
+	}
+	socket.mutex.Lock()
+	defer socket.mutex.Unlock()
+	if socket.disconnected {
+		err = errors.Warning("fns: websocket write response failed for it is disconnected")
+		return
+	}
+	p, encodeErr := json.Marshal(response)
+	if encodeErr != nil {
+		err = errors.Warning("fns: websocket write response failed for encode response").WithCause(encodeErr)
+		return
+	}
+	socket.counter.Add(1)
+	writer, writerErr := socket.conn.NextWriter(websocket.TextMessage)
+	socket.counter.Done()
+	if writerErr != nil {
+		err = errors.Warning("fns: websocket write response failed for can not get writer").WithCause(writerErr)
+		return
+	}
+	_, writeErr := writer.Write(p)
+	if writeErr != nil {
+		_ = writer.Close()
+		err = errors.Warning("fns: websocket write response failed").WithCause(writeErr)
+		return
+	}
+	_ = writer.Close()
+	return
+}
+
+func (socket *websocketConnection) Listen() {
+	ctx, cancel := sc.WithCancel(sc.TODO())
+	socket.cancel = cancel
+	go func(ctx sc.Context, socket *websocketConnection) {
+		closed := false
+		for {
+			if closed {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				closed = true
+				break
+			default:
+				if !socket.env.Running() {
+					_ = socket.conn.WriteControl(
+						websocket.CloseMessage,
+						websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "service is closing"),
+						time.Time{},
+					)
+					socket.Close()
+					closed = true
+					break
+				}
+				socket.handle()
+			}
+		}
+	}(ctx, socket)
+	return
+}
+
+func (socket *websocketConnection) handle() {
+	defer func(socket *websocketConnection) {
+		err := recover()
+		if err != nil {
+			socket.Close()
+		}
+	}(socket)
+	mt, p, readErr := socket.conn.ReadMessage()
+	if readErr != nil {
+		if readErr != io.EOF {
+			_ = socket.conn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "read failed"),
+				time.Time{},
+			)
+		}
+		socket.Close()
+		return
+	}
+	switch mt {
+	case websocket.TextMessage, websocket.BinaryMessage:
+		if !utf8.Valid(p) {
+			_ = socket.conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseInvalidFramePayloadData, ""),
+				time.Time{})
+			socket.Close()
+			return
+		}
+		break
+	case websocket.PingMessage:
+		_ = socket.conn.WriteControl(websocket.PongMessage, []byte("pong"), time.Time{})
+		return
+	default:
+		_ = socket.conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseUnsupportedData, "message type is unsupported"),
+			time.Time{},
+		)
+		socket.Close()
+		return
+	}
+	// handle
+	wr := &websocketRequest{}
+	decodeErr := json.Unmarshal(p, wr)
+	if decodeErr != nil {
+		_ = socket.Write(&websocketResponse{
+			Succeed: false,
+			Error:   errors.NotAcceptable("fns: decode request message failed").WithCause(decodeErr),
+			Data:    nil,
+		})
+		return
+	}
+	service := strings.TrimSpace(wr.Service)
+	if service == "" {
+		_ = socket.Write(&websocketResponse{
+			Succeed: false,
+			Error:   errors.BadRequest("fns: there is no service in message"),
+			Data:    nil,
+		})
+		return
+	}
+	fn := strings.TrimSpace(wr.Fn)
+	if fn == "" {
+		_ = socket.Write(&websocketResponse{
+			Succeed: false,
+			Error:   errors.BadRequest("fns: there is no fn in message"),
+			Data:    nil,
+		})
+		return
+	}
+	authorization := strings.TrimSpace(wr.Authorization)
+	arg := NewArgument(wr.Argument)
+	timeoutCtx, cancel := sc.WithTimeout(sc.TODO(), socket.requestHandleTimeout)
+	ctx := newContext(timeoutCtx, newWebsocketRequest(authorization), newContextData(json.NewObject()), socket.runtime)
+	// handle
+	socket.counter.Add(1)
+	// endpoint
+	endpoint, getEndpointErr := socket.runtime.Endpoints().Get(ctx, service)
+	if getEndpointErr != nil {
+		_ = socket.Write(&websocketResponse{
+			Succeed: false,
+			Error:   getEndpointErr,
+			Data:    nil,
+		})
+		socket.counter.Done()
+		cancel()
+		return
+	}
+	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, wr.Hash())
+	handleResult, handleErr, _ := socket.barrier.Do(ctx, barrierKey, func() (v interface{}, err error) {
+		result := endpoint.Request(ctx, fn, arg)
+		resultBytes := json.RawMessage{}
+		has, getErr := result.Get(ctx, &resultBytes)
+		if getErr != nil {
+			err = getErr
+			return
+		}
+		if has {
+			v = resultBytes
+		}
+		return
+	})
+	socket.barrier.Forget(ctx, barrierKey)
+	cancel()
+	var responseBody json.RawMessage = nil
+	if handleResult != nil {
+		responseBody = handleResult.(json.RawMessage)
+	}
+	var codeErr errors.CodeError = nil
+	if handleErr != nil {
+		codeErr0, ok := handleErr.(errors.CodeError)
+		if ok {
+			codeErr = codeErr0
+		} else {
+			codeErr = errors.Warning("fns: handle request failed").WithCause(handleErr)
+		}
+	}
+	_ = socket.Write(&websocketResponse{
+		Succeed: codeErr == nil,
+		Error:   codeErr,
+		Data:    responseBody,
+	})
+	// done
+	socket.counter.Done()
+	// report tracer
+	socket.tracerReporter.Report(ctx.Fork(sc.TODO()), ctx.Tracer())
+	// hook
+	socket.hooks.send(newHookUnit(ctx, service, fn, responseBody, codeErr, ctx.tracer.RootSpan().Latency()))
+}
+
+func (socket *websocketConnection) Close() {
+	socket.mutex.Lock()
+	if socket.disconnected {
+		socket.mutex.Unlock()
+		return
+	}
+	socket.disconnected = true
+	socket.mutex.Unlock()
+	socket.discovery.Deregister(socket)
+	socket.cancel()
+	socket.counter.Wait()
+	_ = socket.conn.Close()
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type websocketProxy struct {
+	id           string
+	ctx          Context
+	registration *cluster.Registration
+}
+
+func (socket *websocketProxy) Write(response *websocketResponse) (err error) {
+	p, encodeErr := json.Marshal(response)
+	if encodeErr != nil {
+		err = errors.Warning("fns: encode websocket response failed").WithCause(encodeErr)
+		return
+	}
+	obj := json.NewObjectFromBytes(p)
+	_ = obj.Put("destinationSocketIds", []string{socket.id})
+	span := socket.ctx.Tracer().StartSpan(socket.registration.Name, "send")
+	span.AddTag("remote", socket.registration.Address)
+	_, proxyErr := proxy(socket.ctx, span, socket.registration, "send", NewArgument(obj.Raw()))
+	span.Finish()
+	if proxyErr != nil {
+		err = errors.Warning("fns: send message to websocket failed").WithCause(proxyErr)
+		return
+	}
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type websocketOptions struct {
+	env                  Environments
+	config               WebsocketConfig
+	runtime              Runtime
+	barrier              Barrier
+	requestHandleTimeout time.Duration
+	tracerReporter       TracerReporter
+	hooks                *hooks
+	clusterManager       *cluster.Manager
+}
+
+func newWebsocketManager(options websocketOptions) (manager *websocketManager) {
+
+	manager = &websocketManager{
+		env:      options.env,
+		log:      options.env.Log().With("fns", "websocket").With("websocket", "manager"),
+		upgrader: newWebsocketUpgrader(options.config),
+		discovery: &websocketDiscovery{
+			log:            options.env.Log().With("fns", "websocket").With("websocket", "discovery"),
+			connections:    sync.Map{},
+			clusterManager: options.clusterManager,
+		},
+		counter:              sync.WaitGroup{},
+		runtime:              options.runtime,
+		barrier:              options.barrier,
+		requestHandleTimeout: options.requestHandleTimeout,
+		tracerReporter:       options.tracerReporter,
+		hooks:                options.hooks,
+	}
+	return
+}
+
+type websocketManager struct {
+	env                  Environments
+	log                  logs.Logger
+	upgrader             *websocket.Upgrader
+	discovery            *websocketDiscovery
+	counter              sync.WaitGroup
+	runtime              Runtime
+	barrier              Barrier
+	requestHandleTimeout time.Duration
+	tracerReporter       TracerReporter
+	hooks                *hooks
+}
+
+func (manager *websocketManager) Upgrade(response http.ResponseWriter, request *http.Request) (err errors.CodeError) {
+	if !manager.env.Running() {
+		err = errors.Unavailable("fns: service is unavailable").WithMeta("fns", "websocket")
+		return
+	}
+	conn, connErr := manager.upgrader.Upgrade(response, request, nil)
+	if connErr != nil {
+		err = errors.NotAcceptable("fns: upgrade to websocket failed").WithCause(connErr)
+		return
+	}
+	socket := &websocketConnection{
+		env:                  manager.env,
+		id:                   UID(),
+		mutex:                sync.Mutex{},
+		disconnected:         false,
+		conn:                 conn,
+		cancel:               nil,
+		discovery:            manager.discovery,
+		counter:              sync.WaitGroup{},
+		runtime:              manager.runtime,
+		barrier:              manager.barrier,
+		requestHandleTimeout: manager.requestHandleTimeout,
+		tracerReporter:       manager.tracerReporter,
+		hooks:                manager.hooks,
+	}
+	socket.Listen()
+	manager.discovery.Register(socket)
+	return
+}
+
+func (manager *websocketManager) Service() (service Service) {
+	service = &websocketService{
+		discovery: manager.discovery,
+	}
+	return
+}
+
+func (manager *websocketManager) Close() {
+	manager.discovery.Close()
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type websocketDiscovery struct {
+	log            logs.Logger
+	connections    sync.Map
+	clusterManager *cluster.Manager
+}
+
+func (discovery *websocketDiscovery) Register(socket *websocketConnection) {
+	discovery.connections.Store(socket.id, socket)
+	if discovery.clusterManager != nil {
+		discovery.clusterManager.Resources().Save(fmt.Sprintf("ws:%s", socket.id), []byte(discovery.clusterManager.Node().Id))
 	}
 }
 
-type memoryWebsocketDiscovery struct {
-	log logs.Logger
-}
-
-func (discovery *memoryWebsocketDiscovery) Register(ctx Context, socket Websocket) (err errors.CodeError) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (discovery *memoryWebsocketDiscovery) Deregister(ctx Context, socket Websocket) (err errors.CodeError) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (discovery *memoryWebsocketDiscovery) Close() (err error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func newClusterWebsocketDiscovery(log logs.Logger, manager *cluster.Manager) *clusterWebsocketDiscovery {
-	return &clusterWebsocketDiscovery{
-		log:     log,
-		manager: manager,
+func (discovery *websocketDiscovery) Deregister(socket *websocketConnection) {
+	discovery.connections.Delete(socket.id)
+	if discovery.clusterManager != nil {
+		discovery.clusterManager.Resources().Remove(fmt.Sprintf("ws:%s", socket.id))
 	}
 }
 
-type clusterWebsocketDiscovery struct {
-	log     logs.Logger
-	manager *cluster.Manager
+func (discovery *websocketDiscovery) Get(ctx Context, socketId string) (socket websocketClient, has bool) {
+	value, exist := discovery.connections.Load(socketId)
+	if exist {
+		socket, has = value.(*websocketConnection)
+		return
+	}
+	nodeId, hasProxy := discovery.clusterManager.Resources().Load(fmt.Sprintf("ws:%s", socketId))
+	if !hasProxy {
+		return
+	}
+	registration, hasRegistration := discovery.clusterManager.Registrations().GetRegistration("websockets", string(nodeId))
+	if !hasRegistration {
+		return
+	}
+	socket = &websocketProxy{
+		id:           socketId,
+		ctx:          ctx,
+		registration: registration,
+	}
+	return
 }
 
-func (discovery *clusterWebsocketDiscovery) Register(ctx Context, socket Websocket) (err errors.CodeError) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (discovery *clusterWebsocketDiscovery) Deregister(ctx Context, socket Websocket) (err errors.CodeError) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (discovery *clusterWebsocketDiscovery) Close() (err error) {
-	//TODO implement me
-	panic("implement me")
+func (discovery *websocketDiscovery) Close() {
+	sockets := make([]*websocketConnection, 0, 1)
+	discovery.connections.Range(func(key, value interface{}) bool {
+		sockets = append(sockets, value.(*websocketConnection))
+		return true
+	})
+	for _, socket := range sockets {
+		discovery.Deregister(socket)
+		socket.Close()
+	}
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -155,11 +516,11 @@ func (discovery *clusterWebsocketDiscovery) Close() (err error) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type websocketService struct {
-	discovery WebsocketDiscovery
+	discovery *websocketDiscovery
 }
 
 func (service *websocketService) Name() (name string) {
-	name = "websocket"
+	name = "websockets"
 	return
 }
 
@@ -180,229 +541,68 @@ func (service *websocketService) Document() (doc *documents.Service) {
 	return
 }
 
-func (service *websocketService) Handle(context Context, fn string, argument Argument, result ResultWriter) {
-	//TODO implement me
-	panic("implement me")
+func (service *websocketService) Handle(ctx Context, fn string, argument Argument, result ResultWriter) {
+	switch fn {
+	case "send":
+		results, err := service.handleSend(ctx, argument)
+		if err == nil {
+			result.Succeed(results)
+		} else {
+			result.Failed(err)
+		}
+		break
+	default:
+		result.Failed(errors.NotFound(fmt.Sprintf("fns: there is no named %s fn in websockets service", fn)))
+		break
+	}
 }
 
 func (service *websocketService) Shutdown(_ sc.Context) (err error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-// todo 做成 service
-
-type WebsocketConnectionProxy interface {
-	Write(ctx Context, response *WebsocketResponse) (err error)
-}
-
-type WebsocketConnections interface {
-	// 在这里进行监听消息
-	Register(ctx Context, conn *WebsocketConnection) (err error)
-	Deregister(ctx Context, conn *WebsocketConnection) (err error)
-	GetLocal(id string) (conn *WebsocketConnection, has bool)
-	Proxy(ctx Context, id string) (proxy WebsocketConnectionProxy, has bool, err error)
-	Close() (err error)
-}
-
-var websocketConnectionsRetriever = localWebsocketConnectionsRetriever
-
-type WebsocketConnectionsRetriever func() (v WebsocketConnections)
-
-func localWebsocketConnectionsRetriever() (v WebsocketConnections) {
-	v = newLocalWebsocketConnections()
 	return
 }
 
-func newWebsocketResponseChan() *WebsocketResponseChan {
-	return &WebsocketResponseChan{
-		ch:     make(chan *WebsocketResponse, 8),
-		closed: false,
-		mutex:  sync.Mutex{},
-	}
-}
-
-type WebsocketResponseChan struct {
-	ch     chan *WebsocketResponse
-	closed bool
-	mutex  sync.Mutex
-}
-
-func (wrc *WebsocketResponseChan) close() {
-	wrc.mutex.Lock()
-	defer wrc.mutex.Unlock()
-	if wrc.closed {
+func (service *websocketService) handleSend(ctx Context, argument Argument) (results []*websocketSendResult, err errors.CodeError) {
+	if argument.IsNil() {
+		err = errors.BadRequest("fns: can not send nothing to websocket connection")
 		return
 	}
-	close(wrc.ch)
-	wrc.closed = true
-}
-
-func (wrc *WebsocketResponseChan) send(response *WebsocketResponse) (ok bool) {
-	wrc.mutex.Lock()
-	defer wrc.mutex.Unlock()
-	if wrc.closed {
+	message := &websocketSendMessage{}
+	decodeErr := argument.As(message)
+	if decodeErr != nil {
+		err = errors.BadRequest("fns: decode message failed").WithCause(decodeErr)
 		return
 	}
-	wrc.ch <- response
-	ok = true
-	return
-}
-
-type WebsocketConnection struct {
-	online     bool
-	address    string
-	mutex      *sync.Mutex
-	id         string
-	conn       *websocket.Conn
-	responseCh *WebsocketResponseChan
-}
-
-func (conn *WebsocketConnection) listen() {
-	go func(conn *WebsocketConnection) {
-		for {
-			response, ok := <-conn.responseCh.ch
-			if !ok {
-				break
-			}
-			_ = conn.Write(response)
+	ids := message.DestinationSocketIds
+	if ids == nil || len(ids) == 0 {
+		err = errors.BadRequest("fns: no websocket connections to send")
+		return
+	}
+	for _, id := range ids {
+		socket, has := service.discovery.Get(ctx, id)
+		if !has {
+			continue
 		}
-	}(conn)
-}
-
-func (conn *WebsocketConnection) Id() string {
-	return conn.id
-}
-
-func (conn *WebsocketConnection) Handle() (err error) {
-	for {
-		_, reader, nextReaderErr := conn.conn.NextReader()
-		if nextReaderErr != nil {
-			err = nextReaderErr
-			return
-		}
-		message, readErr := ioutil.ReadAll(reader)
-		if readErr != nil {
-			err = readErr
-			return
-		}
-		if !utf8.Valid(message) {
-			err = errors.Warning("invalid utf8")
-			return
-		}
-		request := &WebsocketRequest{}
-		decodeErr := json.Unmarshal(message, request)
-		if decodeErr != nil {
-			err = readErr
-			return
-		}
-
-		// write response
-		writeErr := conn.conn.WriteMessage(websocket.TextMessage, nil)
-		if writeErr != nil {
-			return
-		}
-	}
-}
-
-func (conn *WebsocketConnection) Close() (err error) {
-
-	return
-}
-
-func (conn *WebsocketConnection) Write(response *WebsocketResponse) (err error) {
-	conn.mutex.Lock()
-	if !conn.online {
-		err = fmt.Errorf("fns Http: websocket connection is closed")
-		conn.mutex.Unlock()
-		return
-	}
-	if response == nil {
-		conn.mutex.Unlock()
-		return
-	}
-	p, encodeErr := json.Marshal(response)
-	if encodeErr != nil {
-		err = encodeErr
-		conn.mutex.Unlock()
-		return
-	}
-	err = conn.conn.WriteMessage(websocket.TextMessage, p)
-	conn.mutex.Unlock()
-	return
-}
-
-type localWebsocketConnectionProxy struct {
-	ch *WebsocketResponseChan
-}
-
-func (proxy *localWebsocketConnectionProxy) Write(_ Context, response *WebsocketResponse) (err error) {
-	ok := proxy.ch.send(response)
-	if !ok {
-		err = fmt.Errorf("fns Http: websocket connection proxy is closed")
+		writeErr := socket.Write(&websocketResponse{
+			Succeed: message.Succeed,
+			Error:   message.Error,
+			Data:    message.Data,
+		})
+		results = append(results, &websocketSendResult{
+			Id:      id,
+			Succeed: writeErr == nil,
+		})
 	}
 	return
 }
 
-type remoteWebsocketConnectionProxy struct {
-	id string
+type websocketSendMessage struct {
+	DestinationSocketIds []string         `json:"destinationSocketIds"`
+	Succeed              bool             `json:"succeed"`
+	Data                 json.RawMessage  `json:"data"`
+	Error                errors.CodeError `json:"error"`
 }
 
-func (proxy *remoteWebsocketConnectionProxy) Write(ctx Context, response *WebsocketResponse) (err error) {
-
-	return
-}
-
-func newLocalWebsocketConnections() (v WebsocketConnections) {
-	v = &localWebsocketConnections{
-		items: &sync.Map{},
-	}
-	return
-}
-
-type localWebsocketConnections struct {
-	items *sync.Map
-}
-
-func (wcs *localWebsocketConnections) Register(_ Context, conn *WebsocketConnection) (err error) {
-	wcs.items.Store(conn.Id(), &localWebsocketConnectionProxy{
-		ch: conn.responseCh,
-	})
-	return
-}
-
-func (wcs *localWebsocketConnections) Deregister(_ Context, conn *WebsocketConnection) (err error) {
-	wcs.items.Delete(conn.Id())
-	return
-}
-
-func (wcs *localWebsocketConnections) GetLocal(id string) (conn *WebsocketConnection, has bool) {
-	item, exist := wcs.items.Load(id)
-	if !exist {
-		return
-	}
-	conn, has = item.(*WebsocketConnection)
-	return
-}
-
-func (wcs *localWebsocketConnections) Proxy(_ Context, id string) (proxy WebsocketConnectionProxy, has bool, err error) {
-	v, exist := wcs.items.Load(id)
-	if !exist {
-		return
-	}
-	proxy, has = v.(*localWebsocketConnectionProxy)
-	return
-}
-
-func (wcs *localWebsocketConnections) Close() (err error) {
-	conns := make([]*WebsocketConnection, 0, 1)
-	wcs.items.Range(func(_, value interface{}) bool {
-		conns = append(conns, value.(*WebsocketConnection))
-		return true
-	})
-	for _, conn := range conns {
-		_ = conn.conn.WriteControl(websocket.CloseNormalClosure, []byte("close"), time.Time{})
-		_ = conn.Close()
-	}
-	return
+type websocketSendResult struct {
+	Id      string `json:"id"`
+	Succeed bool   `json:"succeed"`
 }

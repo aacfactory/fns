@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-package websocket
+package websockets
 
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns"
+	"github.com/aacfactory/json"
 )
 
 type Message struct {
-	DestinationSocketIds []string    `json:"destinationSocketIds"`
-	Content              interface{} `json:"content"`
+	DestinationSocketIds []string         `json:"destinationSocketIds"`
+	Succeed              bool             `json:"succeed"`
+	Data                 json.RawMessage  `json:"data"`
+	Error                errors.CodeError `json:"error"`
 }
 
 type Affected struct {
@@ -31,7 +34,17 @@ type Affected struct {
 	Succeed bool   `json:"succeed"`
 }
 
-func SendMessageToDevices(ctx fns.Context, msg Message) (affects []*Affected, err errors.CodeError) {
-	// todo proxy
+func Send(ctx fns.Context, msg Message) (affects []*Affected, err errors.CodeError) {
+	endpoint, getErr := ctx.Runtime().Endpoints().Get(ctx, "websockets")
+	if getErr != nil {
+		err = errors.Warning("fns: can not find websockets endpoint").WithCause(getErr)
+		return
+	}
+	result := endpoint.Request(ctx, "send", fns.NewArgument(&msg))
+	_, resultErr := result.Get(ctx, &affects)
+	if resultErr != nil {
+		err = resultErr
+		return
+	}
 	return
 }

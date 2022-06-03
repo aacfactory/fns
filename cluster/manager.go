@@ -28,14 +28,13 @@ import (
 )
 
 type Manager struct {
-	log               logs.Logger
-	bootstrap         Bootstrap
-	heartbeatDuration time.Duration
-	heartbeatStopCh   chan struct{}
-	node              *Node
-	client            Client
-	resources         Resources
-	registrations     *RegistrationsManager
+	log                 logs.Logger
+	bootstrap           Bootstrap
+	checkHealthDuration time.Duration
+	checkHealthCancel   func()
+	node                *Node
+	client              Client
+	registrations       *RegistrationsManager
 }
 
 type ManagerOptions struct {
@@ -91,11 +90,14 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		err = fmt.Errorf("fns: can not get my ip from bootstrap")
 		return
 	}
+	checkHealthSec := config.CheckHealthSecond
+	if checkHealthSec < 1 {
+		checkHealthSec = 60
+	}
 	manager = &Manager{
-		log:               log,
-		bootstrap:         bootstrap,
-		heartbeatDuration: 0,
-		heartbeatStopCh:   make(chan struct{}, 1),
+		log:                 log,
+		bootstrap:           bootstrap,
+		checkHealthDuration: time.Duration(checkHealthSec) * time.Second,
 		node: &Node{
 			Id:               id,
 			SSL:              options.ClientTLS != nil,
@@ -105,7 +107,6 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 			client:           client,
 		},
 		client:        client,
-		resources:     newResourcesManager(log, client),
 		registrations: newRegistrationsManager(log),
 	}
 	return
@@ -113,9 +114,22 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 
 func (manager *Manager) Join(ctx sc.Context) {
 	//
+
+	ctx0, cancel := sc.WithCancel(ctx)
+	manager.checkHealthCancel = cancel
+	go manager.checkHealth(ctx0)
 }
 
 func (manager *Manager) Leave(ctx sc.Context) {
+	manager.checkHealthCancel()
+	//
+}
+
+func (manager *Manager) SaveResource(key string, value []byte) {
+	//
+}
+
+func (manager *Manager) RemoveResource(key string) {
 	//
 }
 
@@ -124,22 +138,27 @@ func (manager *Manager) Node() (node *Node) {
 	return
 }
 
-func (manager *Manager) Resources() (resources Resources) {
-	resources = manager.resources
-	return
-}
-
 func (manager *Manager) Registrations() (registrations *RegistrationsManager) {
 	registrations = manager.registrations
 	return
 }
 
-func (manager *Manager) push(ctx sc.Context) {
+func (manager *Manager) checkHealth(ctx sc.Context) {
+	for {
+		stopped := false
+		select {
+		case <-ctx.Done():
+			stopped = true
+			break
+		case <-time.After(manager.checkHealthDuration):
+			// members
 
-	return
-}
-
-func (manager *Manager) heartbeat() {
-
+			// boostrap
+			manager.bootstrap.FindMembers(ctx)
+		}
+		if stopped {
+			break
+		}
+	}
 	return
 }

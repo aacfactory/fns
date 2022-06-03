@@ -21,9 +21,10 @@ import (
 )
 
 type Config struct {
-	Kind    string          `json:"kind"`
-	Client  ClientConfig    `json:"client"`
-	Options json.RawMessage `json:"options"`
+	Kind              string          `json:"kind"`
+	Client            ClientConfig    `json:"client"`
+	CheckHealthSecond int             `json:"checkHealthSecond"`
+	Options           json.RawMessage `json:"options"`
 }
 
 type ClientConfig struct {

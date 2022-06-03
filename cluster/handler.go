@@ -17,6 +17,7 @@
 package cluster
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"io/ioutil"
@@ -41,46 +42,42 @@ type Handler struct {
 func (handler *Handler) Handler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if contentType == request.Header.Get("Content-Type") && http.MethodPost == request.Method {
+			signedBody, readBodyErr := ioutil.ReadAll(request.Body)
+			if readBodyErr != nil {
+				handler.failed(writer, errors.BadRequest("fns: read request body failed").WithCause(readBodyErr))
+				return
+			}
+			body, bodyOk := decodeRequestBody(signedBody)
+			if !bodyOk {
+				handler.failed(writer, errors.BadRequest("fns: read request body failed").WithCause(fmt.Errorf("invalid body")))
+				return
+			}
 			requestPath := request.URL.Path
 			switch requestPath {
 			case joinPath:
-				body, readErr := ioutil.ReadAll(request.Body)
-				if readErr != nil {
-					writer.WriteHeader(500)
-					_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: join failed, read request body failed").WithCause(readErr)))
-					return
-				}
 				result, joinErr := handler.handleJoin(body)
 				if joinErr != nil {
-					writer.WriteHeader(500)
-					_, _ = writer.Write(json.UnsafeMarshal(joinErr))
+					handler.failed(writer, joinErr)
 					return
 				}
-				writer.WriteHeader(200)
-				_, _ = writer.Write(result)
+				handler.succeed(writer, result)
+				break
 			case leavePath:
-				body, readErr := ioutil.ReadAll(request.Body)
-				if readErr != nil {
-					writer.WriteHeader(500)
-					_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: leave failed, read request body failed").WithCause(readErr)))
+				leaveErr := handler.handleLeave(body)
+				if leaveErr != nil {
+					handler.failed(writer, leaveErr)
 					return
 				}
-				handler.handleLeave(body)
+				handler.succeed(writer, nil)
+				break
 			case updatePath:
-				body, readErr := ioutil.ReadAll(request.Body)
-				if readErr != nil {
-					writer.WriteHeader(500)
-					_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: join failed, read request body failed").WithCause(readErr)))
+				result, updateErr := handler.handleUpdate(body)
+				if updateErr != nil {
+					handler.failed(writer, updateErr)
 					return
 				}
-				result, joinErr := handler.handleUpdate(body)
-				if joinErr != nil {
-					writer.WriteHeader(500)
-					_, _ = writer.Write(json.UnsafeMarshal(joinErr))
-					return
-				}
-				writer.WriteHeader(200)
-				_, _ = writer.Write(result)
+				handler.succeed(writer, result)
+				break
 			default:
 				writer.WriteHeader(404)
 			}
@@ -90,17 +87,121 @@ func (handler *Handler) Handler(h http.Handler) http.Handler {
 	})
 }
 
-func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
+func (handler *Handler) succeed(response http.ResponseWriter, body []byte) {
+	response.Header().Set("Server", "Fns")
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(200)
+	if body == nil || len(body) == 0 {
+		return
+	}
+	_, _ = response.Write(body)
+}
 
+func (handler *Handler) failed(response http.ResponseWriter, codeErr errors.CodeError) {
+	response.Header().Set("Server", "Fns")
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(codeErr.Code())
+	p, _ := json.Marshal(codeErr)
+	_, _ = response.Write(p)
+}
+
+type joinResult struct {
+	Node    *Node   `json:"node"`
+	Members []*Node `json:"members"`
+}
+
+func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
+	node := &Node{}
+	decodeErr := json.Unmarshal(body, node)
+	if decodeErr != nil {
+		err = errors.BadRequest("fns: json failed").WithCause(decodeErr)
+		return
+	}
+	if node.Id == "" {
+		err = errors.BadRequest("fns: json failed").WithCause(fmt.Errorf("node id is empty"))
+		return
+	}
+	if node.Address == "" {
+		err = errors.BadRequest("fns: json failed").WithCause(fmt.Errorf("node address is empty"))
+		return
+	}
+	if (node.Services == nil || len(node.Services) == 0) && (node.InternalServices == nil || len(node.InternalServices) == 0) {
+		err = errors.BadRequest("fns: json failed").WithCause(fmt.Errorf("node services is empty"))
+		return
+	}
+	if handler.manager.registrations.containsMember(node) {
+		return
+	}
+	members := handler.manager.registrations.members()
+	node.client = handler.manager.client
+	handler.manager.registrations.register(node)
+	jr := &joinResult{
+		Node:    handler.manager.Node(),
+		Members: members,
+	}
+	jrp, encodeErr := json.Marshal(jr)
+	if encodeErr != nil {
+		err = errors.ServiceError("fns: json failed").WithCause(encodeErr)
+		return
+	}
+	result = jrp
 	return
 }
 
-func (handler *Handler) handleLeave(body []byte) {
-
+func (handler *Handler) handleLeave(body []byte) (err errors.CodeError) {
+	node := &Node{}
+	decodeErr := json.Unmarshal(body, node)
+	if decodeErr != nil {
+		err = errors.BadRequest("fns: leave failed").WithCause(decodeErr)
+		return
+	}
+	if node.Id == "" {
+		err = errors.BadRequest("fns: leave failed").WithCause(fmt.Errorf("node id is empty"))
+		return
+	}
+	if node.Address == "" {
+		err = errors.BadRequest("fns: leave failed").WithCause(fmt.Errorf("node address is empty"))
+		return
+	}
+	if (node.Services == nil || len(node.Services) == 0) && (node.InternalServices == nil || len(node.InternalServices) == 0) {
+		err = errors.BadRequest("fns: leave failed").WithCause(fmt.Errorf("node services is empty"))
+		return
+	}
+	handler.manager.Registrations().deregister(node)
 	return
+}
+
+type nodeResourceUpdateRequest struct {
+	Remove bool            `json:"remove"`
+	NodeId string          `json:"nodeId"`
+	Key    string          `json:"key"`
+	Value  json.RawMessage `json:"value"`
 }
 
 func (handler *Handler) handleUpdate(body []byte) (result []byte, err errors.CodeError) {
+	r := &nodeResourceUpdateRequest{}
+	decodeErr := json.Unmarshal(body, r)
+	if decodeErr != nil {
+		err = errors.BadRequest("fns: update failed").WithCause(decodeErr)
+		return
+	}
 
+	if r.Key == "" {
+		err = errors.BadRequest("fns: update failed").WithCause(fmt.Errorf("key id is empty"))
+		return
+	}
+	if r.Remove {
+		handler.manager.registrations.delNodeResource(r.Key)
+	} else {
+		if r.NodeId == "" {
+			err = errors.BadRequest("fns: update failed").WithCause(fmt.Errorf("node id is empty"))
+			return
+		}
+		if r.Value == nil || len(r.Value) == 0 {
+			err = errors.BadRequest("fns: update failed").WithCause(fmt.Errorf("value is empty"))
+			return
+		}
+		handler.manager.registrations.setNodeResource(r.NodeId, r.Key, r.Value)
+	}
 	return
 }

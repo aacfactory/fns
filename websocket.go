@@ -466,14 +466,14 @@ type websocketDiscovery struct {
 func (discovery *websocketDiscovery) Register(socket *websocketConnection) {
 	discovery.connections.Store(socket.id, socket)
 	if discovery.clusterManager != nil {
-		discovery.clusterManager.Resources().Save(fmt.Sprintf("ws:%s", socket.id), []byte(discovery.clusterManager.Node().Id))
+		discovery.clusterManager.SaveResource(fmt.Sprintf("ws:%s", socket.id), []byte(discovery.clusterManager.Node().Id))
 	}
 }
 
 func (discovery *websocketDiscovery) Deregister(socket *websocketConnection) {
 	discovery.connections.Delete(socket.id)
 	if discovery.clusterManager != nil {
-		discovery.clusterManager.Resources().Remove(fmt.Sprintf("ws:%s", socket.id))
+		discovery.clusterManager.RemoveResource(fmt.Sprintf("ws:%s", socket.id))
 	}
 }
 
@@ -483,7 +483,7 @@ func (discovery *websocketDiscovery) Get(ctx Context, socketId string) (socket w
 		socket, has = value.(*websocketConnection)
 		return
 	}
-	nodeId, hasProxy := discovery.clusterManager.Resources().Load(fmt.Sprintf("ws:%s", socketId))
+	nodeId, hasProxy := discovery.clusterManager.Registrations().GetNodeResource(fmt.Sprintf("ws:%s", socketId))
 	if !hasProxy {
 		return
 	}

@@ -111,18 +111,20 @@ func (r *Registrations) Get(id string) (v *Registration, has bool) {
 
 func newRegistrationsManager(log logs.Logger) *RegistrationsManager {
 	return &RegistrationsManager{
-		log:    log.With("cluster", "registrations"),
-		mutex:  sync.Mutex{},
-		nodes:  sync.Map{},
-		values: sync.Map{},
+		log:       log.With("cluster", "registrations"),
+		mutex:     sync.Mutex{},
+		nodes:     sync.Map{},
+		values:    sync.Map{},
+		resources: sync.Map{},
 	}
 }
 
 type RegistrationsManager struct {
-	log    logs.Logger
-	mutex  sync.Mutex
-	nodes  sync.Map
-	values sync.Map
+	log       logs.Logger
+	mutex     sync.Mutex
+	nodes     sync.Map
+	values    sync.Map
+	resources sync.Map
 }
 
 func (manager *RegistrationsManager) members() (values []*Node) {
@@ -132,6 +134,11 @@ func (manager *RegistrationsManager) members() (values []*Node) {
 		values = append(values, node)
 		return true
 	})
+	return
+}
+
+func (manager *RegistrationsManager) containsMember(node *Node) (ok bool) {
+	_, ok = manager.nodes.Load(node.Id)
 	return
 }
 
@@ -183,6 +190,11 @@ func (manager *RegistrationsManager) deregister(node *Node) {
 			manager.values.Delete(registration.Name)
 		}
 	}
+	existNode.resources.Range(func(key, _ interface{}) bool {
+		manager.resources.Delete(key)
+		existNode.resources.Delete(key)
+		return true
+	})
 	return
 }
 
@@ -223,4 +235,49 @@ func (manager *RegistrationsManager) RemoveUnavailableRegistration(name string, 
 	}
 	registered := value.(*Registrations)
 	registered.Remove(&Registration{Id: registrationId})
+}
+
+func (manager *RegistrationsManager) GetNodeResource(key string) (value []byte, has bool) {
+	nodeId, nodeIdLoaded := manager.resources.Load(key)
+	if !nodeIdLoaded {
+		return
+	}
+	node0, nodeLoaded := manager.nodes.Load(nodeId)
+	if !nodeLoaded {
+		return
+	}
+	node := node0.(*Node)
+	value0, valueLoaded := node.resources.Load(key)
+	if !valueLoaded {
+		manager.resources.Delete(key)
+		return
+	}
+	value, has = value0.([]byte)
+	return
+}
+
+func (manager *RegistrationsManager) setNodeResource(nodeId string, key string, value []byte) {
+	node0, nodeLoaded := manager.nodes.Load(nodeId)
+	if !nodeLoaded {
+		return
+	}
+	node := node0.(*Node)
+	node.resources.Store(key, value)
+	manager.resources.Store(key, node.Id)
+	return
+}
+
+func (manager *RegistrationsManager) delNodeResource(key string) {
+	nodeId, nodeIdLoaded := manager.resources.Load(key)
+	if !nodeIdLoaded {
+		return
+	}
+	manager.resources.Delete(key)
+	node0, nodeLoaded := manager.nodes.Load(nodeId)
+	if !nodeLoaded {
+		return
+	}
+	node := node0.(*Node)
+	node.resources.Delete(key)
+	return
 }

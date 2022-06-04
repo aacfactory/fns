@@ -28,7 +28,6 @@ const (
 	contentType = "application/fns+cluster"
 	joinPath    = "/cluster/join"
 	leavePath   = "/cluster/leave"
-	updatePath  = "/cluster/resource"
 )
 
 func NewHandler(manager *Manager) *Handler {
@@ -70,14 +69,6 @@ func (handler *Handler) Handler(h http.Handler) http.Handler {
 				}
 				handler.succeed(writer, nil)
 				break
-			case updatePath:
-				result, updateErr := handler.handleUpdate(body)
-				if updateErr != nil {
-					handler.failed(writer, updateErr)
-					return
-				}
-				handler.succeed(writer, result)
-				break
 			default:
 				handler.failed(writer, errors.NotFound("fns: not found"))
 				break
@@ -106,9 +97,8 @@ func (handler *Handler) failed(response http.ResponseWriter, codeErr errors.Code
 }
 
 type joinResult struct {
-	Node      *Node                      `json:"node"`
-	Resources map[string]json.RawMessage `json:"resources"`
-	Members   []*Node                    `json:"members"`
+	Node    *Node   `json:"node"`
+	Members []*Node `json:"members"`
 }
 
 func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
@@ -137,9 +127,8 @@ func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeE
 	node.client = handler.manager.client
 	handler.manager.registrations.register(node)
 	jr := &joinResult{
-		Node:      handler.manager.Node(),
-		Resources: handler.manager.registrations.getNodeResources(handler.manager.Node().Id),
-		Members:   members,
+		Node:    handler.manager.Node(),
+		Members: members,
 	}
 	jrp, encodeErr := json.Marshal(jr)
 	if encodeErr != nil {
@@ -170,40 +159,5 @@ func (handler *Handler) handleLeave(body []byte) (err errors.CodeError) {
 		return
 	}
 	handler.manager.Registrations().deregister(node)
-	return
-}
-
-type nodeResourceUpdateRequest struct {
-	Remove bool            `json:"remove"`
-	NodeId string          `json:"nodeId"`
-	Key    string          `json:"key"`
-	Value  json.RawMessage `json:"value"`
-}
-
-func (handler *Handler) handleUpdate(body []byte) (result []byte, err errors.CodeError) {
-	r := &nodeResourceUpdateRequest{}
-	decodeErr := json.Unmarshal(body, r)
-	if decodeErr != nil {
-		err = errors.BadRequest("fns: update failed").WithCause(decodeErr)
-		return
-	}
-
-	if r.Key == "" {
-		err = errors.BadRequest("fns: update failed").WithCause(fmt.Errorf("key id is empty"))
-		return
-	}
-	if r.Remove {
-		handler.manager.registrations.delNodeResource(r.Key)
-	} else {
-		if r.NodeId == "" {
-			err = errors.BadRequest("fns: update failed").WithCause(fmt.Errorf("node id is empty"))
-			return
-		}
-		if r.Value == nil || len(r.Value) == 0 {
-			err = errors.BadRequest("fns: update failed").WithCause(fmt.Errorf("value is empty"))
-			return
-		}
-		handler.manager.registrations.setNodeResource(r.NodeId, r.Key, r.Value)
-	}
 	return
 }

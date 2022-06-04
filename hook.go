@@ -17,7 +17,6 @@
 package fns
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
@@ -41,7 +40,7 @@ type HookUnit struct {
 func newHookUnit(ctx Context, service string, fn string, result []byte, failedCause errors.CodeError, latency time.Duration) *HookUnit {
 	return &HookUnit{
 		mutex:       sync.Mutex{},
-		Context:     ctx.Fork(sc.TODO()),
+		Context:     ctx,
 		confirmed:   false,
 		counter:     nil,
 		Service:     service,

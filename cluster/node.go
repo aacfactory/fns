@@ -16,8 +16,6 @@
 
 package cluster
 
-import "sync"
-
 type Node struct {
 	Id               string   `json:"id"`
 	SSL              bool     `json:"ssl"`
@@ -25,7 +23,6 @@ type Node struct {
 	Services         []string `json:"services"`
 	InternalServices []string `json:"internalServices"`
 	client           Client
-	resources        sync.Map
 }
 
 func (node *Node) AppendService(services ...string) {

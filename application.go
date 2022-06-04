@@ -57,6 +57,7 @@ func New(options ...Option) (app Application) {
 	}
 	// app
 	appId := ""
+	appAddress := ""
 	// config
 	configRetriever, configRetrieverErr := configuares.NewRetriever(opt.configRetrieverOption)
 	if configRetrieverErr != nil {
@@ -112,11 +113,16 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("port is invalid, port must great than 1024 or less than 65536"))))
 		return
 	}
-
 	// cluster
 	var clusterManager *cluster.Manager
 	if config.Cluster == nil {
 		appId = UID()
+		appIp := commons.GetGlobalUniCastIpFromHostname()
+		if appIp == "" {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("can not get ip from hostname, please set FNS_IP into system env"))))
+			return
+		}
+		appAddress = fmt.Sprintf("%s:%d", appIp, port)
 	} else {
 		clusterManagerOptions := cluster.ManagerOptions{
 			Log:           log,
@@ -132,12 +138,12 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		appId = clusterManager.Node().Id
+		appAddress = clusterManager.Node().Address
 	}
-
 	// running
 	running := commons.NewSafeFlag(false)
 	// env
-	env := newEnvironments(appId, opt.document.Version, running, configRaw, log)
+	env := newEnvironments(appId, appAddress, opt.document.Version, running, configRaw, log)
 	// procs
 	goprocs := newPROCS(env, opt.procs)
 	// documents
@@ -156,8 +162,6 @@ func New(options ...Option) (app Application) {
 	// runtime
 	runtime := newServiceRuntime(env, endpoints, opt.validator)
 
-	// embedServices
-	embedServices := make([]Service, 0, 1)
 	// todo auth
 	// todo permissions
 
@@ -175,27 +179,12 @@ func New(options ...Option) (app Application) {
 		return
 	}
 
-	// websocket
-	wsm := newWebsocketManager(websocketOptions{
-		env:                  env,
-		config:               config.Websocket,
-		runtime:              runtime,
-		barrier:              opt.barrier,
-		requestHandleTimeout: opt.handleRequestTimeout,
-		tracerReporter:       tracerReporter,
-		hooks:                hs,
-		clusterManager:       clusterManager,
-	})
-
-	embedServices = append(embedServices, wsm.Service())
-
 	// http server
 	httpServerHandler := newHttpHandler(env, httpHandlerOptions{
 		env:                  env,
 		document:             document,
 		barrier:              opt.barrier,
 		requestHandleTimeout: opt.handleRequestTimeout,
-		wsm:                  wsm,
 		runtime:              runtime,
 		tracerReporter:       tracerReporter,
 		hooks:                hs,
@@ -250,14 +239,6 @@ func New(options ...Option) (app Application) {
 		tracerReporter:  tracerReporter,
 		hooks:           hs,
 		shutdownTimeout: opt.shutdownTimeout,
-	}
-
-	for _, embed := range embedServices {
-		deployErr := app.Deploy(embed)
-		if deployErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create embed service failed").WithCause(deployErr)))
-			return
-		}
 	}
 
 	return

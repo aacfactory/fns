@@ -61,7 +61,6 @@ func defaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 type Config struct {
 	Port          int              `json:"port"`
 	TLS           *TLSConfig       `json:"tls"`
-	Websocket     WebsocketConfig  `json:"websocket"`
 	Cors          *HttpCorsConfig  `json:"cors"`
 	Client        HttpClientConfig `json:"client"`
 	ServerOptions json.RawMessage  `json:"serverOptions"`
@@ -83,12 +82,6 @@ type HttpCorsConfig struct {
 	ExposedHeaders   []string `json:"exposedHeaders,omitempty"`
 	AllowCredentials bool     `json:"allowCredentials,omitempty"`
 	MaxAge           int      `json:"maxAge,omitempty"`
-}
-
-type WebsocketConfig struct {
-	HandshakeTimeoutSeconds int    `json:"handshakeTimeoutSeconds"`
-	ReadBufferSize          string `json:"readBufferSize"`
-	WriteBufferSize         string `json:"writeBufferSize"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

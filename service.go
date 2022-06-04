@@ -114,6 +114,7 @@ func (s *AbstractService) Components() (components map[string]ServiceComponent) 
 
 type Runtime interface {
 	AppId() (id string)
+	AppAddress() (address string)
 	Log() (log logs.Logger)
 	Endpoints() (endpoints Endpoints)
 	Validator() (v Validator)
@@ -121,23 +122,30 @@ type Runtime interface {
 
 func newServiceRuntime(env Environments, endpoints Endpoints, validator Validator) (rt *serviceRuntime) {
 	rt = &serviceRuntime{
-		appId:     env.AppId(),
-		log:       env.Log(),
-		endpoints: endpoints,
-		validator: validator,
+		appId:      env.AppId(),
+		appAddress: env.AppAddress(),
+		log:        env.Log(),
+		endpoints:  endpoints,
+		validator:  validator,
 	}
 	return
 }
 
 type serviceRuntime struct {
-	appId     string
-	log       logs.Logger
-	endpoints Endpoints
-	validator Validator
+	appId      string
+	appAddress string
+	log        logs.Logger
+	endpoints  Endpoints
+	validator  Validator
 }
 
 func (rt *serviceRuntime) AppId() (id string) {
 	id = rt.appId
+	return
+}
+
+func (rt *serviceRuntime) AppAddress() (address string) {
+	address = rt.appAddress
 	return
 }
 

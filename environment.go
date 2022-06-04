@@ -24,26 +24,33 @@ import (
 
 type Environments interface {
 	AppId() (id string)
+	AppAddress() (address string)
 	Version() (v string)
 	Running() (ok bool)
 	Config(name string) (config configuares.Config, has bool)
 	Log() (log logs.Logger)
 }
 
-func newEnvironments(appId string, version string, running *commons.SafeFlag, config configuares.Config, log logs.Logger) *environments {
-	return &environments{appId: appId, version: version, running: running, config: config, log: log}
+func newEnvironments(appId string, appAddress string, version string, running *commons.SafeFlag, config configuares.Config, log logs.Logger) *environments {
+	return &environments{appId: appId, appAddress: appAddress, version: version, running: running, config: config, log: log}
 }
 
 type environments struct {
-	appId   string
-	version string
-	running *commons.SafeFlag
-	config  configuares.Config
-	log     logs.Logger
+	appId      string
+	appAddress string
+	version    string
+	running    *commons.SafeFlag
+	config     configuares.Config
+	log        logs.Logger
 }
 
 func (env *environments) AppId() (id string) {
 	id = env.appId
+	return
+}
+
+func (env *environments) AppAddress() (address string) {
+	address = env.appAddress
 	return
 }
 

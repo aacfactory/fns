@@ -316,7 +316,6 @@ const (
 	httpHealthPath      = "/health"
 	httpDocumentRawPath = "/documents/raw"
 	httpDocumentOASPath = "/documents/oas.json"
-	httpWebsocketPath   = "/websocket"
 
 	// header
 	httpServerHeader          = "Server"
@@ -360,7 +359,6 @@ type httpHandlerOptions struct {
 	document             *documents.Application
 	barrier              Barrier
 	requestHandleTimeout time.Duration
-	wsm                  *websocketManager
 	runtime              Runtime
 	tracerReporter       TracerReporter
 	hooks                *hooks
@@ -374,7 +372,6 @@ func newHttpHandler(env Environments, opt httpHandlerOptions) (handler *httpHand
 		document:             opt.document,
 		barrier:              opt.barrier,
 		requestHandleTimeout: opt.requestHandleTimeout,
-		wsm:                  opt.wsm,
 		runtime:              opt.runtime,
 		tracerReporter:       opt.tracerReporter,
 		hooks:                opt.hooks,
@@ -390,7 +387,6 @@ type httpHandler struct {
 	document             *documents.Application
 	barrier              Barrier
 	requestHandleTimeout time.Duration
-	wsm                  *websocketManager
 	runtime              Runtime
 	tracerReporter       TracerReporter
 	hooks                *hooks
@@ -410,9 +406,6 @@ func (h *httpHandler) ServeHTTP(response http.ResponseWriter, request *http.Requ
 			return
 		case httpDocumentOASPath:
 			h.documentOAS(response)
-			return
-		case httpWebsocketPath:
-			h.handleWebsocket(response, request)
 			return
 		default:
 			response.Header().Set(httpServerHeader, httpServerHeaderValue)
@@ -606,7 +599,7 @@ func (h *httpHandler) handleRequest(response http.ResponseWriter, request *http.
 	// report tracer
 	h.tracerReporter.Report(ctx.Fork(sc.TODO()), ctx.Tracer())
 	// hook
-	h.hooks.send(newHookUnit(ctx, service, fn, body, codeErr, ctx.tracer.RootSpan().Latency()))
+	h.hooks.send(newHookUnit(ctx.Fork(sc.TODO()), service, fn, body, codeErr, ctx.tracer.RootSpan().Latency()))
 }
 
 func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, request *http.Request, service string, fn string) {
@@ -657,19 +650,11 @@ func (h *httpHandler) handleInternalRequest(response http.ResponseWriter, reques
 	// done
 	h.requestCounter.Done()
 	// hook
-	h.hooks.send(newHookUnit(ctx, service, fn, body, handleErr, ctx.tracer.RootSpan().Latency()))
-}
-
-func (h *httpHandler) handleWebsocket(response http.ResponseWriter, request *http.Request) {
-	err := h.wsm.Upgrade(response, request)
-	if err != nil {
-		h.failed(response, err)
-	}
+	h.hooks.send(newHookUnit(ctx.Fork(sc.TODO()), service, fn, body, handleErr, ctx.tracer.RootSpan().Latency()))
 }
 
 func (h *httpHandler) Close() (err error) {
 	h.requestCounter.Wait()
-	h.wsm.Close()
 	return
 }
 

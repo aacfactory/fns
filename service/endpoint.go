@@ -19,7 +19,6 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/tracing"
 	"github.com/aacfactory/workers"
 )
 
@@ -51,19 +50,19 @@ func (f *fnExecutor) Execute() {
 		ctx = setComponents(ctx, f.svc.Components())
 	}
 	t, hasTracer := GetTracer(ctx)
-	var span tracing.Span = nil
+	var sp Span = nil
 	if hasTracer {
-		span = t.StartSpan(f.svc.Name(), f.fn)
+		sp = t.StartSpan(f.svc.Name(), f.fn)
 	}
 	v, err := f.svc.Handle(ctx, f.fn, f.argument)
-	if span != nil {
-		span.Finish()
+	if sp != nil {
+		sp.Finish()
 		if err == nil {
-			span.AddTag("status", "OK")
-			span.AddTag("handled", "succeed")
+			sp.AddTag("status", "OK")
+			sp.AddTag("handled", "succeed")
 		} else {
-			span.AddTag("status", err.Name())
-			span.AddTag("handled", "failed")
+			sp.AddTag("status", err.Name())
+			sp.AddTag("handled", "failed")
 		}
 	}
 	if err != nil {
@@ -71,7 +70,7 @@ func (f *fnExecutor) Execute() {
 	} else {
 		f.result.Succeed(v)
 	}
-	tryReportStats(ctx, f.svc.Name(), f.fn, err, span)
+	tryReportStats(ctx, f.svc.Name(), f.fn, err, sp)
 }
 
 func newEndpoint(ws workers.Workers, svc Service) *endpoint {

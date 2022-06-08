@@ -92,7 +92,6 @@ func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.C
 			return
 		}
 		ctx = setTracer(ctx)
-
 		result := ep.Request(ctx, fn, r.Argument())
 		p := json.RawMessage{}
 		hasResult, handleErr := result.Get(ctx, &p)

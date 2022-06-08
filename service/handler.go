@@ -36,7 +36,7 @@ type HandleOptions struct {
 	Discovery             EndpointDiscovery
 }
 
-func NewHandler(options HandleOptions) (handler *Handler) {
+func NewHandler(options HandleOptions) (h Handler) {
 	maxWorkers := options.MaxWorkers
 	if maxWorkers < 1 {
 		maxWorkers = 256 * 1024
@@ -54,11 +54,11 @@ func NewHandler(options HandleOptions) (handler *Handler) {
 	if barrier == nil {
 		barrier = defaultBarrier()
 	}
-	handler = &Handler{
+	h = &handler{
 		log:     options.Log,
 		ws:      ws,
 		barrier: barrier,
-		group: &Group{
+		group: &group{
 			appId:     options.AppId,
 			log:       options.Log.With("fns", "services"),
 			ws:        ws,
@@ -70,15 +70,21 @@ func NewHandler(options HandleOptions) (handler *Handler) {
 	return
 }
 
-type Handler struct {
+type Handler interface {
+	Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError)
+	Mount(svc Service)
+	Close()
+}
+
+type handler struct {
 	log           logs.Logger
 	ws            workers.Workers
 	barrier       Barrier
-	group         *Group
+	group         *group
 	handleTimeout time.Duration
 }
 
-func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {
+func (h *handler) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {
 	service, fn := r.Fn()
 	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
 	var cancel func()
@@ -117,11 +123,11 @@ func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.C
 	return
 }
 
-func (h *Handler) mount(svc Service) {
+func (h *handler) Mount(svc Service) {
 	h.group.add(svc)
 }
 
-func (h *Handler) Close() {
+func (h *handler) Close() {
 	h.ws.Close()
 	h.group.close()
 }

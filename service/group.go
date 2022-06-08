@@ -22,7 +22,7 @@ import (
 	"github.com/aacfactory/workers"
 )
 
-type Group struct {
+type group struct {
 	appId     string
 	log       logs.Logger
 	ws        workers.Workers
@@ -30,64 +30,64 @@ type Group struct {
 	discovery EndpointDiscovery
 }
 
-func (group *Group) Get(ctx context.Context, service string) (endpoint Endpoint, has bool) {
-	svc, exist := group.services[service]
+func (g *group) Get(ctx context.Context, service string) (endpoint Endpoint, has bool) {
+	svc, exist := g.services[service]
 	if !exist {
-		if group.discovery == nil {
+		if g.discovery == nil {
 			return
 		}
 		if !CanAccessInternal(ctx) {
 			return
 		}
-		endpoint, has = group.discovery.Get(ctx, service)
+		endpoint, has = g.discovery.Get(ctx, service)
 		return
 	}
 	if svc.Internal() {
 		if CanAccessInternal(ctx) {
-			endpoint = newEndpoint(group.ws, svc)
+			endpoint = newEndpoint(g.ws, svc)
 			has = true
 		}
 		return
 	}
-	endpoint = newEndpoint(group.ws, svc)
+	endpoint = newEndpoint(g.ws, svc)
 	has = true
 	return
 }
 
-func (group *Group) GetExact(ctx context.Context, service string, id string) (endpoint Endpoint, has bool) {
-	if id == group.appId {
-		svc, exist := group.services[service]
+func (g *group) GetExact(ctx context.Context, service string, id string) (endpoint Endpoint, has bool) {
+	if id == g.appId {
+		svc, exist := g.services[service]
 		if !exist {
 			return
 		}
 		if svc.Internal() {
 			if CanAccessInternal(ctx) {
-				endpoint = newEndpoint(group.ws, svc)
+				endpoint = newEndpoint(g.ws, svc)
 				has = true
 			}
 			return
 		}
-		endpoint = newEndpoint(group.ws, svc)
+		endpoint = newEndpoint(g.ws, svc)
 		has = true
 		return
 	}
-	if group.discovery == nil {
+	if g.discovery == nil {
 		return
 	}
 	if !CanAccessInternal(ctx) {
 		return
 	}
-	endpoint, has = group.discovery.Get(ctx, service)
+	endpoint, has = g.discovery.Get(ctx, service)
 	return
 }
 
-func (group *Group) add(svc Service) {
-	group.services[svc.Name()] = svc
+func (g *group) add(svc Service) {
+	g.services[svc.Name()] = svc
 	return
 }
 
-func (group *Group) close() {
-	for _, service := range group.services {
+func (g *group) close() {
+	for _, service := range g.services {
 		components := service.Components()
 		if components != nil && len(components) > 0 {
 			for _, component := range components {

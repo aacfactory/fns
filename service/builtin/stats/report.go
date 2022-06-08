@@ -16,12 +16,17 @@
 
 package stats
 
-import "time"
+import (
+	"context"
+	"github.com/aacfactory/errors"
+)
 
-type Result interface {
-	Service() (name string)
-	Fn() (name string)
-	Succeed() (ok bool)
-	Error() (code int, name string)
-	Latency() (v time.Duration)
+func report(ctx context.Context, metric *Metric) (err errors.CodeError) {
+	reporter := getReporter(ctx)
+	reportErr := reporter.Report(ctx, metric)
+	if reportErr != nil {
+		err = errors.ServiceError("fns: report metric failed").WithCause(reportErr)
+		return
+	}
+	return
 }

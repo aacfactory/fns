@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package tracings
+package stats
 
 import (
 	"context"
@@ -25,79 +25,79 @@ import (
 )
 
 const (
-	name = "tracings"
+	name = "stats"
 )
 
 func Service(reporter Reporter) (v service.Service) {
 	if reporter == nil {
-		panic(errors.Warning("fns: create tracings service failed").WithCause(fmt.Errorf("reporter is nil")))
+		panic(errors.Warning("fns: create stats service failed").WithCause(fmt.Errorf("reporter is nil")))
 	}
-	v = &tracing{
+	v = &statsService{
 		components: map[string]service.Component{"reporter": &reporterComponent{reporter: reporter}},
 	}
 	return
 }
 
-type tracing struct {
+type statsService struct {
 	components map[string]service.Component
 }
 
-func (svc *tracing) Build(options service.Options) (err error) {
+func (svc *statsService) Build(options service.Options) (err error) {
 	log := options.Log.With("service", name)
 	err = svc.components["reporter"].Build(service.ComponentOptions{
 		Log:    log,
 		Config: options.Config,
 	})
 	if err != nil {
-		err = errors.Warning("fns: build tracings service failed").WithCause(err)
+		err = errors.Warning("fns: build stats service failed").WithCause(err)
 		return
 	}
 	return
 }
 
-func (svc *tracing) Name() string {
+func (svc *statsService) Name() string {
 	return name
 }
 
-func (svc *tracing) Internal() bool {
+func (svc *statsService) Internal() bool {
 	return true
 }
 
-func (svc *tracing) Components() (components map[string]service.Component) {
+func (svc *statsService) Components() (components map[string]service.Component) {
 	components = svc.components
 	return
 }
 
-func (svc *tracing) Document() (doc service.Document) {
+func (svc *statsService) Document() (doc service.Document) {
 	return
 }
 
-func (svc *tracing) Handle(context context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
+func (svc *statsService) Handle(context context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case "report":
-		tracer := &Tracer{}
-		asErr := argument.As(tracer)
+		metric := &Metric{}
+		asErr := argument.As(metric)
 		if asErr != nil {
 			err = errors.BadRequest("fns: decode argument failed").WithCause(asErr).WithMeta("service", name).WithMeta("fn", fn)
 			break
 		}
-		validErr := validators.Validate(tracer)
+		validErr := validators.Validate(metric)
 		if validErr != nil {
 			err = validErr.WithMeta("service", name).WithMeta("fn", fn)
 			break
 		}
-		err = report(context, tracer)
+		err = report(context, metric)
 		if err != nil {
 			err = err.WithMeta("service", name).WithMeta("fn", fn)
 		}
 		break
 	default:
-		err = errors.NotFound("fns: fn was not found").WithMeta("fn", fn)
+		err = errors.NotFound("fns: fn was not found").WithMeta("service", name).WithMeta("fn", fn)
 		break
 	}
 	return
 }
 
-func (svc *tracing) Close() {
+func (svc *statsService) Close() {
 
 }

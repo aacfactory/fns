@@ -19,45 +19,10 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/tracing"
 	"time"
 )
 
-type fnStats struct {
-	Service_  string        `json:"service"`
-	Fn_       string        `json:"fn"`
-	Succeed_  bool          `json:"succeed"`
-	ErrorCode int           `json:"errorCode"`
-	ErrorName string        `json:"errorName"`
-	Latency_  time.Duration `json:"latency"`
-}
-
-func (s *fnStats) Service() (name string) {
-	name = s.Service_
-	return
-}
-
-func (s *fnStats) Fn() (name string) {
-	name = s.Fn_
-	return
-}
-
-func (s *fnStats) Succeed() (ok bool) {
-	ok = s.Succeed_
-	return
-}
-
-func (s *fnStats) Error() (code int, name string) {
-	code, name = s.ErrorCode, s.ErrorName
-	return
-}
-
-func (s *fnStats) Latency() (v time.Duration) {
-	v = s.Latency_
-	return
-}
-
-func tryReportStats(ctx context.Context, service string, fn string, err errors.CodeError, span tracing.Span) {
+func tryReportStats(ctx context.Context, service string, fn string, err errors.CodeError, span Span) {
 	ec := 0
 	en := ""
 	if err != nil {
@@ -65,19 +30,19 @@ func tryReportStats(ctx context.Context, service string, fn string, err errors.C
 		en = err.Name()
 	}
 	TryFork(ctx, &reportStatsTask{
-		s: &fnStats{
-			Service_:  service,
-			Fn_:       fn,
-			Succeed_:  err == nil,
+		s: &Metric{
+			Service:   service,
+			Fn:        fn,
+			Succeed:   err != nil,
 			ErrorCode: ec,
 			ErrorName: en,
-			Latency_:  span.Latency(),
+			Latency:   span.Latency(),
 		},
 	})
 }
 
 type reportStatsTask struct {
-	s *fnStats
+	s *Metric
 }
 
 func (task *reportStatsTask) Name() (name string) {
@@ -91,4 +56,13 @@ func (task *reportStatsTask) Execute(ctx context.Context) {
 		return
 	}
 	_ = ts.Request(ctx, "report", NewArgument(task.s))
+}
+
+type Metric struct {
+	Service   string        `json:"service"`
+	Fn        string        `json:"fn"`
+	Succeed   bool          `json:"succeed"`
+	ErrorCode int           `json:"errorCode"`
+	ErrorName string        `json:"errorName"`
+	Latency   time.Duration `json:"latency"`
 }

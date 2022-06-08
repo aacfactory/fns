@@ -15,3 +15,14 @@
  */
 
 package stats
+
+import "time"
+
+type Metric struct {
+	Service   string        `json:"service" validate:"required" message:"service is required"`
+	Fn        string        `json:"fn" validate:"required" message:"fn is required"`
+	Succeed   bool          `json:"succeed" validate:"required" message:"succeed is required"`
+	ErrorCode int           `json:"errorCode"`
+	ErrorName string        `json:"errorName"`
+	Latency   time.Duration `json:"latency" validate:"required" message:"latency is required"`
+}

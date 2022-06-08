@@ -81,6 +81,8 @@ type Handler struct {
 func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {
 	service, fn := r.Fn()
 	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
+	var cancel func()
+	ctx, cancel = context.WithTimeout(ctx, h.handleTimeout)
 	handleResult, handleErr, _ := h.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
 		ctx = initContext(ctx, h.log, h.ws, h.group)
 		ctx = setRequest(ctx, r)
@@ -90,8 +92,7 @@ func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.C
 			return
 		}
 		ctx = setTracer(ctx)
-		var cancel func()
-		ctx, cancel = context.WithTimeout(ctx, h.handleTimeout)
+
 		result := ep.Request(ctx, fn, r.Argument())
 		p := json.RawMessage{}
 		hasResult, handleErr := result.Get(ctx, &p)
@@ -103,10 +104,10 @@ func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.C
 			}
 		}
 		tryReportTracer(ctx)
-		cancel()
 		return
 	})
 	h.barrier.Forget(ctx, barrierKey)
+	cancel()
 	if handleErr != nil {
 		err = handleErr
 		return

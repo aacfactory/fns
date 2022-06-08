@@ -18,6 +18,8 @@ package service
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/uid"
@@ -157,6 +159,7 @@ type Request interface {
 	Header() (header RequestHeader)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
+	Hash() (code string)
 }
 
 func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
@@ -179,6 +182,13 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 			remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
 		}
 	}
+	hash := md5.New()
+	authorization := req.Header.Get("Authorization")
+	if authorization != "" {
+		hash.Write([]byte(authorization))
+	}
+	hash.Write(body)
+	hashCode := hex.EncodeToString(hash.Sum(nil))
 	r = &request{
 		id:       uid.UID(),
 		remoteIp: remoteIp,
@@ -187,6 +197,7 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 		service:  service,
 		fn:       fn,
 		argument: NewArgument(body),
+		hashCode: hashCode,
 	}
 	return
 }
@@ -199,6 +210,7 @@ type request struct {
 	service  string
 	fn       string
 	argument Argument
+	hashCode string
 }
 
 func (r *request) Id() (id string) {
@@ -252,6 +264,11 @@ func (r *request) Fn() (service string, fn string) {
 
 func (r *request) Argument() (argument Argument) {
 	argument = r.argument
+	return
+}
+
+func (r *request) Hash() (code string) {
+	code = r.hashCode
 	return
 }
 

@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -30,6 +31,8 @@ type HandleOptions struct {
 	Log                   logs.Logger
 	MaxWorkers            int
 	MaxIdleWorkerDuration time.Duration
+	HandleTimeout         time.Duration
+	Barrier               Barrier
 	Discovery             EndpointDiscovery
 }
 
@@ -43,9 +46,18 @@ func NewHandler(options HandleOptions) (handler *Handler) {
 		maxIdleWorkerDuration = 3 * time.Second
 	}
 	ws := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(maxIdleWorkerDuration))
+	handleTimeout := options.HandleTimeout
+	if handleTimeout < 1 {
+		handleTimeout = 10 * time.Second
+	}
+	barrier := options.Barrier
+	if barrier == nil {
+		barrier = defaultBarrier()
+	}
 	handler = &Handler{
-		log: options.Log,
-		ws:  ws,
+		log:     options.Log,
+		ws:      ws,
+		barrier: barrier,
 		group: &Group{
 			appId:     options.AppId,
 			log:       options.Log.With("fns", "services"),
@@ -53,6 +65,7 @@ func NewHandler(options HandleOptions) (handler *Handler) {
 			services:  make(map[string]Service),
 			discovery: options.Discovery,
 		},
+		handleTimeout: handleTimeout,
 	}
 	return
 }
@@ -60,31 +73,47 @@ func NewHandler(options HandleOptions) (handler *Handler) {
 type Handler struct {
 	log           logs.Logger
 	ws            workers.Workers
+	barrier       Barrier
 	group         *Group
 	handleTimeout time.Duration
 }
 
 func (h *Handler) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {
-	ctx = initContext(ctx, h.log, h.ws, h.group)
-	ctx = setRequest(ctx, r)
 	service, fn := r.Fn()
-	ep, has := h.group.Get(ctx, service)
-	if !has {
-		err = errors.NotFound("fns: service was not found").WithMeta("service", service)
+	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
+	handleResult, handleErr, _ := h.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
+		ctx = initContext(ctx, h.log, h.ws, h.group)
+		ctx = setRequest(ctx, r)
+		ep, has := h.group.Get(ctx, service)
+		if !has {
+			err = errors.NotFound("fns: service was not found").WithMeta("service", service)
+			return
+		}
+		ctx = setTracer(ctx)
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, h.handleTimeout)
+		result := ep.Request(ctx, fn, r.Argument())
+		p := json.RawMessage{}
+		hasResult, handleErr := result.Get(ctx, &p)
+		if handleErr != nil {
+			err = handleErr
+		} else {
+			if hasResult {
+				v = p
+			}
+		}
+		tryReportTracer(ctx)
+		cancel()
 		return
-	}
-	ctx = setTracer(ctx)
-	result := ep.Request(ctx, fn, r.Argument())
-	p := json.RawMessage{}
-	hasResult, handleErr := result.Get(ctx, &p)
+	})
+	h.barrier.Forget(ctx, barrierKey)
 	if handleErr != nil {
 		err = handleErr
-	} else {
-		if hasResult {
-			v = p
-		}
+		return
 	}
-	tryReportTracer(ctx)
+	if handleResult != nil {
+		v = handleResult.([]byte)
+	}
 	return
 }
 

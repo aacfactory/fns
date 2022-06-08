@@ -54,12 +54,12 @@ func New() *Application {
 }
 
 type Application struct {
-	Title         string              `json:"title,omitempty"`
-	Description   string              `json:"description,omitempty"`
-	Terms         string              `json:"terms,omitempty"`
-	Contact       Contact             `json:"contact,omitempty"`
-	License       License             `json:"license,omitempty"`
-	Version       string              `json:"version,omitempty"`
+	Title         string              `json:"title"`
+	Description   string              `json:"description"`
+	Terms         string              `json:"terms"`
+	Contact       Contact             `json:"contact"`
+	License       License             `json:"license"`
+	Version       string              `json:"version"`
 	Services      map[string]*Service `json:"services"`
 	URL           string              `json:"url"`
 	once          sync.Once
@@ -364,26 +364,26 @@ func (app *Application) convertToOpenAPI() (p []byte, err error) {
 			api.Paths[fmt.Sprintf("/%s/%s", service.Name, fn.Name)] = path
 			// schemas
 			//if fn.Argument != nil {
-			//	api.Components.Schemas[fn.Argument.key()] = fn.Argument.schema()
+			//	api.Components.Schemas[fn.Argument.Key()] = fn.Argument.schema()
 			//}
 			//if fn.Result != nil {
-			//	api.Components.Schemas[fn.Result.key()] = fn.Result.schema()
+			//	api.Components.Schemas[fn.Result.Key()] = fn.Result.schema()
 			//}
 			/*
-				if fn.Argument != nil && fn.Argument.objects() != nil && len(fn.Argument.objects()) > 0 {
-					for key, obj := range fn.Argument.objects() {
-						if _, has := api.Components.Schemas[key]; has {
+				if fn.Argument != nil && fn.Argument.Elements() != nil && len(fn.Argument.Elements()) > 0 {
+					for Key, obj := range fn.Argument.Elements() {
+						if _, has := api.Components.Schemas[Key]; has {
 							continue
 						}
-						api.Components.Schemas[key] = obj.schema()
+						api.Components.Schemas[Key] = obj.schema()
 					}
 				}
-				if fn.Result != nil && fn.Result.objects() != nil && len(fn.Result.objects()) > 0 {
-					for key, obj := range fn.Result.objects() {
-						if _, has := api.Components.Schemas[key]; has {
+				if fn.Result != nil && fn.Result.Elements() != nil && len(fn.Result.Elements()) > 0 {
+					for Key, obj := range fn.Result.Elements() {
+						if _, has := api.Components.Schemas[Key]; has {
 							continue
 						}
-						api.Components.Schemas[key] = obj.schema()
+						api.Components.Schemas[Key] = obj.schema()
 					}
 				}
 			*/

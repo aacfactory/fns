@@ -87,7 +87,7 @@ func JsonRaw() *Element {
 }
 
 func Empty() *Element {
-	return NewElement("fns", "Empty", "object", "", "Empty", "Empty Struct")
+	return NewElement("fns", "Empty", "object", "", "Empty", "Empty Value")
 }
 
 func Array(name string, title string, description string, item *Element) *Element {

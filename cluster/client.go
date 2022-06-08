@@ -122,36 +122,3 @@ func leave(ctx sc.Context, client Client, address string, node *Node) (err error
 	}
 	return
 }
-
-func update(ctx sc.Context, client Client, address string, action int, node *Node, key string, value []byte) (err errors.CodeError) {
-	var url string
-	if node.SSL {
-		url = fmt.Sprintf("https://%s%s", address, updatePath)
-	} else {
-		url = fmt.Sprintf("http://%s%s", address, updatePath)
-	}
-	r := &nodeResourceUpdateRequest{
-		Remove: action == 0,
-		NodeId: node.Id,
-		Key:    key,
-		Value:  value,
-	}
-	body, encodeErr := json.Marshal(r)
-	if encodeErr != nil {
-		err = errors.BadRequest("fns: encode node failed").WithCause(encodeErr)
-		return
-	}
-	header := http.Header{}
-	header.Set("Content-Type", contentType)
-	resp, doErr := client.Do(ctx, http.MethodPost, url, header, encodeRequestBody(body))
-	if doErr != nil {
-		err = errors.Warning("fns: invoke update node failed").WithCause(doErr)
-		return
-	}
-	_, handleErr := decodeResponseBody(resp)
-	if handleErr != nil {
-		err = handleErr
-		return
-	}
-	return
-}

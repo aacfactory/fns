@@ -32,7 +32,7 @@ type Service struct {
 	// as description of tag, support markdown
 	Description string `json:"description"`
 	// Fns
-	// key: fn
+	// Key: fn
 	Fns map[string]*Fn `json:"fns"`
 }
 
@@ -40,7 +40,7 @@ func (doc *Service) AddFn(fn *Fn) {
 	doc.Fns[fn.Name] = fn
 }
 
-func (doc *Service) objects() (v map[string]*Element) {
+func (doc *Service) Elements() (v map[string]*Element) {
 	v = make(map[string]*Element)
 	if doc.Fns == nil || len(doc.Fns) == 0 {
 		return

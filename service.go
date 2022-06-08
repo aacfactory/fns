@@ -41,7 +41,7 @@ type Service interface {
 	Components() (components map[string]ServiceComponent)
 	Document() (doc *documents.Service)
 	Handle(context Context, fn string, argument Argument, result ResultWriter)
-	Shutdown(context sc.Context) (err error)
+	Close()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

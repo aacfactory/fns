@@ -8,8 +8,7 @@ require (
 	github.com/aacfactory/errors v1.6.3
 	github.com/aacfactory/json v1.6.0
 	github.com/aacfactory/logs v1.2.0
-	github.com/aacfactory/workers v1.2.0
-	github.com/fasthttp/websocket v1.5.0
+	github.com/aacfactory/workers v1.4.0
 	github.com/go-playground/validator/v10 v10.11.0
 	github.com/rs/xid v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0
@@ -33,7 +32,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/rs/zerolog v1.26.1 // indirect
-	github.com/savsgio/gotils v0.0.0-20220530130905-52f3993e8d6d // indirect
 	github.com/tidwall/gjson v1.14.1 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect

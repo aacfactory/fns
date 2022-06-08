@@ -88,6 +88,12 @@ func (group *Group) add(svc Service) {
 
 func (group *Group) close() {
 	for _, service := range group.services {
+		components := service.Components()
+		if components != nil && len(components) > 0 {
+			for _, component := range components {
+				component.Close()
+			}
+		}
 		service.Close()
 	}
 }

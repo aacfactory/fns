@@ -42,41 +42,8 @@ func setTracer(ctx context.Context) context.Context {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: get not set tracer into context cause no request found in context")))
 		return ctx
 	}
-	ctx = context.WithValue(ctx, contextTracerKey, newTracer(r.Id()))
+	ctx = context.WithValue(ctx, contextTracerKey, tracing.NewTracer(r.Id()))
 	return ctx
-}
-
-func newTracer(id string) (t *tracer) {
-
-	return
-}
-
-type tracer struct {
-}
-
-func (t *tracer) Id() (id string) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (t *tracer) StartSpan(service string, fn string) (span tracing.Span) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (t *tracer) RootSpan() (span tracing.Span) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (t *tracer) FlatSpans() (spans tracing.Span) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (t *tracer) SpanSize() (size int) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func tryReportTracer(ctx context.Context) {

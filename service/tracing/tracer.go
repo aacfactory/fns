@@ -16,10 +16,59 @@
 
 package tracing
 
+import "sync"
+
 type Tracer interface {
 	Id() (id string)
 	StartSpan(service string, fn string) (span Span)
-	RootSpan() (span Span)
-	FlatSpans() (spans Span)
-	SpanSize() (size int)
+	Span() (span Span)
+}
+
+func NewTracer(id string) Tracer {
+	return &tracer{
+		Id_:     id,
+		Root:    nil,
+		lock:    sync.Mutex{},
+		current: nil,
+	}
+}
+
+type tracer struct {
+	Id_     string `json:"id"`
+	Root    Span   `json:"span"`
+	lock    sync.Mutex
+	current Span
+}
+
+func (t *tracer) Id() (id string) {
+	id = t.Id_
+	return
+}
+
+func (t *tracer) StartSpan(service string, fn string) (span Span) {
+	t.lock.Lock()
+	if t.Root == nil {
+		span = newSpan(t.Id_, service, fn, nil)
+		t.Root = span
+		t.current = span
+		t.lock.Unlock()
+		return
+	}
+	span = newSpan(t.Id_, service, fn, t.current)
+	if t.current.FinishedAT().IsZero() {
+		// prev not finished, current as parent
+		span = newSpan(t.Id_, service, fn, t.current)
+	} else {
+		// pre finished, current's parent as parent
+		span = newSpan(t.Id_, service, fn, t.current.Parent())
+		// new as current
+		t.current = span
+	}
+	t.lock.Unlock()
+	return
+}
+
+func (t *tracer) Span() (span Span) {
+	span = t.Root
+	return
 }

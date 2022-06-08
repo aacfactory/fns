@@ -55,7 +55,7 @@ func (v *validate) Validate(value interface{}) (err errors.CodeError) {
 		err = errors.Warning(fmt.Sprintf("fns: validate value failed")).WithCause(validateErr)
 		return
 	}
-	err = errors.BadRequest("fns: request argument is invalid")
+	err = errors.BadRequest("fns: value is invalid")
 	for _, validationError := range validationErrors {
 		sf := validationError.Namespace()
 		exp := sf[strings.Index(sf, ".")+1:]

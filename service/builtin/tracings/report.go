@@ -14,21 +14,19 @@
  * limitations under the License.
  */
 
-package tracing
+package tracings
 
 import (
 	"context"
-	"github.com/aacfactory/configuares"
-	"github.com/aacfactory/logs"
+	"github.com/aacfactory/errors"
 )
 
-type TracerReporterOptions struct {
-	Log    logs.Logger
-	Config configuares.Config
-}
-
-type TracerReporter interface {
-	Build(options TracerReporterOptions) (err error)
-	Report(ctx context.Context, tracer Tracer)
-	Close()
+func report(ctx context.Context, tracer *Tracer) (err errors.CodeError) {
+	reporter := getReporter(ctx)
+	reportErr := reporter.Report(ctx, tracer)
+	if reportErr != nil {
+		err = errors.ServiceError("fns: report tracer failed").WithCause(reportErr)
+		return
+	}
+	return
 }

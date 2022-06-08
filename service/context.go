@@ -69,7 +69,7 @@ func CanAccessInternal(ctx context.Context) (ok bool) {
 	if !hasTracer {
 		return
 	}
-	ok = t.SpanSize() > 0
+	ok = t.Span() != nil
 	return
 }
 

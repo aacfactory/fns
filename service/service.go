@@ -31,6 +31,7 @@ type ComponentOptions struct {
 type Component interface {
 	Name() (name string)
 	Build(options ComponentOptions) (err error)
+	Close()
 }
 
 type Options struct {

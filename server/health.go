@@ -18,7 +18,9 @@ package server
 
 import (
 	"fmt"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/json"
 	"net/http"
 	"time"
 )
@@ -37,20 +39,29 @@ type HealthHandlerOptions struct {
 
 func NewHealthHandler(options HealthHandlerOptions) (h Handler) {
 	h = &healthHandler{
-		appId:   options.AppId,
-		version: options.Version,
-		running: options.Running,
+		appId:       options.AppId,
+		version:     options.Version,
+		running:     options.Running,
+		unavailable: json.UnsafeMarshal(errors.Unavailable("fns: service is unavailable").WithMeta("fns", "http")),
 	}
 	return
 }
 
 type healthHandler struct {
-	appId   string
-	version string
-	running *commons.SafeFlag
+	appId       string
+	version     string
+	running     *commons.SafeFlag
+	unavailable []byte
 }
 
 func (h *healthHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
+	if h.running.IsOff() {
+		writer.Header().Set(httpConnectionHeader, httpConnectionHeaderClose)
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = writer.Write(h.unavailable)
+		ok = true
+		return
+	}
 	if request.Method != http.MethodGet {
 		return
 	}
@@ -61,14 +72,7 @@ func (h *healthHandler) Handle(writer http.ResponseWriter, request *http.Request
 			"{\"appId\":\"%s\", \"version\":\"%s\", \"running\":\"%v\", \"now\":\"%s\"}",
 			h.appId, h.version, h.running.IsOn(), time.Now().Format(time.RFC3339),
 		)
-		writer.Header().Set(httpServerHeader, httpServerHeaderValue)
-		writer.Header().Set(httpContentType, httpContentTypeJson)
-		if h.running.IsOff() {
-			writer.Header().Set(httpConnectionHeader, httpConnectionHeaderClose)
-			writer.WriteHeader(http.StatusServiceUnavailable)
-		} else {
-			writer.WriteHeader(http.StatusOK)
-		}
+		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(body))
 		break
 	default:

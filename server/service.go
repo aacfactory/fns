@@ -18,7 +18,6 @@ package server
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -34,14 +33,12 @@ const (
 
 type ServiceHandlerOptions struct {
 	Log       logs.Logger
-	Running   *commons.SafeFlag
 	Endpoints service.Endpoints
 }
 
 func NewServiceHandler(options ServiceHandlerOptions) (h Handler) {
 	h = &serviceHandler{
 		log:       options.Log.With("fns", "handler").With("handle", "service"),
-		running:   options.Running,
 		counter:   sync.WaitGroup{},
 		endpoints: options.Endpoints,
 	}
@@ -50,7 +47,6 @@ func NewServiceHandler(options ServiceHandlerOptions) (h Handler) {
 
 type serviceHandler struct {
 	log       logs.Logger
-	running   *commons.SafeFlag
 	counter   sync.WaitGroup
 	endpoints service.Endpoints
 }
@@ -63,10 +59,6 @@ func (h *serviceHandler) Handle(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	ok = true
-	if h.running.IsOff() {
-		h.failed(writer, "", 0, errors.Unavailable("fns: service is unavailable").WithMeta("fns", "http"))
-		return
-	}
 	r, requestErr := service.NewRequest(request)
 	if requestErr != nil {
 		h.failed(writer, "", 0, requestErr)

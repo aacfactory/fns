@@ -18,8 +18,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"time"
 )
 
 type Endpoint interface {
@@ -31,47 +35,121 @@ type EndpointDiscovery interface {
 	GetExact(ctx context.Context, service string, id string) (endpoint Endpoint, has bool)
 }
 
-func newFn(ctx context.Context, svc Service, fn string, argument Argument, result ResultWriter) *fnExecutor {
-	return &fnExecutor{ctx: ctx, svc: svc, fn: fn, argument: argument, result: result}
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type Endpoints interface {
+	Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError)
+	Mount(svc Service)
+	Documents() (v map[string]Document)
+	Close()
 }
 
-type fnExecutor struct {
-	ctx      context.Context
-	svc      Service
-	fn       string
-	argument Argument
-	result   ResultWriter
+type EndpointsOptions struct {
+	AppId                 string
+	Log                   logs.Logger
+	MaxWorkers            int
+	MaxIdleWorkerDuration time.Duration
+	HandleTimeout         time.Duration
+	Barrier               Barrier
+	Discovery             EndpointDiscovery
 }
 
-func (f *fnExecutor) Execute() {
-	rootLog := getRuntime(f.ctx).log
-	ctx := setLog(f.ctx, rootLog.With("service", f.svc.Name()).With("fn", f.fn))
-	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
-		ctx = setComponents(ctx, f.svc.Components())
+func NewEndpoints(options EndpointsOptions) (v Endpoints) {
+	maxWorkers := options.MaxWorkers
+	if maxWorkers < 1 {
+		maxWorkers = 256 * 1024
 	}
-	t, hasTracer := GetTracer(ctx)
-	var sp Span = nil
-	if hasTracer {
-		sp = t.StartSpan(f.svc.Name(), f.fn)
+	maxIdleWorkerDuration := options.MaxIdleWorkerDuration
+	if maxIdleWorkerDuration < 1 {
+		maxIdleWorkerDuration = 3 * time.Second
 	}
-	v, err := f.svc.Handle(ctx, f.fn, f.argument)
-	if sp != nil {
-		sp.Finish()
-		if err == nil {
-			sp.AddTag("status", "OK")
-			sp.AddTag("handled", "succeed")
-		} else {
-			sp.AddTag("status", err.Name())
-			sp.AddTag("handled", "failed")
+	ws := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(maxIdleWorkerDuration))
+	handleTimeout := options.HandleTimeout
+	if handleTimeout < 1 {
+		handleTimeout = 10 * time.Second
+	}
+	barrier := options.Barrier
+	if barrier == nil {
+		barrier = defaultBarrier()
+	}
+	v = &endpoints{
+		log:     options.Log,
+		ws:      ws,
+		barrier: barrier,
+		group: &group{
+			appId:     options.AppId,
+			log:       options.Log.With("fns", "services"),
+			ws:        ws,
+			services:  make(map[string]Service),
+			discovery: options.Discovery,
+		},
+		handleTimeout: handleTimeout,
+	}
+	return
+}
+
+type endpoints struct {
+	log           logs.Logger
+	ws            workers.Workers
+	barrier       Barrier
+	group         *group
+	handleTimeout time.Duration
+}
+
+func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {
+	service, fn := r.Fn()
+	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
+	var cancel func()
+	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
+	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
+		ctx = initContext(ctx, e.log, e.ws, e.group)
+		ctx = setRequest(ctx, r)
+		ep, has := e.group.Get(ctx, service)
+		if !has {
+			err = errors.NotFound("fns: service was not found").WithMeta("service", service)
+			return
 		}
+		ctx = setTracer(ctx)
+		result := ep.Request(ctx, fn, r.Argument())
+		p := json.RawMessage{}
+		hasResult, handleErr := result.Get(ctx, &p)
+		if handleErr != nil {
+			err = handleErr
+		} else {
+			if hasResult {
+				v = p
+			}
+		}
+		tryReportTracer(ctx)
+		return
+	})
+	e.barrier.Forget(ctx, barrierKey)
+	cancel()
+	if handleErr != nil {
+		err = handleErr
+		return
 	}
-	if err != nil {
-		f.result.Failed(err)
-	} else {
-		f.result.Succeed(v)
+	if handleResult != nil {
+		v = handleResult.([]byte)
 	}
-	tryReportStats(ctx, f.svc.Name(), f.fn, err, sp)
+	return
 }
+
+func (e *endpoints) Mount(svc Service) {
+	e.group.add(svc)
+}
+
+func (e *endpoints) Documents() (v map[string]Document) {
+	v = e.group.documents()
+	return
+}
+
+func (e *endpoints) Close() {
+	e.ws.Close()
+	e.group.close()
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 func newEndpoint(ws workers.Workers, svc Service) *endpoint {
 	return &endpoint{ws: ws, svc: svc}

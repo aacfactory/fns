@@ -86,6 +86,17 @@ func (g *group) add(svc Service) {
 	return
 }
 
+func (g *group) documents() (v map[string]Document) {
+	v = make(map[string]Document)
+	for name, service := range g.services {
+		if service.Internal() || service.Document() == nil {
+			continue
+		}
+		v[name] = service.Document()
+	}
+	return
+}
+
 func (g *group) close() {
 	for _, service := range g.services {
 		components := service.Components()

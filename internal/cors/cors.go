@@ -23,75 +23,35 @@ import (
 )
 
 type Options struct {
-	// AllowedOrigins is a list of origins a cross-domain request can be executed from.
-	// If the special "*" value is present in the list, all origins will be allowed.
-	// An origin may contain a wildcard (*) to replace 0 or more characters
-	// (i.e.: http://*.domain.com). Usage of wildcards implies a small performance penalty.
-	// Only one wildcard can be used per origin.
-	// Default value is ["*"]
-	AllowedOrigins []string
-	// AllowOriginFunc is a custom function to validate the origin. It take the origin
-	// as argument and returns true if allowed or false otherwise. If this option is
-	// set, the content of AllowedOrigins is ignored.
-	AllowOriginFunc func(origin string) bool
-	// AllowOriginRequestFunc is a custom function to validate the origin. It takes the HTTP Request object and the origin as
-	// argument and returns true if allowed or false otherwise. If this option is set, the content of `AllowedOrigins`
-	// and `AllowOriginFunc` is ignored.
+	AllowedOrigins         []string
+	AllowOriginFunc        func(origin string) bool
 	AllowOriginRequestFunc func(r *http.Request, origin string) bool
-	// AllowedMethods is a list of methods the client is allowed to use with
-	// cross-domain requests. Default value is simple methods (HEAD, GET and POST).
-	AllowedMethods []string
-	// AllowedHeaders is list of non simple headers the client is allowed to use with
-	// cross-domain requests.
-	// If the special "*" value is present in the list, all headers will be allowed.
-	// Default value is [] but "Origin" is always appended to the list.
-	AllowedHeaders []string
-	// ExposedHeaders indicates which headers are safe to expose to the API of a CORS
-	// API specification
-	ExposedHeaders []string
-	// MaxAge indicates how long (in seconds) the results of a preflight request
-	// can be cached
-	MaxAge int
-	// AllowCredentials indicates whether the request can include user credentials like
-	// cookies, HTTP authentication or client side SSL certificates.
-	AllowCredentials bool
-	// AllowPrivateNetwork indicates whether to accept cross-origin requests over a
-	// private network.
-	AllowPrivateNetwork bool
-	// OptionsPassthrough instructs preflight to let other potential next handlers to
-	// process the OPTIONS method. Turn this on if your application handles OPTIONS.
-	OptionsPassthrough bool
-	// Provides a status code to use for successful OPTIONS requests.
-	// Default value is http.StatusNoContent (204).
-	OptionsSuccessStatus int
+	AllowedMethods         []string
+	AllowedHeaders         []string
+	ExposedHeaders         []string
+	MaxAge                 int
+	AllowCredentials       bool
+	AllowPrivateNetwork    bool
+	OptionsPassthrough     bool
+	OptionsSuccessStatus   int
 }
 
 // Cors http handler
 type Cors struct {
-	// Normalized list of plain allowed origins
-	allowedOrigins []string
-	// List of allowed origins containing wildcards
-	allowedWOrigins []wildcard
-	// Optional origin validator function
-	allowOriginFunc func(origin string) bool
-	// Optional origin validator (with request) function
+	allowedOrigins         []string
+	allowedWOrigins        []wildcard
+	allowOriginFunc        func(origin string) bool
 	allowOriginRequestFunc func(r *http.Request, origin string) bool
-	// Normalized list of allowed headers
-	allowedHeaders []string
-	// Normalized list of allowed methods
-	allowedMethods []string
-	// Normalized list of exposed headers
-	exposedHeaders []string
-	maxAge         int
-	// Set to true when allowed origins contains a "*"
-	allowedOriginsAll bool
-	// Set to true when allowed headers contains a "*"
-	allowedHeadersAll bool
-	// Status code to use for successful OPTIONS requests
-	optionsSuccessStatus int
-	allowCredentials     bool
-	allowPrivateNetwork  bool
-	optionPassthrough    bool
+	allowedHeaders         []string
+	allowedMethods         []string
+	exposedHeaders         []string
+	maxAge                 int
+	allowedOriginsAll      bool
+	allowedHeadersAll      bool
+	optionsSuccessStatus   int
+	allowCredentials       bool
+	allowPrivateNetwork    bool
+	optionPassthrough      bool
 }
 
 func New(options Options) *Cors {
@@ -174,6 +134,22 @@ func AllowAll() *Cors {
 		AllowedHeaders:   []string{"*"},
 		AllowCredentials: false,
 	})
+}
+
+func (c *Cors) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
+	if request.Method == http.MethodOptions && request.Header.Get("Access-Control-Request-Method") != "" {
+		c.handlePreflight(writer, request)
+		if c.optionPassthrough {
+			ok = false
+		} else {
+			writer.WriteHeader(c.optionsSuccessStatus)
+			ok = true
+		}
+	} else {
+		c.handleActualRequest(writer, request)
+		ok = false
+	}
+	return
 }
 
 func (c *Cors) Handler(h http.Handler) http.Handler {

@@ -22,7 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/uid"
+	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/json"
 	"io/ioutil"
 	"net/http"

@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/uid"
+	"github.com/aacfactory/fns/commons/uid"
 	"sync"
 	"time"
 )

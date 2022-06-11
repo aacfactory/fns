@@ -17,17 +17,21 @@
 package fns
 
 import (
-	sc "context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cluster"
-	"github.com/aacfactory/fns/documents"
+	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/internal/configuare"
+	"github.com/aacfactory/fns/internal/logger"
+	"github.com/aacfactory/fns/internal/procs"
+	"github.com/aacfactory/fns/server"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"net/http"
+	"golang.org/x/net/context"
 	"os"
 	"os/signal"
 	"strings"
@@ -37,7 +41,7 @@ import (
 
 type Application interface {
 	Log() (log logs.Logger)
-	Deploy(service ...Service) (err error)
+	Deploy(service ...service.Service) (err error)
 	Run() (err error)
 	Sync() (err error)
 }
@@ -50,14 +54,14 @@ func New(options ...Option) (app Application) {
 		for _, option := range options {
 			optErr := option(opt)
 			if optErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed for invalid options").WithCause(optErr)))
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(optErr)))
 				return
 			}
 		}
 	}
 	// app
 	appId := ""
-	appAddress := ""
+	appVersion := opt.version
 	// config
 	configRetriever, configRetrieverErr := configuares.NewRetriever(opt.configRetrieverOption)
 	if configRetrieverErr != nil {
@@ -69,67 +73,132 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, get config via retriever failed").WithCause(configGetErr)))
 		return
 	}
-	config := Config{}
+	config := configuare.Config{}
 	decodeConfigErr := configRaw.As(&config)
 	if decodeConfigErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, decode config failed").WithCause(decodeConfigErr)))
 		return
 	}
+	name := strings.TrimSpace(config.Name)
+	if name == "" {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, name is undefined in config")))
+		return
+	}
+	// running
+	running := commons.NewSafeFlag(false)
 	// log
-	log, logErr := newLog(config.Log)
+	logOptions := logger.LogOptions{
+		Name: name,
+	}
+	if config.Log != nil {
+		logOptions.Color = config.Log.Color
+		logOptions.Formatter = config.Log.Formatter
+		logOptions.Level = config.Log.Level
+	}
+	log, logErr := logger.NewLog(logOptions)
 	if logErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create logger failed").WithCause(logErr)))
 		return
 	}
-	// tls
-	ssl := false
-	var servetTLS *tls.Config
-	var clientTLS *tls.Config
-	if config.TLS != nil {
-		tlsOptions, hasTlsOptions := configRaw.Node("tls.options")
-		if !hasTlsOptions {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create tls failed").WithCause(fmt.Errorf("fns: no tls options in config"))))
+
+	// http server options
+	httpOptions := server.HttpOptions{
+		Port:      80,
+		ServerTLS: nil,
+		ClientTLS: nil,
+		Handler:   nil,
+		Log:       log,
+		Raw:       nil,
+	}
+	if config.Server != nil {
+		var serverTLS *tls.Config
+		var clientTLS *tls.Config
+		if config.Server.TLS != nil {
+			var tlsErr error
+			serverTLS, clientTLS, tlsErr = config.Server.TLS.Config()
+			if tlsErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, load tls failed").WithCause(tlsErr)))
+				return
+			}
+		}
+		httpOptions.ServerTLS = serverTLS
+		httpOptions.ClientTLS = clientTLS
+		port := config.Server.Port
+		if port == 0 {
+			if serverTLS == nil {
+				port = 80
+			} else {
+				port = 443
+			}
+		}
+		if port < 1024 || port > 65535 {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("port is invalid, port must great than 1024 or less than 65536"))))
 			return
 		}
-		servetTLS0, clientTLS0, tlsErr := config.TLS.Load(tlsOptions)
-		if tlsErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, load tls failed").WithCause(tlsErr)))
-			return
+		httpOptions.Port = port
+		if config.Server.Options == nil {
+			config.Server.Options = []byte("{}")
 		}
-		servetTLS = servetTLS0
-		clientTLS = clientTLS0
-		ssl = true
+		httpOptions.Raw = json.NewObjectFromBytes(config.Server.Options)
 	}
-	// port
-	port := config.Port
-	if port == 0 {
-		if servetTLS == nil {
-			port = 80
-		} else {
-			port = 443
-		}
-	}
-	if port < 1024 || port > 65535 {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("port is invalid, port must great than 1024 or less than 65536"))))
-		return
-	}
+
 	// cluster
 	var clusterManager *cluster.Manager
 	if config.Cluster == nil {
-		appId = UID()
+		appId = uid.UID()
 		appIp := commons.GetGlobalUniCastIpFromHostname()
 		if appIp == "" {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("can not get ip from hostname, please set FNS_IP into system env"))))
 			return
 		}
-		appAddress = fmt.Sprintf("%s:%d", appIp, port)
 	} else {
+		clientBuilder := opt.clientBuilder
+		if clientBuilder == nil {
+			clientBuilder = cluster.FastHttpClientBuilder
+		}
+		clientConfig := config.Cluster.Client
+		maxIdleConnSeconds := clientConfig.MaxIdleConnSeconds
+		if maxIdleConnSeconds < 1 {
+			maxIdleConnSeconds = 10
+		}
+		maxConnsPerHost := clientConfig.MaxConnsPerHost
+		if maxConnsPerHost < 1 {
+			maxConnsPerHost = 0
+		}
+		maxIdleConnsPerHost := clientConfig.MaxIdleConnsPerHost
+		if maxIdleConnsPerHost < 1 {
+			maxIdleConnsPerHost = 0
+		}
+		requestTimeoutSeconds := clientConfig.RequestTimeoutSeconds
+		if requestTimeoutSeconds < 1 {
+			requestTimeoutSeconds = 2
+		}
+
+		client, clientErr := clientBuilder(cluster.ClientOptions{
+			Log:                 log,
+			Https:               httpOptions.ServerTLS != nil,
+			TLS:                 httpOptions.ClientTLS,
+			MaxIdleConnDuration: time.Duration(maxIdleConnSeconds) * time.Second,
+			MaxConnsPerHost:     maxConnsPerHost,
+			MaxIdleConnsPerHost: maxIdleConnsPerHost,
+			RequestTimeout:      time.Duration(requestTimeoutSeconds) * time.Second,
+		})
+		if clientErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster client failed").WithCause(clientErr)))
+			return
+		}
+		checkHealthSeconds := config.Cluster.CheckHealthSeconds
+		if checkHealthSeconds < 1 {
+			checkHealthSeconds = 60
+		}
+
 		clusterManagerOptions := cluster.ManagerOptions{
-			Log:           log,
-			Port:          port,
-			Config:        config.Cluster,
-			ClientTLS:     clientTLS,
-			ClientBuilder: opt.clientBuilder,
+			Log:                 log,
+			Port:                httpOptions.Port,
+			Kind:                config.Cluster.Kind,
+			CheckHealthDuration: time.Duration(checkHealthSeconds) * time.Second,
+			Options:             config.Cluster.Options,
+			Client:              client,
 		}
 		var clusterManagerErr error
 		clusterManager, clusterManagerErr = cluster.NewManager(clusterManagerOptions)
@@ -138,165 +207,195 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		appId = clusterManager.Node().Id
-		appAddress = clusterManager.Node().Address
 	}
-	// running
-	running := commons.NewSafeFlag(false)
-	// env
-	env := newEnvironments(appId, appAddress, opt.document.Version, running, configRaw, log)
+
 	// procs
-	goprocs := newPROCS(env, opt.procs)
-	// documents
-	document := opt.document
+	goprocs := procs.New(procs.Options{
+		Log: log,
+		Min: opt.autoMaxProcsMin,
+		Max: opt.autoMaxProcsMax,
+	})
 
 	// endpoints
-	endpoints, endpointsErr := newEndpoints(env, serviceEndpointsOptions{
-		workerMaxIdleTime: opt.workerMaxIdleTime,
-		barrier:           opt.barrier,
-		clusterManager:    clusterManager,
-	})
-	if endpointsErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create endpoints failed").WithCause(endpointsErr)))
-		return
-	}
-	// runtime
-	runtime := newServiceRuntime(env, endpoints, opt.validator)
-
-	// todo auth
-	// todo permissions
-
-	// hooks
-	hs, hooksErr := newHooks(env, opt.hooks)
-	if hooksErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create hooks failed").WithCause(hooksErr)))
-		return
-	}
-	// tracer
-	tracerReporter := opt.tracerReporter
-	tracerReporterErr := tracerReporter.Build(env)
-	if tracerReporterErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create tracer reporter failed").WithCause(tracerReporterErr)))
-		return
-	}
-
-	// http server
-	httpServerHandler := newHttpHandler(env, httpHandlerOptions{
-		env:                  env,
-		document:             document,
-		barrier:              opt.barrier,
-		requestHandleTimeout: opt.handleRequestTimeout,
-		runtime:              runtime,
-		tracerReporter:       tracerReporter,
-		hooks:                hs,
-	})
-
-	var httpServerHandlers http.Handler = httpServerHandler
-	if clusterManager != nil {
-		clusterHandler := cluster.NewHandler(clusterManager)
-		httpServerHandlers = clusterHandler.Handler(httpServerHandlers)
-	}
-	httpHandlerWrapperBuildersLen := len(opt.httpHandlerWrapperBuilders)
-	for i := httpHandlerWrapperBuildersLen; i > 0; i-- {
-		wrapper, wrapperErr := opt.httpHandlerWrapperBuilders[i-1](env)
-		if wrapperErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create http handler wrapper failed").WithCause(wrapperErr)))
-			return
+	serviceMaxWorkers := 0
+	serviceMaxIdleWorkerSeconds := 0
+	serviceHandleTimeoutSeconds := 0
+	if config.Server != nil {
+		serviceMaxWorkers = config.Service.MaxWorkers
+		if serviceMaxWorkers < 1 {
+			serviceMaxWorkers = 0
 		}
-		httpServerHandlers = wrapper.Wrap(httpServerHandlers)
+		serviceMaxIdleWorkerSeconds = config.Service.WorkerMaxIdleSeconds
+		if serviceMaxIdleWorkerSeconds < 1 {
+			serviceMaxIdleWorkerSeconds = 10
+		}
+		serviceHandleTimeoutSeconds = config.Service.HandleTimeoutSeconds
+		if serviceHandleTimeoutSeconds < 1 {
+			serviceHandleTimeoutSeconds = 10
+		}
 	}
-
-	var serverOptionsRaw *json.Object
-	if config.ServerOptions != nil && len(config.ServerOptions) > 2 {
-		serverOptionsRaw = json.NewObjectFromBytes(config.ServerOptions)
-	} else {
-		serverOptionsRaw = json.NewObject()
+	var discovery service.EndpointDiscovery
+	if clusterManager != nil {
+		discovery = clusterManager.Registrations()
 	}
-	httpServer, httpServerErr := opt.serverBuilder(HttpServerOptions{
-		Port:    port,
-		TLS:     servetTLS,
-		Handler: httpServerHandlers,
-		Log:     log.With("fns", "http"),
-		raw:     serverOptionsRaw,
+	endpoints := service.NewEndpoints(service.EndpointsOptions{
+		AppId:                 appId,
+		Log:                   log,
+		MaxWorkers:            serviceMaxWorkers,
+		MaxIdleWorkerDuration: time.Duration(serviceMaxIdleWorkerSeconds) * time.Second,
+		HandleTimeout:         time.Duration(serviceHandleTimeoutSeconds) * time.Second,
+		Barrier:               opt.barrier,
+		Discovery:             discovery,
 	})
+
+	// http handler
+	httpHandlers := server.NewHandlers()
+	corsOptions := server.CorsHandlerOptions{
+		Customized:       false,
+		AllowedOrigins:   nil,
+		AllowedHeaders:   nil,
+		ExposedHeaders:   nil,
+		AllowCredentials: false,
+		MaxAge:           0,
+	}
+	if config.Server.Cors != nil {
+		corsOptions = server.CorsHandlerOptions{
+			Customized:       true,
+			AllowedOrigins:   config.Server.Cors.AllowedOrigins,
+			AllowedHeaders:   config.Server.Cors.AllowedHeaders,
+			ExposedHeaders:   config.Server.Cors.ExposedHeaders,
+			AllowCredentials: config.Server.Cors.AllowCredentials,
+			MaxAge:           config.Server.Cors.MaxAge,
+		}
+	}
+	httpHandlers.Append(server.NewCorsHandler(corsOptions))
+	httpHandlers.Append(server.NewHealthHandler(server.HealthHandlerOptions{
+		AppId:   appId,
+		AppName: name,
+		Version: appVersion,
+		Running: running,
+	}))
+	docHandlerOptions := server.DocumentHandlerOptions{
+		Log:       log,
+		Version:   appVersion,
+		Document:  nil,
+		Endpoints: endpoints,
+	}
+	if config.OAS != nil {
+		doc := server.Document{
+			Title:       strings.TrimSpace(config.OAS.Title),
+			Description: strings.TrimSpace(config.OAS.Description),
+			Terms:       strings.TrimSpace(config.OAS.Terms),
+			Contact:     nil,
+			License:     nil,
+			Addresses:   nil,
+		}
+		if config.OAS.Contact != nil {
+			doc.Contact = &server.Contact{
+				Name:  strings.TrimSpace(config.OAS.Contact.Name),
+				Url:   strings.TrimSpace(config.OAS.Contact.Url),
+				Email: strings.TrimSpace(config.OAS.Contact.Email),
+			}
+		}
+		if config.OAS.License != nil {
+			doc.License = &server.License{
+				Name: strings.TrimSpace(config.OAS.License.Name),
+				Url:  strings.TrimSpace(config.OAS.License.Url),
+			}
+		}
+		if config.OAS.Servers != nil && len(config.OAS.Servers) > 0 {
+			doc.Addresses = make([]server.Address, 0, 1)
+			for _, oasServer := range config.OAS.Servers {
+				doc.Addresses = append(doc.Addresses, server.Address{
+					URL:         strings.TrimSpace(oasServer.URL),
+					Description: strings.TrimSpace(oasServer.Description),
+				})
+			}
+		}
+		docHandlerOptions.Document = &doc
+	}
+	httpHandlers.Append(server.NewDocumentHandler(docHandlerOptions))
+	if clusterManager != nil {
+		httpHandlers.Append(cluster.NewHandler(clusterManager))
+	}
+	httpHandlers.Append(server.NewServiceHandler(server.ServiceHandlerOptions{
+		Log:       log,
+		Endpoints: endpoints,
+	}))
+
 	// http server
-	if httpServerErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create http server failed").WithCause(httpServerErr)))
+	httpServer := opt.server
+	if httpServer == nil {
+		httpServer = &server.FastHttp{}
+	}
+	httpOptions.Handler = httpHandlers
+	serverBuildErr := httpServer.Build(httpOptions)
+	if serverBuildErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create http server failed").WithCause(serverBuildErr)))
 		return
 	}
-
 	app = &application{
-		env:             env,
+		log:             log,
 		running:         running,
-		log:             env.log.With("system", "application"),
-		goprocs:         goprocs,
-		document:        document,
-		services:        make(map[string]Service),
-		endpoints:       endpoints,
+		autoMaxProcs:    goprocs,
+		config:          configRaw,
 		clusterManager:  clusterManager,
-		https:           ssl,
+		endpoints:       endpoints,
 		http:            httpServer,
-		httpHandler:     httpServerHandler,
-		tracerReporter:  tracerReporter,
-		hooks:           hs,
+		httpHandlers:    httpHandlers,
 		shutdownTimeout: opt.shutdownTimeout,
 	}
-
 	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type application struct {
-	env             Environments
-	running         *commons.SafeFlag
 	log             logs.Logger
-	goprocs         *procs
-	document        *documents.Application
-	services        map[string]Service
-	endpoints       *serviceEndpoints
+	running         *commons.SafeFlag
+	autoMaxProcs    *procs.AutoMaxProcs
+	config          configuares.Config
 	clusterManager  *cluster.Manager
-	https           bool
-	http            HttpServer
-	httpHandler     *httpHandler
-	tracerReporter  TracerReporter
-	hooks           *hooks
+	endpoints       service.Endpoints
+	http            server.Http
+	httpHandlers    *server.Handlers
 	shutdownTimeout time.Duration
 }
 
 func (app *application) Log() (log logs.Logger) {
-	log = app.log
+	log = app.log.With("fns", "application")
 	return
 }
 
-func (app *application) Deploy(services ...Service) (err error) {
+func (app *application) Deploy(services ...service.Service) (err error) {
 	if services == nil || len(services) == 0 {
 		err = errors.Warning("fns: no services deployed")
 		return
 	}
-	for _, service := range services {
-		if service == nil {
+	for _, svc := range services {
+		if svc == nil {
 			err = errors.Warning("fns: deploy service failed for it is nil")
 			return
 		}
-		name := strings.TrimSpace(service.Name())
-		_, has := app.services[name]
-		if has {
-			err = errors.Warning(fmt.Sprintf("fns: %s service has been deployed", name))
-			return
+		name := strings.TrimSpace(svc.Name())
+		svcConfig, hasConfig := app.config.Node(name)
+		if !hasConfig {
+			svcConfig, _ = configuares.NewJsonConfig([]byte("{}"))
 		}
-		buildErr := service.Build(app.env)
+		buildErr := svc.Build(service.Options{
+			Log:    app.log.With("fns", "service").With("service", name),
+			Config: svcConfig,
+		})
 		if buildErr != nil {
 			err = errors.Warning(fmt.Sprintf("fns: deploy %s service failed", name)).WithCause(buildErr)
 			return
 		}
-		app.services[name] = service
-		// endpoints
-		app.endpoints.mount(service)
-		// documents
-		if !service.Internal() {
-			doc := service.Document()
-			if doc != nil {
-				app.document.AddService(name, doc)
+		app.endpoints.Mount(svc)
+		if app.clusterManager != nil {
+			if svc.Internal() {
+				app.clusterManager.Node().AppendInternalService(svc.Name())
+			} else {
+				app.clusterManager.Node().AppendService(svc.Name())
 			}
 		}
 	}
@@ -309,21 +408,15 @@ func (app *application) Run() (err error) {
 		return
 	}
 	// goprocs
-	app.goprocs.enable()
+	app.autoMaxProcs.Enable()
 	defer func(err error) {
 		if err != nil {
-			app.goprocs.reset()
+			app.autoMaxProcs.Reset()
 		}
 	}(err)
-	// endpoints
-	endpointsErr := app.endpoints.start()
-	if endpointsErr != nil {
-		err = errors.Warning("fns: run application failed").WithCause(endpointsErr)
-		return
-	}
 	// http start
 	httpListenCh := make(chan error, 1)
-	go func(srv HttpServer, ch chan error) {
+	go func(srv server.Http, ch chan error) {
 		listenErr := app.http.ListenAndServe()
 		if listenErr != nil {
 			ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
@@ -338,18 +431,10 @@ func (app *application) Run() (err error) {
 		err = httpErr
 		return
 	}
-	// hooks
-	app.hooks.start()
+
 	// cluster publish
 	if app.clusterManager != nil {
-		for _, service := range app.services {
-			if service.Internal() {
-				app.clusterManager.Node().AppendInternalService(service.Name())
-			} else {
-				app.clusterManager.Node().AppendService(service.Name())
-			}
-		}
-		app.clusterManager.Join(sc.TODO())
+		app.clusterManager.Join(context.TODO())
 	}
 	// on
 	app.running.On()
@@ -371,7 +456,7 @@ func (app *application) Sync() (err error) {
 	)
 	<-ch
 	stopped := make(chan struct{}, 1)
-	ctx, cancel := sc.WithTimeout(sc.TODO(), app.shutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.TODO(), app.shutdownTimeout)
 	go app.stop(ctx, stopped)
 	select {
 	case <-ctx.Done():
@@ -384,10 +469,8 @@ func (app *application) Sync() (err error) {
 	return
 }
 
-func (app *application) stop(ctx sc.Context, ch chan struct{}) {
-	defer func(reset *procs) {
-		reset.reset()
-	}(app.goprocs)
+func (app *application) stop(ctx context.Context, ch chan struct{}) {
+	defer app.autoMaxProcs.Reset()
 	// off
 	app.running.Off()
 	// cluster leave
@@ -395,48 +478,15 @@ func (app *application) stop(ctx sc.Context, ch chan struct{}) {
 		app.clusterManager.Leave(ctx)
 	}
 	// http
-	httpHandlerCloseErr := app.httpHandler.Close()
-	if httpHandlerCloseErr != nil {
-		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(httpHandlerCloseErr).Message("fns: stop application failed")
-		}
-	}
+	app.httpHandlers.Close()
 	httpCloseErr := app.http.Close()
 	if httpCloseErr != nil {
 		if app.log.WarnEnabled() {
 			app.log.Warn().Cause(httpCloseErr).Message("fns: stop application failed")
 		}
 	}
-	// tracerReporter
-	tracerReporterCloseErr := app.tracerReporter.Close()
-	if tracerReporterCloseErr != nil {
-		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(tracerReporterCloseErr).Message("fns: stop application failed")
-		}
-	}
-	// hooks
-	hooksCloseErr := app.hooks.close()
-	if hooksCloseErr != nil {
-		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(hooksCloseErr).Message("fns: stop application failed")
-		}
-	}
 	// endpoints
-	endpointsCloseErr := app.endpoints.close()
-	if endpointsCloseErr != nil {
-		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(endpointsCloseErr).Message("fns: stop application failed")
-		}
-	}
-	// services
-	for _, service := range app.services {
-		serviceErr := service.Shutdown(ctx)
-		if serviceErr != nil {
-			if app.log.WarnEnabled() {
-				app.log.Warn().Cause(serviceErr).Message("fns: stop application failed")
-			}
-		}
-	}
+	app.endpoints.Close()
 	ch <- struct{}{}
 	close(ch)
 	return

@@ -18,10 +18,10 @@ package cluster
 
 import (
 	sc "context"
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"strings"
 	"time"
@@ -38,11 +38,12 @@ type Manager struct {
 }
 
 type ManagerOptions struct {
-	Log           logs.Logger
-	Port          int
-	Config        *Config
-	ClientTLS     *tls.Config
-	ClientBuilder ClientBuilder
+	Log                 logs.Logger
+	Port                int
+	Kind                string
+	CheckHealthDuration time.Duration
+	Options             json.RawMessage
+	Client              Client
 }
 
 func NewManager(options ManagerOptions) (manager *Manager, err error) {

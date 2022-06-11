@@ -14,21 +14,10 @@
  * limitations under the License.
  */
 
-package cluster
+package configuare
 
-import (
-	"github.com/aacfactory/json"
-)
-
-type Config struct {
-	Kind              string          `json:"kind"`
-	Client            ClientConfig    `json:"client"`
-	CheckHealthSecond int             `json:"checkHealthSecond"`
-	Options           json.RawMessage `json:"options"`
-}
-
-type ClientConfig struct {
-	MaxIdleClientConnSeconds  int `json:"maxIdleClientConnSeconds"`
-	MaxClientConnsPerHost     int `json:"maxClientConnsPerHost"`
-	MaxIdleClientConnsPerHost int `json:"maxIdleClientConnsPerHost"`
+type Service struct {
+	MaxWorkers           int `json:"maxWorkers"`
+	WorkerMaxIdleSeconds int `json:"workerMaxIdleSeconds"`
+	HandleTimeoutSeconds int `json:"handleTimeoutSeconds"`
 }

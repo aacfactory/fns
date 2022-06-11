@@ -17,22 +17,22 @@
 package cluster
 
 import (
-	sc "context"
+	"context"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/logs"
 	"strings"
 )
 
 type BootstrapOptions struct {
-	Config configuares.Config
 	Log    logs.Logger
+	Config configuares.Config
 }
 
 type Bootstrap interface {
 	Build(options BootstrapOptions) (err error)
 	Id() (id string)
 	Ip() (ip string)
-	FindMembers(ctx sc.Context) (addresses []string)
+	FindMembers(ctx context.Context) (addresses []string)
 }
 
 var (

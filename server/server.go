@@ -26,6 +26,7 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
+	"golang.org/x/net/context"
 	"net"
 	"net/http"
 	"strings"
@@ -91,16 +92,26 @@ func (handlers *Handlers) Close() {
 	waiter.Wait()
 }
 
-type HttpOptions struct {
-	Port    int
-	TLS     *tls.Config
-	Handler http.Handler
-	Log     logs.Logger
-	raw     *json.Object
+type HttpClient interface {
+	Do(ctx context.Context, method string, url string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
+	Close()
 }
 
-func (options HttpOptions) GetOption(key string, value interface{}) (err error) {
-	err = options.raw.Get(key, value)
+type HttpOptions struct {
+	Port      int
+	ServerTLS *tls.Config
+	ClientTLS *tls.Config
+	Handler   http.Handler
+	Log       logs.Logger
+	Raw       *json.Object
+}
+
+func (options HttpOptions) GetOption(key string, value interface{}) (has bool, err error) {
+	has = options.Raw.Contains(key)
+	if !has {
+		return
+	}
+	err = options.Raw.Get(key, value)
 	if err != nil {
 		err = errors.Warning(fmt.Sprintf("fns: http server options get %s failed", key)).WithCause(err).WithMeta("fns", "http")
 		return
@@ -124,10 +135,10 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 	srv.log = options.Log.With("fns", "http")
 
 	var ln net.Listener
-	if options.TLS == nil {
+	if options.ServerTLS == nil {
 		ln, err = net.Listen("tcp", fmt.Sprintf(":%d", options.Port))
 	} else {
-		ln, err = tls.Listen("tcp", fmt.Sprintf(":%d", options.Port), options.TLS)
+		ln, err = tls.Listen("tcp", fmt.Sprintf(":%d", options.Port), options.ServerTLS)
 	}
 	if err != nil {
 		err = errors.Warning("fns: build server failed").WithCause(err).WithMeta("fns", "http")
@@ -135,28 +146,29 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 	}
 	srv.ln = ln
 
+	var optionErr error
 	readTimeoutSeconds := 0
-	readTimeoutSecondsErr := options.GetOption("readTimeoutSeconds", &readTimeoutSeconds)
-	if readTimeoutSecondsErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(readTimeoutSecondsErr).WithMeta("fns", "http")
+	_, optionErr = options.GetOption("readTimeoutSeconds", &readTimeoutSeconds)
+	if optionErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
 		return
 	}
 	if readTimeoutSeconds < 1 {
 		readTimeoutSeconds = 2
 	}
 	maxWorkerIdleSeconds := 0
-	maxWorkerIdleSecondsErr := options.GetOption("maxWorkerIdleSeconds", &maxWorkerIdleSeconds)
-	if maxWorkerIdleSecondsErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(maxWorkerIdleSecondsErr).WithMeta("fns", "http")
+	_, optionErr = options.GetOption("maxWorkerIdleSeconds", &maxWorkerIdleSeconds)
+	if optionErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
 		return
 	}
 	if maxWorkerIdleSeconds < 1 {
 		maxWorkerIdleSeconds = 10
 	}
 	maxRequestBody := ""
-	maxRequestBodyErr := options.GetOption("maxRequestBody", &maxRequestBody)
-	if maxRequestBodyErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(maxRequestBodyErr).WithMeta("fns", "http")
+	_, optionErr = options.GetOption("maxRequestBody", &maxRequestBody)
+	if optionErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
 		return
 	}
 	maxRequestBody = strings.ToUpper(strings.TrimSpace(maxRequestBody))
@@ -169,12 +181,11 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 		return
 	}
 	reduceMemoryUsage := false
-	reduceMemoryUsageErr := options.GetOption("reduceMemoryUsage", &reduceMemoryUsage)
-	if reduceMemoryUsageErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(reduceMemoryUsageErr).WithMeta("fns", "http")
+	_, optionErr = options.GetOption("reduceMemoryUsage", &reduceMemoryUsage)
+	if optionErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
 		return
 	}
-
 	srv.srv = &fasthttp.Server{
 		Handler:                            fasthttpadaptor.NewFastHTTPHandler(options.Handler),
 		ErrorHandler:                       fastHttpErrorHandler,

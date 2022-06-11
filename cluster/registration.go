@@ -20,7 +20,9 @@ import (
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
+	"golang.org/x/net/context"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -230,4 +232,13 @@ func (manager *RegistrationsManager) RemoveUnavailableRegistration(name string, 
 	}
 	registered := value.(*Registrations)
 	registered.Remove(&Registration{Id: registrationId})
+}
+
+func (manager *RegistrationsManager) Get(ctx context.Context, service string) (endpoint service.Endpoint, has bool) {
+
+	return
+}
+func (manager *RegistrationsManager) GetExact(ctx context.Context, service string, id string) (endpoint service.Endpoint, has bool) {
+
+	return
 }

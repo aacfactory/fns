@@ -38,6 +38,16 @@ type Handler struct {
 	manager *Manager
 }
 
+func (handler *Handler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
+
+	return
+}
+
+func (handler *Handler) Close() {
+
+	return
+}
+
 func (handler *Handler) Handler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if contentType == request.Header.Get("Content-Type") && http.MethodPost == request.Method {

@@ -19,14 +19,15 @@ package configuare
 import "github.com/aacfactory/json"
 
 type Cluster struct {
-	Kind              string          `json:"kind"`
-	Client            ClusterClient   `json:"client"`
-	CheckHealthSecond int             `json:"checkHealthSecond"`
-	Options           json.RawMessage `json:"options"`
+	Kind               string          `json:"kind"`
+	Client             ClusterClient   `json:"client"`
+	CheckHealthSeconds int             `json:"checkHealthSeconds"`
+	Options            json.RawMessage `json:"options"`
 }
 
 type ClusterClient struct {
-	MaxIdleClientConnSeconds  int `json:"maxIdleClientConnSeconds"`
-	MaxClientConnsPerHost     int `json:"maxClientConnsPerHost"`
-	MaxIdleClientConnsPerHost int `json:"maxIdleClientConnsPerHost"`
+	MaxIdleConnSeconds    int `json:"maxIdleConnSeconds"`
+	MaxConnsPerHost       int `json:"maxConnsPerHost"`
+	MaxIdleConnsPerHost   int `json:"maxIdleConnsPerHost"`
+	RequestTimeoutSeconds int `json:"requestTimeoutSeconds"`
 }

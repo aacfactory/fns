@@ -14,47 +14,49 @@
  * limitations under the License.
  */
 
-package fns
+package procs
 
 import (
+	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/logs"
 	"go.uber.org/automaxprocs/maxprocs"
 	"runtime"
 )
 
-type procsOption struct {
-	min int
-	max int
+type Options struct {
+	Log logs.Logger
+	Min int
+	Max int
 }
 
-func newPROCS(env Environments, opt *procsOption) *procs {
-	min := opt.min
+func New(options Options) *AutoMaxProcs {
+	min := options.Min
 	if min < 0 {
 		min = 0
 	}
-	max := opt.max
+	max := options.Max
 	if max < 0 {
 		max = 0
 	}
-	return &procs{
-		log:     env.Log().With("system", "maxprocs"),
+	return &AutoMaxProcs{
+		log:     options.Log.With("fns", "automaxprocs"),
 		min:     min,
 		max:     max,
 		resetFn: nil,
 	}
 }
 
-type procs struct {
+type AutoMaxProcs struct {
 	log     logs.Logger
 	min     int
 	max     int
 	resetFn func()
 }
 
-func (p *procs) enable() {
+func (p *AutoMaxProcs) Enable() {
 	if p.min > 0 {
-		maxprocsLog := &printf{
-			core: p.log,
+		maxprocsLog := &logger.Printf{
+			Core: p.log,
 		}
 		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(maxprocsLog.Printf))
 		if setErr != nil {
@@ -70,7 +72,7 @@ func (p *procs) enable() {
 	return
 }
 
-func (p *procs) reset() {
+func (p *AutoMaxProcs) Reset() {
 	if p.resetFn != nil {
 		p.resetFn()
 	}

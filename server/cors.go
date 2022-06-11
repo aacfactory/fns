@@ -23,7 +23,10 @@ import (
 )
 
 type CorsHandlerOptions struct {
-	Customized       bool     `json:"customized"`
+	Config *CorsConfig
+}
+
+type CorsConfig struct {
 	AllowedOrigins   []string `json:"allowedOrigins"`
 	AllowedHeaders   []string `json:"allowedHeaders"`
 	ExposedHeaders   []string `json:"exposedHeaders"`
@@ -33,17 +36,18 @@ type CorsHandlerOptions struct {
 
 func NewCorsHandler(options CorsHandlerOptions) (h Handler) {
 	var c *cors.Cors
-	if !options.Customized {
+	if options.Config == nil {
 		c = cors.AllowAll()
 	} else {
-		allowedOrigins := options.AllowedOrigins
+		config := options.Config
+		allowedOrigins := config.AllowedOrigins
 		if allowedOrigins == nil {
 			allowedOrigins = make([]string, 0, 1)
 		}
 		if len(allowedOrigins) == 0 {
 			allowedOrigins = append(allowedOrigins, "*")
 		}
-		allowedHeaders := options.AllowedHeaders
+		allowedHeaders := config.AllowedHeaders
 		if allowedHeaders == nil {
 			allowedHeaders = make([]string, 0, 1)
 		}
@@ -59,18 +63,18 @@ func NewCorsHandler(options CorsHandlerOptions) (h Handler) {
 		if sort.SearchStrings(allowedHeaders, "X-Real-Ip") < 0 {
 			allowedHeaders = append(allowedHeaders, "X-Real-Ip")
 		}
-		exposedHeaders := options.ExposedHeaders
+		exposedHeaders := config.ExposedHeaders
 		if exposedHeaders == nil {
 			exposedHeaders = make([]string, 0, 1)
 		}
 		exposedHeaders = append(exposedHeaders, httpIdHeader, httpLatencyHeader, httpConnectionHeader, "Server")
 		opt := cors.Options{
-			AllowedOrigins:       options.AllowedOrigins,
+			AllowedOrigins:       config.AllowedOrigins,
 			AllowedMethods:       []string{http.MethodGet, http.MethodPost},
 			AllowedHeaders:       allowedHeaders,
 			ExposedHeaders:       exposedHeaders,
-			MaxAge:               options.MaxAge,
-			AllowCredentials:     options.AllowCredentials,
+			MaxAge:               config.MaxAge,
+			AllowCredentials:     config.AllowCredentials,
 			AllowPrivateNetwork:  true,
 			OptionsPassthrough:   false,
 			OptionsSuccessStatus: http.StatusNoContent,

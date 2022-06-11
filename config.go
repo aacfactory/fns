@@ -28,14 +28,6 @@ import (
 )
 
 const (
-	B = 1 << (10 * iota)
-	KB
-	MB
-	GB
-	TB
-	PB
-	EB
-
 	activeSystemEnvKey = "FNS-ACTIVE"
 )
 
@@ -74,14 +66,6 @@ type HttpClientConfig struct {
 	MaxIdleConnSeconds  int `json:"maxIdleConnSeconds"`
 	MaxConnsPerHost     int `json:"maxConnsPerHost"`
 	MaxIdleConnsPerHost int `json:"maxIdleConnsPerHost"`
-}
-
-type HttpCorsConfig struct {
-	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`
-	AllowedHeaders   []string `json:"allowedHeaders,omitempty"`
-	ExposedHeaders   []string `json:"exposedHeaders,omitempty"`
-	AllowCredentials bool     `json:"allowCredentials,omitempty"`
-	MaxAge           int      `json:"maxAge,omitempty"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

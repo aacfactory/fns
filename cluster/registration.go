@@ -33,7 +33,6 @@ type Registration struct {
 	Name             string
 	Internal         bool
 	Address          string
-	SSL              bool
 	client           Client
 	unavailableTimes int64
 	checkLock        sync.Mutex
@@ -46,12 +45,7 @@ func (r *Registration) Key() (key string) {
 }
 
 func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
-	schema := ""
-	if r.SSL {
-		schema = "https"
-	} else {
-		schema = "http"
-	}
+	
 	url := fmt.Sprintf("%s://%s/%s/%s", schema, r.Address, r.Name, fn)
 	respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
 	return

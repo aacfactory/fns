@@ -40,7 +40,7 @@ type ClientOptions struct {
 type ClientBuilder func(options ClientOptions) (client Client, err error)
 
 type Client interface {
-	Do(ctx context.Context, method string, host string, uri string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
+	Do(ctx context.Context, method string, address string, uri string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
 	Close()
 }
 
@@ -72,14 +72,15 @@ type FastHttpClient struct {
 	timeout time.Duration
 }
 
-func (client *FastHttpClient) Do(_ context.Context, method string, host string, uri string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
+func (client *FastHttpClient) Do(_ context.Context, method string, address string, uri string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
 	req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 	defer func() {
 		fasthttp.ReleaseRequest(req)
 		fasthttp.ReleaseResponse(res)
 	}()
 	req.Header.SetMethod(method)
-	req.Header.SetRequestURI(fmt.Sprintf("%s://%s%s", client.schema, host, uri))
+	url := fmt.Sprintf("%s://%s%s", client.schema, address, uri)
+	req.Header.SetRequestURI(url)
 	if header != nil {
 		for hk, hvv := range header {
 			for _, hv := range hvv {

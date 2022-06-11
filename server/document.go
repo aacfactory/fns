@@ -337,22 +337,32 @@ func (h *documentHandler) encode() {
 								Title:       "Check Health Result",
 								Description: "",
 								Type:        "object",
-								Required:    []string{"id", "version", "running", "now"},
+								Required:    []string{"name", "id", "version", "running", "now"},
 								Properties: map[string]*oas.Schema{
+									"name": {
+										Title: "Application name",
+										Type:  "string",
+									},
 									"id": {
-										Title: "Document id",
+										Title: "Application id",
 										Type:  "string",
 									},
 									"version": {
-										Title: "Document version",
+										Title: "Application version",
 										Type:  "string",
 									},
 									"running": {
-										Title: "Document running status",
+										Title: "Application running status",
 										Type:  "boolean",
 									},
+									"launch": {
+										Title:                "Application launch times",
+										Type:                 "string",
+										Format:               "2006-01-02T15:04:05Z07:00",
+										AdditionalProperties: &oas.Schema{Type: "string"},
+									},
 									"now": {
-										Title:                "now time",
+										Title:                "Now",
 										Type:                 "string",
 										Format:               "2006-01-02T15:04:05Z07:00",
 										AdditionalProperties: &oas.Schema{Type: "string"},
@@ -463,7 +473,7 @@ type Document struct {
 	Terms       string    `json:"terms"`
 	Contact     *Contact  `json:"contact"`
 	License     *License  `json:"license"`
-	Addresses   []Address `json:"addresses"`
+	Addresses   []Address `json:"servers"`
 	version     string
 }
 

@@ -16,8 +16,113 @@
 
 package ssl
 
+import (
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"github.com/aacfactory/afssl"
+	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/errors"
+	"io/ioutil"
+	"strings"
+	"time"
+)
+
+type SSCLoaderOptions struct {
+	CA    string `json:"ca"`
+	CAKEY string `json:"caKey"`
+}
+
+func SSCLoader(options configuares.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
+	caPEM := defaultTestSSCCaPEM
+	caKeyPEM := defaultTestSSCCaKeyPEM
+	opt := &SSCLoaderOptions{}
+	optErr := options.As(opt)
+	if optErr != nil {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(optErr)
+		return
+	}
+	ca := strings.TrimSpace(opt.CA)
+	if ca != "" {
+		caKey := strings.TrimSpace(opt.CAKEY)
+		if caKey == "" {
+			err = errors.Warning("fns: load ssc kind tls config failed").WithCause(fmt.Errorf("caKey is undefined"))
+			return
+		}
+		caKeyPEM, err = ioutil.ReadFile(caKey)
+		if err != nil {
+			err = errors.Warning("fns: load ssc kind tls config failed").WithCause(err)
+			return
+		}
+		caPEM, err = ioutil.ReadFile(ca)
+		if err != nil {
+			err = errors.Warning("fns: load ssc kind tls config failed").WithCause(err)
+			return
+		}
+	}
+	block, _ := pem.Decode(caPEM)
+	ca0, parseCaErr := x509.ParseCertificate(block.Bytes)
+	if parseCaErr != nil {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(parseCaErr)
+		return
+	}
+	sscConfig := afssl.CertificateConfig{
+		Country:            ca0.Subject.Country[0],
+		Province:           ca0.Subject.Province[0],
+		City:               ca0.Subject.Locality[0],
+		Organization:       ca0.Subject.Organization[0],
+		OrganizationalUnit: ca0.Subject.OrganizationalUnit[0],
+		CommonName:         ca0.Subject.CommonName,
+		IPs:                nil,
+		Emails:             nil,
+		DNSNames:           nil,
+	}
+	serverCert, serverKey, createServerErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(int(ca0.NotAfter.Sub(time.Now()).Hours())/24))
+	if createServerErr != nil {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createServerErr)
+		return
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(caPEM) {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(fmt.Errorf("append client ca pool failed"))
+		return
+	}
+	serverCertificate, serverCertificateErr := tls.X509KeyPair(serverCert, serverKey)
+	if serverCertificateErr != nil {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(serverCertificateErr)
+		return
+	}
+	serverTLS = &tls.Config{
+		ClientCAs:    clientCAs,
+		Certificates: []tls.Certificate{serverCertificate},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+	}
+	clientCert, clientKey, createClientErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(int(ca0.NotAfter.Sub(time.Now()).Hours())/24))
+	if createClientErr != nil {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createClientErr)
+		return
+	}
+	rootCAs := x509.NewCertPool()
+	if !rootCAs.AppendCertsFromPEM(caPEM) {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(fmt.Errorf("append root ca pool failed"))
+		return
+	}
+	clientCertificate, clientCertificateErr := tls.X509KeyPair(clientCert, clientKey)
+	if clientCertificateErr != nil {
+		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(clientCertificateErr)
+		return
+	}
+	clientTLS = &tls.Config{
+		RootCAs:            rootCAs,
+		Certificates:       []tls.Certificate{clientCertificate},
+		InsecureSkipVerify: true,
+	}
+	return
+}
+
 var (
-	DefaultTestCaPEM = []byte{
+	defaultTestSSCCaPEM = []byte{
 		45, 45, 45, 45, 45, 66, 69, 71, 73, 78, 32, 67, 69, 82, 84, 73, 70, 73, 67, 65,
 		84, 69, 45, 45, 45, 45, 45, 10, 77, 73, 73, 68, 114, 84, 67, 67, 65, 112, 87, 103,
 		65, 119, 73, 66, 65, 103, 73, 85, 86, 49, 77, 48, 86, 101, 57, 116, 111, 101, 89, 89,
@@ -86,7 +191,7 @@ var (
 		104, 68, 80, 87, 107, 102, 105, 10, 45, 45, 45, 45, 45, 69, 78, 68, 32, 67, 69, 82,
 		84, 73, 70, 73, 67, 65, 84, 69, 45, 45, 45, 45, 45,
 	}
-	DefaultTestCaKeyPEM = []byte{
+	defaultTestSSCCaKeyPEM = []byte{
 		45, 45, 45, 45, 45, 66, 69, 71, 73, 78, 32, 82, 83, 65, 32, 80, 82, 73, 86, 65,
 		84, 69, 32, 75, 69, 89, 45, 45, 45, 45, 45, 10, 77, 73, 73, 69, 111, 119, 73, 66,
 		65, 65, 75, 67, 65, 81, 69, 65, 53, 101, 84, 117, 74, 67, 55, 75, 65, 79, 99, 116,

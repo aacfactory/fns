@@ -92,7 +92,7 @@ type HttpOptions struct {
 	raw     *json.Object
 }
 
-func (options HttpOptions) Get(key string, value interface{}) (err error) {
+func (options HttpOptions) GetOption(key string, value interface{}) (err error) {
 	err = options.raw.Get(key, value)
 	if err != nil {
 		err = errors.Warning(fmt.Sprintf("fns: http server options get %s failed", key)).WithCause(err)

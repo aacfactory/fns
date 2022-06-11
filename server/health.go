@@ -33,6 +33,7 @@ const (
 
 type HealthHandlerOptions struct {
 	AppId   string
+	AppName string
 	Version string
 	Running *commons.SafeFlag
 }
@@ -40,7 +41,9 @@ type HealthHandlerOptions struct {
 func NewHealthHandler(options HealthHandlerOptions) (h Handler) {
 	h = &healthHandler{
 		appId:       options.AppId,
+		appName:     options.AppName,
 		version:     options.Version,
+		launchAT:    time.Now().Format(time.RFC3339),
 		running:     options.Running,
 		unavailable: json.UnsafeMarshal(errors.Unavailable("fns: service is unavailable").WithMeta("fns", "http")),
 	}
@@ -49,7 +52,9 @@ func NewHealthHandler(options HealthHandlerOptions) (h Handler) {
 
 type healthHandler struct {
 	appId       string
+	appName     string
 	version     string
+	launchAT    string
 	running     *commons.SafeFlag
 	unavailable []byte
 }
@@ -69,8 +74,8 @@ func (h *healthHandler) Handle(writer http.ResponseWriter, request *http.Request
 	case "", "/", httpHealthPath:
 		ok = true
 		body := fmt.Sprintf(
-			"{\"appId\":\"%s\", \"version\":\"%s\", \"running\":\"%v\", \"now\":\"%s\"}",
-			h.appId, h.version, h.running.IsOn(), time.Now().Format(time.RFC3339),
+			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"running\":\"%v\", \"launch\":\"%s\", \"now\":\"%s\"}",
+			h.appName, h.appId, h.version, h.running.IsOn(), h.launchAT, time.Now().Format(time.RFC3339),
 		)
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(body))

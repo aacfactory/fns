@@ -23,31 +23,27 @@ import (
 )
 
 type CorsHandlerOptions struct {
-	Config *CorsConfig
-}
-
-type CorsConfig struct {
-	AllowedOrigins   []string `json:"allowedOrigins"`
-	AllowedHeaders   []string `json:"allowedHeaders"`
-	ExposedHeaders   []string `json:"exposedHeaders"`
-	AllowCredentials bool     `json:"allowCredentials"`
-	MaxAge           int      `json:"maxAge"`
+	Customized       bool
+	AllowedOrigins   []string `copy:"AllowedOrigins"`
+	AllowedHeaders   []string `copy:"AllowedHeaders"`
+	ExposedHeaders   []string `copy:"ExposedHeaders"`
+	AllowCredentials bool     `copy:"AllowCredentials"`
+	MaxAge           int      `copy:"MaxAge"`
 }
 
 func NewCorsHandler(options CorsHandlerOptions) (h Handler) {
 	var c *cors.Cors
-	if options.Config == nil {
+	if options.Customized == false {
 		c = cors.AllowAll()
 	} else {
-		config := options.Config
-		allowedOrigins := config.AllowedOrigins
+		allowedOrigins := options.AllowedOrigins
 		if allowedOrigins == nil {
 			allowedOrigins = make([]string, 0, 1)
 		}
 		if len(allowedOrigins) == 0 {
 			allowedOrigins = append(allowedOrigins, "*")
 		}
-		allowedHeaders := config.AllowedHeaders
+		allowedHeaders := options.AllowedHeaders
 		if allowedHeaders == nil {
 			allowedHeaders = make([]string, 0, 1)
 		}
@@ -63,18 +59,18 @@ func NewCorsHandler(options CorsHandlerOptions) (h Handler) {
 		if sort.SearchStrings(allowedHeaders, "X-Real-Ip") < 0 {
 			allowedHeaders = append(allowedHeaders, "X-Real-Ip")
 		}
-		exposedHeaders := config.ExposedHeaders
+		exposedHeaders := options.ExposedHeaders
 		if exposedHeaders == nil {
 			exposedHeaders = make([]string, 0, 1)
 		}
 		exposedHeaders = append(exposedHeaders, httpIdHeader, httpLatencyHeader, httpConnectionHeader, "Server")
 		opt := cors.Options{
-			AllowedOrigins:       config.AllowedOrigins,
+			AllowedOrigins:       options.AllowedOrigins,
 			AllowedMethods:       []string{http.MethodGet, http.MethodPost},
 			AllowedHeaders:       allowedHeaders,
 			ExposedHeaders:       exposedHeaders,
-			MaxAge:               config.MaxAge,
-			AllowCredentials:     config.AllowCredentials,
+			MaxAge:               options.MaxAge,
+			AllowCredentials:     options.AllowCredentials,
 			AllowPrivateNetwork:  true,
 			OptionsPassthrough:   false,
 			OptionsSuccessStatus: http.StatusNoContent,

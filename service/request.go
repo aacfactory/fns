@@ -76,7 +76,7 @@ type RequestUser interface {
 	Attributes() (attributes *json.Object)
 }
 
-func newRequestUser(id string, attributes *json.Object) (u RequestUser) {
+func NewRequestUser(id string, attributes *json.Object) (u RequestUser) {
 	u = &requestUser{
 		id:            id,
 		authenticated: id != "",
@@ -192,7 +192,7 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	r = &request{
 		id:       uid.UID(),
 		remoteIp: remoteIp,
-		user:     newRequestUser("", json.NewObject()),
+		user:     NewRequestUser("", json.NewObject()),
 		header:   NewRequestHeader(req.Header),
 		service:  service,
 		fn:       fn,
@@ -229,7 +229,7 @@ func (r *request) User() (user RequestUser) {
 }
 
 func (r *request) SetUser(id string, attributes *json.Object) {
-	r.user = newRequestUser(id, attributes)
+	r.user = NewRequestUser(id, attributes)
 }
 
 func (r *request) RemoteIp() (v string) {
@@ -287,7 +287,11 @@ func GetRequest(ctx context.Context) (r Request, has bool) {
 	return
 }
 
-func setRequest(ctx context.Context, r Request) context.Context {
+func SetRequest(ctx context.Context, r Request) context.Context {
+	_, has := GetRequest(ctx)
+	if has {
+		return ctx
+	}
 	ctx = context.WithValue(ctx, contextRequestKey, r)
 	return ctx
 }

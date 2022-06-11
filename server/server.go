@@ -38,7 +38,7 @@ const (
 	httpServerHeader      = "Server"
 	httpServerHeaderValue = "FNS"
 	httpContentType       = "Content-Type"
-	httpContentTypeJson   = "Document/json"
+	httpContentTypeJson   = "application/json"
 )
 
 type Handler interface {

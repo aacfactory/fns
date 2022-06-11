@@ -38,7 +38,11 @@ func GetTracer(ctx context.Context) (t Tracer, has bool) {
 	return
 }
 
-func setTracer(ctx context.Context) context.Context {
+func SetTracer(ctx context.Context) context.Context {
+	_, has := GetTracer(ctx)
+	if has {
+		return ctx
+	}
 	r, hasRequest := GetRequest(ctx)
 	if !hasRequest || r == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: get not set tracer into context cause no request found in context")))

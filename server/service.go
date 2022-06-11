@@ -52,10 +52,7 @@ type serviceHandler struct {
 }
 
 func (h *serviceHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-	if request.Method != http.MethodPost {
-		return
-	}
-	if request.Header.Get(httpContentType) != httpContentTypeJson {
+	if !(request.Method == http.MethodPost && request.Header.Get(httpContentType) == httpContentTypeJson) {
 		return
 	}
 	ok = true

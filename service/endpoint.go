@@ -103,13 +103,13 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
 	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
 		ctx = initContext(ctx, e.log, e.ws, e.group)
-		ctx = setRequest(ctx, r)
+		ctx = SetRequest(ctx, r)
 		ep, has := e.group.Get(ctx, service)
 		if !has {
 			err = errors.NotFound("fns: service was not found").WithMeta("service", service)
 			return
 		}
-		ctx = setTracer(ctx)
+		ctx = SetTracer(ctx)
 		result := ep.Request(ctx, fn, r.Argument())
 		p := json.RawMessage{}
 		hasResult, handleErr := result.Get(ctx, &p)
@@ -126,7 +126,7 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors
 	e.barrier.Forget(ctx, barrierKey)
 	cancel()
 	if handleErr != nil {
-		err = handleErr
+		err = handleErr.WithMeta("requestId", r.Id())
 		return
 	}
 	if handleResult != nil {

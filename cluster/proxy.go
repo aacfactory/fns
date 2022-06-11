@@ -17,60 +17,9 @@
 package cluster
 
 import (
-	"encoding/binary"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/json"
-	"github.com/valyala/bytebufferpool"
 )
-
-type proxyRequest struct {
-	ContextData ContextData `json:"cdata"`
-	Argument    Argument    `json:"argument"`
-}
-
-func encodeProxyRequest(data ContextData, argument Argument) (p []byte, err errors.CodeError) {
-	req := &proxyRequest{
-		ContextData: data,
-		Argument:    argument,
-	}
-	reqBytes, encodeReqErr := json.Marshal(req)
-	if encodeReqErr != nil {
-		err = errors.Warning("fns: encode internal request failed").WithCause(encodeReqErr)
-		return
-	}
-	signature := secret.Sign(reqBytes)
-	head := make([]byte, 8)
-	binary.BigEndian.PutUint64(head, uint64(len(signature)))
-	buf := bytebufferpool.Get()
-	_, _ = buf.Write(head)
-	_, _ = buf.Write(signature)
-	_, _ = buf.Write(reqBytes)
-	p = buf.Bytes()
-	buf.Reset()
-	bytebufferpool.Put(buf)
-	return
-}
-
-func decodeProxyRequest(p []byte) (data ContextData, argument Argument, err errors.CodeError) {
-	head := p[0:8]
-	signatureLen := binary.BigEndian.Uint64(head)
-	signature := p[8 : 8+signatureLen]
-	body := p[16+signatureLen:]
-	if !secret.Verify(body, signature) {
-		err = errors.Warning("fns: verify internal request body failed")
-		return
-	}
-	req := &proxyRequest{}
-	decodeErr := json.Unmarshal(body, req)
-	if decodeErr != nil {
-		err = errors.Warning("fns: decode internal request failed").WithCause(decodeErr)
-		return
-	}
-	data = req.ContextData
-	argument = req.Argument
-	return
-}
 
 type proxyResponse struct {
 	Failed bool             `json:"failed"`

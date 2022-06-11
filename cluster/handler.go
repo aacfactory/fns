@@ -19,155 +19,201 @@ package cluster
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
-	"io/ioutil"
+	"github.com/aacfactory/logs"
 	"net/http"
+	"sync"
 )
 
 const (
-	contentType = "application/fns+cluster"
-	joinPath    = "/cluster/join"
-	leavePath   = "/cluster/leave"
+	httpContentType        = "Content-Type"
+	httpContentTypeProxy   = "application/fns+proxy"
+	httpContentTypeCluster = "application/fns+cluster"
+	httpContentTypeJson    = "application/json"
+
+	joinPath  = "/cluster/join"
+	leavePath = "/cluster/leave"
 )
 
-func NewHandler(manager *Manager) *Handler {
-	return &Handler{manager: manager}
+type HandlerOptions struct {
+	Log           logs.Logger
+	Endpoints     service.Endpoints
+	Registrations *RegistrationsManager
+}
+
+func NewHandler(options HandlerOptions) *Handler {
+	return &Handler{
+		log: options.Log.With("fns", "cluster"),
+		proxy: &proxyHandler{
+			log:       options.Log.With("fns", "cluster").With("cluster", "proxy"),
+			counter:   sync.WaitGroup{},
+			endpoints: options.Endpoints,
+		},
+		member: &clusterHandler{
+			log:           options.Log.With("fns", "cluster").With("cluster", "members"),
+			registrations: options.Registrations,
+		},
+	}
 }
 
 type Handler struct {
-	manager *Manager
+	log    logs.Logger
+	proxy  *proxyHandler
+	member *clusterHandler
 }
 
 func (handler *Handler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-
+	if request.Method != http.MethodPost {
+		return
+	}
+	contentType := request.Header.Get(httpContentType)
+	switch contentType {
+	case httpContentTypeProxy:
+		ok = true
+		handler.proxy.Handle(writer, request)
+	case httpContentTypeCluster:
+		ok = true
+		handler.member.Handle(writer, request)
+	default:
+		return
+	}
 	return
 }
 
 func (handler *Handler) Close() {
-
+	handler.proxy.Close()
 	return
 }
 
-func (handler *Handler) Handler(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if contentType == request.Header.Get("Content-Type") && http.MethodPost == request.Method {
-			signedBody, readBodyErr := ioutil.ReadAll(request.Body)
-			if readBodyErr != nil {
-				handler.failed(writer, errors.BadRequest("fns: read request body failed").WithCause(readBodyErr))
-				return
-			}
-			body, bodyOk := decodeRequestBody(signedBody)
-			if !bodyOk {
-				handler.failed(writer, errors.BadRequest("fns: read request body failed").WithCause(fmt.Errorf("invalid body")))
-				return
-			}
-			requestPath := request.URL.Path
-			switch requestPath {
-			case joinPath:
-				result, joinErr := handler.handleJoin(body)
-				if joinErr != nil {
-					handler.failed(writer, joinErr)
-					return
-				}
-				handler.succeed(writer, result)
-				break
-			case leavePath:
-				leaveErr := handler.handleLeave(body)
-				if leaveErr != nil {
-					handler.failed(writer, leaveErr)
-					return
-				}
-				handler.succeed(writer, nil)
-				break
-			default:
-				handler.failed(writer, errors.NotFound("fns: not found"))
-				break
-			}
-		} else {
-			h(writer, request)
-		}
-	})
+type proxyHandler struct {
+	log       logs.Logger
+	counter   sync.WaitGroup
+	endpoints service.Endpoints
 }
 
-func (handler *Handler) succeed(response http.ResponseWriter, body []byte) {
-	response.Header().Set("Server", "Fns")
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(200)
-	if body == nil || len(body) == 0 {
-		body = []byte("{}")
+func (handler *proxyHandler) Handle(writer http.ResponseWriter, request *http.Request) {
+	r, requestErr := service.NewRequest(request)
+	if requestErr != nil {
+		handler.failed(writer, requestErr)
+		return
 	}
-	_, _ = response.Write(encodeResponseBody(body, nil))
+	handler.counter.Add(1)
+	ctx := request.Context()
+	ctx = service.SetRequest(ctx, r)
+	ctx = service.SetTracer(ctx)
+	result, handleErr := handler.endpoints.Handle(request.Context(), r)
+	if handleErr == nil {
+		tracer, _ := service.GetTracer(ctx)
+		handler.succeed(writer, tracer.Span(), result)
+	} else {
+		handler.failed(writer, handleErr)
+	}
+	handler.counter.Done()
+	return
 }
 
-func (handler *Handler) failed(response http.ResponseWriter, codeErr errors.CodeError) {
-	response.Header().Set("Server", "Fns")
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(codeErr.Code())
-	_, _ = response.Write(encodeResponseBody(nil, codeErr))
+func (handler *proxyHandler) succeed(writer http.ResponseWriter, span service.Span, body []byte) {
+	resp := &response{
+		Span: span,
+		Data: body,
+	}
+	p, encodeErr := json.Marshal(resp)
+	if encodeErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: encode response to json failed").WithCause(encodeErr)))
+	}
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(p)
+}
+
+func (handler *proxyHandler) failed(writer http.ResponseWriter, codeErr errors.CodeError) {
+	p, encodeErr := json.Marshal(codeErr)
+	if encodeErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: encode code error to json failed").WithCause(encodeErr).WithCause(codeErr)))
+	}
+	resp := &response{
+		Span: nil,
+		Data: p,
+	}
+	p, encodeErr = json.Marshal(resp)
+	if encodeErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: encode response to json failed").WithCause(encodeErr).WithCause(codeErr)))
+	}
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(codeErr.Code())
+	_, _ = writer.Write(p)
+}
+
+func (handler *proxyHandler) Close() {
+	handler.counter.Wait()
+}
+
+type clusterHandler struct {
+	log           logs.Logger
+	registrations *RegistrationsManager
+}
+
+func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.Request) {
+	r, requestErr := service.NewRequest(request)
+	if requestErr != nil {
+		handler.failed(writer, requestErr)
+		return
+	}
+	sn, fn := r.Fn()
+	if sn != "cluster" {
+		handler.failed(writer, errors.NotAcceptable("fns: invalid url path"))
+		return
+	}
+	switch fn {
+	case "join":
+		result, handleErr := handler.handleJoin(r)
+		if handler == nil {
+			handler.succeed(writer, result)
+		} else {
+			handler.failed(writer, handleErr)
+		}
+	case "leave":
+		result, handleErr := handler.handleLeave(r)
+		if handler == nil {
+			handler.succeed(writer, result)
+		} else {
+			handler.failed(writer, handleErr)
+		}
+	default:
+		handler.failed(writer, errors.NotAcceptable("fns: invalid url path"))
+		return
+	}
+	return
+}
+
+func (handler *clusterHandler) handleJoin(r service.Request) (result []byte, err errors.CodeError) {
+	// todo
+	return
+}
+
+func (handler *clusterHandler) handleLeave(r service.Request) (result []byte, err errors.CodeError) {
+	// todo
+	return
+}
+
+func (handler *clusterHandler) succeed(writer http.ResponseWriter, body []byte) {
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(body)
+}
+
+func (handler *clusterHandler) failed(writer http.ResponseWriter, codeErr errors.CodeError) {
+	p, encodeErr := json.Marshal(codeErr)
+	if encodeErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: encode code error to json failed").WithCause(encodeErr).WithCause(codeErr)))
+	}
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(codeErr.Code())
+	_, _ = writer.Write(p)
 }
 
 type joinResult struct {
 	Node    *Node   `json:"node"`
 	Members []*Node `json:"members"`
-}
-
-func (handler *Handler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
-	node := &Node{}
-	decodeErr := json.Unmarshal(body, node)
-	if decodeErr != nil {
-		err = errors.BadRequest("fns: json failed").WithCause(decodeErr)
-		return
-	}
-	if node.Id == "" {
-		err = errors.BadRequest("fns: json failed").WithCause(fmt.Errorf("node id is empty"))
-		return
-	}
-	if node.Address == "" {
-		err = errors.BadRequest("fns: json failed").WithCause(fmt.Errorf("node address is empty"))
-		return
-	}
-	if (node.Services == nil || len(node.Services) == 0) && (node.InternalServices == nil || len(node.InternalServices) == 0) {
-		err = errors.BadRequest("fns: json failed").WithCause(fmt.Errorf("node services is empty"))
-		return
-	}
-	if handler.manager.registrations.containsMember(node) {
-		return
-	}
-	members := handler.manager.registrations.members()
-	node.client = handler.manager.client
-	handler.manager.registrations.register(node)
-	jr := &joinResult{
-		Node:    handler.manager.Node(),
-		Members: members,
-	}
-	jrp, encodeErr := json.Marshal(jr)
-	if encodeErr != nil {
-		err = errors.ServiceError("fns: json failed").WithCause(encodeErr)
-		return
-	}
-	result = jrp
-	return
-}
-
-func (handler *Handler) handleLeave(body []byte) (err errors.CodeError) {
-	node := &Node{}
-	decodeErr := json.Unmarshal(body, node)
-	if decodeErr != nil {
-		err = errors.BadRequest("fns: leave failed").WithCause(decodeErr)
-		return
-	}
-	if node.Id == "" {
-		err = errors.BadRequest("fns: leave failed").WithCause(fmt.Errorf("node id is empty"))
-		return
-	}
-	if node.Address == "" {
-		err = errors.BadRequest("fns: leave failed").WithCause(fmt.Errorf("node address is empty"))
-		return
-	}
-	if (node.Services == nil || len(node.Services) == 0) && (node.InternalServices == nil || len(node.InternalServices) == 0) {
-		err = errors.BadRequest("fns: leave failed").WithCause(fmt.Errorf("node services is empty"))
-		return
-	}
-	handler.manager.Registrations().deregister(node)
-	return
 }

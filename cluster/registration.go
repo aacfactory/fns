@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Registration struct {
@@ -35,9 +36,16 @@ type Registration struct {
 	SSL              bool
 	client           Client
 	unavailableTimes int64
+	checkLock        sync.Mutex
+	lastCheckTime    time.Time
 }
 
-func (r *Registration) Request(ctx context.Context, fn string, header http.Header, body []byte) (respBody []byte, err error) {
+func (r *Registration) Key() (key string) {
+	key = r.Id
+	return
+}
+
+func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
 	schema := ""
 	if r.SSL {
 		schema = "https"
@@ -49,18 +57,35 @@ func (r *Registration) Request(ctx context.Context, fn string, header http.Heade
 	return
 }
 
-func (r *Registration) Key() (key string) {
-	key = r.Id
+func (r *Registration) checkHealth() (ok bool) {
+
 	return
 }
 
-func (r *Registration) AddUnavailableTimes() {
+func (r *Registration) addUnavailableTimes() {
 	atomic.AddInt64(&r.unavailableTimes, 1)
+	return
+}
+
+func (r *Registration) resetUnavailableTimes() {
+	atomic.StoreInt64(&r.unavailableTimes, 0)
 	return
 }
 
 func (r *Registration) Unavailable() (ok bool) {
 	ok = atomic.LoadInt64(&r.unavailableTimes) > 5
+	if ok {
+		r.checkLock.Lock()
+		if time.Now().Sub(r.lastCheckTime) < 10*time.Second {
+			r.checkLock.Unlock()
+			return
+		}
+		r.lastCheckTime = time.Now()
+		r.checkLock.Unlock()
+		if r.checkHealth() {
+			r.resetUnavailableTimes()
+		}
+	}
 	return
 }
 
@@ -194,50 +219,45 @@ func (manager *RegistrationsManager) deregister(node *Node) {
 	return
 }
 
-func (manager *RegistrationsManager) GetRegistrations(name string) (registrations *Registrations, has bool) {
+func (manager *RegistrationsManager) Get(_ context.Context, name string) (endpoint service.Endpoint, has bool) {
 	value, exist := manager.values.Load(name)
 	if !exist {
 		return
 	}
-	registrations = value.(*Registrations)
-	has = true
+	registered := value.(*Registrations)
+	for i := 0; i < 5; i++ {
+		registration, ok := registered.Next()
+		if !ok {
+			return
+		}
+		if registration.Unavailable() {
+			continue
+		}
+		endpoint = registration
+		has = true
+		return
+	}
 	return
 }
 
-func (manager *RegistrationsManager) GetRegistration(name string, registrationId string) (registration *Registration, has bool) {
+func (manager *RegistrationsManager) GetExact(_ context.Context, name string, id string) (endpoint service.Endpoint, has bool) {
 	value, exist := manager.values.Load(name)
 	if !exist {
 		return
 	}
 	registered := value.(*Registrations)
 	for {
-		registration, has = registered.Next()
-		if !has {
-			break
+		registration, ok := registered.Next()
+		if !ok {
+			return
 		}
-		if registration.Id == registrationId {
-			break
+		if registration.Id == id {
+			if registration.Unavailable() {
+				return
+			}
+			endpoint = registration
+			has = true
+			return
 		}
 	}
-	return
-}
-
-func (manager *RegistrationsManager) RemoveUnavailableRegistration(name string, registrationId string) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
-	value, exist := manager.values.Load(name)
-	if !exist {
-		return
-	}
-	registered := value.(*Registrations)
-	registered.Remove(&Registration{Id: registrationId})
-}
-
-func (manager *RegistrationsManager) Get(ctx context.Context, service string) (endpoint service.Endpoint, has bool) {
-
-	return
-}
-func (manager *RegistrationsManager) GetExact(ctx context.Context, service string, id string) (endpoint service.Endpoint, has bool) {
-
-	return
 }

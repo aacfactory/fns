@@ -18,7 +18,6 @@ package cluster
 
 type Node struct {
 	Id               string   `json:"id"`
-	SSL              bool     `json:"ssl"`
 	Address          string   `json:"address"`
 	Services         []string `json:"services"`
 	InternalServices []string `json:"internalServices"`
@@ -42,7 +41,6 @@ func (node *Node) Registrations() (registrations []*Registration) {
 				Name:             service,
 				Internal:         false,
 				Address:          node.Address,
-				SSL:              node.SSL,
 				client:           node.client,
 				unavailableTimes: 0,
 			})
@@ -55,7 +53,6 @@ func (node *Node) Registrations() (registrations []*Registration) {
 				Name:             service,
 				Internal:         true,
 				Address:          node.Address,
-				SSL:              node.SSL,
 				client:           node.client,
 				unavailableTimes: 0,
 			})

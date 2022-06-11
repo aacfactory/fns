@@ -101,7 +101,6 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		checkHealthDuration: time.Duration(checkHealthSec) * time.Second,
 		node: &Node{
 			Id:               id,
-			SSL:              options.ClientTLS != nil,
 			Address:          fmt.Sprintf("%s:%d", ip, options.Port),
 			Services:         make([]string, 0, 1),
 			InternalServices: make([]string, 0, 1),

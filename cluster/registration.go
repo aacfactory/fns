@@ -45,7 +45,7 @@ func (r *Registration) Key() (key string) {
 }
 
 func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
-	
+
 	url := fmt.Sprintf("%s://%s/%s/%s", schema, r.Address, r.Name, fn)
 	respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
 	return

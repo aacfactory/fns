@@ -20,10 +20,17 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -95,7 +102,7 @@ type HttpOptions struct {
 func (options HttpOptions) GetOption(key string, value interface{}) (err error) {
 	err = options.raw.Get(key, value)
 	if err != nil {
-		err = errors.Warning(fmt.Sprintf("fns: http server options get %s failed", key)).WithCause(err)
+		err = errors.Warning(fmt.Sprintf("fns: http server options get %s failed", key)).WithCause(err).WithMeta("fns", "http")
 		return
 	}
 	return
@@ -105,4 +112,106 @@ type Http interface {
 	Build(options HttpOptions) (err error)
 	ListenAndServe() (err error)
 	Close() (err error)
+}
+
+type FastHttp struct {
+	log logs.Logger
+	ln  net.Listener
+	srv *fasthttp.Server
+}
+
+func (srv *FastHttp) Build(options HttpOptions) (err error) {
+	srv.log = options.Log.With("fns", "http")
+
+	var ln net.Listener
+	if options.TLS == nil {
+		ln, err = net.Listen("tcp", fmt.Sprintf(":%d", options.Port))
+	} else {
+		ln, err = tls.Listen("tcp", fmt.Sprintf(":%d", options.Port), options.TLS)
+	}
+	if err != nil {
+		err = errors.Warning("fns: build server failed").WithCause(err).WithMeta("fns", "http")
+		return
+	}
+	srv.ln = ln
+
+	readTimeoutSeconds := 0
+	readTimeoutSecondsErr := options.GetOption("readTimeoutSeconds", &readTimeoutSeconds)
+	if readTimeoutSecondsErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(readTimeoutSecondsErr).WithMeta("fns", "http")
+		return
+	}
+	if readTimeoutSeconds < 1 {
+		readTimeoutSeconds = 2
+	}
+	maxWorkerIdleSeconds := 0
+	maxWorkerIdleSecondsErr := options.GetOption("maxWorkerIdleSeconds", &maxWorkerIdleSeconds)
+	if maxWorkerIdleSecondsErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(maxWorkerIdleSecondsErr).WithMeta("fns", "http")
+		return
+	}
+	if maxWorkerIdleSeconds < 1 {
+		maxWorkerIdleSeconds = 10
+	}
+	maxRequestBody := ""
+	maxRequestBodyErr := options.GetOption("maxRequestBody", &maxRequestBody)
+	if maxRequestBodyErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(maxRequestBodyErr).WithMeta("fns", "http")
+		return
+	}
+	maxRequestBody = strings.ToUpper(strings.TrimSpace(maxRequestBody))
+	if maxRequestBody == "" {
+		maxRequestBody = "4MB"
+	}
+	maxRequestBodySize, maxRequestBodySizeErr := commons.ToBytes(maxRequestBody)
+	if maxRequestBodySizeErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(maxRequestBodySizeErr).WithMeta("fns", "http")
+		return
+	}
+	reduceMemoryUsage := false
+	reduceMemoryUsageErr := options.GetOption("reduceMemoryUsage", &reduceMemoryUsage)
+	if reduceMemoryUsageErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(reduceMemoryUsageErr).WithMeta("fns", "http")
+		return
+	}
+
+	srv.srv = &fasthttp.Server{
+		Handler:                            fasthttpadaptor.NewFastHTTPHandler(options.Handler),
+		ErrorHandler:                       fastHttpErrorHandler,
+		ReadTimeout:                        time.Duration(readTimeoutSeconds) * time.Second,
+		MaxIdleWorkerDuration:              time.Duration(maxWorkerIdleSeconds) * time.Second,
+		MaxRequestBodySize:                 int(maxRequestBodySize),
+		ReduceMemoryUsage:                  reduceMemoryUsage,
+		DisablePreParseMultipartForm:       true,
+		SleepWhenConcurrencyLimitsExceeded: 10 * time.Second,
+		NoDefaultServerHeader:              true,
+		NoDefaultDate:                      false,
+		NoDefaultContentType:               false,
+		CloseOnShutdown:                    true,
+		Logger:                             &logger.Printf{Core: options.Log},
+	}
+	return
+}
+
+func (srv *FastHttp) ListenAndServe() (err error) {
+	err = srv.srv.Serve(srv.ln)
+	if err != nil {
+		err = errors.Warning("fns: server listen and serve failed").WithCause(err).WithMeta("fns", "http")
+		return
+	}
+	return
+}
+
+func (srv *FastHttp) Close() (err error) {
+	err = srv.srv.Shutdown()
+	if err != nil {
+		err = errors.Warning("fns: server close failed").WithCause(err).WithMeta("fns", "http")
+	}
+	return
+}
+
+func fastHttpErrorHandler(ctx *fasthttp.RequestCtx, err error) {
+	ctx.SetStatusCode(555)
+	ctx.SetContentType(httpContentTypeJson)
+	ctx.SetBody([]byte(fmt.Sprintf("{\"error\": \"%s\"}", err.Error())))
 }

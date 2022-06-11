@@ -24,12 +24,12 @@ import (
 )
 
 type Printf struct {
-	core logs.Logger
+	Core logs.Logger
 }
 
 func (p *Printf) Printf(layout string, v ...interface{}) {
-	if p.core.DebugEnabled() {
-		p.core.Debug().Message(fmt.Sprintf("fns: %s", fmt.Sprintf(layout, v...)))
+	if p.Core.DebugEnabled() {
+		p.Core.Debug().Message(fmt.Sprintf("fns: %s", fmt.Sprintf(layout, v...)))
 	}
 }
 

@@ -17,12 +17,11 @@
 package cluster
 
 import (
-	sc "context"
+	"context"
 	"fmt"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
-	"golang.org/x/net/context"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -38,7 +37,7 @@ type Registration struct {
 	unavailableTimes int64
 }
 
-func (r *Registration) Request(ctx sc.Context, fn string, header http.Header, body []byte) (respBody []byte, err error) {
+func (r *Registration) Request(ctx context.Context, fn string, header http.Header, body []byte) (respBody []byte, err error) {
 	schema := ""
 	if r.SSL {
 		schema = "https"

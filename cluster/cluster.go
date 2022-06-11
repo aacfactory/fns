@@ -16,12 +16,12 @@
 
 package cluster
 
-import sc "context"
+import "context"
 
 type Cluster interface {
 	AppId() (id string)
 	AppHost() (host string)
 	RegisterService(name string, internal bool) (err error)
-	Join(ctx sc.Context) (err error)
-	Leave(ctx sc.Context) (err error)
+	Join(ctx context.Context) (err error)
+	Leave(ctx context.Context) (err error)
 }

@@ -17,7 +17,7 @@
 package cluster
 
 import (
-	sc "context"
+	"context"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
@@ -113,24 +113,16 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 	return
 }
 
-func (manager *Manager) Join(ctx sc.Context) {
+func (manager *Manager) Join(ctx context.Context) {
 	//
 
-	ctx0, cancel := sc.WithCancel(ctx)
+	ctx0, cancel := context.WithCancel(ctx)
 	manager.checkHealthCancel = cancel
 	go manager.checkHealth(ctx0)
 }
 
-func (manager *Manager) Leave(ctx sc.Context) {
+func (manager *Manager) Leave(ctx context.Context) {
 	manager.checkHealthCancel()
-	//
-}
-
-func (manager *Manager) SaveResource(key string, value []byte) {
-	//
-}
-
-func (manager *Manager) RemoveResource(key string) {
 	//
 }
 
@@ -144,7 +136,7 @@ func (manager *Manager) Registrations() (registrations *RegistrationsManager) {
 	return
 }
 
-func (manager *Manager) checkHealth(ctx sc.Context) {
+func (manager *Manager) checkHealth(ctx context.Context) {
 	for {
 		stopped := false
 		select {

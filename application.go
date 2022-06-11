@@ -17,6 +17,7 @@
 package fns
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
@@ -31,7 +32,6 @@ import (
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"golang.org/x/net/context"
 	"os"
 	"os/signal"
 	"strings"

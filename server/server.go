@@ -17,6 +17,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -26,7 +27,6 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"golang.org/x/net/context"
 	"net"
 	"net/http"
 	"strings"

@@ -19,7 +19,6 @@ package cluster
 import (
 	"encoding/binary"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"

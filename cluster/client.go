@@ -17,14 +17,12 @@
 package cluster
 
 import (
-	sc "context"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
-	"golang.org/x/net/context"
 	"net/http"
 	"time"
 )
@@ -108,64 +106,4 @@ func (client *FastHttpClient) Do(_ context.Context, method string, host string, 
 
 func (client *FastHttpClient) Close() {
 	client.core.CloseIdleConnections()
-}
-
-func join(ctx sc.Context, client Client, address string, node *Node) (result *joinResult, err errors.CodeError) {
-	var url string
-	if node.SSL {
-		url = fmt.Sprintf("https://%s%s", address, joinPath)
-	} else {
-		url = fmt.Sprintf("http://%s%s", address, joinPath)
-	}
-	body, encodeErr := json.Marshal(node)
-	if encodeErr != nil {
-		err = errors.BadRequest("fns: encode node failed").WithCause(encodeErr)
-		return
-	}
-	header := http.Header{}
-	header.Set("Content-Type", contentType)
-	resp, doErr := client.Do(ctx, http.MethodPost, url, header, encodeRequestBody(body))
-	if doErr != nil {
-		err = errors.Warning("fns: invoke join node failed").WithCause(doErr)
-		return
-	}
-	data, handleErr := decodeResponseBody(resp)
-	if handleErr != nil {
-		err = handleErr
-		return
-	}
-	result = &joinResult{}
-	decodeErr := json.Unmarshal(data, result)
-	if decodeErr != nil {
-		err = errors.Warning("fns: invoke join node failed").WithCause(decodeErr)
-		return
-	}
-	return
-}
-
-func leave(ctx sc.Context, client Client, address string, node *Node) (err errors.CodeError) {
-	var url string
-	if node.SSL {
-		url = fmt.Sprintf("https://%s%s", address, leavePath)
-	} else {
-		url = fmt.Sprintf("http://%s%s", address, leavePath)
-	}
-	body, encodeErr := json.Marshal(node)
-	if encodeErr != nil {
-		err = errors.BadRequest("fns: encode node failed").WithCause(encodeErr)
-		return
-	}
-	header := http.Header{}
-	header.Set("Content-Type", contentType)
-	resp, doErr := client.Do(ctx, http.MethodPost, url, header, encodeRequestBody(body))
-	if doErr != nil {
-		err = errors.Warning("fns: invoke leave node failed").WithCause(doErr)
-		return
-	}
-	_, handleErr := decodeResponseBody(resp)
-	if handleErr != nil {
-		err = handleErr
-		return
-	}
-	return
 }

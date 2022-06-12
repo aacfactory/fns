@@ -60,3 +60,8 @@ func (node *Node) Registrations() (registrations []*Registration) {
 	}
 	return
 }
+
+type nodeEvent struct {
+	kind  string
+	value *Node
+}

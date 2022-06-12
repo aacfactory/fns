@@ -19,10 +19,9 @@ package configuare
 import "github.com/aacfactory/json"
 
 type Cluster struct {
-	Kind               string          `json:"kind"`
-	Client             ClusterClient   `json:"client"`
-	CheckHealthSeconds int             `json:"checkHealthSeconds"`
-	Options            json.RawMessage `json:"options"`
+	Kind    string          `json:"kind"`
+	Client  ClusterClient   `json:"client"`
+	Options json.RawMessage `json:"options"`
 }
 
 type ClusterClient struct {

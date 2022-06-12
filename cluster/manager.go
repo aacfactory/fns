@@ -27,48 +27,27 @@ import (
 	"time"
 )
 
-type Manager struct {
-	log                 logs.Logger
-	bootstrap           Bootstrap
-	checkHealthDuration time.Duration
-	checkHealthCancel   func()
-	node                *Node
-	client              Client
-	registrations       *RegistrationsManager
-}
-
 type ManagerOptions struct {
-	Log                 logs.Logger
-	Port                int
-	Kind                string
-	CheckHealthDuration time.Duration
-	Options             json.RawMessage
-	Client              Client
+	Log     logs.Logger
+	Port    int
+	Kind    string
+	Options json.RawMessage
+	Client  Client
 }
 
 func NewManager(options ManagerOptions) (manager *Manager, err error) {
-	config := options.Config
-	kind := strings.TrimSpace(config.Kind)
+	kind := strings.TrimSpace(options.Kind)
 	if kind == "" {
 		err = errors.Warning("fns: kind is undefined")
 		return
 	}
-	if config.Options == nil || len(config.Options) == 0 {
-		err = errors.Warning("fns: options is undefined")
-		return
-	}
 	log := options.Log.With("fns", "cluster")
-	client, clientErr := options.ClientBuilder(newClientOptions(log.With("cluster", "client"), options.ClientTLS, config.Client))
-	if clientErr != nil {
-		err = errors.Warning("fns: build client failed").WithCause(clientErr)
-		return
-	}
 	bootstrap, hasBootstrap := getRegisteredBootstrap(kind)
 	if !hasBootstrap {
 		err = errors.Warning(fmt.Sprintf("fns: %s kind bootstrap is not registerd", kind))
 		return
 	}
-	bootstrapConfig, bootstrapConfigErr := configuares.NewJsonConfig(config.Options)
+	bootstrapConfig, bootstrapConfigErr := configuares.NewJsonConfig(options.Options)
 	if bootstrapConfigErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: options is invalid")).WithCause(bootstrapConfigErr)
 		return
@@ -91,37 +70,60 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		err = fmt.Errorf("fns: can not get my ip from bootstrap")
 		return
 	}
-	checkHealthSec := config.CheckHealthSecond
-	if checkHealthSec < 1 {
-		checkHealthSec = 60
-	}
 	manager = &Manager{
-		log:                 log,
-		bootstrap:           bootstrap,
-		checkHealthDuration: time.Duration(checkHealthSec) * time.Second,
+		log:       log.With("cluster", "manager"),
+		bootstrap: bootstrap,
+		interval:  60 * time.Second,
 		node: &Node{
 			Id:               id,
 			Address:          fmt.Sprintf("%s:%d", ip, options.Port),
 			Services:         make([]string, 0, 1),
 			InternalServices: make([]string, 0, 1),
-			client:           client,
+			client:           options.Client,
 		},
-		client:        client,
+		client:        options.Client,
 		registrations: newRegistrationsManager(log),
+		stopCh:        make(chan struct{}, 1),
 	}
 	return
 }
 
-func (manager *Manager) Join(ctx context.Context) {
-	//
-
-	ctx0, cancel := context.WithCancel(ctx)
-	manager.checkHealthCancel = cancel
-	go manager.checkHealth(ctx0)
+type Manager struct {
+	log           logs.Logger
+	bootstrap     Bootstrap
+	interval      time.Duration
+	node          *Node
+	client        Client
+	registrations *RegistrationsManager
+	stopCh        chan struct{}
 }
 
-func (manager *Manager) Leave(ctx context.Context) {
-	manager.checkHealthCancel()
+func (manager *Manager) Join() {
+	go func(manager *Manager) {
+		for {
+			stopped := false
+			select {
+			case <-manager.stopCh:
+				stopped = true
+				break
+			case <-time.After(manager.interval):
+				// members
+
+				// boostrap
+				manager.bootstrap.FindMembers(context.TODO())
+
+			}
+			if stopped {
+				break
+			}
+		}
+	}(manager)
+}
+
+func (manager *Manager) Leave() {
+	close(manager.stopCh)
+
+	manager.registrations.Close()
 	//
 }
 
@@ -132,25 +134,5 @@ func (manager *Manager) Node() (node *Node) {
 
 func (manager *Manager) Registrations() (registrations *RegistrationsManager) {
 	registrations = manager.registrations
-	return
-}
-
-func (manager *Manager) checkHealth(ctx context.Context) {
-	for {
-		stopped := false
-		select {
-		case <-ctx.Done():
-			stopped = true
-			break
-		case <-time.After(manager.checkHealthDuration):
-			// members
-
-			// boostrap
-			manager.bootstrap.FindMembers(ctx)
-		}
-		if stopped {
-			break
-		}
-	}
 	return
 }

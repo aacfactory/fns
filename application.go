@@ -17,7 +17,6 @@
 package fns
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
@@ -187,18 +186,12 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster client failed").WithCause(clientErr)))
 			return
 		}
-		checkHealthSeconds := config.Cluster.CheckHealthSeconds
-		if checkHealthSeconds < 1 {
-			checkHealthSeconds = 60
-		}
-
 		clusterManagerOptions := cluster.ManagerOptions{
-			Log:                 log,
-			Port:                httpOptions.Port,
-			Kind:                config.Cluster.Kind,
-			CheckHealthDuration: time.Duration(checkHealthSeconds) * time.Second,
-			Options:             config.Cluster.Options,
-			Client:              client,
+			Log:     log,
+			Port:    httpOptions.Port,
+			Kind:    config.Cluster.Kind,
+			Options: config.Cluster.Options,
+			Client:  client,
 		}
 		var clusterManagerErr error
 		clusterManager, clusterManagerErr = cluster.NewManager(clusterManagerOptions)
@@ -316,7 +309,11 @@ func New(options ...Option) (app Application) {
 	}
 	httpHandlers.Append(server.NewDocumentHandler(docHandlerOptions))
 	if clusterManager != nil {
-		httpHandlers.Append(cluster.NewHandler(clusterManager))
+		httpHandlers.Append(cluster.NewHandler(cluster.HandlerOptions{
+			Log:           log,
+			Endpoints:     endpoints,
+			Registrations: clusterManager.Registrations(),
+		}))
 	}
 	httpHandlers.Append(server.NewServiceHandler(server.ServiceHandlerOptions{
 		Log:       log,
@@ -434,7 +431,7 @@ func (app *application) Run() (err error) {
 
 	// cluster publish
 	if app.clusterManager != nil {
-		app.clusterManager.Join(context.TODO())
+		app.clusterManager.Join()
 	}
 	// on
 	app.running.On()
@@ -456,26 +453,24 @@ func (app *application) Sync() (err error) {
 	)
 	<-ch
 	stopped := make(chan struct{}, 1)
-	ctx, cancel := context.WithTimeout(context.TODO(), app.shutdownTimeout)
-	go app.stop(ctx, stopped)
+	go app.stop(stopped)
 	select {
-	case <-ctx.Done():
+	case <-time.After(app.shutdownTimeout):
 		err = errors.Warning("fns: stop application timeout")
 		break
 	case <-stopped:
 		break
 	}
-	cancel()
 	return
 }
 
-func (app *application) stop(ctx context.Context, ch chan struct{}) {
+func (app *application) stop(ch chan struct{}) {
 	defer app.autoMaxProcs.Reset()
 	// off
 	app.running.Off()
 	// cluster leave
 	if app.clusterManager != nil {
-		app.clusterManager.Leave(ctx)
+		app.clusterManager.Leave()
 	}
 	// http
 	app.httpHandlers.Close()

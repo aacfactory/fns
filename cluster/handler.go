@@ -187,6 +187,11 @@ func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.
 	return
 }
 
+type joinResult struct {
+	Node    *Node   `json:"node"`
+	Members []*Node `json:"members"`
+}
+
 func (handler *clusterHandler) handleJoin(r service.Request) (result []byte, err errors.CodeError) {
 	// todo
 	return
@@ -211,9 +216,4 @@ func (handler *clusterHandler) failed(writer http.ResponseWriter, codeErr errors
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(codeErr.Code())
 	_, _ = writer.Write(p)
-}
-
-type joinResult struct {
-	Node    *Node   `json:"node"`
-	Members []*Node `json:"members"`
 }

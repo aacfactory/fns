@@ -45,6 +45,7 @@ func (r *Registration) Key() (key string) {
 }
 
 func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
+	// 在这里进行tracer合并, append child
 
 	url := fmt.Sprintf("%s://%s/%s/%s", schema, r.Address, r.Name, fn)
 	respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
@@ -52,7 +53,12 @@ func (r *Registration) Request(ctx context.Context, fn string, argument service.
 }
 
 func (r *Registration) checkHealth() (ok bool) {
+	// ping ok and connection != close
+	return
+}
 
+func (r *Registration) available() (ok bool) {
+	// status != http.StatusServiceUnavailable
 	return
 }
 
@@ -76,7 +82,7 @@ func (r *Registration) Unavailable() (ok bool) {
 		}
 		r.lastCheckTime = time.Now()
 		r.checkLock.Unlock()
-		if r.checkHealth() {
+		if r.available() {
 			r.resetUnavailableTimes()
 		}
 	}
@@ -131,20 +137,20 @@ func (r *Registrations) Get(id string) (v *Registration, has bool) {
 
 func newRegistrationsManager(log logs.Logger) *RegistrationsManager {
 	return &RegistrationsManager{
-		log:       log.With("cluster", "registrations"),
-		mutex:     sync.Mutex{},
-		nodes:     sync.Map{},
-		values:    sync.Map{},
-		resources: sync.Map{},
+		log:    log.With("cluster", "registrations"),
+		stopCh: make(chan struct{}, 1),
+		events: make(chan *nodeEvent, 512),
+		nodes:  sync.Map{},
+		values: sync.Map{},
 	}
 }
 
 type RegistrationsManager struct {
-	log       logs.Logger
-	mutex     sync.Mutex
-	nodes     sync.Map
-	values    sync.Map
-	resources sync.Map
+	log    logs.Logger
+	stopCh chan struct{}
+	events chan *nodeEvent
+	nodes  sync.Map
+	values sync.Map
 }
 
 func (manager *RegistrationsManager) members() (values []*Node) {
@@ -163,8 +169,22 @@ func (manager *RegistrationsManager) containsMember(node *Node) (ok bool) {
 }
 
 func (manager *RegistrationsManager) register(node *Node) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
+	manager.events <- &nodeEvent{
+		kind:  "register",
+		value: node,
+	}
+	return
+}
+
+func (manager *RegistrationsManager) deregister(node *Node) {
+	manager.events <- &nodeEvent{
+		kind:  "deregister",
+		value: node,
+	}
+	return
+}
+
+func (manager *RegistrationsManager) handleRegister(node *Node) {
 	_, hasNode := manager.nodes.Load(node.Id)
 	if hasNode {
 		return
@@ -186,9 +206,7 @@ func (manager *RegistrationsManager) register(node *Node) {
 	return
 }
 
-func (manager *RegistrationsManager) deregister(node *Node) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
+func (manager *RegistrationsManager) handleDeregister(node *Node) {
 	existNode0, hasNode := manager.nodes.Load(node.Id)
 	if !hasNode {
 		return
@@ -211,6 +229,38 @@ func (manager *RegistrationsManager) deregister(node *Node) {
 		}
 	}
 	return
+}
+
+func (manager *RegistrationsManager) listenEvents() {
+	go func() {
+		closed := false
+		for {
+			if closed {
+				break
+			}
+			select {
+			case event, ok := <-manager.events:
+				if !ok {
+					closed = true
+					break
+				}
+				if event.kind == "register" {
+					manager.handleRegister(event.value)
+				} else if event.kind == "deregister" {
+					manager.handleDeregister(event.value)
+				}
+			case <-manager.stopCh:
+				closed = true
+				break
+			}
+		}
+	}()
+}
+
+func (manager *RegistrationsManager) Close() {
+	manager.stopCh <- struct{}{}
+	close(manager.stopCh)
+
 }
 
 func (manager *RegistrationsManager) Get(_ context.Context, name string) (endpoint service.Endpoint, has bool) {

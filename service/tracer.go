@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/json"
 	"sync"
 	"time"
 )
@@ -153,6 +154,17 @@ type Span interface {
 	Parent() (v Span)
 	Children() (v []Span)
 	AppendChild(children ...Span)
+}
+
+func DecodeSpan(p []byte) (v Span, err errors.CodeError) {
+	s := &span{}
+	decodeErr := json.Unmarshal(p, s)
+	if decodeErr != nil {
+		err = errors.Warning("fns: decode span failed").WithCause(decodeErr)
+		return
+	}
+	v = s
+	return
 }
 
 func newSpan(traceId string, service string, fn string, parent Span) Span {

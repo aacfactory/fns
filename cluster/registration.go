@@ -19,8 +19,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
 	"sync"
@@ -45,20 +47,64 @@ func (r *Registration) Key() (key string) {
 }
 
 func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
-	// 在这里进行tracer合并, append child
-
-	url := fmt.Sprintf("%s://%s/%s/%s", schema, r.Address, r.Name, fn)
-	respBody, err = r.client.Do(ctx, http.MethodPost, url, header, body)
-	return
-}
-
-func (r *Registration) checkHealth() (ok bool) {
-	// ping ok and connection != close
+	req, hasReq := service.GetRequest(ctx)
+	if !hasReq {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, there is no request in context").WithMeta("service", r.Name).WithMeta("fn", fn)))
+		return
+	}
+	ir := &internalRequest{
+		User:     req.User(),
+		Argument: argument,
+	}
+	reqBody, encodeErr := json.Marshal(ir)
+	if encodeErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode internal request body failed").WithCause(encodeErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		return
+	}
+	reqHeader := req.Header().Raw().Clone()
+	reqHeader.Set(httpContentType, httpContentTypeProxy)
+	fr := service.NewResult()
+	result = fr
+	status, _, respBody, callErr := r.client.Do(ctx, http.MethodPost, r.Address, fmt.Sprintf("/%s/%s", r.Name, fn), reqHeader, reqBody)
+	if callErr != nil {
+		r.addUnavailableTimes()
+		fr.Failed(errors.Warning("fns: remote call failed").WithCause(callErr).WithMeta("service", r.Name).WithMeta("fn", fn))
+		return
+	}
+	resp := &response{}
+	decodeErr := json.Unmarshal(respBody, resp)
+	if decodeErr != nil {
+		fr.Failed(errors.Warning("fns: remote call failed, response body is not json").WithCause(callErr).WithMeta("service", r.Name).WithMeta("fn", fn))
+		return
+	}
+	tracer, hasTracer := service.GetTracer(ctx)
+	if hasTracer && resp.HasSpan() {
+		span, _ := resp.Span()
+		if span != nil {
+			tracer.Span().AppendChild(span)
+		}
+	}
+	if status == http.StatusOK {
+		fr.Succeed(resp.Data)
+	} else {
+		fr.Failed(resp.AsError())
+	}
 	return
 }
 
 func (r *Registration) available() (ok bool) {
-	// status != http.StatusServiceUnavailable
+	status, _, body, callErr := r.client.Do(context.TODO(), http.MethodGet, r.Address, "/health", nil, nil)
+	if callErr != nil {
+		return
+	}
+	if status != http.StatusOK {
+		return
+	}
+	if body == nil || !json.Validate(body) {
+		return
+	}
+	obj := json.NewObjectFromBytes(body)
+	_ = obj.Get("running", &ok)
 	return
 }
 
@@ -72,7 +118,7 @@ func (r *Registration) resetUnavailableTimes() {
 	return
 }
 
-func (r *Registration) Unavailable() (ok bool) {
+func (r *Registration) unavailable() (ok bool) {
 	ok = atomic.LoadInt64(&r.unavailableTimes) > 5
 	if ok {
 		r.checkLock.Lock()
@@ -258,9 +304,7 @@ func (manager *RegistrationsManager) listenEvents() {
 }
 
 func (manager *RegistrationsManager) Close() {
-	manager.stopCh <- struct{}{}
 	close(manager.stopCh)
-
 }
 
 func (manager *RegistrationsManager) Get(_ context.Context, name string) (endpoint service.Endpoint, has bool) {
@@ -274,7 +318,7 @@ func (manager *RegistrationsManager) Get(_ context.Context, name string) (endpoi
 		if !ok {
 			return
 		}
-		if registration.Unavailable() {
+		if registration.unavailable() {
 			continue
 		}
 		endpoint = registration
@@ -296,7 +340,7 @@ func (manager *RegistrationsManager) GetExact(_ context.Context, name string, id
 			return
 		}
 		if registration.Id == id {
-			if registration.Unavailable() {
+			if registration.unavailable() {
 				return
 			}
 			endpoint = registration

@@ -95,7 +95,7 @@ type proxyHandler struct {
 func (handler *proxyHandler) Handle(writer http.ResponseWriter, request *http.Request) {
 	r, requestErr := service.NewRequest(request)
 	if requestErr != nil {
-		handler.failed(writer, requestErr)
+		handler.failed(writer, nil, requestErr)
 		return
 	}
 	handler.counter.Add(1)
@@ -103,20 +103,33 @@ func (handler *proxyHandler) Handle(writer http.ResponseWriter, request *http.Re
 	ctx = service.SetRequest(ctx, r)
 	ctx = service.SetTracer(ctx)
 	result, handleErr := handler.endpoints.Handle(request.Context(), r)
+	var span service.Span
+	tracer, hasTracer := service.GetTracer(ctx)
+	if hasTracer {
+		span = tracer.Span()
+	}
 	if handleErr == nil {
-		tracer, _ := service.GetTracer(ctx)
-		handler.succeed(writer, tracer.Span(), result)
+		handler.succeed(writer, span, result)
 	} else {
-		handler.failed(writer, handleErr)
+		handler.failed(writer, span, handleErr)
 	}
 	handler.counter.Done()
 	return
 }
 
 func (handler *proxyHandler) succeed(writer http.ResponseWriter, span service.Span, body []byte) {
+	var spanData []byte = nil
+	if span != nil {
+		p, err := json.Marshal(span)
+		if err != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: encode span to json failed").WithCause(err)))
+			return
+		}
+		spanData = p
+	}
 	resp := &response{
-		Span: span,
-		Data: body,
+		SpanData: spanData,
+		Data:     body,
 	}
 	p, encodeErr := json.Marshal(resp)
 	if encodeErr != nil {
@@ -127,14 +140,23 @@ func (handler *proxyHandler) succeed(writer http.ResponseWriter, span service.Sp
 	_, _ = writer.Write(p)
 }
 
-func (handler *proxyHandler) failed(writer http.ResponseWriter, codeErr errors.CodeError) {
+func (handler *proxyHandler) failed(writer http.ResponseWriter, span service.Span, codeErr errors.CodeError) {
+	var spanData []byte = nil
+	if span != nil {
+		p, err := json.Marshal(span)
+		if err != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: encode span to json failed").WithCause(err)))
+			return
+		}
+		spanData = p
+	}
 	p, encodeErr := json.Marshal(codeErr)
 	if encodeErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: encode code error to json failed").WithCause(encodeErr).WithCause(codeErr)))
 	}
 	resp := &response{
-		Span: nil,
-		Data: p,
+		SpanData: spanData,
+		Data:     p,
 	}
 	p, encodeErr = json.Marshal(resp)
 	if encodeErr != nil {

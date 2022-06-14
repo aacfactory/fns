@@ -24,8 +24,18 @@ import (
 )
 
 type response struct {
-	Span service.Span    `json:"span"`
-	Data json.RawMessage `json:"data"`
+	SpanData json.RawMessage `json:"span"`
+	Data     json.RawMessage `json:"data"`
+}
+
+func (resp *response) HasSpan() (has bool) {
+	has = resp.SpanData != nil && len(resp.SpanData) > 0
+	return
+}
+
+func (resp *response) Span() (span service.Span, err errors.CodeError) {
+	span, err = service.DecodeSpan(resp.SpanData)
+	return
 }
 
 func (resp *response) AsError() (err errors.CodeError) {

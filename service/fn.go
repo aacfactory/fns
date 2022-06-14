@@ -16,7 +16,11 @@
 
 package service
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"time"
+)
 
 func newFn(ctx context.Context, svc Service, fn string, argument Argument, result ResultWriter) *fnExecutor {
 	return &fnExecutor{ctx: ctx, svc: svc, fn: fn, argument: argument, result: result}
@@ -32,7 +36,8 @@ type fnExecutor struct {
 
 func (f *fnExecutor) Execute() {
 	rootLog := getRuntime(f.ctx).log
-	ctx := setLog(f.ctx, rootLog.With("service", f.svc.Name()).With("fn", f.fn))
+	fnLog := rootLog.With("service", f.svc.Name()).With("fn", f.fn)
+	ctx := setLog(f.ctx, fnLog)
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
 		ctx = setComponents(ctx, f.svc.Components())
 	}
@@ -58,4 +63,20 @@ func (f *fnExecutor) Execute() {
 		f.result.Succeed(v)
 	}
 	tryReportStats(ctx, f.svc.Name(), f.fn, err, sp)
+	if fnLog.DebugEnabled() {
+		latency := time.Duration(0)
+		if sp != nil {
+			latency = sp.Latency()
+		}
+		handled := "succeed"
+		if err != nil {
+			handled = "failed"
+		}
+		reqId := ""
+		r, hasReq := GetRequest(ctx)
+		if hasReq {
+			reqId = r.Id()
+		}
+		fnLog.Debug().Caller().With("latency", latency).With("requestId", reqId).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", f.svc.Name(), f.fn, handled, latency))
+	}
 }

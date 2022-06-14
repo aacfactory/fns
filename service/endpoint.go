@@ -78,7 +78,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 		barrier: barrier,
 		group: &group{
 			appId:     options.AppId,
-			log:       options.Log.With("fns", "services"),
+			log:       options.Log.With("fns", "service group"),
 			ws:        ws,
 			services:  make(map[string]Service),
 			discovery: options.Discovery,

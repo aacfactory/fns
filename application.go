@@ -365,7 +365,7 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 	}
 	for _, svc := range services {
 		if svc == nil {
-			err = errors.Warning("fns: deploy service failed for it is nil")
+			err = errors.Warning("fns: deploy service failed for one of services is nil")
 			return
 		}
 		name := strings.TrimSpace(svc.Name())
@@ -449,6 +449,9 @@ func (app *application) Sync() (err error) {
 		err = errors.Warning("fns: stop application timeout")
 		break
 	case <-stopped:
+		if app.log.DebugEnabled() {
+			app.log.Debug().Message("fns: stop application succeed")
+		}
 		break
 	}
 	return

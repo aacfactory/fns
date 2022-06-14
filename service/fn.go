@@ -36,7 +36,12 @@ type fnExecutor struct {
 
 func (f *fnExecutor) Execute() {
 	rootLog := getRuntime(f.ctx).log
+
 	fnLog := rootLog.With("service", f.svc.Name()).With("fn", f.fn)
+	req, hasReq := GetRequest(f.ctx)
+	if hasReq {
+		fnLog = fnLog.With("requestId", req.Id())
+	}
 	ctx := setLog(f.ctx, fnLog)
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
 		ctx = setComponents(ctx, f.svc.Components())
@@ -72,11 +77,6 @@ func (f *fnExecutor) Execute() {
 		if err != nil {
 			handled = "failed"
 		}
-		reqId := ""
-		r, hasReq := GetRequest(ctx)
-		if hasReq {
-			reqId = r.Id()
-		}
-		fnLog.Debug().Caller().With("latency", latency).With("requestId", reqId).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", f.svc.Name(), f.fn, handled, latency))
+		fnLog.Debug().Caller().With("latency", latency).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", f.svc.Name(), f.fn, handled, latency))
 	}
 }

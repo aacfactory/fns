@@ -172,7 +172,6 @@ func New(options ...Option) (app Application) {
 		if requestTimeoutSeconds < 1 {
 			requestTimeoutSeconds = 2
 		}
-
 		client, clientErr := clientBuilder(cluster.ClientOptions{
 			Log:                 log,
 			Https:               httpOptions.ServerTLS != nil,
@@ -310,9 +309,9 @@ func New(options ...Option) (app Application) {
 	httpHandlers.Append(server.NewDocumentHandler(docHandlerOptions))
 	if clusterManager != nil {
 		httpHandlers.Append(cluster.NewHandler(cluster.HandlerOptions{
-			Log:           log,
-			Endpoints:     endpoints,
-			Registrations: clusterManager.Registrations(),
+			Log:       log,
+			Endpoints: endpoints,
+			Cluster:   clusterManager,
 		}))
 	}
 	httpHandlers.Append(server.NewServiceHandler(server.ServiceHandlerOptions{

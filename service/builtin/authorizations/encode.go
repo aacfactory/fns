@@ -17,8 +17,10 @@
 package authorizations
 
 import (
+	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 )
 
@@ -31,22 +33,30 @@ type EncodeResult struct {
 	Token string `json:"token"`
 }
 
-func encode(ctx fns.Context, param EncodeParam) (result *EncodeResult, err errors.CodeError) {
-	encoding := &tokenEncodingComponent{}
-	getEncodingErr := ctx.CurrentServiceComponent("encoding", encoding)
-	if getEncodingErr != nil {
-		err = errors.ServiceError("fns: encode failed").WithCause(getEncodingErr)
+func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err errors.CodeError) {
+	encodingComponent, hasEncodingComponent := service.GetComponent(ctx, "encoding")
+	if !hasEncodingComponent {
+		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
 		return
 	}
-	store := &tokenStoreComponent{}
-	getStoreErr := ctx.CurrentServiceComponent("store", store)
-	if getStoreErr != nil {
-		err = errors.ServiceError("fns: encode failed").WithCause(getStoreErr)
+	encoding, encodingOk := encodingComponent.(*tokenEncodingComponent)
+	if !encodingOk {
+		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
 		return
 	}
 	token, encodeErr := encoding.Encode(param.Id, param.Attributes)
 	if encodeErr != nil {
 		err = errors.ServiceError("fns: encode failed").WithCause(encodeErr)
+		return
+	}
+	storeComponent, hasStoreComponent := service.GetComponent(ctx, "store")
+	if !hasStoreComponent {
+		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("there is no store component in context"))
+		return
+	}
+	store, storeOk := storeComponent.(*tokenStoreComponent)
+	if !storeOk {
+		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
 	saveErr := store.Save(ctx, token)

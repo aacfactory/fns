@@ -23,6 +23,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -98,32 +100,115 @@ type Manager struct {
 }
 
 func (manager *Manager) Join() {
-	go func(manager *Manager) {
-		for {
-			stopped := false
-			select {
-			case <-manager.stopCh:
-				stopped = true
-				break
-			case <-time.After(manager.interval):
-				// members
+	manager.linkMembers()
+	go manager.keepAlive()
+}
 
-				// boostrap
-				manager.bootstrap.FindMembers(context.TODO())
-
-			}
-			if stopped {
-				break
-			}
+func (manager *Manager) linkMembers() {
+	memberAddresses := manager.bootstrap.FindMembers(context.TODO())
+	if memberAddresses == nil {
+		memberAddresses = make([]string, 0, 1)
+	}
+	existMembers := manager.registrations.members()
+	for _, member := range existMembers {
+		if sort.SearchStrings(memberAddresses, member.Address) < len(memberAddresses) {
+			continue
 		}
-	}(manager)
+		memberAddresses = append(memberAddresses, member.Address)
+	}
+	if len(memberAddresses) == 0 {
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().With("members", fmt.Sprintf("[ ]")).Message(fmt.Sprintf("fns: cluster size is %d", 0))
+		}
+		return
+	}
+	p, pErr := json.Marshal(manager.node)
+	if pErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: encode node failed").WithCause(pErr)))
+		return
+	}
+	body := encodeRequestBody(p)
+	header := http.Header{}
+	header.Set(httpContentType, httpContentTypeCluster)
+	memberAddressesLen := len(memberAddresses)
+	for _, address := range memberAddresses {
+		manager.linkMember(address, memberAddresses, memberAddressesLen, header, body)
+	}
+	manager.registrations.removeUnavailableNodes()
+	if manager.log.DebugEnabled() {
+		members := make([]string, 0, 1)
+		nodes := manager.registrations.members()
+		for _, n := range nodes {
+			members = append(members, fmt.Sprintf("%s:%s", n.Id_, n.Address))
+		}
+		manager.log.Debug().With("members", fmt.Sprintf("[%s]", strings.Join(members, ","))).Message(fmt.Sprintf("fns: cluster size is %d", len(nodes)))
+	}
+}
+
+func (manager *Manager) linkMember(target string, members []string, membersLen int, header http.Header, body []byte) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return
+	}
+	status, _, respBody, callErr := manager.client.Do(context.TODO(), http.MethodPost, target, joinPath, header, body)
+	if callErr != nil {
+		if manager.log.WarnEnabled() {
+			manager.log.Warn().With("member", target).With("status", status).With("step", "call").Cause(callErr).Message("fns: link member failed")
+		}
+		return
+	}
+	nodes := make([]*node, 0, 1)
+	decodeErr := json.Unmarshal(respBody, &nodes)
+	if decodeErr != nil {
+		if manager.log.WarnEnabled() {
+			manager.log.Warn().With("member", target).With("status", status).With("step", "decode response").Cause(decodeErr).Message("fns: link member failed")
+		}
+		return
+	}
+	for i, n := range nodes {
+		if i == 0 {
+			manager.registrations.register(n)
+			continue
+		}
+		if manager.registrations.containsNode(n) {
+			continue
+		}
+		if sort.SearchStrings(members, n.Address) < membersLen {
+			continue
+		}
+		manager.linkMember(n.Address, members, membersLen, header, body)
+	}
+}
+
+func (manager *Manager) keepAlive() {
+	for {
+		stopped := false
+		select {
+		case <-manager.stopCh:
+			stopped = true
+			break
+		case <-time.After(manager.interval):
+			manager.linkMembers()
+		}
+		if stopped {
+			break
+		}
+	}
 }
 
 func (manager *Manager) Leave() {
 	close(manager.stopCh)
-
 	manager.registrations.Close()
-	//
+	body := encodeRequestBody([]byte(fmt.Sprintf("{\"id\":\"%s\"}", manager.node.Id_)))
+	header := http.Header{}
+	header.Set(httpContentType, httpContentTypeCluster)
+	members := manager.registrations.members()
+	for _, member := range members {
+		status, _, _, _ := manager.client.Do(context.TODO(), http.MethodPost, member.Address, leavePath, header, body)
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().With("member", member.Id_).With("status", status).Message("fns: leaved")
+		}
+	}
 }
 
 func (manager *Manager) Node() (node Node) {

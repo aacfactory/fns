@@ -16,6 +16,12 @@
 
 package cluster
 
+import (
+	"context"
+	"github.com/aacfactory/json"
+	"net/http"
+)
+
 type Node interface {
 	Id() string
 	AppendService(service string, internal bool)
@@ -58,6 +64,22 @@ func (node *node) registrations() (registrations []*Registration) {
 			})
 		}
 	}
+	return
+}
+
+func (node *node) available() (ok bool) {
+	status, _, body, callErr := node.client.Do(context.TODO(), http.MethodGet, node.Address, "/health", nil, nil)
+	if callErr != nil {
+		return
+	}
+	if status != http.StatusOK {
+		return
+	}
+	if body == nil || !json.Validate(body) {
+		return
+	}
+	obj := json.NewObjectFromBytes(body)
+	_ = obj.Get("running", &ok)
 	return
 }
 

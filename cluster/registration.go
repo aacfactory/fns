@@ -220,13 +220,13 @@ func (manager *RegistrationsManager) members() (values []*node) {
 	return
 }
 
-func (manager *RegistrationsManager) containsMember(node *node) (ok bool) {
+func (manager *RegistrationsManager) containsNode(node *node) (ok bool) {
 	_, ok = manager.nodes.Load(node.Id_)
 	return
 }
 
 func (manager *RegistrationsManager) register(n *node) {
-	if manager.containsMember(n) {
+	if manager.containsNode(n) {
 		return
 	}
 	manager.events <- &nodeEvent{
@@ -237,7 +237,7 @@ func (manager *RegistrationsManager) register(n *node) {
 }
 
 func (manager *RegistrationsManager) deregister(n *node) {
-	if !manager.containsMember(n) {
+	if !manager.containsNode(n) {
 		return
 	}
 	manager.events <- &nodeEvent{
@@ -248,7 +248,7 @@ func (manager *RegistrationsManager) deregister(n *node) {
 }
 
 func (manager *RegistrationsManager) handleRegister(node *node) {
-	if manager.containsMember(node) {
+	if manager.containsNode(node) {
 		return
 	}
 	manager.nodes.Store(node.Id_, node)
@@ -319,6 +319,21 @@ func (manager *RegistrationsManager) listenEvents() {
 			}
 		}
 	}()
+}
+
+func (manager *RegistrationsManager) removeUnavailableNodes() {
+	unavailableNodes := make([]*node, 0, 1)
+	manager.nodes.Range(func(_, value interface{}) bool {
+		n := value.(*node)
+		if n.available() {
+			return true
+		}
+		unavailableNodes = append(unavailableNodes, n)
+		return true
+	})
+	for _, unavailable := range unavailableNodes {
+		manager.deregister(unavailable)
+	}
 }
 
 func (manager *RegistrationsManager) Close() {

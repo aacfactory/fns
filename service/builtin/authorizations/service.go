@@ -18,6 +18,7 @@ package authorizations
 
 import (
 	"fmt"
+	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"golang.org/x/net/context"
@@ -58,7 +59,25 @@ func (svc *authorizationService) Internal() (internal bool) {
 }
 
 func (svc *authorizationService) Build(options service.Options) (err error) {
-
+	if svc.components != nil {
+		for cn, component := range svc.components {
+			if component == nil {
+				continue
+			}
+			componentCfg, hasConfig := options.Config.Node(cn)
+			if !hasConfig {
+				componentCfg, _ = configuares.NewJsonConfig([]byte("{}"))
+			}
+			err = component.Build(service.ComponentOptions{
+				Log:    options.Log.With("component", cn),
+				Config: componentCfg,
+			})
+			if err != nil {
+				err = errors.Warning("fns: build authorizations service failed").WithCause(err)
+				return
+			}
+		}
+	}
 	return
 }
 

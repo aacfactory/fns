@@ -17,10 +17,10 @@
 package authorizations
 
 import (
+	"context"
 	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
@@ -32,9 +32,9 @@ type TokenStoreOptions struct {
 
 type TokenStore interface {
 	Build(options TokenStoreOptions) (err error)
-	Exist(ctx fns.Context, tokenId string) (ok bool)
-	Save(ctx fns.Context, token Token) (err error)
-	Remove(ctx fns.Context, token Token) (err error)
+	Exist(ctx context.Context, tokenId string) (ok bool)
+	Save(ctx context.Context, token Token) (err error)
+	Remove(ctx context.Context, token Token) (err error)
 }
 
 type tokenStoreComponent struct {
@@ -59,17 +59,17 @@ func (component *tokenStoreComponent) Build(options service.ComponentOptions) (e
 	return
 }
 
-func (component *tokenStoreComponent) Exist(ctx fns.Context, tokenId string) (ok bool) {
+func (component *tokenStoreComponent) Exist(ctx context.Context, tokenId string) (ok bool) {
 	ok = component.store.Exist(ctx, tokenId)
 	return
 }
 
-func (component *tokenStoreComponent) Save(ctx fns.Context, token Token) (err error) {
+func (component *tokenStoreComponent) Save(ctx context.Context, token Token) (err error) {
 	err = component.store.Save(ctx, token)
 	return
 }
 
-func (component *tokenStoreComponent) Remove(ctx fns.Context, token Token) (err error) {
+func (component *tokenStoreComponent) Remove(ctx context.Context, token Token) (err error) {
 	err = component.store.Remove(ctx, token)
 	return
 }

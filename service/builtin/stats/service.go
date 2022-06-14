@@ -19,6 +19,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
@@ -43,14 +44,24 @@ type statsService struct {
 }
 
 func (svc *statsService) Build(options service.Options) (err error) {
-	log := options.Log.With("service", name)
-	err = svc.components["reporter"].Build(service.ComponentOptions{
-		Log:    log,
-		Config: options.Config,
-	})
-	if err != nil {
-		err = errors.Warning("fns: build stats service failed").WithCause(err)
-		return
+	if svc.components != nil {
+		for cn, component := range svc.components {
+			if component == nil {
+				continue
+			}
+			componentCfg, hasConfig := options.Config.Node(cn)
+			if !hasConfig {
+				componentCfg, _ = configuares.NewJsonConfig([]byte("{}"))
+			}
+			err = component.Build(service.ComponentOptions{
+				Log:    options.Log.With("component", cn),
+				Config: componentCfg,
+			})
+			if err != nil {
+				err = errors.Warning("fns: build stats service failed").WithCause(err)
+				return
+			}
+		}
 	}
 	return
 }

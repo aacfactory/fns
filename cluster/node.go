@@ -16,42 +16,42 @@
 
 package cluster
 
-type Node struct {
-	Id               string   `json:"id"`
-	Address          string   `json:"address"`
-	Services         []string `json:"services"`
-	InternalServices []string `json:"internalServices"`
-	client           Client
+type Node interface {
+	Id() string
+	AppendService(service string, internal bool)
 }
 
-func (node *Node) AppendService(services ...string) {
-	node.Services = append(node.Services, services...)
+type nodeService struct {
+	Name     string `json:"name"`
+	Internal bool   `json:"internal"`
 }
 
-func (node *Node) AppendInternalService(services ...string) {
-	node.InternalServices = append(node.InternalServices, services...)
+type node struct {
+	Id_      string         `json:"id"`
+	Address  string         `json:"address"`
+	Services []*nodeService `json:"services"`
+	client   Client
 }
 
-func (node *Node) Registrations() (registrations []*Registration) {
+func (node *node) Id() string {
+	return node.Id_
+}
+
+func (node *node) AppendService(service string, internal bool) {
+	node.Services = append(node.Services, &nodeService{
+		Name:     service,
+		Internal: internal,
+	})
+}
+
+func (node *node) registrations() (registrations []*Registration) {
 	registrations = make([]*Registration, 0, 1)
 	if node.Services != nil {
 		for _, service := range node.Services {
 			registrations = append(registrations, &Registration{
-				Id:               node.Id,
-				Name:             service,
-				Internal:         false,
-				Address:          node.Address,
-				client:           node.client,
-				unavailableTimes: 0,
-			})
-		}
-	}
-	if node.InternalServices != nil {
-		for _, service := range node.InternalServices {
-			registrations = append(registrations, &Registration{
-				Id:               node.Id,
-				Name:             service,
-				Internal:         true,
+				Id:               node.Id_,
+				Name:             service.Name,
+				Internal:         service.Internal,
 				Address:          node.Address,
 				client:           node.client,
 				unavailableTimes: 0,
@@ -63,5 +63,5 @@ func (node *Node) Registrations() (registrations []*Registration) {
 
 type nodeEvent struct {
 	kind  string
-	value *Node
+	value *node
 }

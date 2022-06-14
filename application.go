@@ -199,7 +199,7 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(clusterManagerErr)))
 			return
 		}
-		appId = clusterManager.Node().Id
+		appId = clusterManager.Node().Id()
 	}
 
 	// procs
@@ -389,11 +389,7 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 		}
 		app.endpoints.Mount(svc)
 		if app.clusterManager != nil {
-			if svc.Internal() {
-				app.clusterManager.Node().AppendInternalService(svc.Name())
-			} else {
-				app.clusterManager.Node().AppendService(svc.Name())
-			}
+			app.clusterManager.Node().AppendService(svc.Name(), svc.Internal())
 		}
 	}
 	return

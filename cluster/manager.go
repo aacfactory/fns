@@ -74,12 +74,11 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		log:       log.With("cluster", "manager"),
 		bootstrap: bootstrap,
 		interval:  60 * time.Second,
-		node: &Node{
-			Id:               id,
-			Address:          fmt.Sprintf("%s:%d", ip, options.Port),
-			Services:         make([]string, 0, 1),
-			InternalServices: make([]string, 0, 1),
-			client:           options.Client,
+		node: &node{
+			Id_:      id,
+			Address:  fmt.Sprintf("%s:%d", ip, options.Port),
+			Services: make([]*nodeService, 0, 1),
+			client:   options.Client,
 		},
 		client:        options.Client,
 		registrations: newRegistrationsManager(log),
@@ -92,7 +91,7 @@ type Manager struct {
 	log           logs.Logger
 	bootstrap     Bootstrap
 	interval      time.Duration
-	node          *Node
+	node          *node
 	client        Client
 	registrations *RegistrationsManager
 	stopCh        chan struct{}
@@ -127,7 +126,7 @@ func (manager *Manager) Leave() {
 	//
 }
 
-func (manager *Manager) Node() (node *Node) {
+func (manager *Manager) Node() (node Node) {
 	node = manager.node
 	return
 }

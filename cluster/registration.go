@@ -153,43 +153,43 @@ type RegistrationsManager struct {
 	values sync.Map
 }
 
-func (manager *RegistrationsManager) members() (values []*Node) {
-	values = make([]*Node, 0, 1)
+func (manager *RegistrationsManager) members() (values []*node) {
+	values = make([]*node, 0, 1)
 	manager.nodes.Range(func(_, value interface{}) bool {
-		node := value.(*Node)
-		values = append(values, node)
+		n := value.(*node)
+		values = append(values, n)
 		return true
 	})
 	return
 }
 
-func (manager *RegistrationsManager) containsMember(node *Node) (ok bool) {
-	_, ok = manager.nodes.Load(node.Id)
+func (manager *RegistrationsManager) containsMember(node *node) (ok bool) {
+	_, ok = manager.nodes.Load(node.Id_)
 	return
 }
 
-func (manager *RegistrationsManager) register(node *Node) {
+func (manager *RegistrationsManager) register(n *node) {
 	manager.events <- &nodeEvent{
 		kind:  "register",
-		value: node,
+		value: n,
 	}
 	return
 }
 
-func (manager *RegistrationsManager) deregister(node *Node) {
+func (manager *RegistrationsManager) deregister(n *node) {
 	manager.events <- &nodeEvent{
 		kind:  "deregister",
-		value: node,
+		value: n,
 	}
 	return
 }
 
-func (manager *RegistrationsManager) handleRegister(node *Node) {
-	_, hasNode := manager.nodes.Load(node.Id)
+func (manager *RegistrationsManager) handleRegister(node *node) {
+	_, hasNode := manager.nodes.Load(node.Id_)
 	if hasNode {
 		return
 	}
-	registrations := node.Registrations()
+	registrations := node.registrations()
 	for _, registration := range registrations {
 		value, has := manager.values.Load(registration.Name)
 		if has {
@@ -206,13 +206,13 @@ func (manager *RegistrationsManager) handleRegister(node *Node) {
 	return
 }
 
-func (manager *RegistrationsManager) handleDeregister(node *Node) {
-	existNode0, hasNode := manager.nodes.Load(node.Id)
+func (manager *RegistrationsManager) handleDeregister(n *node) {
+	existNode0, hasNode := manager.nodes.Load(n.Id_)
 	if !hasNode {
 		return
 	}
-	existNode := existNode0.(*Node)
-	registrations := existNode.Registrations()
+	existNode := existNode0.(*node)
+	registrations := existNode.registrations()
 	for _, registration := range registrations {
 		value, has := manager.values.Load(registration.Name)
 		if !has {

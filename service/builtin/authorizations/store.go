@@ -34,7 +34,7 @@ type TokenStore interface {
 	Build(options TokenStoreOptions) (err error)
 	Exist(ctx context.Context, tokenId string) (ok bool)
 	Save(ctx context.Context, token Token) (err error)
-	Remove(ctx context.Context, token Token) (err error)
+	Remove(ctx context.Context, tokenId string) (err error)
 }
 
 type tokenStoreComponent struct {
@@ -69,10 +69,30 @@ func (component *tokenStoreComponent) Save(ctx context.Context, token Token) (er
 	return
 }
 
-func (component *tokenStoreComponent) Remove(ctx context.Context, token Token) (err error) {
-	err = component.store.Remove(ctx, token)
+func (component *tokenStoreComponent) Remove(ctx context.Context, tokenId string) (err error) {
+	err = component.store.Remove(ctx, tokenId)
 	return
 }
 
 func (component *tokenStoreComponent) Close() {
+}
+
+type DiscardTokenStore struct {
+}
+
+func (store *DiscardTokenStore) Build(options TokenStoreOptions) (err error) {
+	return
+}
+
+func (store *DiscardTokenStore) Exist(ctx context.Context, tokenId string) (ok bool) {
+	ok = true
+	return
+}
+
+func (store *DiscardTokenStore) Save(ctx context.Context, token Token) (err error) {
+	return
+}
+
+func (store *DiscardTokenStore) Remove(ctx context.Context, tokenId string) (err error) {
+	return
 }

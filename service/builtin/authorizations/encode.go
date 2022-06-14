@@ -64,5 +64,8 @@ func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err e
 		err = errors.ServiceError("fns: encode failed").WithCause(saveErr)
 		return
 	}
+	result = &EncodeResult{
+		Token: string(token.Bytes()),
+	}
 	return
 }

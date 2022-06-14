@@ -21,41 +21,30 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/json"
 )
 
-type encodeParam struct {
-	Id         string       `json:"id"`
-	Attributes *json.Object `json:"attributes"`
+type revokeParam struct {
+	TokenId string `json:"tokenId"`
 }
 
-type encodeResult struct {
-	Token string `json:"token"`
-}
-
-func Encode(ctx context.Context, userId string, userAttributes *json.Object) (token string, err errors.CodeError) {
+func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
 	if !hasEndpoint {
 		err = errors.Warning("fns: there is no authorizations in context, please deploy authorizations service")
 		return
 	}
-	if userId == "" {
-		err = errors.Warning("fns: encode token failed").WithCause(fmt.Errorf("userId is empty"))
+	if tokenId == "" {
+		err = errors.Warning("fns: revoke token failed").WithCause(fmt.Errorf("tokenId is empty"))
 		return
 	}
-	if userAttributes == nil {
-		userAttributes = json.NewObject()
-	}
-	fr := endpoint.Request(ctx, "encode", service.NewArgument(&encodeParam{
-		Id:         userId,
-		Attributes: userAttributes,
+	fr := endpoint.Request(ctx, "encode", service.NewArgument(&revokeParam{
+		TokenId: tokenId,
 	}))
-	result := &encodeResult{}
+	result := &service.Empty{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return
 	}
-	token = result.Token
 	return
 }

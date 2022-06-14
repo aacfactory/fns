@@ -40,10 +40,9 @@ type ManagerOptions struct {
 func NewManager(options ManagerOptions) (manager *Manager, err error) {
 	kind := strings.TrimSpace(options.Kind)
 	if kind == "" {
-		err = errors.Warning("fns: kind is undefined")
+		kind = "default"
 		return
 	}
-	log := options.Log.With("fns", "cluster")
 	bootstrap, hasBootstrap := getRegisteredBootstrap(kind)
 	if !hasBootstrap {
 		err = errors.Warning(fmt.Sprintf("fns: %s kind bootstrap is not registerd", kind))
@@ -56,7 +55,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 	}
 	bootstrapBuildErr := bootstrap.Build(BootstrapOptions{
 		Config: bootstrapConfig,
-		Log:    log.With("cluster", "bootstrap"),
+		Log:    options.Log.With("cluster", "bootstrap"),
 	})
 	if bootstrapBuildErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: build bootstrap failed")).WithCause(bootstrapBuildErr)
@@ -73,7 +72,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		return
 	}
 	manager = &Manager{
-		log:       log.With("cluster", "manager"),
+		log:       options.Log.With("cluster", "manager"),
 		bootstrap: bootstrap,
 		interval:  60 * time.Second,
 		node: &node{
@@ -83,7 +82,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 			client:   options.Client,
 		},
 		client:        options.Client,
-		registrations: newRegistrationsManager(log),
+		registrations: newRegistrationsManager(options.Log),
 		stopCh:        make(chan struct{}, 1),
 	}
 	return

@@ -19,6 +19,9 @@ package cluster
 import (
 	"context"
 	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
 	"strings"
 )
@@ -36,7 +39,7 @@ type Bootstrap interface {
 }
 
 var (
-	registeredBootstraps = make(map[string]Bootstrap)
+	registeredBootstraps = map[string]Bootstrap{"default": &defaultBootstrap{}}
 )
 
 func RegisterBootstrap(kind string, bootstrap Bootstrap) (ok bool) {
@@ -58,5 +61,47 @@ func RegisterBootstrap(kind string, bootstrap Bootstrap) (ok bool) {
 
 func getRegisteredBootstrap(kind string) (bootstrap Bootstrap, has bool) {
 	bootstrap, has = registeredBootstraps[kind]
+	return
+}
+
+type defaultBootstrap struct {
+	id      string
+	ip      string
+	members []string
+}
+
+func (b *defaultBootstrap) Build(options BootstrapOptions) (err error) {
+	members := make([]string, 0, 1)
+	has, getErr := options.Config.Get("members", &members)
+	if getErr != nil {
+		err = errors.Warning("fns: members is undefined in cluster.options config")
+		return
+	}
+	if !has || len(members) == 0 {
+		err = errors.Warning("fns: members is undefined in cluster.options config")
+		return
+	}
+	b.members = members
+	b.id = uid.UID()
+	b.ip = commons.GetGlobalUniCastIpFromHostname()
+	if b.ip == "" {
+		err = errors.Warning("can not get ip from hostname, please set FNS_IP into system env")
+		return
+	}
+	return
+}
+
+func (b *defaultBootstrap) Id() (id string) {
+	id = b.id
+	return
+}
+
+func (b *defaultBootstrap) Ip() (ip string) {
+	ip = b.ip
+	return
+}
+
+func (b *defaultBootstrap) FindMembers(_ context.Context) (addresses []string) {
+	addresses = b.members
 	return
 }

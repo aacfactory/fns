@@ -145,11 +145,6 @@ func New(options ...Option) (app Application) {
 	var clusterManager *cluster.Manager
 	if config.Cluster == nil {
 		appId = uid.UID()
-		appIp := commons.GetGlobalUniCastIpFromHostname()
-		if appIp == "" {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("can not get ip from hostname, please set FNS_IP into system env"))))
-			return
-		}
 	} else {
 		clientBuilder := opt.clientBuilder
 		if clientBuilder == nil {
@@ -173,7 +168,7 @@ func New(options ...Option) (app Application) {
 			requestTimeoutSeconds = 2
 		}
 		client, clientErr := clientBuilder(cluster.ClientOptions{
-			Log:                 log,
+			Log:                 log.With("cluster", "client"),
 			Https:               httpOptions.ServerTLS != nil,
 			TLS:                 httpOptions.ClientTLS,
 			MaxIdleConnDuration: time.Duration(maxIdleConnSeconds) * time.Second,

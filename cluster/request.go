@@ -28,8 +28,8 @@ import (
 )
 
 type internalRequest struct {
-	User     service.RequestUser `json:"user"`
-	Argument service.Argument    `json:"argument"`
+	User     json.RawMessage `json:"user"`
+	Argument json.RawMessage `json:"argument"`
 }
 
 func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
@@ -63,8 +63,13 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 		err = errors.NotAcceptable("fns: decode internal request body failed").WithCause(decodeIrErr)
 		return
 	}
-	if ir.User == nil {
-		ir.User = service.NewRequestUser("", json.NewObject())
+	user := service.NewRequestUser("", json.NewObject())
+	if ir.User != nil {
+		decodeUserErr := json.Unmarshal(ir.User, user)
+		if decodeUserErr != nil {
+			err = errors.NotAcceptable("fns: decode internal request body failed").WithCause(decodeUserErr)
+			return
+		}
 	}
 	remoteIp := req.RemoteAddr
 	if remoteIp != "" {
@@ -79,11 +84,11 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 	r = &request{
 		id:       id,
 		remoteIp: remoteIp,
-		user:     ir.User,
+		user:     user,
 		header:   service.NewRequestHeader(req.Header),
 		service:  sn,
 		fn:       fn,
-		argument: ir.Argument,
+		argument: service.NewArgument(ir.Argument),
 		hashCode: hashCode,
 	}
 	return

@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"io/ioutil"
 	"net/http"
 	"sync"
 )
@@ -37,9 +38,9 @@ const (
 )
 
 type HandlerOptions struct {
-	Log           logs.Logger
-	Endpoints     service.Endpoints
-	Registrations *RegistrationsManager
+	Log       logs.Logger
+	Endpoints service.Endpoints
+	Cluster   *Manager
 }
 
 func NewHandler(options HandlerOptions) *Handler {
@@ -51,8 +52,8 @@ func NewHandler(options HandlerOptions) *Handler {
 			endpoints: options.Endpoints,
 		},
 		member: &clusterHandler{
-			log:           options.Log.With("fns", "cluster").With("cluster", "members"),
-			registrations: options.Registrations,
+			log:     options.Log.With("fns", "cluster").With("cluster", "members"),
+			manager: options.Cluster,
 		},
 	}
 }
@@ -93,7 +94,7 @@ type proxyHandler struct {
 }
 
 func (handler *proxyHandler) Handle(writer http.ResponseWriter, request *http.Request) {
-	r, requestErr := service.NewRequest(request)
+	r, requestErr := newRequest(request)
 	if requestErr != nil {
 		handler.failed(writer, nil, requestErr)
 		return
@@ -172,62 +173,80 @@ func (handler *proxyHandler) Close() {
 }
 
 type clusterHandler struct {
-	log           logs.Logger
-	registrations *RegistrationsManager
+	log     logs.Logger
+	manager *Manager
 }
 
 func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.Request) {
-	r, requestErr := service.NewRequest(request)
-	if requestErr != nil {
-		handler.failed(writer, requestErr)
+	bodyRaw, bodyErr := ioutil.ReadAll(request.Body)
+	if bodyErr != nil {
+		handler.failed(writer, errors.BadRequest("fns: read body failed").WithCause(bodyErr))
 		return
 	}
-	sn, fn := r.Fn()
-	if sn != "cluster" {
-		handler.failed(writer, errors.NotAcceptable("fns: invalid url path"))
+	body, bodyValid := decodeRequestBody(bodyRaw)
+	if !bodyValid {
+		handler.failed(writer, errors.NotAcceptable("fns: invalid body"))
 		return
 	}
-	switch fn {
-	case "join":
-		result, handleErr := handler.handleJoin(r)
+	switch request.URL.Path {
+	case joinPath:
+		result, handleErr := handler.handleJoin(body)
 		if handler == nil {
 			handler.succeed(writer, result)
 		} else {
 			handler.failed(writer, handleErr)
 		}
-	case "leave":
-		result, handleErr := handler.handleLeave(r)
+	case leavePath:
+		handleErr := handler.handleLeave(body)
 		if handler == nil {
-			handler.succeed(writer, result)
+			handler.succeed(writer, nil)
 		} else {
 			handler.failed(writer, handleErr)
 		}
 	default:
-		handler.failed(writer, errors.NotAcceptable("fns: invalid url path"))
+		handler.failed(writer, errors.NotFound("fns: not found").WithMeta("uri", request.URL.Path))
 		return
 	}
 	return
 }
 
-type joinResult struct {
-	Node    *Node   `json:"node"`
-	Members []*Node `json:"members"`
-}
-
-func (handler *clusterHandler) handleJoin(r service.Request) (result []byte, err errors.CodeError) {
-	// todo
+func (handler *clusterHandler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
+	n := &node{}
+	decodeErr := json.Unmarshal(body, n)
+	if decodeErr != nil {
+		err = errors.Warning("fns: decode body failed").WithCause(decodeErr)
+		return
+	}
+	handler.manager.registrations.register(n)
+	nodes := make([]*node, 0, 1)
+	nodes = append(nodes, handler.manager.node)
+	nodes = append(nodes, handler.manager.registrations.members()...)
+	p, encodeErr := json.Marshal(nodes)
+	if encodeErr != nil {
+		err = errors.Warning("fns: encode result failed").WithCause(encodeErr)
+		return
+	}
+	result = p
 	return
 }
 
-func (handler *clusterHandler) handleLeave(r service.Request) (result []byte, err errors.CodeError) {
-	// todo
+func (handler *clusterHandler) handleLeave(body []byte) (err errors.CodeError) {
+	n := &node{}
+	decodeErr := json.Unmarshal(body, n)
+	if decodeErr != nil {
+		err = errors.Warning("fns: decode body failed").WithCause(decodeErr)
+		return
+	}
+	handler.manager.registrations.deregister(n)
 	return
 }
 
 func (handler *clusterHandler) succeed(writer http.ResponseWriter, body []byte) {
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(http.StatusOK)
-	_, _ = writer.Write(body)
+	if body != nil && len(body) > 0 {
+		_, _ = writer.Write(body)
+	}
 }
 
 func (handler *clusterHandler) failed(writer http.ResponseWriter, codeErr errors.CodeError) {

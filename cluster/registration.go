@@ -52,15 +52,26 @@ func (r *Registration) Request(ctx context.Context, fn string, argument service.
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, there is no request in context").WithMeta("service", r.Name).WithMeta("fn", fn)))
 		return
 	}
+	user, userErr := json.Marshal(req.User())
+	if userErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode request user failed").WithCause(userErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		return
+	}
+	arg, argErr := argument.MarshalJSON()
+	if argErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode argument failed").WithCause(argErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		return
+	}
 	ir := &internalRequest{
-		User:     req.User(),
-		Argument: argument,
+		User:     user,
+		Argument: arg,
 	}
 	reqBody, encodeErr := json.Marshal(ir)
 	if encodeErr != nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode internal request body failed").WithCause(encodeErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
 		return
 	}
+	reqBody = encodeRequestBody(reqBody)
 	reqHeader := req.Header().Raw().Clone()
 	reqHeader.Set(httpContentType, httpContentTypeProxy)
 	fr := service.NewResult()
@@ -215,6 +226,9 @@ func (manager *RegistrationsManager) containsMember(node *node) (ok bool) {
 }
 
 func (manager *RegistrationsManager) register(n *node) {
+	if manager.containsMember(n) {
+		return
+	}
 	manager.events <- &nodeEvent{
 		kind:  "register",
 		value: n,
@@ -223,6 +237,9 @@ func (manager *RegistrationsManager) register(n *node) {
 }
 
 func (manager *RegistrationsManager) deregister(n *node) {
+	if !manager.containsMember(n) {
+		return
+	}
 	manager.events <- &nodeEvent{
 		kind:  "deregister",
 		value: n,
@@ -231,10 +248,10 @@ func (manager *RegistrationsManager) deregister(n *node) {
 }
 
 func (manager *RegistrationsManager) handleRegister(node *node) {
-	_, hasNode := manager.nodes.Load(node.Id_)
-	if hasNode {
+	if manager.containsMember(node) {
 		return
 	}
+	manager.nodes.Store(node.Id_, node)
 	registrations := node.registrations()
 	for _, registration := range registrations {
 		value, has := manager.values.Load(registration.Name)
@@ -257,6 +274,7 @@ func (manager *RegistrationsManager) handleDeregister(n *node) {
 	if !hasNode {
 		return
 	}
+	manager.nodes.Delete(n.Id_)
 	existNode := existNode0.(*node)
 	registrations := existNode.registrations()
 	for _, registration := range registrations {

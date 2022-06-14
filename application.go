@@ -130,7 +130,7 @@ func New(options ...Option) (app Application) {
 				port = 443
 			}
 		}
-		if port < 1024 || port > 65535 {
+		if port < 1 || port > 65535 {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(fmt.Errorf("port is invalid, port must great than 1024 or less than 65536"))))
 			return
 		}

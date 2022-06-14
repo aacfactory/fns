@@ -50,3 +50,72 @@ type Service interface {
 	Handle(context context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
 	Close()
 }
+
+func NewAbstract(name string, internal bool, components ...Component) Abstract {
+	svc := Abstract{
+		name:       name,
+		internal:   internal,
+		log:        nil,
+		components: make(map[string]Component),
+	}
+	if components != nil && len(components) > 0 {
+		for _, component := range components {
+			if component == nil {
+				continue
+			}
+			svc.components[component.Name()] = component
+		}
+	}
+	return svc
+}
+
+type Abstract struct {
+	name       string
+	internal   bool
+	log        logs.Logger
+	components map[string]Component
+}
+
+func (svc *Abstract) Build(options Options) (err error) {
+	svc.log = options.Log
+	if svc.components != nil {
+		for _, component := range svc.components {
+			componentConfig, hasComponentConfig := options.Config.Node(component.Name())
+			if !hasComponentConfig {
+				componentConfig, _ = configuares.NewJsonConfig([]byte{'{', '}'})
+			}
+			componentBuildErr := component.Build(ComponentOptions{
+				Log:    svc.log.With("component", component.Name()),
+				Config: componentConfig,
+			})
+			if componentBuildErr != nil {
+				if svc.log.ErrorEnabled() {
+					svc.log.Error().Caller().Cause(errors.Map(componentBuildErr).WithMeta("component", component.Name())).Message("service: build component failed")
+				}
+				err = errors.Warning("service: build failed").WithMeta("service", svc.name).WithCause(componentBuildErr)
+			}
+			return
+		}
+	}
+	return
+}
+
+func (svc *Abstract) Name() (name string) {
+	name = svc.name
+	return
+}
+
+func (svc *Abstract) Internal() (internal bool) {
+	internal = svc.internal
+	return
+}
+
+func (svc *Abstract) Components() (components map[string]Component) {
+	components = svc.components
+	return
+}
+
+func (svc *Abstract) Log() (log logs.Logger) {
+	log = svc.log
+	return
+}

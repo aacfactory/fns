@@ -130,7 +130,7 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors
 		return
 	}
 	if handleResult != nil {
-		v = handleResult.([]byte)
+		v = handleResult.(json.RawMessage)
 	}
 	return
 }
@@ -162,7 +162,7 @@ type endpoint struct {
 
 func (e *endpoint) Request(ctx context.Context, fn string, argument Argument) (result Result) {
 	fr := NewResult()
-	if e.ws.Dispatch(newFn(ctx, e.svc, fn, argument, fr)) {
+	if !e.ws.Dispatch(newFn(ctx, e.svc, fn, argument, fr)) {
 		fr.Failed(errors.Unavailable("fns: service is overload").WithMeta("fns", "overload"))
 	}
 	result = fr

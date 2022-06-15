@@ -73,6 +73,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 		barrier = defaultBarrier()
 	}
 	v = &endpoints{
+		appId:   options.AppId,
 		log:     options.Log,
 		ws:      ws,
 		barrier: barrier,
@@ -89,6 +90,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 }
 
 type endpoints struct {
+	appId         string
 	log           logs.Logger
 	ws            workers.Workers
 	barrier       Barrier
@@ -102,7 +104,7 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
 	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
-		ctx = initContext(ctx, e.log, e.ws, e.group)
+		ctx = initContext(ctx, e.appId, e.log, e.ws, e.group)
 		ctx = SetRequest(ctx, r)
 		ep, has := e.group.Get(ctx, service)
 		if !has {

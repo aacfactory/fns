@@ -85,8 +85,9 @@ func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, 
 	return
 }
 
-func initContext(ctx context.Context, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery) context.Context {
+func initContext(ctx context.Context, appId string, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
+		appId:     appId,
 		log:       log,
 		ws:        ws,
 		discovery: discovery,
@@ -99,7 +100,14 @@ func getRuntime(ctx context.Context) (v *contextValue) {
 	return
 }
 
+func GetAppId(ctx context.Context) (appId string) {
+	rt := getRuntime(ctx)
+	appId = rt.appId
+	return
+}
+
 type contextValue struct {
+	appId     string
 	log       logs.Logger
 	ws        workers.Workers
 	discovery EndpointDiscovery

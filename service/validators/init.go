@@ -21,10 +21,12 @@ import "github.com/go-playground/validator/v10"
 func init() {
 	_validator = &validate{
 		validate: validateRegisterRegex(
-			validateRegisterNotBlank(
-				validateRegisterNotEmpty(
-					validateRegisterDefault(
-						validator.New(),
+			validateRegisterIsUID(
+				validateRegisterNotBlank(
+					validateRegisterNotEmpty(
+						validateRegisterDefault(
+							validator.New(),
+						),
 					),
 				),
 			),

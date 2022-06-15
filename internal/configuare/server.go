@@ -60,8 +60,9 @@ func (config *TLS) Config() (serverTLS *tls.Config, clientTLS *tls.Config, err e
 }
 
 type Server struct {
-	Port    int             `json:"port"`
-	Cors    *Cors           `json:"cors"`
-	TLS     *TLS            `json:"tls"`
-	Options json.RawMessage `json:"options"`
+	Port         int                        `json:"port"`
+	Cors         *Cors                      `json:"cors"`
+	TLS          *TLS                       `json:"tls"`
+	Options      json.RawMessage            `json:"options"`
+	Interceptors map[string]json.RawMessage `json:"interceptors"`
 }

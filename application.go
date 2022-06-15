@@ -302,6 +302,42 @@ func New(options ...Option) (app Application) {
 		docHandlerOptions.Document = &doc
 	}
 	httpHandlers.Append(server.NewDocumentHandler(docHandlerOptions))
+	if len(opt.serverInterceptorHandlers) > 0 {
+		for _, handler := range opt.serverInterceptorHandlers {
+			if handler == nil {
+				continue
+			}
+			interceptorHandlerName := strings.TrimSpace(handler.Name())
+			if interceptorHandlerName == "" {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, one of interceptor handlers has no name")))
+				return
+			}
+			interceptorHandlerLog := log.With("interceptor", interceptorHandlerName)
+			var interceptorHandlerConfig configuares.Config
+			var interceptorHandlerConfigGetErr error
+			if config.Server.Interceptors != nil {
+				interceptorHandlerConfigRaw, hasInterceptorHandlerConfig := config.Server.Interceptors[interceptorHandlerName]
+				if hasInterceptorHandlerConfig {
+					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configuares.NewJsonConfig(interceptorHandlerConfigRaw)
+				} else {
+					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configuares.NewJsonConfig([]byte{'{', '}'})
+				}
+			}
+			if interceptorHandlerConfigGetErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, get interceptor handler config failed").WithCause(interceptorHandlerConfigGetErr).WithMeta("interceptor", interceptorHandlerName)))
+				return
+			}
+			interceptorHBuildErr := handler.Build(server.InterceptorHandlerOptions{
+				Log:    interceptorHandlerLog,
+				Config: interceptorHandlerConfig,
+			})
+			if interceptorHBuildErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, build interceptor handler failed").WithCause(interceptorHBuildErr).WithMeta("interceptor", interceptorHandlerName)))
+				return
+			}
+			httpHandlers.Append(handler)
+		}
+	}
 	if clusterManager != nil {
 		httpHandlers.Append(cluster.NewHandler(cluster.HandlerOptions{
 			Log:       log,

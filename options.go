@@ -36,25 +36,27 @@ type Option func(*Options) error
 
 var (
 	defaultOptions = &Options{
-		version:               "0.0.0",
-		autoMaxProcsMin:       0,
-		autoMaxProcsMax:       0,
-		configRetrieverOption: configuare.DefaultConfigRetrieverOption(),
-		barrier:               nil,
-		server:                &server.FastHttp{},
-		shutdownTimeout:       60 * time.Second,
+		version:                   "0.0.0",
+		autoMaxProcsMin:           0,
+		autoMaxProcsMax:           0,
+		configRetrieverOption:     configuare.DefaultConfigRetrieverOption(),
+		barrier:                   nil,
+		server:                    &server.FastHttp{},
+		serverInterceptorHandlers: make([]server.InterceptorHandler, 0, 1),
+		shutdownTimeout:           60 * time.Second,
 	}
 )
 
 type Options struct {
-	version               string
-	autoMaxProcsMin       int
-	autoMaxProcsMax       int
-	configRetrieverOption configuares.RetrieverOption
-	barrier               service.Barrier
-	server                server.Http
-	clientBuilder         cluster.ClientBuilder
-	shutdownTimeout       time.Duration
+	version                   string
+	autoMaxProcsMin           int
+	autoMaxProcsMax           int
+	configRetrieverOption     configuares.RetrieverOption
+	barrier                   service.Barrier
+	server                    server.Http
+	serverInterceptorHandlers []server.InterceptorHandler
+	clientBuilder             cluster.ClientBuilder
+	shutdownTimeout           time.Duration
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -154,6 +156,16 @@ func Server(server server.Http) Option {
 			return fmt.Errorf("customize http failed for server is nil")
 		}
 		options.server = server
+		return nil
+	}
+}
+
+func InterceptorHandlers(handlers ...server.InterceptorHandler) Option {
+	return func(options *Options) error {
+		if handlers == nil || len(handlers) == 0 {
+			return nil
+		}
+		options.serverInterceptorHandlers = append(options.serverInterceptorHandlers, handlers...)
 		return nil
 	}
 }

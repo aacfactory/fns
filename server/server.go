@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/logger"
@@ -44,6 +45,17 @@ const (
 type Handler interface {
 	Handle(writer http.ResponseWriter, request *http.Request) (ok bool)
 	Close()
+}
+
+type InterceptorHandlerOptions struct {
+	Log    logs.Logger
+	Config configuares.Config
+}
+
+type InterceptorHandler interface {
+	Handler
+	Build(options InterceptorHandlerOptions) (err error)
+	Name() (name string)
 }
 
 func NewHandlers() (handlers *Handlers) {

@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/commons/container/ring"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -148,12 +148,12 @@ func (r *Registration) unavailable() (ok bool) {
 
 func newRegistrations(value *Registration) *Registrations {
 	return &Registrations{
-		r: commons.NewRing(value),
+		r: ring.New(value),
 	}
 }
 
 type Registrations struct {
-	r *commons.Ring
+	r *ring.Ring
 }
 
 func (r *Registrations) Next() (v *Registration, has bool) {

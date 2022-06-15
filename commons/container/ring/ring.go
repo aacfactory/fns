@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package commons
+package ring
 
 import (
-	"github.com/valyala/bytebufferpool"
+	"bytes"
 	"sync"
 )
 
@@ -25,12 +25,12 @@ type Keyable interface {
 	Key() (key string)
 }
 
-type RingEntry struct {
-	next, prev *RingEntry
+type entry struct {
+	next, prev *entry
 	value      Keyable
 }
 
-func NewRing(values ...Keyable) (r *Ring) {
+func New(values ...Keyable) (r *Ring) {
 	r = &Ring{
 		mutex: sync.RWMutex{},
 		head:  nil,
@@ -46,7 +46,7 @@ func NewRing(values ...Keyable) (r *Ring) {
 
 type Ring struct {
 	mutex sync.RWMutex
-	head  *RingEntry
+	head  *entry
 	size  int
 }
 
@@ -55,19 +55,19 @@ func (r *Ring) Append(v Keyable) {
 		return
 	}
 	r.mutex.Lock()
-	entry := &RingEntry{
+	e := &entry{
 		value: v,
 	}
 	if r.head == nil {
-		entry.next = entry
-		entry.prev = entry
-		r.head = entry
+		e.next = e
+		e.prev = e
+		r.head = e
 	} else {
 		prev := r.head.prev
-		prev.next = entry
-		entry.prev = prev
-		entry.next = r.head
-		r.head.prev = entry
+		prev.next = e
+		e.prev = prev
+		e.next = r.head
+		r.head.prev = e
 	}
 	r.size++
 	r.mutex.Unlock()
@@ -83,14 +83,14 @@ func (r *Ring) Remove(v Keyable) {
 		return
 	}
 	for i := 0; i < r.size; i++ {
-		entry := r.next()
-		if entry.value.Key() == v.Key() {
-			if entry.prev.value.Key() == v.Key() && entry.next.value.Key() == v.Key() {
+		e := r.next()
+		if e.value.Key() == v.Key() {
+			if e.prev.value.Key() == v.Key() && e.next.value.Key() == v.Key() {
 				r.head = nil
 				break
 			}
-			prev := entry.prev
-			next := entry.next
+			prev := e.prev
+			next := e.next
 			prev.next = next
 			break
 		}
@@ -136,25 +136,24 @@ func (r *Ring) Size() (size int) {
 
 func (r *Ring) String() (value string) {
 	r.mutex.RLock()
-	p := bytebufferpool.Get()
+	p := bytes.NewBufferString("")
 	_ = p.WriteByte('[')
 	for i := 0; i < r.size; i++ {
-		entry := r.next()
+		e := r.next()
 		if i == 0 {
-			_, _ = p.WriteString(entry.value.Key())
+			_, _ = p.WriteString(e.value.Key())
 		} else {
 			_, _ = p.WriteString(", ")
-			_, _ = p.WriteString(entry.value.Key())
+			_, _ = p.WriteString(e.value.Key())
 		}
 	}
 	_ = p.WriteByte(']')
 	value = p.String()
-	bytebufferpool.Put(p)
 	r.mutex.RUnlock()
 	return
 }
 
-func (r *Ring) next() (entry *RingEntry) {
+func (r *Ring) next() (entry *entry) {
 	entry = r.head
 	r.head = r.head.next
 	return

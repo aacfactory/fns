@@ -16,7 +16,6 @@
 
 package commons
 
-
 import (
 	"fmt"
 	"strings"

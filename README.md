@@ -1,63 +1,70 @@
 # 项目简介
+
 FNS 是一个类 FaaS 的 http 服务框架。   
 其主要目标是提供快速构建一个 FaaS 项目的模式与非侵入式生态。  
 其宗旨为亲和性标准化去构建一个可持续发展的 http 项目。
 
 ## 特性列表
+
 * [x] 标准化
 * [x] 环境化配置
 * [x] 代码生成
-  * [x] fns service
-  * [x] open api documents 
-  * [x] 参数验证
-* [x] 高并发 
+    * [x] fns service
+    * [x] open api documents
+    * [x] 参数验证
+* [x] 高并发
 * [ ] 分布式
-  * [ ] DOCKER SWARM
-  * [ ] KUBERNETES
-  * [ ] ETCD 
+    * [ ] DOCKER SWARM
+    * [ ] KUBERNETES
+    * [ ] ETCD
 * [ ] authorizations
-  * [x] JWT
+    * [x] JWT
 * [x] 重复提交拦截
-  * [x] 本地
-  * [x] redis
+    * [x] 本地
+    * [x] redis
 * [ ] 数据库
-  * [x] sql 
-  * [x] 分布式 sql 事务 
-  * [x] postgres orm
-  * [ ] mysql orm
-  * [ ] dgraph
-  * [ ] graphQL to sql
-  * [x] redis
+    * [x] sql
+    * [x] 分布式 sql 事务
+    * [x] postgres orm
+    * [ ] mysql orm
+    * [ ] dgraph
+    * [ ] graphQL to sql
+    * [x] redis
 * [ ] 消息中间件
-  * [ ] RabbitMQ
-  * [ ] Kafka
-  * [ ] RocketMQ
+    * [ ] RabbitMQ
+    * [ ] Kafka
+    * [ ] RocketMQ
 * [ ] DDD
 * [ ] OAUTH CLIENT
-  * [ ] Wechat
-  * [ ] Apple
-  * [ ] Alipay
+    * [ ] Wechat
+    * [ ] Apple
+    * [ ] Alipay
 * [ ] OAUTH SERVER
 * [ ] 第三方支付
-  * [ ] Wechat
-  * [ ] Alipay
-   
+    * [ ] Wechat
+    * [ ] Alipay
+
 ## 使用说明
-使用要求：  
+
+使用要求：
+
 * go1.17 或更高
 * go mod 项目环境
 
 下载代码生成器（具体版本见fnc项目）
+
 ```bash
 go install github.com/aacfactory/fnc@v1.6.1
 ```
 
 获取库
+
 ```bash
 go get github.com/aacfactory/fns
 ```
 
 建议的项目结构
+
 ```
 |-- main.go
 |-- config/
@@ -73,6 +80,7 @@ go get github.com/aacfactory/fns
 ```
 
 编辑 config/app.yaml
+
 ```yaml
 name: project name
 description: |
@@ -114,11 +122,15 @@ services:
         - wechat-miniapp
       expirations: 360h0m0s
 ```
+
 创建内网传送密码 config/sk.txt
+
 ```
 YOUR_PASSWORD
 ```
+
 编辑 main.go
+
 ```go
 
 var (
@@ -168,7 +180,9 @@ func main() {
 }
 
 ```
+
 创建 fn service，编辑foo/doc.go
+
 ```go
 // Package foo
 // @service foo
@@ -177,7 +191,9 @@ func main() {
 // @internal false
 package foo
 ```
+
 创建 fn
+
 ```go
 // CountNumParam
 // @title open api title
@@ -228,26 +244,35 @@ func countNum(ctx fns.Context, param CountNumParam) (v *CountNumResult, err erro
 }
 
 ```
-使用 go:generate 命令生成 service 
+
+使用 go:generate 命令生成 service
+
 ```bash
 go generate
 ```
+
 将生成的 service 布到 main 程序中。
+
 ```go
 deployErr := app.Deploy(
 	foo.Service(),
 )
 ```
+
 ### JWT
+
 ```go
 claims := jwt.NewUserClaims()
 claims.SetIntUserId(userId)
 claims.SetSub("some sub")
 token, tokenErr := ctx.App().Authorizations().Encode(ctx, claims)
 ```
+
 ### 数据库
+
 导入对应的驱动，目前支持 `github.com/lib/pq`。  
 在repository创建model
+
 ```go
 type UserRow struct {
 	Id               int64                 `col:"ID,incrPk" json:"ID"`
@@ -304,7 +329,9 @@ type File struct {
 }
 
 ```
+
 在 fn 中使用（postgres）
+
 ```go
 // QUERY ONE
 row := &repository.UserRow{}
@@ -325,6 +352,7 @@ deleteErr := postgres.Delete(ctx, row)
 ```
 
 ## 压力测试
+
 在AMD 3950X 64G内存的单机上 K6 压力测试结果（50 VUS 30s）。
 
 ```shell

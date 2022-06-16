@@ -77,22 +77,26 @@ func (component *tokenStoreComponent) Remove(ctx context.Context, tokenId string
 func (component *tokenStoreComponent) Close() {
 }
 
-type DiscardTokenStore struct {
+func DiscardTokenStore() TokenStore {
+	return &discardTokenStore{}
 }
 
-func (store *DiscardTokenStore) Build(options TokenStoreOptions) (err error) {
+type discardTokenStore struct {
+}
+
+func (store *discardTokenStore) Build(options TokenStoreOptions) (err error) {
 	return
 }
 
-func (store *DiscardTokenStore) Exist(ctx context.Context, tokenId string) (ok bool) {
+func (store *discardTokenStore) Exist(ctx context.Context, tokenId string) (ok bool) {
 	ok = true
 	return
 }
 
-func (store *DiscardTokenStore) Save(ctx context.Context, token Token) (err error) {
+func (store *discardTokenStore) Save(ctx context.Context, token Token) (err error) {
 	return
 }
 
-func (store *DiscardTokenStore) Remove(ctx context.Context, tokenId string) (err error) {
+func (store *discardTokenStore) Remove(ctx context.Context, tokenId string) (err error) {
 	return
 }

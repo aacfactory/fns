@@ -16,6 +16,8 @@
 
 package documents
 
+import "github.com/aacfactory/fns/service"
+
 func newFn(name string, title string, description string, authorization bool, deprecated bool, arg *Element, result *Element) *Fn {
 	return &Fn{
 		Name_:          name,
@@ -63,12 +65,12 @@ func (fn *Fn) Deprecated() (deprecated bool) {
 	return
 }
 
-func (fn *Fn) Argument() (argument *Element) {
+func (fn *Fn) Argument() (argument service.ElementDocument) {
 	argument = fn.Argument_
 	return
 }
 
-func (fn *Fn) Result() (result *Element) {
+func (fn *Fn) Result() (result service.ElementDocument) {
 	result = fn.Result_
 	return
 }

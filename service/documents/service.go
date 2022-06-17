@@ -16,11 +16,13 @@
 
 package documents
 
+import "github.com/aacfactory/fns/service"
+
 func NewService(name string, description string) *Service {
 	return &Service{
 		Name_:        name,
 		Description_: description,
-		Fns_:         make([]*Fn, 0, 1),
+		Fns_:         make([]service.FnDocument, 0, 1),
 	}
 }
 
@@ -32,7 +34,7 @@ type Service struct {
 	// as description of tag, support markdown
 	Description_ string `json:"description"`
 	// Fns
-	Fns_ []*Fn `json:"fns"`
+	Fns_ []service.FnDocument `json:"fns"`
 }
 
 func (svc *Service) Name() (name string) {
@@ -45,7 +47,7 @@ func (svc *Service) Description() (description string) {
 	return
 }
 
-func (svc *Service) Fns() (fns []*Fn) {
+func (svc *Service) Fns() (fns []service.FnDocument) {
 	fns = svc.Fns_
 	return
 }

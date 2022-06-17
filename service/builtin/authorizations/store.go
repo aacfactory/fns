@@ -18,9 +18,7 @@ package authorizations
 
 import (
 	"context"
-	"fmt"
 	"github.com/aacfactory/configuares"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
@@ -47,14 +45,9 @@ func (component *tokenStoreComponent) Name() (name string) {
 }
 
 func (component *tokenStoreComponent) Build(options service.ComponentOptions) (err error) {
-	config, hasConfig := options.Config.Node("store")
-	if !hasConfig {
-		err = errors.Warning("fns: build authorizations token store failed").WithCause(fmt.Errorf("there is no store node in authorizations config node"))
-		return
-	}
 	err = component.store.Build(TokenStoreOptions{
 		Log:    options.Log,
-		Config: config,
+		Config: options.Config,
 	})
 	return
 }

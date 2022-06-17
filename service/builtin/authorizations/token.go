@@ -59,14 +59,9 @@ func (component *tokenEncodingComponent) Name() (name string) {
 }
 
 func (component *tokenEncodingComponent) Build(options service.ComponentOptions) (err error) {
-	config, hasConfig := options.Config.Node("encoding")
-	if !hasConfig {
-		err = errors.Warning("fns: build authorizations token encoding failed").WithCause(fmt.Errorf("there is no encoding node in authorizations config node"))
-		return
-	}
 	err = component.encoding.Build(TokenEncodingOptions{
 		Log:    options.Log,
-		Config: config,
+		Config: options.Config,
 	})
 	return
 }

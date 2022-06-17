@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
@@ -92,7 +93,7 @@ func (svc *Abstract) Build(options Options) (err error) {
 				if svc.log.ErrorEnabled() {
 					svc.log.Error().Caller().Cause(errors.Map(componentBuildErr).WithMeta("component", component.Name())).Message("service: build component failed")
 				}
-				err = errors.Warning("service: build failed").WithMeta("service", svc.name).WithCause(componentBuildErr)
+				err = errors.Warning(fmt.Sprintf("%s: build failed", svc.name)).WithMeta("service", svc.name).WithCause(componentBuildErr)
 			}
 			return
 		}
@@ -112,6 +113,18 @@ func (svc *Abstract) Internal() (internal bool) {
 
 func (svc *Abstract) Components() (components map[string]Component) {
 	components = svc.components
+	return
+}
+
+func (svc *Abstract) Close() {
+	if svc.components != nil && len(svc.components) > 0 {
+		for _, component := range svc.components {
+			component.Close()
+		}
+	}
+	if svc.log.DebugEnabled() {
+		svc.log.Debug().Message(fmt.Sprintf("%s: closed", svc.name))
+	}
 	return
 }
 

@@ -21,12 +21,13 @@ import (
 	"github.com/aacfactory/configuares"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/logs"
 	"golang.org/x/net/context"
 )
 
 var (
-	encoding = DefaultTokenEncoding()
-	store    = DiscardTokenStore()
+	encoding = createDefaultTokenEncoding()
+	store    = createDiscardTokenStore()
 )
 
 func RegisterTokenEncoding(tokenEncoding TokenEncoding) {
@@ -44,7 +45,7 @@ func RegisterTokenStore(tokenStore TokenStore) {
 }
 
 func Service() (v service.Service) {
-	v = &authorizationService{
+	v = &_service_{
 		components: map[string]service.Component{
 			"store": &tokenStoreComponent{
 				store: store,
@@ -57,21 +58,23 @@ func Service() (v service.Service) {
 	return
 }
 
-type authorizationService struct {
+type _service_ struct {
+	log        logs.Logger
 	components map[string]service.Component
 }
 
-func (svc *authorizationService) Name() (name string) {
+func (svc *_service_) Name() (name string) {
 	name = "authorizations"
 	return
 }
 
-func (svc *authorizationService) Internal() (internal bool) {
+func (svc *_service_) Internal() (internal bool) {
 	internal = true
 	return
 }
 
-func (svc *authorizationService) Build(options service.Options) (err error) {
+func (svc *_service_) Build(options service.Options) (err error) {
+	svc.log = options.Log
 	if svc.components != nil {
 		for cn, component := range svc.components {
 			if component == nil {
@@ -94,16 +97,16 @@ func (svc *authorizationService) Build(options service.Options) (err error) {
 	return
 }
 
-func (svc *authorizationService) Components() (components map[string]service.Component) {
+func (svc *_service_) Components() (components map[string]service.Component) {
 	components = svc.components
 	return
 }
 
-func (svc *authorizationService) Document() (doc service.Document) {
+func (svc *_service_) Document() (doc service.Document) {
 	return
 }
 
-func (svc *authorizationService) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
+func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case "encode":
 		param := EncodeParam{}
@@ -151,6 +154,13 @@ func (svc *authorizationService) Handle(ctx context.Context, fn string, argument
 	return
 }
 
-func (svc *authorizationService) Close() {
-
+func (svc *_service_) Close() {
+	if svc.components != nil && len(svc.components) > 0 {
+		for _, component := range svc.components {
+			component.Close()
+		}
+	}
+	if svc.log.DebugEnabled() {
+		svc.log.Debug().Message("authorizations: closed")
+	}
 }

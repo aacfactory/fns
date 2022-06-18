@@ -33,6 +33,7 @@ type TokenStore interface {
 	Exist(ctx context.Context, tokenId string) (ok bool)
 	Save(ctx context.Context, token Token) (err error)
 	Remove(ctx context.Context, tokenId string) (err error)
+	Close() (err error)
 }
 
 type tokenStoreComponent struct {
@@ -68,9 +69,10 @@ func (component *tokenStoreComponent) Remove(ctx context.Context, tokenId string
 }
 
 func (component *tokenStoreComponent) Close() {
+	_ = component.store.Close()
 }
 
-func DiscardTokenStore() TokenStore {
+func createDiscardTokenStore() TokenStore {
 	return &discardTokenStore{}
 }
 
@@ -91,5 +93,9 @@ func (store *discardTokenStore) Save(ctx context.Context, token Token) (err erro
 }
 
 func (store *discardTokenStore) Remove(ctx context.Context, tokenId string) (err error) {
+	return
+}
+
+func (store *discardTokenStore) Close() (err error) {
 	return
 }

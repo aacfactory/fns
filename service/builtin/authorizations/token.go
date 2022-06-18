@@ -113,19 +113,19 @@ func (t *defaultToken) Bytes() (p []byte) {
 	return
 }
 
-func DefaultTokenEncoding() TokenEncoding {
-	return &defaultTokenEncoding{}
+func createDefaultTokenEncoding() TokenEncoding {
+	return &DefaultTokenEncoding{}
 }
 
-type defaultTokenEncoding struct {
+type DefaultTokenEncoding struct {
 	expires time.Duration
 }
 
-func (encoding *defaultTokenEncoding) Build(options TokenEncodingOptions) (err error) {
+func (encoding *DefaultTokenEncoding) Build(options TokenEncodingOptions) (err error) {
 	expireMinutes := 0
 	_, expireMinutesGetErr := options.Config.Get("expireMinutes", &expireMinutes)
 	if expireMinutesGetErr != nil {
-		err = errors.Warning("fns: default token encoding build failed").WithCause(expireMinutesGetErr).WithMeta("component", "defaultTokenEncoding")
+		err = errors.Warning("fns: default token encoding build failed").WithCause(expireMinutesGetErr).WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	if expireMinutes < 1 {
@@ -135,7 +135,7 @@ func (encoding *defaultTokenEncoding) Build(options TokenEncodingOptions) (err e
 	return
 }
 
-func (encoding *defaultTokenEncoding) Encode(id string, attributes *json.Object) (t Token, err error) {
+func (encoding *DefaultTokenEncoding) Encode(id string, attributes *json.Object) (t Token, err error) {
 	v := &defaultToken{
 		Id_:        uid.UID(),
 		NotBefore_: time.Now(),
@@ -145,7 +145,7 @@ func (encoding *defaultTokenEncoding) Encode(id string, attributes *json.Object)
 	}
 	p, encodeErr := json.Marshal(v)
 	if encodeErr != nil {
-		err = errors.Warning("fns: default token encoding failed").WithCause(encodeErr).WithMeta("component", "defaultTokenEncoding")
+		err = errors.Warning("fns: default token encoding failed").WithCause(encodeErr).WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	signature := secret.Sign(p)
@@ -154,25 +154,25 @@ func (encoding *defaultTokenEncoding) Encode(id string, attributes *json.Object)
 	return
 }
 
-func (encoding *defaultTokenEncoding) Decode(authorization []byte) (token Token, err error) {
+func (encoding *DefaultTokenEncoding) Decode(authorization []byte) (token Token, err error) {
 	if authorization == nil || len(authorization) < 6 || bytes.Index(authorization, []byte("Fns ")) != 0 {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "defaultTokenEncoding")
+		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	raw := authorization[4:]
 	items := bytes.Split(raw, []byte{'.'})
 	if len(items) != 2 {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "defaultTokenEncoding")
+		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	if !secret.Verify(items[0], items[1]) {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "defaultTokenEncoding")
+		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	v := &defaultToken{}
 	decodeErr := json.Unmarshal(items[0], v)
 	if decodeErr != nil {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "defaultTokenEncoding").WithCause(decodeErr)
+		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding").WithCause(decodeErr)
 		return
 	}
 	v.p = raw

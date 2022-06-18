@@ -24,13 +24,26 @@ import (
 	"golang.org/x/net/context"
 )
 
-func Service(encoding TokenEncoding, store TokenStore) (v service.Service) {
-	if encoding == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: create authorizations service failed").WithCause(fmt.Errorf("encoding is nil"))))
+var (
+	encoding = DefaultTokenEncoding()
+	store    = DiscardTokenStore()
+)
+
+func RegisterTokenEncoding(tokenEncoding TokenEncoding) {
+	if tokenEncoding == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: register authorizations components failed").WithCause(fmt.Errorf("encoding is nil"))))
 	}
-	if store == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: create authorizations service failed").WithCause(fmt.Errorf("store is nil"))))
+	encoding = tokenEncoding
+}
+
+func RegisterTokenStore(tokenStore TokenStore) {
+	if tokenStore == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: register authorizations components failed").WithCause(fmt.Errorf("store is nil"))))
 	}
+	store = tokenStore
+}
+
+func Service() (v service.Service) {
 	v = &authorizationService{
 		components: map[string]service.Component{
 			"store": &tokenStoreComponent{

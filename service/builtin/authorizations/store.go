@@ -33,6 +33,7 @@ type TokenStore interface {
 	Exist(ctx context.Context, tokenId string) (ok bool)
 	Save(ctx context.Context, token Token) (err error)
 	Remove(ctx context.Context, tokenId string) (err error)
+	RemoveUserTokens(ctx context.Context, userId string) (err error)
 	Close() (err error)
 }
 
@@ -93,6 +94,10 @@ func (store *discardTokenStore) Save(ctx context.Context, token Token) (err erro
 }
 
 func (store *discardTokenStore) Remove(ctx context.Context, tokenId string) (err error) {
+	return
+}
+
+func (store *discardTokenStore) RemoveUserTokens(ctx context.Context, userId string) (err error) {
 	return
 }
 

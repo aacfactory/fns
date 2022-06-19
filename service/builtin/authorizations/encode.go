@@ -39,12 +39,12 @@ func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err e
 		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
 		return
 	}
-	encoding, encodingOk := encodingComponent.(*tokenEncodingComponent)
+	encoder, encodingOk := encodingComponent.(*tokenEncodingComponent)
 	if !encodingOk {
 		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
 		return
 	}
-	token, encodeErr := encoding.Encode(param.Id, param.Attributes)
+	token, encodeErr := encoder.Encode(param.Id, param.Attributes)
 	if encodeErr != nil {
 		err = errors.ServiceError("fns: encode failed").WithCause(encodeErr)
 		return
@@ -54,12 +54,12 @@ func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err e
 		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
-	store, storeOk := storeComponent.(*tokenStoreComponent)
+	st, storeOk := storeComponent.(*tokenStoreComponent)
 	if !storeOk {
 		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
-	saveErr := store.Save(ctx, token)
+	saveErr := st.Save(ctx, token)
 	if saveErr != nil {
 		err = errors.ServiceError("fns: encode failed").WithCause(saveErr)
 		return

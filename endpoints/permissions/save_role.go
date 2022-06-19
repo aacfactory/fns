@@ -21,13 +21,12 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
+func SaveRole(ctx context.Context, role Role) (err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
-		err = errors.Warning("permissions: verify user permissions failed").WithCause(fmt.Errorf("there is no request in context"))
+		err = errors.Warning("permissions: save role failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
 	}
 	if !request.User().Authenticated() {
@@ -39,17 +38,11 @@ func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
 		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, "verify", service.NewArgument(&permissions.VerifyArgument{
-		AllowedRoles: roles,
-	}))
-	result := &permissions.VerifyResult{}
+	fr := endpoint.Request(ctx, "save_role", service.NewArgument(mapToPermissionRole(role)))
+	result := &service.Empty{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
-		return
-	}
-	if !result.Ok {
-		err = errors.Forbidden("permissions: forbidden")
 		return
 	}
 	return

@@ -21,10 +21,6 @@ import (
 	"github.com/aacfactory/errors"
 )
 
-type SaveRoleArgument struct {
-	Name string `json:"name"`
-}
-
 func saveRole(ctx context.Context, role *Role) (err errors.CodeError) {
 	ps := getStore(ctx)
 	saveErr := ps.SaveRole(ctx, role)

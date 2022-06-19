@@ -24,7 +24,7 @@ import (
 	"github.com/aacfactory/fns/service/builtin/permissions"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
+func CanWriteResource(ctx context.Context, resource string) (ok bool, err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
 		err = errors.Warning("permissions: verify user permissions failed").WithCause(fmt.Errorf("there is no request in context"))
@@ -39,18 +39,15 @@ func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
 		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, "verify", service.NewArgument(&permissions.VerifyArgument{
-		AllowedRoles: roles,
+	fr := endpoint.Request(ctx, "check_user_can_write_resource", service.NewArgument(&permissions.CheckResourcePermissionArgument{
+		Resource: resource,
 	}))
-	result := &permissions.VerifyResult{}
+	result := &permissions.CheckResourcePermissionResult{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return
 	}
-	if !result.Ok {
-		err = errors.Forbidden("permissions: forbidden")
-		return
-	}
+	ok = result.Ok
 	return
 }

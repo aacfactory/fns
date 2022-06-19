@@ -17,7 +17,10 @@
 package permissions
 
 import (
+	"context"
+	"fmt"
 	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
@@ -29,7 +32,13 @@ type StoreOptions struct {
 
 type Store interface {
 	Build(options StoreOptions) (err error)
-	GetUserRoles()
+	Role(ctx context.Context, name string) (role *Role, err error)
+	Roles(ctx context.Context) (roles []*Role, err error)
+	SaveRole(ctx context.Context, role *Role) (err error)
+	RemoveRole(ctx context.Context, name string) (err error)
+	UserRoles(ctx context.Context, userId string) (roles []*Role, err error)
+	UserBindRoles(ctx context.Context, userId string, roleNames ...string) (err error)
+	UserUnbindRoles(ctx context.Context, userId string, roleNames ...string) (err error)
 	Close() (err error)
 }
 
@@ -52,4 +61,17 @@ func (component *storeComponent) Build(options service.ComponentOptions) (err er
 
 func (component *storeComponent) Close() {
 	_ = component.store.Close()
+}
+
+func getStore(ctx context.Context) (v Store) {
+	c, has := service.GetComponent(ctx, "store")
+	if !has {
+		panic(fmt.Sprintf("%+v", errors.Warning("permissions: there is no store in context")))
+	}
+	sc, ok := c.(*storeComponent)
+	if !ok {
+		panic(fmt.Sprintf("%+v", errors.Warning("permissions: type of store in context is invalid")))
+	}
+	v = sc.store
+	return
 }

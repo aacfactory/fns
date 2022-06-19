@@ -21,7 +21,13 @@ import (
 	"github.com/aacfactory/errors"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
-
+func getRoles(ctx context.Context) (result []*Role, err errors.CodeError) {
+	ps := getStore(ctx)
+	var getErr error
+	result, getErr = ps.Roles(ctx)
+	if getErr != nil {
+		err = errors.ServiceError("permissions: get roles from store failed").WithCause(getErr)
+		return
+	}
 	return
 }

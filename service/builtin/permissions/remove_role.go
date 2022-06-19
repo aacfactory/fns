@@ -19,9 +19,24 @@ package permissions
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"strings"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
+type RemoveRoleArgument struct {
+	Name string `json:"name"`
+}
 
+func removeRole(ctx context.Context, argument RemoveRoleArgument) (err errors.CodeError) {
+	name := strings.TrimSpace(argument.Name)
+	if name == "" {
+		err = errors.BadRequest("permissions: role name is empty")
+		return
+	}
+	ps := getStore(ctx)
+	removeErr := ps.RemoveRole(ctx, name)
+	if removeErr != nil {
+		err = errors.ServiceError("permissions: remove role failed").WithCause(removeErr)
+		return
+	}
 	return
 }

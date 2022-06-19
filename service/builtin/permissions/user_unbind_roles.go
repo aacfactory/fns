@@ -19,9 +19,30 @@ package permissions
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"strings"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
+type UserUnbindRolesArgument struct {
+	UserId string   `json:"userId"`
+	Roles  []string `json:"roles"`
+}
 
+func userUnbindRoles(ctx context.Context, argument UserUnbindRolesArgument) (err errors.CodeError) {
+	userId := strings.TrimSpace(argument.UserId)
+	if userId == "" {
+		err = errors.BadRequest("permissions: user id is empty")
+		return
+	}
+	roles := argument.Roles
+	if roles == nil || len(roles) == 0 {
+		err = errors.BadRequest("permissions: roles is empty")
+		return
+	}
+	ps := getStore(ctx)
+	bindErr := ps.UserUnbindRoles(ctx, userId, roles...)
+	if bindErr != nil {
+		err = errors.ServiceError("permissions: unbind user roles failed").WithCause(bindErr)
+		return
+	}
 	return
 }

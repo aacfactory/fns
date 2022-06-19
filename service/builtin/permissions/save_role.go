@@ -21,7 +21,16 @@ import (
 	"github.com/aacfactory/errors"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
+type SaveRoleArgument struct {
+	Name string `json:"name"`
+}
 
+func saveRole(ctx context.Context, role *Role) (err errors.CodeError) {
+	ps := getStore(ctx)
+	saveErr := ps.SaveRole(ctx, role)
+	if saveErr != nil {
+		err = errors.ServiceError("permissions: save role failed").WithCause(saveErr)
+		return
+	}
 	return
 }

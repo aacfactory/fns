@@ -101,29 +101,135 @@ func (svc *_service_) Document() (doc service.Document) {
 func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case "verify":
-
+		fnArgument := VerifyArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v, err = verify(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
 		break
 	case "get_user_roles":
-
+		fnArgument := GetUserRolesArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v, err = userRoles(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
 		break
-
 	case "user_bind_roles":
-
+		fnArgument := UserBindRolesArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		err = userBindRoles(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v = &service.Empty{}
 		break
 	case "user_unbind_roles":
-
+		fnArgument := UserUnbindRolesArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		err = userUnbindRoles(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v = &service.Empty{}
 		break
-	case "get_models":
-
+	case "role":
+		fnArgument := GetRoleArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v, err = getRole(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
 		break
-	case "save_model":
-
+	case "roles":
+		v, err = getRoles(ctx)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
 		break
-	case "remove_model":
-
+	case "save_role":
+		fnArgument := Role{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		err = saveRole(ctx, &fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v = &service.Empty{}
+		break
+	case "remove_role":
+		fnArgument := RemoveRoleArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		err = removeRole(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v = &service.Empty{}
+		break
+	case "check_user_can_read_resource":
+		fnArgument := CheckResourcePermissionArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v, err = canReadResource(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		break
+	case "check_user_can_write_resource":
+		fnArgument := CheckResourcePermissionArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v, err = canWriteResource(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
 		break
 	default:
-		err = errors.NotFound("fns: fn was not found").WithMeta("service", "permissions").WithMeta("fn", fn)
+		err = errors.NotFound("permissions: fn was not found").WithMeta("service", "permissions").WithMeta("fn", fn)
 		break
 	}
 	return

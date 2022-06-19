@@ -19,9 +19,25 @@ package permissions
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"strings"
 )
 
-func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
+type GetRoleArgument struct {
+	Name string `json:"name"`
+}
 
+func getRole(ctx context.Context, argument GetRoleArgument) (result *Role, err errors.CodeError) {
+	name := strings.TrimSpace(argument.Name)
+	if name == "" {
+		err = errors.BadRequest("permissions: role name is empty")
+		return
+	}
+	ps := getStore(ctx)
+	var getErr error
+	result, getErr = ps.Role(ctx, name)
+	if getErr != nil {
+		err = errors.ServiceError("permissions: get role from store failed").WithCause(getErr)
+		return
+	}
 	return
 }

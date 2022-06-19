@@ -26,6 +26,7 @@ type AccessKind int
 
 type Role struct {
 	Name      string                `json:"name"`
+	Parent    string                `json:"parent"`
 	Children  []*Role               `json:"children"`
 	Resources map[string]AccessKind `json:"resources"`
 }
@@ -114,6 +115,24 @@ func (r *Role) Contains(roles []string) (ok bool) {
 				}
 			}
 		}
+	}
+	return
+}
+
+func FindRole(roles []*Role, name string) (role *Role, has bool) {
+	children := make([]*Role, 0, 1)
+	for _, r := range roles {
+		if r.Name == name {
+			role = r
+			has = true
+			return
+		}
+		if r.Children != nil && len(r.Children) > 0 {
+			children = append(children, r.Children...)
+		}
+	}
+	if len(children) > 0 {
+		role, has = FindRole(children, name)
 	}
 	return
 }

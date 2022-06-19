@@ -36,7 +36,7 @@ type decodeResult struct {
 func Verify(ctx context.Context) (err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
-		err = errors.Warning("fns: verify user authorizations failed").WithCause(fmt.Errorf("there is no request in context"))
+		err = errors.Warning("authorizations: verify user authorizations failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
 	}
 	if request.User().Authenticated() {
@@ -44,12 +44,12 @@ func Verify(ctx context.Context) (err errors.CodeError) {
 	}
 	token := request.Authorization()
 	if token == "" {
-		err = errors.Unauthorized("fns: verify user authorizations failed").WithCause(fmt.Errorf("there is no authorization in request"))
+		err = errors.Unauthorized("authorizations: verify user authorizations failed").WithCause(fmt.Errorf("there is no authorization in request"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
 	if !hasEndpoint {
-		err = errors.Warning("fns: there is no authorizations in context, please deploy authorizations service")
+		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
 		return
 	}
 	fr := endpoint.Request(ctx, "decode", service.NewArgument(&decodeParam{

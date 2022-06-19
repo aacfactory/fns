@@ -36,11 +36,11 @@ type encodeResult struct {
 func Encode(ctx context.Context, userId string, userAttributes *json.Object) (token string, err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
 	if !hasEndpoint {
-		err = errors.Warning("fns: there is no authorizations in context, please deploy authorizations service")
+		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
 		return
 	}
 	if userId == "" {
-		err = errors.Warning("fns: encode token failed").WithCause(fmt.Errorf("userId is empty"))
+		err = errors.Warning("authorizations: encode token failed").WithCause(fmt.Errorf("userId is empty"))
 		return
 	}
 	if userAttributes == nil {

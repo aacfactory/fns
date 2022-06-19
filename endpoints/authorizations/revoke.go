@@ -30,11 +30,11 @@ type revokeParam struct {
 func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
 	if !hasEndpoint {
-		err = errors.Warning("fns: there is no authorizations in context, please deploy authorizations service")
+		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
 		return
 	}
 	if tokenId == "" {
-		err = errors.Warning("fns: revoke token failed").WithCause(fmt.Errorf("tokenId is empty"))
+		err = errors.Warning("authorizations: revoke token failed").WithCause(fmt.Errorf("tokenId is empty"))
 		return
 	}
 	fr := endpoint.Request(ctx, "encode", service.NewArgument(&revokeParam{

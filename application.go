@@ -443,14 +443,13 @@ func (app *application) Run() (err error) {
 		listenErr := app.http.ListenAndServe()
 		if listenErr != nil {
 			ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
+			close(httpListenCh)
 		}
 	}(app.http, httpListenCh)
 	select {
 	case <-time.After(1 * time.Second):
-		close(httpListenCh)
 		break
 	case httpErr := <-httpListenCh:
-		close(httpListenCh)
 		err = httpErr
 		return
 	}

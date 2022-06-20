@@ -30,12 +30,13 @@ import (
 )
 
 type ManagerOptions struct {
-	Log     logs.Logger
-	Port    int
-	Kind    string
-	Options json.RawMessage
-	Client  Client
-	DevMode bool
+	Log               logs.Logger
+	Port              int
+	Kind              string
+	Options           json.RawMessage
+	Client            Client
+	DevMode           bool
+	NodesProxyAddress string
 }
 
 func NewManager(options ManagerOptions) (manager *Manager, err error) {
@@ -73,10 +74,11 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		return
 	}
 	manager = &Manager{
-		log:       options.Log.With("cluster", "manager"),
-		devMode:   options.DevMode,
-		bootstrap: bootstrap,
-		interval:  60 * time.Second,
+		log:               options.Log.With("cluster", "manager"),
+		devMode:           options.DevMode,
+		nodesProxyAddress: strings.TrimSpace(options.NodesProxyAddress),
+		bootstrap:         bootstrap,
+		interval:          60 * time.Second,
 		node: &node{
 			Id_:      id,
 			Address:  fmt.Sprintf("%s:%d", ip, options.Port),
@@ -91,14 +93,15 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 }
 
 type Manager struct {
-	log           logs.Logger
-	devMode       bool
-	bootstrap     Bootstrap
-	interval      time.Duration
-	node          *node
-	client        Client
-	registrations *RegistrationsManager
-	stopCh        chan struct{}
+	log               logs.Logger
+	devMode           bool
+	nodesProxyAddress string
+	bootstrap         Bootstrap
+	interval          time.Duration
+	node              *node
+	client            Client
+	registrations     *RegistrationsManager
+	stopCh            chan struct{}
 }
 
 func (manager *Manager) Join() {
@@ -171,6 +174,9 @@ func (manager *Manager) linkMember(target string, members []string, membersLen i
 		return
 	}
 	for i, n := range nodes {
+		if manager.nodesProxyAddress != "" {
+			n.ProxyAddress = manager.nodesProxyAddress
+		}
 		if i == 0 {
 			manager.registrations.register(n)
 			continue

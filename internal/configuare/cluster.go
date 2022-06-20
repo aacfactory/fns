@@ -19,10 +19,11 @@ package configuare
 import "github.com/aacfactory/json"
 
 type Cluster struct {
-	DevMode bool            `json:"devMode"`
-	Kind    string          `json:"kind"`
-	Client  ClusterClient   `json:"client"`
-	Options json.RawMessage `json:"options"`
+	DevMode           bool            `json:"devMode"`
+	NodesProxyAddress string          `json:"nodesProxyAddress"`
+	Kind              string          `json:"kind"`
+	Client            ClusterClient   `json:"client"`
+	Options           json.RawMessage `json:"options"`
 }
 
 type ClusterClient struct {

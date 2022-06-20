@@ -33,10 +33,11 @@ type nodeService struct {
 }
 
 type node struct {
-	Id_      string         `json:"id"`
-	Address  string         `json:"address"`
-	Services []*nodeService `json:"services"`
-	client   Client
+	Id_          string         `json:"id"`
+	Address      string         `json:"address"`
+	ProxyAddress string         `json:"proxyAddress"`
+	Services     []*nodeService `json:"services"`
+	client       Client
 }
 
 func (node *node) Id() string {
@@ -52,13 +53,17 @@ func (node *node) AppendService(service string, internal bool) {
 
 func (node *node) registrations() (registrations []*Registration) {
 	registrations = make([]*Registration, 0, 1)
+	address := node.Address
+	if node.ProxyAddress != "" {
+		address = node.ProxyAddress
+	}
 	if node.Services != nil {
 		for _, service := range node.Services {
 			registrations = append(registrations, &Registration{
 				Id:               node.Id_,
 				Name:             service.Name,
 				Internal:         service.Internal,
-				Address:          node.Address,
+				Address:          address,
 				client:           node.client,
 				unavailableTimes: 0,
 			})

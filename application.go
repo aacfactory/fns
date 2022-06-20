@@ -181,12 +181,13 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		clusterManagerOptions := cluster.ManagerOptions{
-			Log:     log,
-			Port:    httpOptions.Port,
-			Kind:    config.Cluster.Kind,
-			Options: config.Cluster.Options,
-			Client:  client,
-			DevMode: config.Cluster.DevMode,
+			Log:               log,
+			Port:              httpOptions.Port,
+			Kind:              config.Cluster.Kind,
+			Options:           config.Cluster.Options,
+			Client:            client,
+			DevMode:           config.Cluster.DevMode,
+			NodesProxyAddress: config.Cluster.NodesProxyAddress,
 		}
 		var clusterManagerErr error
 		clusterManager, clusterManagerErr = cluster.NewManager(clusterManagerOptions)

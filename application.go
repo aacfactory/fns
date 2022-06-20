@@ -186,6 +186,7 @@ func New(options ...Option) (app Application) {
 			Kind:    config.Cluster.Kind,
 			Options: config.Cluster.Options,
 			Client:  client,
+			DevMode: config.Cluster.DevMode,
 		}
 		var clusterManagerErr error
 		clusterManager, clusterManagerErr = cluster.NewManager(clusterManagerOptions)

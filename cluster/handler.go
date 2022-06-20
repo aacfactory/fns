@@ -178,6 +178,7 @@ type clusterHandler struct {
 }
 
 func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.Request) {
+	devMode := request.Header.Get("X-Fns-DevMode") == "true"
 	bodyRaw, bodyErr := ioutil.ReadAll(request.Body)
 	if bodyErr != nil {
 		handler.failed(writer, errors.BadRequest("fns: read body failed").WithCause(bodyErr))
@@ -190,14 +191,14 @@ func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.
 	}
 	switch request.URL.Path {
 	case joinPath:
-		result, handleErr := handler.handleJoin(body)
+		result, handleErr := handler.handleJoin(body, devMode)
 		if handler == nil {
 			handler.succeed(writer, result)
 		} else {
 			handler.failed(writer, handleErr)
 		}
 	case leavePath:
-		handleErr := handler.handleLeave(body)
+		handleErr := handler.handleLeave(body, devMode)
 		if handler == nil {
 			handler.succeed(writer, nil)
 		} else {
@@ -210,14 +211,13 @@ func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.
 	return
 }
 
-func (handler *clusterHandler) handleJoin(body []byte) (result []byte, err errors.CodeError) {
+func (handler *clusterHandler) handleJoin(body []byte, devMode bool) (result []byte, err errors.CodeError) {
 	n := &node{}
 	decodeErr := json.Unmarshal(body, n)
 	if decodeErr != nil {
 		err = errors.Warning("fns: decode body failed").WithCause(decodeErr)
 		return
 	}
-	handler.manager.registrations.register(n)
 	nodes := make([]*node, 0, 1)
 	nodes = append(nodes, handler.manager.node)
 	nodes = append(nodes, handler.manager.registrations.members()...)
@@ -227,10 +227,16 @@ func (handler *clusterHandler) handleJoin(body []byte) (result []byte, err error
 		return
 	}
 	result = p
+	if !devMode {
+		handler.manager.registrations.register(n)
+	}
 	return
 }
 
-func (handler *clusterHandler) handleLeave(body []byte) (err errors.CodeError) {
+func (handler *clusterHandler) handleLeave(body []byte, devMode bool) (err errors.CodeError) {
+	if devMode {
+		return
+	}
 	n := &node{}
 	decodeErr := json.Unmarshal(body, n)
 	if decodeErr != nil {

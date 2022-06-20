@@ -35,6 +35,7 @@ type ManagerOptions struct {
 	Kind    string
 	Options json.RawMessage
 	Client  Client
+	DevMode bool
 }
 
 func NewManager(options ManagerOptions) (manager *Manager, err error) {
@@ -73,6 +74,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 	}
 	manager = &Manager{
 		log:       options.Log.With("cluster", "manager"),
+		devMode:   options.DevMode,
 		bootstrap: bootstrap,
 		interval:  60 * time.Second,
 		node: &node{
@@ -90,6 +92,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 
 type Manager struct {
 	log           logs.Logger
+	devMode       bool
 	bootstrap     Bootstrap
 	interval      time.Duration
 	node          *node
@@ -148,6 +151,9 @@ func (manager *Manager) linkMember(target string, members []string, membersLen i
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return
+	}
+	if manager.devMode {
+		header.Set("X-Fns-DevMode", "true")
 	}
 	status, _, respBody, callErr := manager.client.Do(context.TODO(), http.MethodPost, target, joinPath, header, body)
 	if callErr != nil {

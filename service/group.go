@@ -99,12 +99,6 @@ func (g *group) documents() (v map[string]Document) {
 
 func (g *group) close() {
 	for _, service := range g.services {
-		components := service.Components()
-		if components != nil && len(components) > 0 {
-			for _, component := range components {
-				component.Close()
-			}
-		}
 		service.Close()
 	}
 }

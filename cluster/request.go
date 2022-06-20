@@ -20,6 +20,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"io/ioutil"
@@ -28,6 +29,7 @@ import (
 )
 
 type internalRequest struct {
+	Local    json.RawMessage `json:"local"`
 	User     json.RawMessage `json:"user"`
 	Argument json.RawMessage `json:"argument"`
 }
@@ -63,6 +65,15 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 		err = errors.NotAcceptable("fns: decode internal request body failed").WithCause(decodeIrErr)
 		return
 	}
+	local := &requestLocal{
+		values: make(map[string]interface{}),
+		remote: nil,
+	}
+	if ir.Local != nil && json.Validate(ir.Local) {
+		local.remote = json.NewObjectFromBytes(ir.Local)
+	} else {
+		local.remote = json.NewObject()
+	}
 	user := service.NewRequestUser("", json.NewObject())
 	if ir.User != nil {
 		decodeUserErr := json.Unmarshal(ir.User, user)
@@ -85,6 +96,7 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 		id:       id,
 		remoteIp: remoteIp,
 		user:     user,
+		local:    local,
 		header:   service.NewRequestHeader(req.Header),
 		service:  sn,
 		fn:       fn,
@@ -94,10 +106,62 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 	return
 }
 
+type requestLocal struct {
+	values map[string]interface{}
+	remote *json.Object
+}
+
+func (local *requestLocal) Scan(key string, value interface{}) (has bool, err errors.CodeError) {
+	v, exist := local.values[key]
+	if !exist {
+		if local.remote.Contains(key) {
+			getErr := local.remote.Get(key, value)
+			if getErr != nil {
+				err = errors.Warning("fns: request local scan failed").WithCause(getErr).WithMeta("key", key)
+				return
+			}
+			local.values[key] = value
+		}
+		return
+	}
+	cpErr := commons.CopyInterface(value, v)
+	if cpErr != nil {
+		err = errors.Warning("fns: request local scan failed").WithCause(cpErr).WithMeta("key", key)
+		return
+	}
+	return
+}
+
+func (local *requestLocal) Put(key string, value interface{}) {
+	local.values[key] = value
+}
+
+func (local *requestLocal) MarshalJSON() (p []byte, err error) {
+	obj := json.NewObject()
+	mergeErr := obj.Merge(local.remote)
+	if mergeErr != nil {
+		err = mergeErr
+		return
+	}
+	for k, v := range local.values {
+		if obj.Contains(k) {
+			continue
+		}
+		putErr := obj.Put(k, v)
+		if putErr != nil {
+			err = putErr
+			return
+		}
+	}
+	p, err = obj.MarshalJSON()
+	return
+}
+
 type request struct {
 	id       string
 	remoteIp string
 	user     service.RequestUser
+	local    service.RequestLocal
 	header   service.RequestHeader
 	service  string
 	fn       string
@@ -122,6 +186,11 @@ func (r *request) User() (user service.RequestUser) {
 
 func (r *request) SetUser(id string, attributes *json.Object) {
 	r.user = service.NewRequestUser(id, attributes)
+}
+
+func (r *request) Local() (local service.RequestLocal) {
+	local = r.local
+	return
 }
 
 func (r *request) RemoteIp() (v string) {

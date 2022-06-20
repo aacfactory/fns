@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/json"
 	"io/ioutil"
 	"net/http"
@@ -149,6 +150,40 @@ func (u *requestUser) UnmarshalJSON(p []byte) (err error) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type RequestLocal interface {
+	json.Marshaler
+	Scan(key string, value interface{}) (has bool, err errors.CodeError)
+	Put(key string, value interface{})
+}
+
+type requestLocal struct {
+	values map[string]interface{}
+}
+
+func (local *requestLocal) Scan(key string, value interface{}) (has bool, err errors.CodeError) {
+	v, exist := local.values[key]
+	if !exist {
+		return
+	}
+	cpErr := commons.CopyInterface(value, v)
+	if cpErr != nil {
+		err = errors.Warning("fns: request local scan failed").WithCause(cpErr).WithMeta("key", key)
+		return
+	}
+	return
+}
+
+func (local *requestLocal) Put(key string, value interface{}) {
+	local.values[key] = value
+}
+
+func (local *requestLocal) MarshalJSON() (p []byte, err error) {
+	p, err = json.Marshal(local.values)
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type Request interface {
 	Id() (id string)
 	Internal() (ok bool)
@@ -156,6 +191,7 @@ type Request interface {
 	RemoteIp() (v string)
 	User() (user RequestUser)
 	SetUser(id string, attr *json.Object)
+	Local() (local RequestLocal)
 	Header() (header RequestHeader)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
@@ -193,6 +229,9 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 		id:       uid.UID(),
 		remoteIp: remoteIp,
 		user:     NewRequestUser("", json.NewObject()),
+		local: &requestLocal{
+			values: make(map[string]interface{}),
+		},
 		header:   NewRequestHeader(req.Header),
 		service:  service,
 		fn:       fn,
@@ -206,6 +245,7 @@ type request struct {
 	id       string
 	remoteIp string
 	user     RequestUser
+	local    RequestLocal
 	header   RequestHeader
 	service  string
 	fn       string
@@ -230,6 +270,11 @@ func (r *request) User() (user RequestUser) {
 
 func (r *request) SetUser(id string, attributes *json.Object) {
 	r.user = NewRequestUser(id, attributes)
+}
+
+func (r *request) Local() (local RequestLocal) {
+	local = r.local
+	return
 }
 
 func (r *request) RemoteIp() (v string) {

@@ -52,6 +52,11 @@ func (r *Registration) Request(ctx context.Context, fn string, argument service.
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, there is no request in context").WithMeta("service", r.Name).WithMeta("fn", fn)))
 		return
 	}
+	local, localErr := json.Marshal(req.Local())
+	if localErr != nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode request local failed").WithCause(localErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		return
+	}
 	user, userErr := json.Marshal(req.User())
 	if userErr != nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode request user failed").WithCause(userErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
@@ -63,6 +68,7 @@ func (r *Registration) Request(ctx context.Context, fn string, argument service.
 		return
 	}
 	ir := &internalRequest{
+		Local:    local,
 		User:     user,
 		Argument: arg,
 	}

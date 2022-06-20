@@ -1,5 +1,5 @@
-github.com/aacfactory/afssl v1.4.0 h1:msCBEuc2quMbUaTlbZiuffQfH6ANiOBlBq7QMa5TLqM=
-github.com/aacfactory/afssl v1.4.0/go.mod h1:gO9Y8nwF/JS4ohdq8KgAFHnFbnLuDEOvRRYNg+nWR94=
+github.com/aacfactory/afssl v1.5.0 h1:IzeKuB4b2wq6lQyE8kNYaSiRcP35Foom04nOnfqaCuI=
+github.com/aacfactory/afssl v1.5.0/go.mod h1:gO9Y8nwF/JS4ohdq8KgAFHnFbnLuDEOvRRYNg+nWR94=
 github.com/aacfactory/configuares v1.4.0 h1:pNEkkfADXOk9r3lxIEjE6ArifD3psuAOU5DG25OnN9Y=
 github.com/aacfactory/configuares v1.4.0/go.mod h1:jUHFDHDDDsJuVI2N11/wAowqJyhLCMFn0dMQm86m+tQ=
 github.com/aacfactory/errors v1.6.3 h1:IlNhh2a8PGgxBFbiify+km/0nL2bq6/d3N74M+8ohKk=
@@ -110,6 +110,7 @@ golang.org/x/net v0.0.0-20190620200207-3b0461eec859/go.mod h1:z5CRVTTTmAJ677TzLL
 golang.org/x/net v0.0.0-20210226172049-e18ecbb05110/go.mod h1:m0MpNAwzfU5UDzcl9v0D8zg8gWTRqZa9RBIspLL5mdg=
 golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
 golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
+golang.org/x/net v0.0.0-20220225172249-27dd8689420f h1:oA4XRj0qtSt8Yo1Zms0CUlsT3KG69V2UGQWPBxujDmc=
 golang.org/x/net v0.0.0-20220225172249-27dd8689420f/go.mod h1:CfG3xpIq0wQ8r1q4Su4UZFWDARRcnwPjda9FqA0JpMk=
 golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20210220032951-036812b2e83c/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=

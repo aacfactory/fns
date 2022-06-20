@@ -52,6 +52,14 @@ type Service interface {
 	Close()
 }
 
+// ListenableService
+// used for listenable service such as message queue
+// new internal request and set request into context in listen
+type ListenableService interface {
+	Service
+	Listen(ctx context.Context) (err error)
+}
+
 func NewAbstract(name string, internal bool, components ...Component) Abstract {
 	svc := Abstract{
 		name:       name,

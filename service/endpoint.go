@@ -38,6 +38,7 @@ type EndpointDiscovery interface {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type Endpoints interface {
+	Start() (err errors.CodeError)
 	Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError)
 	Mount(svc Service)
 	Documents() (v map[string]Document)
@@ -96,6 +97,16 @@ type endpoints struct {
 	barrier       Barrier
 	group         *group
 	handleTimeout time.Duration
+}
+
+func (e *endpoints) Start() (err errors.CodeError) {
+	ctx := initContext(context.TODO(), e.appId, e.log, e.ws, e.group)
+	lnErr := e.group.listen(ctx)
+	if lnErr != nil {
+		err = errors.Warning("fns: endpoints start failed").WithCause(lnErr)
+		return
+	}
+	return
 }
 
 func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {

@@ -18,8 +18,11 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"time"
 )
 
 type group struct {
@@ -93,6 +96,33 @@ func (g *group) documents() (v map[string]Document) {
 			continue
 		}
 		v[name] = service.Document()
+	}
+	return
+}
+
+func (g *group) listen(ctx context.Context) (err error) {
+	for _, service := range g.services {
+		ln, ok := service.(ListenableService)
+		if !ok {
+			continue
+		}
+		errCh := make(chan error, 1)
+		go func(ctx context.Context, ln ListenableService, errCh chan error) {
+			lnErr := ln.Listen(ctx)
+			if lnErr != nil {
+				errCh <- lnErr
+				close(errCh)
+			}
+		}(ctx, ln, errCh)
+		select {
+		case lnErr := <-errCh:
+			if lnErr != nil {
+				err = errors.Warning(fmt.Sprintf("fns: %s service ln failed", service.Name())).WithCause(lnErr)
+				return
+			}
+		case <-time.After(1 * time.Second):
+			break
+		}
 	}
 	return
 }

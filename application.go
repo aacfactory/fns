@@ -438,6 +438,12 @@ func (app *application) Run() (err error) {
 			app.autoMaxProcs.Reset()
 		}
 	}(err)
+	// endpoints
+	endpointsStartErr := app.endpoints.Start()
+	if endpointsStartErr != nil {
+		err = errors.Warning("fns: application is run failed").WithCause(endpointsStartErr)
+		return
+	}
 	// http start
 	httpListenCh := make(chan error, 1)
 	go func(srv server.Http, ch chan error) {
@@ -454,7 +460,6 @@ func (app *application) Run() (err error) {
 		err = httpErr
 		return
 	}
-
 	// cluster publish
 	if app.clusterManager != nil {
 		app.clusterManager.Join()

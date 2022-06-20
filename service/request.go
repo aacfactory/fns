@@ -232,6 +232,7 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	hashCode := hex.EncodeToString(hash.Sum(nil))
 	r = &request{
 		id:       uid.UID(),
+		internal: false,
 		remoteIp: remoteIp,
 		user:     NewRequestUser("", json.NewObject()),
 		local: &requestLocal{
@@ -246,8 +247,30 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	return
 }
 
+func NewInternalRequest(service string, fn string, arg []byte) (r Request, err errors.CodeError) {
+	hash := md5.New()
+	hash.Write(arg)
+	hashCode := hex.EncodeToString(hash.Sum(nil))
+	r = &request{
+		id:       uid.UID(),
+		internal: true,
+		remoteIp: "",
+		user:     NewRequestUser("", json.NewObject()),
+		local: &requestLocal{
+			values: make(map[string]interface{}),
+		},
+		header:   NewRequestHeader(http.Header{}),
+		service:  service,
+		fn:       fn,
+		argument: NewArgument(arg),
+		hashCode: hashCode,
+	}
+	return
+}
+
 type request struct {
 	id       string
+	internal bool
 	remoteIp string
 	user     RequestUser
 	local    RequestLocal
@@ -264,7 +287,7 @@ func (r *request) Id() (id string) {
 }
 
 func (r *request) Internal() (ok bool) {
-	ok = false
+	ok = r.internal
 	return
 }
 

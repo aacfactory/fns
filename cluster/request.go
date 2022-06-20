@@ -136,6 +136,13 @@ func (local *requestLocal) Put(key string, value interface{}) {
 	local.values[key] = value
 }
 
+func (local *requestLocal) Remove(key string) {
+	delete(local.values, key)
+	if local.remote.Contains(key) {
+		_ = local.remote.Remove(key)
+	}
+}
+
 func (local *requestLocal) MarshalJSON() (p []byte, err error) {
 	obj := json.NewObject()
 	mergeErr := obj.Merge(local.remote)

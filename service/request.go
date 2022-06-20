@@ -154,6 +154,7 @@ type RequestLocal interface {
 	json.Marshaler
 	Scan(key string, value interface{}) (has bool, err errors.CodeError)
 	Put(key string, value interface{})
+	Remove(key string)
 }
 
 type requestLocal struct {
@@ -175,6 +176,10 @@ func (local *requestLocal) Scan(key string, value interface{}) (has bool, err er
 
 func (local *requestLocal) Put(key string, value interface{}) {
 	local.values[key] = value
+}
+
+func (local *requestLocal) Remove(key string) {
+	delete(local.values, key)
 }
 
 func (local *requestLocal) MarshalJSON() (p []byte, err error) {

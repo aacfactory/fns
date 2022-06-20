@@ -16,19 +16,11 @@
 
 package permissions
 
-const (
-	R  = AccessKind(1)
-	W  = AccessKind(2)
-	RW = R | W
-)
-
-type AccessKind int
-
 type Role struct {
-	Name      string                `json:"name"`
-	Parent    string                `json:"parent"`
-	Children  []*Role               `json:"children"`
-	Resources map[string]AccessKind `json:"resources"`
+	Name      string         `json:"name"`
+	Parent    string         `json:"parent"`
+	Children  []*Role        `json:"children"`
+	Resources map[string]int `json:"resources"`
 }
 
 func (r *Role) AddChild(child *Role) {
@@ -48,74 +40,6 @@ func (r *Role) AddChild(child *Role) {
 		}
 	}
 	r.Children = append(r.Children, child)
-	return
-}
-
-func (r *Role) AddResource(resource string, kind AccessKind) {
-	if resource == "" {
-		return
-	}
-	if kind&RW == 0 {
-		return
-	}
-	if r.Resources == nil {
-		r.Resources = make(map[string]AccessKind)
-	}
-	r.Resources[resource] = kind
-	return
-}
-
-func (r *Role) CanReadResource(resource string) (ok bool) {
-	if r.Resources == nil {
-		return
-	}
-	kind, has := r.Resources[resource]
-	if !has {
-		return
-	}
-	ok = kind&R != 0
-	return
-}
-
-func (r *Role) CanWriteResource(resource string) (ok bool) {
-	if r.Resources == nil {
-		return
-	}
-	kind, has := r.Resources[resource]
-	if !has {
-		return
-	}
-	ok = kind&W != 0
-	return
-}
-
-func (r *Role) CanReadAndResourceResource(resource string) (ok bool) {
-	if r.Resources == nil {
-		return
-	}
-	kind, has := r.Resources[resource]
-	if !has {
-		return
-	}
-	ok = kind&RW != 0
-	return
-}
-
-func (r *Role) Contains(roles []string) (ok bool) {
-	for _, role := range roles {
-		if r.Name == role {
-			ok = true
-			return
-		}
-		if r.Children != nil && len(r.Children) > 0 {
-			for _, child := range r.Children {
-				ok = child.Contains(roles)
-				if ok {
-					return
-				}
-			}
-		}
-	}
 	return
 }
 

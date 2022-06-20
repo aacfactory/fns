@@ -44,16 +44,11 @@ func mapToPermissionRole(r Role) (v *permissions.Role) {
 		Name:      r.Name(),
 		Parent:    rr.ParentName,
 		Children:  make([]*permissions.Role, 0, 1),
-		Resources: make(map[string]permissions.AccessKind),
+		Resources: rr.Resources_,
 	}
 	if r.Children() != nil {
 		for _, child := range r.Children() {
 			v.AddChild(mapToPermissionRole(child))
-		}
-	}
-	if rr.Resources_ != nil {
-		for resource, kind := range rr.Resources_ {
-			v.Resources[resource] = permissions.AccessKind(kind)
 		}
 	}
 	return

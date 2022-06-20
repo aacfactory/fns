@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
 )
 
 func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
@@ -31,26 +30,23 @@ func Verify(ctx context.Context, roles ...string) (err errors.CodeError) {
 		return
 	}
 	if !request.User().Authenticated() {
-		err = errors.ServiceError("permissions: there is no authenticated user in context")
+		err = errors.Forbidden("permissions: forbidden").WithCause(fmt.Errorf("permissions: there is no authenticated user in context"))
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, "permissions")
-	if !hasEndpoint {
-		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
+	userRoles, getUserRolesErr := getCurrentUserRoles(ctx)
+	if getUserRolesErr != nil {
+		err = errors.Warning("permissions: verify user permissions failed").WithCause(getUserRolesErr)
 		return
 	}
-	fr := endpoint.Request(ctx, "verify", service.NewArgument(&permissions.VerifyArgument{
-		AllowedRoles: roles,
-	}))
-	result := &permissions.VerifyResult{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
+	if userRoles == nil || len(userRoles) == 0 {
+		err = errors.Forbidden("permissions: forbidden").WithCause(fmt.Errorf("permissions: user has no roles"))
 		return
 	}
-	if !result.Ok {
-		err = errors.Forbidden("permissions: forbidden")
-		return
+	for _, userRole := range userRoles {
+		if userRole.Contains(roles) {
+			return
+		}
 	}
+	err = errors.Forbidden("permissions: forbidden").WithCause(fmt.Errorf("permissions: user has no required roles"))
 	return
 }

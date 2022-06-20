@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
 )
 
 func CanReadResource(ctx context.Context, resource string) (ok bool, err errors.CodeError) {
@@ -34,20 +33,20 @@ func CanReadResource(ctx context.Context, resource string) (ok bool, err errors.
 		err = errors.ServiceError("permissions: there is no authenticated user in context")
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, "permissions")
-	if !hasEndpoint {
-		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
+	userRoles, getUserRolesErr := getCurrentUserRoles(ctx)
+	if getUserRolesErr != nil {
+		err = errors.Warning("permissions: verify user permissions failed").WithCause(getUserRolesErr)
 		return
 	}
-	fr := endpoint.Request(ctx, "check_user_can_read_resource", service.NewArgument(&permissions.CheckResourcePermissionArgument{
-		Resource: resource,
-	}))
-	result := &permissions.CheckResourcePermissionResult{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
+	if userRoles == nil || len(userRoles) == 0 {
+		err = errors.Forbidden("permissions: forbidden").WithCause(fmt.Errorf("permissions: user has no roles"))
 		return
 	}
-	ok = result.Ok
+	for _, userRole := range userRoles {
+		if userRole.CanReadResource(resource) {
+			return
+		}
+	}
+	err = errors.Forbidden("permissions: forbidden").WithCause(fmt.Errorf("permissions: user can not read %s", resource))
 	return
 }

@@ -100,19 +100,6 @@ func (svc *_service_) Document() (doc service.Document) {
 
 func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
-	case "verify":
-		fnArgument := VerifyArgument{}
-		argumentErr := argument.As(&fnArgument)
-		if argumentErr != nil {
-			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
-		v, err = verify(ctx, fnArgument)
-		if err != nil {
-			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
-		break
 	case "get_user_roles":
 		fnArgument := GetUserRolesArgument{}
 		argumentErr := argument.As(&fnArgument)
@@ -201,32 +188,6 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 			return
 		}
 		v = &service.Empty{}
-		break
-	case "check_user_can_read_resource":
-		fnArgument := CheckResourcePermissionArgument{}
-		argumentErr := argument.As(&fnArgument)
-		if argumentErr != nil {
-			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
-		v, err = canReadResource(ctx, fnArgument)
-		if err != nil {
-			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
-		break
-	case "check_user_can_write_resource":
-		fnArgument := CheckResourcePermissionArgument{}
-		argumentErr := argument.As(&fnArgument)
-		if argumentErr != nil {
-			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
-		v, err = canWriteResource(ctx, fnArgument)
-		if err != nil {
-			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
 		break
 	default:
 		err = errors.NotFound("permissions: fn was not found").WithMeta("service", "permissions").WithMeta("fn", fn)

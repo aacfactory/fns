@@ -57,3 +57,37 @@ func GetUserRoles(ctx context.Context, userId string) (v []Role, err errors.Code
 	}
 	return
 }
+
+const (
+	userRoleRLKey = "_roles_"
+)
+
+func getCurrentUserRoles(ctx context.Context) (v []Role, err errors.CodeError) {
+	request, hasRequest := service.GetRequest(ctx)
+	if !hasRequest {
+		err = errors.Warning("permissions: get request user roles failed").WithCause(fmt.Errorf("there is no request in context"))
+		return
+	}
+	if !request.User().Authenticated() {
+		err = errors.ServiceError("permissions: there is no authenticated user in context")
+		return
+	}
+	v = make([]Role, 0, 1)
+	hasRoles, scanErr := request.Local().Scan(userRoleRLKey, &v)
+	if scanErr != nil {
+		err = errors.ServiceError("permissions: get roles from request local failed").WithCause(scanErr)
+		return
+	}
+	if hasRoles {
+		return
+	}
+	v, err = GetUserRoles(ctx, request.User().Id())
+	if err != nil {
+		err = errors.ServiceError("permissions: get roles from store failed").WithCause(err)
+		return
+	}
+	if v != nil && len(v) > 0 {
+		request.Local().Put(userRoleRLKey, v)
+	}
+	return
+}

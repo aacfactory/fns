@@ -33,6 +33,9 @@ type Role interface {
 	AddReadableResource(resource string)
 	AddWriteableResource(resource string)
 	AddReadableAndWriteableResource(resource string)
+	Contains(roles []string) (ok bool)
+	CanReadResource(resource string) (ok bool)
+	CanWriteResource(resource string) (ok bool)
 }
 
 func mapToPermissionRole(r Role) (v *permissions.Role) {
@@ -186,4 +189,46 @@ func (r *role) AddReadableAndWriteableResource(resource string) {
 		r.Resources_ = make(map[string]int)
 	}
 	r.Resources_[resource] = 1 | 2
+}
+
+func (r *role) Contains(roles []string) (ok bool) {
+	for _, target := range roles {
+		if r.Name_ == target {
+			ok = true
+			return
+		}
+		if r.Children_ != nil && len(r.Children_) > 0 {
+			for _, child := range r.Children_ {
+				ok = child.Contains(roles)
+				if ok {
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
+func (r *role) CanReadResource(resource string) (ok bool) {
+	if r.Resources_ == nil {
+		return
+	}
+	kind, has := r.Resources_[resource]
+	if !has {
+		return
+	}
+	ok = kind&1 != 0
+	return
+}
+
+func (r *role) CanWriteResource(resource string) (ok bool) {
+	if r.Resources_ == nil {
+		return
+	}
+	kind, has := r.Resources_[resource]
+	if !has {
+		return
+	}
+	ok = kind&2 != 0
+	return
 }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
@@ -52,6 +53,7 @@ type Endpoints interface {
 
 type EndpointsOptions struct {
 	AppId                 string
+	Running               *commons.SafeFlag
 	Log                   logs.Logger
 	MaxWorkers            int
 	MaxIdleWorkerDuration time.Duration
@@ -80,6 +82,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 	}
 	v = &endpoints{
 		appId:   options.AppId,
+		running: options.Running,
 		log:     options.Log,
 		ws:      ws,
 		barrier: barrier,
@@ -98,6 +101,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 
 type endpoints struct {
 	appId            string
+	running          *commons.SafeFlag
 	log              logs.Logger
 	ws               workers.Workers
 	barrier          Barrier
@@ -155,7 +159,7 @@ func (e *endpoints) RegisterOutboundChannels(name string, channels listeners.Out
 
 func (e *endpoints) SetupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
-		ctx = initContext(ctx, e.appId, e.log, e.ws, e.group, e.outboundChannels)
+		ctx = initContext(ctx, e.appId, e.running, e.log, e.ws, e.group, e.outboundChannels)
 	}
 	return ctx
 }

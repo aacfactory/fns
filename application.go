@@ -233,6 +233,7 @@ func New(options ...Option) (app Application) {
 	}
 	endpoints := service.NewEndpoints(service.EndpointsOptions{
 		AppId:                 appId,
+		Running:               running,
 		Log:                   log,
 		MaxWorkers:            serviceMaxWorkers,
 		MaxIdleWorkerDuration: time.Duration(serviceMaxIdleWorkerSeconds) * time.Second,

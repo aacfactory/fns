@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
@@ -92,9 +93,10 @@ func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, 
 	return
 }
 
-func initContext(ctx context.Context, appId string, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
+func initContext(ctx context.Context, appId string, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
 		appId:            appId,
+		running:          running,
 		log:              log,
 		ws:               ws,
 		discovery:        discovery,
@@ -112,12 +114,21 @@ func getRuntime(ctx context.Context) (v *contextValue) {
 	return
 }
 
-func GetAppId(ctx context.Context) (appId string) {
+func GetApplicationId(ctx context.Context) (appId string) {
 	rt := getRuntime(ctx)
 	if rt == nil {
 		return
 	}
 	appId = rt.appId
+	return
+}
+
+func ApplicationIsRunning(ctx context.Context) (ok bool) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
+	ok = rt.running.IsOn()
 	return
 }
 
@@ -136,6 +147,7 @@ func GetOutboundChannel(ctx context.Context, listener string, name string) (chan
 
 type contextValue struct {
 	appId            string
+	running          *commons.SafeFlag
 	log              logs.Logger
 	ws               workers.Workers
 	discovery        EndpointDiscovery

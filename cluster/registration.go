@@ -49,7 +49,14 @@ func (r *Registration) Key() (key string) {
 func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
 	req, hasReq := service.GetRequest(ctx)
 	if !hasReq {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, there is no request in context").WithMeta("service", r.Name).WithMeta("fn", fn)))
+		req0, reqErr := service.NewInternalRequest(r.Name, fn, argument)
+		if reqErr != nil {
+			fr := service.NewResult()
+			fr.Failed(errors.Warning("fns: there is no request in context, then to create internal request but failed").WithCause(reqErr).WithMeta("service", r.Name).WithMeta("fn", fn))
+			result = fr
+			return
+		}
+		ctx = service.SetRequest(ctx, req0)
 		return
 	}
 	local, localErr := json.Marshal(req.Local())

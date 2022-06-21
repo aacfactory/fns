@@ -17,19 +17,19 @@
 package listeners
 
 import (
+	"context"
 	"github.com/aacfactory/configuares"
-	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
 
 type ListenerOptions struct {
-	Log            logs.Logger
-	Config         configuares.Config
-	ServiceHandler service.Handler
+	Log    logs.Logger
+	Config configuares.Config
 }
 
 type Listener interface {
 	Name() (name string)
-	Listen(options ListenerOptions) (err error)
+	InboundChannels() (channels InboundChannels)
+	Listen(ctx context.Context, options ListenerOptions) (err error)
 	Close() (err error)
 }

@@ -17,6 +17,7 @@
 package fns
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configuares"
@@ -453,24 +454,28 @@ func (app *application) Run() (err error) {
 				lnConfig, _ = configuares.NewJsonConfig([]byte("{}"))
 			}
 			lnOpt := listeners.ListenerOptions{
-				Log:            app.log.With("extra_listener", lnName),
-				Config:         lnConfig,
-				ServiceHandler: app.endpoints,
+				Log:    app.log.With("extra_listener", lnName),
+				Config: lnConfig,
 			}
+			lnCtx := app.endpoints.SetupContext(context.TODO())
 			extraListenCh := make(chan error, 1)
-			go func(ln listeners.Listener, opt *listeners.ListenerOptions, ch chan error) {
-				listenErr := ln.Listen(*opt)
+			go func(ctx context.Context, ln listeners.Listener, opt *listeners.ListenerOptions, ch chan error) {
+				listenErr := ln.Listen(lnCtx, *opt)
 				if listenErr != nil {
 					ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
 					close(ch)
 				}
-			}(ln, &lnOpt, extraListenCh)
+			}(lnCtx, ln, &lnOpt, extraListenCh)
 			select {
 			case <-time.After(1 * time.Second):
 				break
 			case httpErr := <-extraListenCh:
 				err = httpErr
 				return
+			}
+			inboundChannels := ln.InboundChannels()
+			if inboundChannels != nil {
+				app.endpoints.RegisterInboundChannels(lnName, inboundChannels)
 			}
 		}
 	}

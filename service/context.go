@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 )
@@ -85,18 +86,23 @@ func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, 
 	return
 }
 
-func initContext(ctx context.Context, appId string, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery) context.Context {
+func initContext(ctx context.Context, appId string, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, inboundChannels map[string]listeners.InboundChannels) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
-		appId:     appId,
-		log:       log,
-		ws:        ws,
-		discovery: discovery,
+		appId:           appId,
+		log:             log,
+		ws:              ws,
+		discovery:       discovery,
+		inboundChannels: inboundChannels,
 	})
 	return ctx
 }
 
 func getRuntime(ctx context.Context) (v *contextValue) {
-	v = ctx.Value(contextRuntimeKey).(*contextValue)
+	rt := ctx.Value(contextRuntimeKey)
+	if rt == nil {
+		return nil
+	}
+	v = rt.(*contextValue)
 	return
 }
 
@@ -107,8 +113,9 @@ func GetAppId(ctx context.Context) (appId string) {
 }
 
 type contextValue struct {
-	appId     string
-	log       logs.Logger
-	ws        workers.Workers
-	discovery EndpointDiscovery
+	appId           string
+	log             logs.Logger
+	ws              workers.Workers
+	discovery       EndpointDiscovery
+	inboundChannels map[string]listeners.InboundChannels
 }

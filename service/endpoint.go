@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"time"
@@ -43,7 +44,9 @@ type Handler interface {
 type Endpoints interface {
 	Handler
 	Mount(svc Service)
+	RegisterInboundChannels(name string, channels listeners.InboundChannels)
 	Documents() (v map[string]Document)
+	SetupContext(ctx context.Context) context.Context
 	Close()
 }
 
@@ -87,18 +90,20 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 			services:  make(map[string]Service),
 			discovery: options.Discovery,
 		},
-		handleTimeout: handleTimeout,
+		inboundChannels: make(map[string]listeners.InboundChannels),
+		handleTimeout:   handleTimeout,
 	}
 	return
 }
 
 type endpoints struct {
-	appId         string
-	log           logs.Logger
-	ws            workers.Workers
-	barrier       Barrier
-	group         *group
-	handleTimeout time.Duration
+	appId           string
+	log             logs.Logger
+	ws              workers.Workers
+	barrier         Barrier
+	group           *group
+	inboundChannels map[string]listeners.InboundChannels
+	handleTimeout   time.Duration
 }
 
 func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
@@ -107,7 +112,7 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err e
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
 	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
-		ctx = initContext(ctx, e.appId, e.log, e.ws, e.group)
+		ctx = e.SetupContext(ctx)
 		ctx = SetRequest(ctx, r)
 		ep, has := e.group.Get(ctx, service)
 		if !has {
@@ -143,6 +148,18 @@ func (e *endpoints) Mount(svc Service) {
 	e.group.add(svc)
 }
 
+func (e *endpoints) RegisterInboundChannels(name string, channels listeners.InboundChannels) {
+	e.inboundChannels[name] = channels
+	return
+}
+
+func (e *endpoints) SetupContext(ctx context.Context) context.Context {
+	if getRuntime(ctx) == nil {
+		ctx = initContext(ctx, e.appId, e.log, e.ws, e.group, e.inboundChannels)
+	}
+	return ctx
+}
+
 func (e *endpoints) Documents() (v map[string]Document) {
 	v = e.group.documents()
 	return
@@ -166,8 +183,18 @@ type endpoint struct {
 
 func (e *endpoint) Request(ctx context.Context, fn string, argument Argument) (result Result) {
 	fr := NewResult()
+	_, hasRequest := GetRequest(ctx)
+	if !hasRequest {
+		req, reqErr := NewInternalRequest(e.svc.Name(), fn, argument)
+		if reqErr != nil {
+			fr.Failed(errors.Warning("fns: there is no request in context, then to create internal request but failed").WithCause(reqErr).WithMeta("service", e.svc.Name()).WithMeta("fn", fn))
+			result = fr
+			return
+		}
+		ctx = SetRequest(ctx, req)
+	}
 	if !e.ws.Dispatch(newFn(ctx, e.svc, fn, argument, fr)) {
-		fr.Failed(errors.Unavailable("fns: service is overload").WithMeta("fns", "overload"))
+		fr.Failed(errors.Unavailable("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", e.svc.Name()).WithMeta("fn", fn))
 	}
 	result = fr
 	return

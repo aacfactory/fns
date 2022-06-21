@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	stdjson "encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
@@ -256,9 +257,39 @@ func NewInternalRequest(service string, fn string, arg interface{}) (r Request, 
 		case []byte:
 			hash.Write(arg.([]byte))
 			break
+		case string:
+			hash.Write([]byte(arg.(string)))
+			break
 		case json.RawMessage:
 			hash.Write(arg.(json.RawMessage))
 			break
+		case stdjson.RawMessage:
+			hash.Write(arg.(stdjson.RawMessage))
+			break
+		case json.Marshaler:
+			encoder := arg.(json.Marshaler)
+			p, encodeErr := encoder.MarshalJSON()
+			if encodeErr != nil {
+				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
+				return
+			}
+			hash.Write(p)
+		case stdjson.Marshaler:
+			encoder := arg.(stdjson.Marshaler)
+			p, encodeErr := encoder.MarshalJSON()
+			if encodeErr != nil {
+				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
+				return
+			}
+			hash.Write(p)
+		case Argument:
+			encoder := arg.(Argument)
+			p, encodeErr := encoder.MarshalJSON()
+			if encodeErr != nil {
+				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
+				return
+			}
+			hash.Write(p)
 		default:
 			p, encodeErr := json.Marshal(arg)
 			if encodeErr != nil {

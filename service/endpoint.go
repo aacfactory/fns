@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"time"
@@ -37,9 +36,12 @@ type EndpointDiscovery interface {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type Handler interface {
+	Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError)
+}
+
 type Endpoints interface {
-	Start() (err errors.CodeError)
-	Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError)
+	Handler
 	Mount(svc Service)
 	Documents() (v map[string]Document)
 	Close()
@@ -99,17 +101,7 @@ type endpoints struct {
 	handleTimeout time.Duration
 }
 
-func (e *endpoints) Start() (err errors.CodeError) {
-	ctx := initContext(context.TODO(), e.appId, e.log, e.ws, e.group)
-	lnErr := e.group.listen(ctx)
-	if lnErr != nil {
-		err = errors.Warning("fns: endpoints start failed").WithCause(lnErr)
-		return
-	}
-	return
-}
-
-func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors.CodeError) {
+func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
 	service, fn := r.Fn()
 	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
 	var cancel func()
@@ -124,13 +116,12 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors
 		}
 		ctx = SetTracer(ctx)
 		result := ep.Request(ctx, fn, r.Argument())
-		p := json.RawMessage{}
-		hasResult, handleErr := result.Get(ctx, &p)
+		resultValue, hasResult, handleErr := result.Value(ctx)
 		if handleErr != nil {
 			err = handleErr
 		} else {
 			if hasResult {
-				v = p
+				v = resultValue
 			}
 		}
 		tryReportTracer(ctx)
@@ -143,7 +134,7 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v []byte, err errors
 		return
 	}
 	if handleResult != nil {
-		v = handleResult.(json.RawMessage)
+		v = handleResult
 	}
 	return
 }

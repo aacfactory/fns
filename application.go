@@ -439,12 +439,8 @@ func (app *application) Run() (err error) {
 			app.autoMaxProcs.Reset()
 		}
 	}(err)
-	// endpoints
-	endpointsStartErr := app.endpoints.Start()
-	if endpointsStartErr != nil {
-		err = errors.Warning("fns: application is run failed").WithCause(endpointsStartErr)
-		return
-	}
+	// extra listeners
+
 	// http start
 	httpListenCh := make(chan error, 1)
 	go func(srv server.Http, ch chan error) {

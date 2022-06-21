@@ -17,6 +17,7 @@
 package cluster
 
 import (
+	stdjson "encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
@@ -110,7 +111,25 @@ func (handler *proxyHandler) Handle(writer http.ResponseWriter, request *http.Re
 		span = tracer.Span()
 	}
 	if handleErr == nil {
-		handler.succeed(writer, span, result)
+		switch result.(type) {
+		case []byte:
+			handler.succeed(writer, span, result.([]byte))
+			break
+		case json.RawMessage:
+			handler.succeed(writer, span, result.(json.RawMessage))
+			break
+		case stdjson.RawMessage:
+			handler.succeed(writer, span, result.(stdjson.RawMessage))
+			break
+		default:
+			p, encodeErr := json.Marshal(result)
+			if encodeErr != nil {
+				handler.failed(writer, span, errors.Warning("fns: encoding result failed").WithCause(encodeErr))
+			} else {
+				handler.succeed(writer, span, p)
+			}
+			break
+		}
 	} else {
 		handler.failed(writer, span, handleErr)
 	}

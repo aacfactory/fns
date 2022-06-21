@@ -17,6 +17,7 @@
 package server
 
 import (
+	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
@@ -72,7 +73,29 @@ func (h *serviceHandler) Handle(writer http.ResponseWriter, request *http.Reques
 		latency = time.Now().Sub(handleBegAT)
 	}
 	if handleErr == nil {
-		h.succeed(writer, r.Id(), latency, result)
+		if result == nil {
+			h.succeed(writer, r.Id(), latency, nil)
+		} else {
+			switch result.(type) {
+			case []byte:
+				h.succeed(writer, r.Id(), latency, result.([]byte))
+				break
+			case json.RawMessage:
+				h.succeed(writer, r.Id(), latency, result.(json.RawMessage))
+				break
+			case stdjson.RawMessage:
+				h.succeed(writer, r.Id(), latency, result.(stdjson.RawMessage))
+				break
+			default:
+				p, encodeErr := json.Marshal(result)
+				if encodeErr != nil {
+					h.failed(writer, r.Id(), latency, errors.Warning("fns: encoding result failed").WithCause(encodeErr))
+				} else {
+					h.succeed(writer, r.Id(), latency, p)
+				}
+				break
+			}
+		}
 	} else {
 		h.failed(writer, r.Id(), latency, handleErr)
 	}
@@ -90,7 +113,7 @@ func (h *serviceHandler) succeed(writer http.ResponseWriter, id string, latency 
 	if id != "" {
 		writer.Header().Set(httpIdHeader, id)
 	}
-	if latency > 0 {
+	if h.log.DebugEnabled() {
 		writer.Header().Set(httpLatencyHeader, latency.String())
 	}
 	writer.WriteHeader(http.StatusOK)
@@ -106,7 +129,7 @@ func (h *serviceHandler) failed(writer http.ResponseWriter, id string, latency t
 	if id != "" {
 		writer.Header().Set(httpIdHeader, id)
 	}
-	if latency > 0 {
+	if h.log.DebugEnabled() {
 		writer.Header().Set(httpLatencyHeader, latency.String())
 	}
 	writer.WriteHeader(codeErr.Code())

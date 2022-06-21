@@ -30,11 +30,12 @@ type ResultWriter interface {
 
 type Result interface {
 	Get(ctx context.Context, v interface{}) (has bool, err errors.CodeError)
+	Value(ctx context.Context) (value interface{}, has bool, err errors.CodeError)
 }
 
 type FutureResult interface {
 	ResultWriter
-	Get(ctx context.Context, v interface{}) (has bool, err errors.CodeError)
+	Result
 }
 
 func NewResult() FutureResult {
@@ -67,6 +68,21 @@ func (r *futureResult) Failed(err errors.CodeError) {
 	}
 	r.ch <- err
 	close(r.ch)
+}
+
+func (r *futureResult) Value(ctx context.Context) (value interface{}, has bool, err errors.CodeError) {
+	select {
+	case <-ctx.Done():
+		err = errors.Timeout("fns: get result value timeout").WithMeta("fns", "result")
+		return
+	case data, ok := <-r.ch:
+		if !ok {
+			return
+		}
+		value = data
+		has = true
+		return
+	}
 }
 
 func (r *futureResult) Get(ctx context.Context, v interface{}) (has bool, err errors.CodeError) {

@@ -46,7 +46,7 @@ func TryFork(ctx context.Context, task Task) (ok bool) {
 		taskName = "-"
 	}
 	log = log.With("task", taskName)
-	nc = setLog(nc, log)
+	nc = SetLog(nc, log)
 	vcm := ctx.Value(contextComponentsKey)
 	if vcm != nil {
 		nc = setComponents(ctx, vcm.(map[string]Component))
@@ -70,7 +70,7 @@ func Fork(ctx context.Context, task Task) {
 		taskName = "-"
 	}
 	log = log.With("task", taskName)
-	nc = setLog(nc, log)
+	nc = SetLog(nc, log)
 	vcm := ctx.Value(contextComponentsKey)
 	if vcm != nil {
 		nc = setComponents(ctx, vcm.(map[string]Component))

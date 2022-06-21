@@ -35,7 +35,7 @@ func GetLog(ctx context.Context) (log logs.Logger) {
 	return
 }
 
-func setLog(ctx context.Context, log logs.Logger) context.Context {
+func SetLog(ctx context.Context, log logs.Logger) context.Context {
 	ctx = context.WithValue(ctx, contextLogKey, log)
 	return ctx
 }

@@ -42,7 +42,7 @@ func (f *fnExecutor) Execute() {
 	if hasReq {
 		fnLog = fnLog.With("requestId", req.Id())
 	}
-	ctx := setLog(f.ctx, fnLog)
+	ctx := SetLog(f.ctx, fnLog)
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
 		ctx = setComponents(ctx, f.svc.Components())
 	}

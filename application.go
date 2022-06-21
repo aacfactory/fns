@@ -473,9 +473,9 @@ func (app *application) Run() (err error) {
 				err = httpErr
 				return
 			}
-			inboundChannels := ln.InboundChannels()
+			inboundChannels := ln.OutboundChannels()
 			if inboundChannels != nil {
-				app.endpoints.RegisterInboundChannels(lnName, inboundChannels)
+				app.endpoints.RegisterOutboundChannels(lnName, inboundChannels)
 			}
 		}
 	}

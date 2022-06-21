@@ -76,23 +76,29 @@ func CanAccessInternal(ctx context.Context) (ok bool) {
 
 func GetEndpoint(ctx context.Context, name string) (v Endpoint, has bool) {
 	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
 	v, has = rt.discovery.Get(ctx, name)
 	return
 }
 
 func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, has bool) {
 	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
 	v, has = rt.discovery.GetExact(ctx, name, id)
 	return
 }
 
-func initContext(ctx context.Context, appId string, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, inboundChannels map[string]listeners.InboundChannels) context.Context {
+func initContext(ctx context.Context, appId string, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
-		appId:           appId,
-		log:             log,
-		ws:              ws,
-		discovery:       discovery,
-		inboundChannels: inboundChannels,
+		appId:            appId,
+		log:              log,
+		ws:               ws,
+		discovery:        discovery,
+		outboundChannels: outboundChannels,
 	})
 	return ctx
 }
@@ -108,14 +114,30 @@ func getRuntime(ctx context.Context) (v *contextValue) {
 
 func GetAppId(ctx context.Context) (appId string) {
 	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
 	appId = rt.appId
 	return
 }
 
+func GetOutboundChannel(ctx context.Context, listener string, name string) (channel listeners.OutboundChannel, has bool) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
+	channels, exist := rt.outboundChannels[listener]
+	if !exist {
+		return
+	}
+	channel, has = channels.Get(name)
+	return
+}
+
 type contextValue struct {
-	appId           string
-	log             logs.Logger
-	ws              workers.Workers
-	discovery       EndpointDiscovery
-	inboundChannels map[string]listeners.InboundChannels
+	appId            string
+	log              logs.Logger
+	ws               workers.Workers
+	discovery        EndpointDiscovery
+	outboundChannels map[string]listeners.OutboundChannels
 }

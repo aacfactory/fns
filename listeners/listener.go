@@ -29,7 +29,7 @@ type ListenerOptions struct {
 
 type Listener interface {
 	Name() (name string)
-	InboundChannels() (channels InboundChannels)
+	OutboundChannels() (channels OutboundChannels)
 	Listen(ctx context.Context, options ListenerOptions) (err error)
 	Close() (err error)
 }

@@ -44,7 +44,7 @@ type Handler interface {
 type Endpoints interface {
 	Handler
 	Mount(svc Service)
-	RegisterInboundChannels(name string, channels listeners.InboundChannels)
+	RegisterOutboundChannels(name string, channels listeners.OutboundChannels)
 	Documents() (v map[string]Document)
 	SetupContext(ctx context.Context) context.Context
 	Close()
@@ -90,20 +90,20 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 			services:  make(map[string]Service),
 			discovery: options.Discovery,
 		},
-		inboundChannels: make(map[string]listeners.InboundChannels),
-		handleTimeout:   handleTimeout,
+		outboundChannels: make(map[string]listeners.OutboundChannels),
+		handleTimeout:    handleTimeout,
 	}
 	return
 }
 
 type endpoints struct {
-	appId           string
-	log             logs.Logger
-	ws              workers.Workers
-	barrier         Barrier
-	group           *group
-	inboundChannels map[string]listeners.InboundChannels
-	handleTimeout   time.Duration
+	appId            string
+	log              logs.Logger
+	ws               workers.Workers
+	barrier          Barrier
+	group            *group
+	outboundChannels map[string]listeners.OutboundChannels
+	handleTimeout    time.Duration
 }
 
 func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
@@ -148,14 +148,14 @@ func (e *endpoints) Mount(svc Service) {
 	e.group.add(svc)
 }
 
-func (e *endpoints) RegisterInboundChannels(name string, channels listeners.InboundChannels) {
-	e.inboundChannels[name] = channels
+func (e *endpoints) RegisterOutboundChannels(name string, channels listeners.OutboundChannels) {
+	e.outboundChannels[name] = channels
 	return
 }
 
 func (e *endpoints) SetupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
-		ctx = initContext(ctx, e.appId, e.log, e.ws, e.group, e.inboundChannels)
+		ctx = initContext(ctx, e.appId, e.log, e.ws, e.group, e.outboundChannels)
 	}
 	return ctx
 }

@@ -19,6 +19,7 @@ package listeners
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"sync"
 )
 
 type MessageHeader interface {
@@ -69,22 +70,36 @@ func (msg *message) Body() (body []byte) {
 	return
 }
 
-type InboundChannel interface {
+type OutboundChannel interface {
 	Name() (name string)
 	Send(ctx context.Context, msg Message) (err errors.CodeError)
 }
 
-type InboundChannels interface {
-	Get(name string) (channel InboundChannel)
+type OutboundChannels interface {
+	Get(name string) (channel OutboundChannel, has bool)
+	Set(name string, channel OutboundChannel)
 }
 
-func NewDefaultInboundChannels() InboundChannels {
-	return DefaultInboundChannels(map[string]InboundChannel{})
+func NewDefaultOutboundChannels() OutboundChannels {
+	return &DefaultOutboundChannels{
+		values: sync.Map{},
+	}
 }
 
-type DefaultInboundChannels map[string]InboundChannel
+type DefaultOutboundChannels struct {
+	values sync.Map
+}
 
-func (channels DefaultInboundChannels) Get(name string) (channel InboundChannel) {
-	channel, _ = channels[name]
+func (channels *DefaultOutboundChannels) Get(name string) (channel OutboundChannel, has bool) {
+	value, exist := channels.values.Load(name)
+	if !exist {
+		return
+	}
+	channel, has = value.(OutboundChannel)
+	return
+}
+
+func (channels *DefaultOutboundChannels) Set(name string, channel OutboundChannel) {
+	channels.values.Store(name, channel)
 	return
 }

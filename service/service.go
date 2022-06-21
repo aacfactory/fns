@@ -52,6 +52,12 @@ type Service interface {
 	Close()
 }
 
+type Listenable interface {
+	Service
+	Sharing() (ok bool)
+	Listen(ctx context.Context) (err error)
+}
+
 func NewAbstract(name string, internal bool, components ...Component) Abstract {
 	svc := Abstract{
 		name:       name,

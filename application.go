@@ -428,7 +428,14 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 		}
 		app.endpoints.Mount(svc)
 		if app.clusterManager != nil {
-			app.clusterManager.Node().AppendService(svc.Name(), svc.Internal())
+			lns, isLn := svc.(service.Listenable)
+			if !isLn {
+				app.clusterManager.Node().AppendService(svc.Name(), svc.Internal())
+			} else {
+				if lns.Sharing() {
+					app.clusterManager.Node().AppendService(svc.Name(), svc.Internal())
+				}
+			}
 		}
 	}
 	return

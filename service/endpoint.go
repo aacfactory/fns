@@ -150,6 +150,46 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err e
 
 func (e *endpoints) Mount(svc Service) {
 	e.group.add(svc)
+	ln, ok := svc.(Listenable)
+	if ok {
+		ctx := e.SetupContext(context.TODO())
+		go func(ctx context.Context, ln Listenable, log logs.Logger) {
+			for {
+				stopped := false
+				select {
+				case <-time.After(3 * time.Minute):
+					stopped = true
+					if log.WarnEnabled() {
+						log.Warn().With("fns", "listenable service").Message(fmt.Sprintf("fns: %s can not listen cause app is not running", ln.Name()))
+					}
+					break
+				case <-time.After(1 * time.Second):
+					if ApplicationIsRunning(ctx) {
+						go func(ctx context.Context, ln Listenable) {
+							lnErr := ln.Listen(ctx)
+							if lnErr != nil {
+								if log.ErrorEnabled() {
+									lnErr = errors.Warning(fmt.Sprintf("fns: %s listen falied", ln.Name())).WithCause(lnErr).WithMeta("service", ln.Name())
+									log.Error().With("fns", "listenable service").Message(fmt.Sprintf("%+v", lnErr))
+								}
+							}
+						}(ctx, ln)
+						if log.DebugEnabled() {
+							log.Debug().Caller().With("fns", "listenable service").Message(fmt.Sprintf("fns: %s is listening", ln.Name()))
+						}
+						stopped = true
+					} else {
+						if log.DebugEnabled() {
+							log.Debug().Caller().With("fns", "listenable service").Message(fmt.Sprintf("fns: %s try to listen again", ln.Name()))
+						}
+					}
+				}
+				if stopped {
+					break
+				}
+			}
+		}(ctx, ln, e.log)
+	}
 }
 
 func (e *endpoints) RegisterOutboundChannels(name string, channels listeners.OutboundChannels) {

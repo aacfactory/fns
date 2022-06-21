@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/internal/configuare"
 	"github.com/aacfactory/fns/internal/secret"
+	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
@@ -43,6 +44,7 @@ var (
 		barrier:                   nil,
 		server:                    &server.FastHttp{},
 		serverInterceptorHandlers: make([]server.InterceptorHandler, 0, 1),
+		extraListeners:            make([]listeners.Listener, 0, 1),
 		shutdownTimeout:           60 * time.Second,
 	}
 )
@@ -56,6 +58,7 @@ type Options struct {
 	server                    server.Http
 	serverInterceptorHandlers []server.InterceptorHandler
 	clientBuilder             cluster.ClientBuilder
+	extraListeners            []listeners.Listener
 	shutdownTimeout           time.Duration
 }
 
@@ -176,6 +179,32 @@ func ClusterClientBuilder(builder cluster.ClientBuilder) Option {
 			return fmt.Errorf("customize cluster client failed for builder is nil")
 		}
 		options.clientBuilder = builder
+		return nil
+	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func ExtraListeners(lns ...listeners.Listener) Option {
+	return func(options *Options) error {
+		if lns == nil || len(lns) == 0 {
+			return nil
+		}
+		for _, ln := range lns {
+			if ln == nil {
+				return fmt.Errorf("add extra listener failed for one of them is nil")
+			}
+			lnName := strings.TrimSpace(ln.Name())
+			if lnName == "" {
+				return fmt.Errorf("add extra listener failed for one of them has no name")
+			}
+			for _, listener := range options.extraListeners {
+				if listener.Name() == lnName {
+					return fmt.Errorf("add extra listener failed for one of them has same name")
+				}
+			}
+			options.extraListeners = append(options.extraListeners, ln)
+		}
 		return nil
 	}
 }

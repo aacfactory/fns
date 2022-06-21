@@ -224,6 +224,7 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 		}
 	}
 	hash := md5.New()
+	hash.Write([]byte(service + fn))
 	authorization := req.Header.Get("Authorization")
 	if authorization != "" {
 		hash.Write([]byte(authorization))
@@ -247,9 +248,27 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	return
 }
 
-func NewInternalRequest(service string, fn string, arg []byte) (r Request, err errors.CodeError) {
+func NewInternalRequest(service string, fn string, arg interface{}) (r Request, err errors.CodeError) {
 	hash := md5.New()
-	hash.Write(arg)
+	hash.Write([]byte(service + fn))
+	if arg != nil {
+		switch arg.(type) {
+		case []byte:
+			hash.Write(arg.([]byte))
+			break
+		case json.RawMessage:
+			hash.Write(arg.(json.RawMessage))
+			break
+		default:
+			p, encodeErr := json.Marshal(arg)
+			if encodeErr != nil {
+				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
+				return
+			}
+			hash.Write(p)
+			break
+		}
+	}
 	hashCode := hex.EncodeToString(hash.Sum(nil))
 	r = &request{
 		id:       uid.UID(),

@@ -27,6 +27,7 @@ import (
 	"github.com/aacfactory/fns/internal/configuare"
 	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/fns/internal/procs"
+	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
@@ -99,6 +100,8 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create logger failed").WithCause(logErr)))
 		return
 	}
+	// extra listener
+	extraListeners := opt.extraListeners
 
 	// http server options
 	httpOptions := server.HttpOptions{
@@ -372,6 +375,7 @@ func New(options ...Option) (app Application) {
 		endpoints:       endpoints,
 		http:            httpServer,
 		httpHandlers:    httpHandlers,
+		extraListeners:  extraListeners,
 		shutdownTimeout: opt.shutdownTimeout,
 	}
 	return
@@ -388,6 +392,7 @@ type application struct {
 	endpoints       service.Endpoints
 	http            server.Http
 	httpHandlers    *server.Handlers
+	extraListeners  []listeners.Listener
 	shutdownTimeout time.Duration
 }
 
@@ -440,14 +445,42 @@ func (app *application) Run() (err error) {
 		}
 	}(err)
 	// extra listeners
-
+	if app.extraListeners != nil && len(app.extraListeners) > 0 {
+		for _, ln := range app.extraListeners {
+			lnName := strings.TrimSpace(ln.Name())
+			lnConfig, hasConfig := app.config.Node(lnName)
+			if !hasConfig {
+				lnConfig, _ = configuares.NewJsonConfig([]byte("{}"))
+			}
+			lnOpt := listeners.ListenerOptions{
+				Log:            app.log.With("extra_listener", lnName),
+				Config:         lnConfig,
+				ServiceHandler: app.endpoints,
+			}
+			extraListenCh := make(chan error, 1)
+			go func(ln listeners.Listener, opt *listeners.ListenerOptions, ch chan error) {
+				listenErr := ln.Listen(*opt)
+				if listenErr != nil {
+					ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
+					close(ch)
+				}
+			}(ln, &lnOpt, extraListenCh)
+			select {
+			case <-time.After(1 * time.Second):
+				break
+			case httpErr := <-extraListenCh:
+				err = httpErr
+				return
+			}
+		}
+	}
 	// http start
 	httpListenCh := make(chan error, 1)
 	go func(srv server.Http, ch chan error) {
 		listenErr := app.http.ListenAndServe()
 		if listenErr != nil {
 			ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
-			close(httpListenCh)
+			close(ch)
 		}
 	}(app.http, httpListenCh)
 	select {
@@ -508,7 +541,18 @@ func (app *application) stop(ch chan struct{}) {
 	httpCloseErr := app.http.Close()
 	if httpCloseErr != nil {
 		if app.log.WarnEnabled() {
-			app.log.Warn().Cause(httpCloseErr).Message("fns: stop application failed")
+			app.log.Warn().Cause(httpCloseErr).Message("fns: an error occurred in the stop application")
+		}
+	}
+	// extra listeners
+	if app.extraListeners != nil && len(app.extraListeners) > 0 {
+		for _, listener := range app.extraListeners {
+			lnCloseErr := listener.Close()
+			if lnCloseErr != nil {
+				if app.log.WarnEnabled() {
+					app.log.Warn().Cause(lnCloseErr).Message("fns: an error occurred in the stop application")
+				}
+			}
 		}
 	}
 	// endpoints

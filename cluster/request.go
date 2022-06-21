@@ -90,6 +90,7 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 		}
 	}
 	hash := md5.New()
+	hash.Write([]byte(sn + fn))
 	hash.Write(body)
 	hashCode := hex.EncodeToString(hash.Sum(nil))
 	r = &request{

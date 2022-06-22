@@ -1,76 +1,79 @@
-# 项目简介
+# Fns
+Fn services for Golang.  
+Simplify the development process by using standardized development methods.  
+Every thing is service.
 
-FNS 是一个类 FaaS 的 http 服务框架。   
-其主要目标是提供快速构建一个 FaaS 项目的模式与非侵入式生态。  
-其宗旨为亲和性标准化去构建一个可持续发展的 http 项目。
+## Usage
+First: install `fnc` commander.
+```shell
+go install github.com/aacfactory/fnc
+```
+Second: use `fnc` create a fns project.
+```shell
+mkdir {your project name}
+cd {your project name}
+fnc create .
+```
+Third: see `main.go`, `config`, `modules/examples`.   
+Last: Happy coding with `FNS`.
 
-## 特性列表
-
-* [x] 标准化
-* [x] 环境化配置
-* [x] 代码生成
-    * [x] fns service
-    * [x] open api documents
-    * [x] 参数验证
-* [x] 高并发
-* [ ] 分布式
-    * [ ] DOCKER SWARM
-    * [ ] KUBERNETES
-    * [ ] ETCD
-* [ ] authorizations
-    * [x] JWT
-* [x] 重复提交拦截
-    * [x] 本地
+## Features
+* [x] Standardization
+* [x] Applicable to enterprise projects
+* [x] Code generations
+    * [x] Service
+    * [x] Proxy
+    * [x] Open api documents
+    * [x] Parameter validation
+    * [x] Authorizations validation
+    * [x] Permissions validation
+* [x] High concurrency
+  * [x] Fasthttp as default http server
+  * [x] Http3 is optional
+* [x] TLS
+  * [x] SSC(self sign certs)
+  * [x] ACMEs
+* [x] Cluster
+    * [x] DOCKER SWARM
+    * [x] KUBERNETES
+* [x] Authorizations
+  * [x] Fns default token
+  * [x] Json web token
+* [x] Idempotent
+    * [x] local
     * [x] redis
-* [ ] 数据库
-    * [x] sql
-    * [x] 分布式 sql 事务
-    * [x] postgres orm
-    * [ ] mysql orm
+* [x] Databases
+    * [x] Strand SQL
+      * [x] Distributed SQL transaction
+    * [x] Postgres ORM
+    * [x] Mysql orm
     * [ ] dgraph
-    * [ ] graphQL to sql
-    * [x] redis
-* [ ] 消息中间件
-    * [ ] RabbitMQ
-    * [ ] Kafka
-    * [ ] RocketMQ
+    * [ ] GraphQL to SQL
+    * [x] Redis
+* [x] Message queue
+    * [x] RabbitMQ
+    * [x] Kafka
+    * [x] Nats.IO
 * [ ] DDD
 * [ ] OAUTH CLIENT
     * [ ] Wechat
     * [ ] Apple
     * [ ] Alipay
-* [ ] OAUTH SERVER
-* [ ] 第三方支付
+* [ ] Extra listeners
+  * [ ] Websockets
+  * [ ] MQTT
+* [ ] Third party payment
     * [ ] Wechat
     * [ ] Alipay
 
-## 使用说明
 
-使用要求：
-
-* go1.17 或更高
-* go mod 项目环境
-
-下载代码生成器（具体版本见fnc项目）
-
-```bash
-go install github.com/aacfactory/fnc@v1.6.1
-```
-
-获取库
-
-```bash
-go get github.com/aacfactory/fns
-```
-
-建议的项目结构
-
+## Project structure
 ```
 |-- main.go
 |-- config/
-     |-- app.yaml
-     |-- app-dev.yaml
-     |-- app-prod.yaml
+     |-- fns.yaml
+     |-- fns-dev.yaml
+     |-- fns-prod.yaml
 |-- module/
      |-- foo/
           |-- doc.go
@@ -78,283 +81,160 @@ go get github.com/aacfactory/fns
 |-- repository/
      |-- some_db_model.go
 ```
-
-编辑 config/app.yaml
-
+## Config file
 ```yaml
-name: project name
-description: |
-  project description.
-terms: project terms
+name: "project name"
+# service engine
+service:
+  maxWorkers: 0
+  workerMaxIdleSeconds: 10
+  handleTimeoutSeconds: 10
+# logger
 log:
   level: info
   formatter: console
   color: true
-http:
-  host: 0.0.0.0
+# http server
+server:
   port: 80
-  publicHost: 127.0.0.1
-  publicPort: 80
-  keepAlive: true
-  readBufferSize: 1MB
-  writeBufferSize: 4MB
-  cors:
-    enable: true
-    allowedOrigins:
-      - '*'
-    allowedMethods:
-      - GET
-      - POST
-services:
-  handleTimeoutSecond: 10
-  authorization:
-    enable: true
-    kind: jwt
-    config:
-      method: RS512
-      publicKey: ./config/jwt.public.pem
-      privateKey: ./config/jwt.private.pem
-      issuer: FNS
-      audience:
-        - web
-        - ios
-        - android
-        - wechat-miniapp
-      expirations: 360h0m0s
+# openapi config
+oas:
+  title: "Project title"
+  description: |
+    Project description
+  terms: https://terms.fns
+  contact:
+    name: hello
+    url: https://hello.fns
+    email: hello@fns
+  license:
+    name: license
+    url: https://license.fns
+  servers:
+    - url: https://test.hello.fns
+      description: test
+    - url: https://hello.fns
+      description: prod
+# service config >>>
+# authorizations service
+authorizations:
+  encoding:
+    method: "RS512"
+    publicKey: "path of public key"
+    privateKey: "path of private key"
+    issuer: ""
+    audience:
+      - foo
+      - bar
+    expirations: "720h0m0s"
+  store: {}
+examples:
+  componentA: {}
+# service config <<<
 ```
 
-创建内网传送密码 config/sk.txt
 
-```
-YOUR_PASSWORD
-```
-
-编辑 main.go
-
+## Coding
+### Service
+Create service package under `modules`, such as `modules/users`.  
+Create service `doc.go`, such as `modules/users/doc.go`.
 ```go
-
-var (
-	AppVersion = "v0.0.1"
-)
-
-//go:generate fnc -p .
-func main() {
-	app, appErr := fns.New(
-          // 在这之前请创建配置环境的环境变量，变量名没有约束。
-		fns.ConfigRetriever("./config", "YAML", fns.ConfigActiveFromENV("YOUR_PROJECT_ACTIVE"), "app", '-'),
-		fns.SecretKeyFile("./config/sk.txt"),
-		fns.Version(AppVersion),
-	)
-
-	if appErr != nil {
-		panic(fmt.Sprintf("%+v\n", appErr))
-		return
-	}
-
-	deployErr := app.Deploy(
-		// TODO: ADD SERVERS
-	)
-
-	if deployErr != nil {
-		app.Log().Error().Cause(deployErr).Caller().Message("app deploy service failed")
-		return
-	}
-
-	runErr := app.Run(context.TODO())
-
-	if runErr != nil {
-		app.Log().Error().Cause(runErr).Caller().Message("app run failed")
-		return
-	}
-
-	if app.Log().DebugEnabled() {
-		app.Log().Debug().Caller().Message("running...")
-	}
-
-	app.Sync()
-
-	if app.Log().DebugEnabled() {
-		app.Log().Debug().Message("stopped!!!")
-	}
-
-}
-
-```
-
-创建 fn service，编辑foo/doc.go
-
-```go
-// Package foo
-// @service foo
-// @title open tag title
-// @description open tag title
+// Package users
+// @service users
+// @title User
+// @description User service
 // @internal false
-package foo
+package users
 ```
-
-创建 fn
-
+`@service` value is service name;  
+`@title` value is service title, used as openapi tag;  
+`@description` value is service title, used as openapi tag description;   
+`@internal` value is mark the service can not be accessed from public network request;
+### Fn
+Create `fn` file, such as `get.go`. 
 ```go
-// CountNumParam
-// @title open api title
-// @description open api description
-type CountNumParam struct {
-	// BrandName
-	// @title open api title
-	// @description open api description
-	BrandName string `json:"brandName" validate:"required,not_blank" message:"brandName is invalid"`
-	// GroupName
-	// @title open api title
-	// @description open api description
-	GroupName string `json:"groupName"`
-	// Kind
-	// @title open api title
-	// @description open api description
-	Kind string `json:"kind"`
-	// UserId
-	// @title open api title
-	// @description open api description
-	UserId int64 `json:"userId"`
+// GetArgument
+// @title Get User Argument
+// @description Get User Argument
+type GetArgument struct {
+	// Id
+	// @title id
+	// @description id
+	Id int64 `json:"id" validate:"required" message:"id is invalid"`
 }
 
-// CountNumResult
-// @title open api title
-// @description open api description
-type CountNumResult struct {
-	Num int `json:"num"`
+// User
+// @title User
+// @description User profile
+type User struct {
+    // Id
+    // @title id
+    // @description id
+    Id string `json:"id"`
+    // Mobile
+    // @title Mobile
+    // @description Mobile
+    Mobile string `json:"mobile"`
+    // Name
+    // @title Name
+    // @description Name
+    Name string `json:"name"`
+    // Gender
+    // @title Gender 
+	// @enum M,F,N
+    // @description Gender
+    Gender string `json:"gender"`
+    // Age
+    // @title Age
+    // @description Age
+    Age int `json:"age"`
+    // Avatar
+    // @title Avatar
+    // @description Avatar
+    Avatar string `json:"avatar"`
 }
 
-// countNum
-// @fn count_num
+
+// get
+// @fn get
 // @validate true
 // @authorization false
 // @permission false
 // @internal false
-// @title open api title
+// @title Get user info
 // @description >>>
-// open api description
+// Get user info function
 // ----------
-// 支持 markdown
+// errors:
+// * user_get_failed
 // <<<
-func countNum(ctx fns.Context, param CountNumParam) (v *CountNumResult, err errors.CodeError) {
-	// TODO
-     // 参数必须两个：第一个固定fns.Context，第二个必须是value struct
-     // 返回值必须两个：第一个是返回的内容（支持PTR STRUCT、ARRAY、MAP），第二个必须是errors.CodeError
+func get(ctx context.Context, argument GetArgument) (v *User, err errors.CodeError) {
+	v = &User{
+		Id:     fmt.Sprintf("%v", argument.Id),
+		Mobile: "000",
+		Name:   "foo",
+		Gender: "F",
+		Age:    10,
+		Avatar: "bar",
+	}
 	return
 }
-
 ```
-
-使用 go:generate 命令生成 service
-
-```bash
-go generate
+### Code generation
+```shell
+cd {your project home}
+fnc codes .
 ```
-
-将生成的 service 布到 main 程序中。
-
+Or you can use `go generate` and `//go:generate fnc codes .`
+### Deploy service
+Add service in `main.go`.
 ```go
-deployErr := app.Deploy(
-	foo.Service(),
-)
+app.Deploy(users.Service())
 ```
 
-### JWT
-
-```go
-claims := jwt.NewUserClaims()
-claims.SetIntUserId(userId)
-claims.SetSub("some sub")
-token, tokenErr := ctx.App().Authorizations().Encode(ctx, claims)
-```
-
-### 数据库
-
-导入对应的驱动，目前支持 `github.com/lib/pq`。  
-在repository创建model
-
-```go
-type UserRow struct {
-	Id               int64                 `col:"ID,incrPk" json:"ID"`
-	Version          int64                 `col:"VERSION,aol" json:"VERSION"`
-	UID              string                `col:"UID" json:"UID"`
-	RegisterTime     time.Time             `col:"REGISTER_TIME" json:"REGISTER_TIME"`
-	Nickname         string                `col:"NICKNAME" json:"NICKNAME"`
-	Certified        bool                  `col:"CERTIFIED" json:"CERTIFIED"`
-	Mobile           string                `col:"MOBILE" json:"MOBILE"`
-	Gender           string                `col:"GENDER" json:"GENDER"`
-     Avatar           *File                 `col:"AVATAR,json" json:"AVATAR_ROW" copy:"AVATAR"`
-}
-
-func (r UserRow) TableName() (string, string) {
-	return "scheme", "table_name"
-}
-
-// File
-// @title 文件
-// @description 文件
-type File struct {
-	// Id
-	// @title 标识
-	// @description 标识
-	Id int64 `json:"id"`
-	// UID
-	// @title unique id
-	// @description unique id
-	UID string `json:"uid"`
-	// Schema
-	// @title http schema
-	// @description http schema
-	Schema string `json:"schema"`
-	// Domain
-	// @title 域名
-	// @description 域名
-	Domain string `json:"domain"`
-	// Path
-	// @title 路径
-	// @description 路径
-	Path string `json:"path"`
-	// MimeType
-	// @title 文件类型
-	// @description 文件类型
-	MimeType string `json:"mimeType"`
-	// Bucket
-	// @title 文件所在桶
-	// @description 文件所在桶
-	Bucket string `json:"bucket"`
-	// URL
-	// @title URL地址
-	// @description URL地址
-	URL string `json:"url"`
-}
-
-```
-
-在 fn 中使用（postgres）
-
-```go
-// QUERY ONE
-row := &repository.UserRow{}
-fetched, getErr := postgres.QueryOne(ctx, postgres.NewConditions(postgres.Eq("ID", param.Id)), row)
-// QUERY list
-rows := make([]*repository.UserRow, 0, 1)
-cond := postgres.NewConditions(postgres.Eq("NICKNAME", param.Nickname))
-sort := postgres.NewOrders().Asc("ID")
-rng := postgres.NewRange(param.Offset, param.Length)
-has, queryErr := postgres.QueryWithRange(ctx, cond, sort, rng, &rows)
-// INSERT
-insertErr := postgres.Insert(ctx, row)
-// MODIFY
-row.Gender = gender
-modErr := postgres.Modify(ctx, row)
-// DELETE
-deleteErr := postgres.Delete(ctx, row)
-```
-
-## 压力测试
-
-在AMD 3950X 64G内存的单机上 K6 压力测试结果（50 VUS 30s）。
-
+## Benchmark
+CPU: AMD 3950X;   
+MEM: 64G; 
 ```shell
 
           /\      |‾‾| /‾‾/   /‾‾/

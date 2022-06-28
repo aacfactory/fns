@@ -25,6 +25,7 @@ import (
 
 type revokeParam struct {
 	TokenId string `json:"tokenId"`
+	UserId  string `json:"userId"`
 }
 
 func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
@@ -37,8 +38,30 @@ func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
 		err = errors.Warning("authorizations: revoke token failed").WithCause(fmt.Errorf("tokenId is empty"))
 		return
 	}
-	fr := endpoint.Request(ctx, "encode", service.NewArgument(&revokeParam{
+	fr := endpoint.Request(ctx, "revoke", service.NewArgument(&revokeParam{
 		TokenId: tokenId,
+	}))
+	result := &service.Empty{}
+	_, getResultErr := fr.Get(ctx, result)
+	if getResultErr != nil {
+		err = getResultErr
+		return
+	}
+	return
+}
+
+func RevokeUserTokens(ctx context.Context, userId string) (err errors.CodeError) {
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
+	if !hasEndpoint {
+		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
+		return
+	}
+	if userId == "" {
+		err = errors.Warning("authorizations: revoke user tokens failed").WithCause(fmt.Errorf("userId is empty"))
+		return
+	}
+	fr := endpoint.Request(ctx, "revoke", service.NewArgument(&revokeParam{
+		UserId: userId,
 	}))
 	result := &service.Empty{}
 	_, getResultErr := fr.Get(ctx, result)

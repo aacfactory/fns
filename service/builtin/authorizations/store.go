@@ -69,6 +69,11 @@ func (component *tokenStoreComponent) Remove(ctx context.Context, tokenId string
 	return
 }
 
+func (component *tokenStoreComponent) RemoveUserTokens(ctx context.Context, userId string) (err error) {
+	err = component.store.RemoveUserTokens(ctx, userId)
+	return
+}
+
 func (component *tokenStoreComponent) Close() {
 	_ = component.store.Close()
 }

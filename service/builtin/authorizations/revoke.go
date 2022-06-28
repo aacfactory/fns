@@ -25,6 +25,7 @@ import (
 
 type RevokeParam struct {
 	TokenId string `json:"tokenId"`
+	UserId  string `json:"userId"`
 }
 
 func revoke(ctx context.Context, param RevokeParam) (result *service.Empty, err errors.CodeError) {
@@ -38,10 +39,19 @@ func revoke(ctx context.Context, param RevokeParam) (result *service.Empty, err 
 		err = errors.Warning("fns: revoke failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
-	rmErr := store.Remove(ctx, param.TokenId)
-	if rmErr != nil {
-		err = errors.Warning("fns: revoke failed").WithCause(rmErr)
-		return
+	if param.TokenId != "" {
+		rmErr := store.Remove(ctx, param.TokenId)
+		if rmErr != nil {
+			err = errors.Warning("fns: revoke failed").WithCause(rmErr)
+			return
+		}
+	}
+	if param.UserId != "" {
+		rmErr := store.RemoveUserTokens(ctx, param.UserId)
+		if rmErr != nil {
+			err = errors.Warning("fns: revoke failed").WithCause(rmErr)
+			return
+		}
 	}
 	return
 }

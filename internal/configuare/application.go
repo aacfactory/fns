@@ -18,7 +18,7 @@ package configuare
 
 type Config struct {
 	Name    string     `json:"name"`
-	Service *Service   `json:"service"`
+	Runtime *Runtime   `json:"runtime"`
 	Log     *LogConfig `json:"log"`
 	OAS     *OAS       `json:"oas"`
 	Server  *Server    `json:"server"`

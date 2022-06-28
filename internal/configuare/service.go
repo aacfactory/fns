@@ -16,7 +16,7 @@
 
 package configuare
 
-type Service struct {
+type Runtime struct {
 	MaxWorkers           int `json:"maxWorkers"`
 	WorkerMaxIdleSeconds int `json:"workerMaxIdleSeconds"`
 	HandleTimeoutSeconds int `json:"handleTimeoutSeconds"`

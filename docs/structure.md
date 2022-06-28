@@ -12,8 +12,7 @@
      |-- fns-qa.yaml                    # FNS-ACTIVE=qa
      |-- fns-prod.yaml                  # FNS-ACTIVE=prod
 |-- module/                             # biz modules
-     |-- mod.go                         # all services
-     |-- biz.go                         # biz services (it will be auto regenerated after invoking `fnc service create` command)
+     |-- mod.go                         # all services (it will be auto regenerated after invoking `fnc service create` command)
      |-- dep.go                         # dependency services 
      |-- foo/                           # biz service
           |-- doc.go                    # definition of service

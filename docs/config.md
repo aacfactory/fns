@@ -135,7 +135,7 @@ cluster:
   options: {}                     # options of kind
 ```
 ## Service
-service config, name of root node is service name, second layer nodes is components (if components are used).   
+service config, name of root node is service name, second layer nodes are components (if components are used).   
 For example: `jwt authorizations`
 ```yaml
 authorizations:

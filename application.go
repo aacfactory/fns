@@ -214,15 +214,15 @@ func New(options ...Option) (app Application) {
 	serviceMaxIdleWorkerSeconds := 0
 	serviceHandleTimeoutSeconds := 0
 	if config.Server != nil {
-		serviceMaxWorkers = config.Service.MaxWorkers
+		serviceMaxWorkers = config.Runtime.MaxWorkers
 		if serviceMaxWorkers < 1 {
 			serviceMaxWorkers = 0
 		}
-		serviceMaxIdleWorkerSeconds = config.Service.WorkerMaxIdleSeconds
+		serviceMaxIdleWorkerSeconds = config.Runtime.WorkerMaxIdleSeconds
 		if serviceMaxIdleWorkerSeconds < 1 {
 			serviceMaxIdleWorkerSeconds = 10
 		}
-		serviceHandleTimeoutSeconds = config.Service.HandleTimeoutSeconds
+		serviceHandleTimeoutSeconds = config.Runtime.HandleTimeoutSeconds
 		if serviceHandleTimeoutSeconds < 1 {
 			serviceHandleTimeoutSeconds = 10
 		}

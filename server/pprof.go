@@ -17,6 +17,7 @@
 package server
 
 import (
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/secret"
 	"net/http"
 	"net/http/pprof"
@@ -34,15 +35,29 @@ type PprofHandlerOptions struct {
 	Password string
 }
 
-func NewPprofHandler(options PprofHandlerOptions) (h Handler) {
-	h = &pprofHandler{
-		password: options.Password,
-	}
+func PprofHandler() (h Handler) {
+	h = &pprofHandler{}
 	return
 }
 
 type pprofHandler struct {
 	password string
+}
+
+func (h *pprofHandler) Name() (name string) {
+	name = "pprof"
+	return
+}
+
+func (h *pprofHandler) Build(options InterceptorHandlerOptions) (err error) {
+	password := ""
+	_, _ = options.Config.Get("password", &password)
+	if password == "" {
+		err = errors.Warning("fns: create pprof handler failed, password is required")
+		return
+	}
+	h.password = password
+	return
 }
 
 func (h *pprofHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {

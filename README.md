@@ -1,53 +1,47 @@
 # Fns
-Fn services for Golang.  
-Simplify the development process by using standardized development methods.  
-Every thing is service.
-
-## Usage
-First: install `fnc` commander.
-```shell
-go install github.com/aacfactory/fnc
-```
-Second: use `fnc` create a fns project.
-```shell
-mkdir {your project name}
-cd {your project name}
-fnc create .
-```
-Third: see `main.go`, `config`, `modules/examples`.   
-Last: Happy coding with `FNS`.
+Fn services for Golang. Simplify the development process by using standardized development scheme. Every thing is service.
 
 ## Features
-* [x] Standardization
 * [x] Applicable to enterprise projects
+  * [x] Standardization
+  * [x] Environmental configuration
+  * [x] Rapid development by code generations
+  * [x] Built in RBAC permission scheme
 * [x] Code generations
-    * [x] Service
-    * [x] Proxy
+    * [x] Service of fn
+    * [x] Proxy of fn
     * [x] Open api documents
-    * [x] Parameter validation
+    * [x] Request argument validation
     * [x] Authorizations validation
     * [x] Permissions validation
 * [x] High concurrency
-  * [x] Fasthttp as default http server
-  * [x] Http3 is optional
+  * [x] Goroutines pool
+  * [x] Fasthttp (Default)
+  * [x] Http3 (Optional)
+  * [x] Request Barrier (Multiple identical requests will only process the first one, and others will share the results of the first one)
 * [x] TLS
-  * [x] SSC(self sign certs)
+  * [x] Standard 
+  * [x] SSC (Auto generate cert and key by self sign ca)
   * [x] ACMEs
 * [x] Cluster
-    * [x] DOCKER SWARM
-    * [x] KUBERNETES
+  * [x] Designated members 
+  * [x] DOCKER SWARM (Auto find members by container label)
+  * [x] KUBERNETES (Auto find members by pod label)
 * [x] Authorizations
   * [x] Fns default token
   * [x] Json web token
-* [x] Idempotent
-    * [x] local
-    * [x] redis
+* [x] Permissions
+  * [x] RBAC
+* [x] Monitoring standards
+  * [x] Metric
+  * [x] Tracing
 * [x] Databases
-    * [x] Strand SQL
+    * [x] SQL
+      * [x] Serviceability (Internal service)
       * [x] Distributed SQL transaction
     * [x] Postgres ORM
-    * [x] Mysql orm
-    * [ ] dgraph
+    * [x] Mysql ORM
+    * [ ] Dgraph
     * [ ] GraphQL to SQL
     * [x] Redis
 * [x] Message queue
@@ -55,83 +49,37 @@ Last: Happy coding with `FNS`.
     * [x] Kafka
     * [x] Nats.IO
 * [ ] DDD
-* [ ] OAUTH CLIENT
-    * [ ] Wechat
-    * [ ] Apple
-    * [ ] Alipay
 * [ ] Extra listeners
   * [ ] Websockets
   * [ ] MQTT
-* [ ] Third party payment
-    * [ ] Wechat
-    * [ ] Alipay
+* [ ] Third party integration
+  * [ ] Oauth
+  * [ ] Payments
+  * [ ] SMS
+  * [ ] Notifications
 
+## Quickstart
+Read [usage]() for more.
+### Create project
+First: install `fnc` commander.
+```shell
+go install github.com/aacfactory/fnc
+```
+Second: use `fnc` create a fns project.
+```shell
+mkdir {your project path}
+cd {your project path}
+fnc create .
+```
+Third: look `main.go`, `config`, `modules` to understand [project structure](). 
+### Create fn
+Happy coding by `FNS`.
+### Send request to fn
+```shell
+curl -H "Content-Type: application/json" -X POST -d '{}' http://ip:port/service/fn
+```
 
-## Project structure
-```
-|-- main.go
-|-- config/
-     |-- fns.yaml
-     |-- fns-dev.yaml
-     |-- fns-prod.yaml
-|-- module/
-     |-- foo/
-          |-- doc.go
-          |-- some_fn.go
-|-- repository/
-     |-- some_db_model.go
-```
-## Config file
-```yaml
-name: "project name"
-# service engine
-service:
-  maxWorkers: 0
-  workerMaxIdleSeconds: 10
-  handleTimeoutSeconds: 10
-# logger
-log:
-  level: info
-  formatter: console
-  color: true
-# http server
-server:
-  port: 80
-# openapi config
-oas:
-  title: "Project title"
-  description: |
-    Project description
-  terms: https://terms.fns
-  contact:
-    name: hello
-    url: https://hello.fns
-    email: hello@fns
-  license:
-    name: license
-    url: https://license.fns
-  servers:
-    - url: https://test.hello.fns
-      description: test
-    - url: https://hello.fns
-      description: prod
-# service config >>>
-# authorizations service
-authorizations:
-  encoding:
-    method: "RS512"
-    publicKey: "path of public key"
-    privateKey: "path of private key"
-    issuer: ""
-    audience:
-      - foo
-      - bar
-    expirations: "720h0m0s"
-  store: {}
-examples:
-  componentA: {}
-# service config <<<
-```
+## Environmental configuration
 
 
 ## Coding
@@ -234,7 +182,8 @@ app.Deploy(users.Service())
 
 ## Benchmark
 CPU: AMD 3950X;   
-MEM: 64G; 
+MEM: 64G;   
+RPS: 118850.991763/s;
 ```shell
 
           /\      |‾‾| /‾‾/   /‾‾/

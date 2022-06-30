@@ -48,5 +48,13 @@ log := service.GetLog(ctx)
 
 ```
 
+## Argument field tag
+
+| Tag           | Type              | Description                                                                  |
+|---------------|-------------------|------------------------------------------------------------------------------|
+| json          | string            | json tag                                                                     |
+| validate      | string            | validator name, implement by [validator](github.com/go-playground/validator) |
+| message       | string            | validate failed message                                                      |
+
 ## Task
 The task is proxy of goroutine, and it is managed by fns goroutine pool.

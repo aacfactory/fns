@@ -77,11 +77,6 @@ Use `fnc` to create fn service.
 cd {your project path}
 fnc service create
 ```
-Use `fnc` to create fn.
-```shell
-cd {your project path}
-fnc fn create
-```
 Happy coding. Read [usage](https://github.com/aacfactory/fns/blob/main/docs/usage.md) for more.
 ### Read openapi document
 Setup `swagger-ui`, then open it.
@@ -98,6 +93,7 @@ curl -H "Content-Type: application/json" -X POST -d '{}' http://ip:port/service/
 
 ## Environmental configuration
 Use `FNS-ACTIVE` environment to control which configuration to be merged into default configuration and used. 
+The environment value could be `local`, `dev`, `qa`, and `prod`.
 Read [configuration](https://github.com/aacfactory/fns/blob/main/docs/config.md) for more.
 
 ## Cluster

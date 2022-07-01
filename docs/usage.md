@@ -136,7 +136,9 @@ type User struct {
 // Get user profile
 // ----------
 // errors:
-// * user_get_failed
+// | Name                     | Code    | Description                   |
+// |--------------------------|---------|-------------------------------|
+// | users_get_failed         | 500     | get user failed               |
 // <<<
 func get(ctx context.Context, argument GetArgument) (v *User, err errors.CodeError) {
     v = &User{

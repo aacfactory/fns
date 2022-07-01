@@ -7,14 +7,14 @@ Trace the `fn` used in the request. the tracer will be reported when origin requ
 ## Model
 ### Tracer
 | Name | Type   | Description         |
-| ---- | ------ | ------------------- |
+|------|--------|---------------------|
 | id   | string | id of tracer        |
 | span | Span   | root span of tracer |
 
 ### Span
 
 | Name       | Type     | Description                 |
-| ---------- | -------- | --------------------------- |
+|------------|----------|-----------------------------|
 | id         | string   | id of span                  |
 | service    | string   | service name                |
 | fn         | string   | fn name                     |

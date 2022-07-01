@@ -19,14 +19,14 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
 )
 
 type ComponentOptions struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 type Component interface {
@@ -37,7 +37,7 @@ type Component interface {
 
 type Options struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 // Service
@@ -89,7 +89,7 @@ func (svc *Abstract) Build(options Options) (err error) {
 		for _, component := range svc.components {
 			componentConfig, hasComponentConfig := options.Config.Node(component.Name())
 			if !hasComponentConfig {
-				componentConfig, _ = configuares.NewJsonConfig([]byte{'{', '}'})
+				componentConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
 			}
 			componentBuildErr := component.Build(ComponentOptions{
 				Log:    svc.log.With("component", component.Name()),

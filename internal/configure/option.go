@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package configuare
+package configure
 
 import (
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"os"
 	"path/filepath"
@@ -29,7 +29,7 @@ const (
 	activeSystemEnvKey = "FNS-ACTIVE"
 )
 
-func DefaultConfigRetrieverOption() (option configuares.RetrieverOption) {
+func DefaultConfigRetrieverOption() (option configures.RetrieverOption) {
 	path, pathErr := filepath.Abs("./config")
 	if pathErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: create default config retriever failed, cant not get absolute representation of './config'").WithCause(pathErr)))
@@ -37,8 +37,8 @@ func DefaultConfigRetrieverOption() (option configuares.RetrieverOption) {
 	}
 	active, _ := os.LookupEnv(activeSystemEnvKey)
 	active = strings.TrimSpace(active)
-	store := configuares.NewFileStore(path, "fns", '-')
-	option = configuares.RetrieverOption{
+	store := configures.NewFileStore(path, "fns", '-')
+	option = configures.RetrieverOption{
 		Active: active,
 		Format: "YAML",
 		Store:  store,

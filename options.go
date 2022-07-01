@@ -18,9 +18,9 @@ package fns
 
 import (
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/cluster"
-	"github.com/aacfactory/fns/internal/configuare"
+	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/fns/server"
@@ -40,7 +40,7 @@ var (
 		version:                   "0.0.0",
 		autoMaxProcsMin:           0,
 		autoMaxProcsMax:           0,
-		configRetrieverOption:     configuare.DefaultConfigRetrieverOption(),
+		configRetrieverOption:     configure.DefaultConfigRetrieverOption(),
 		barrier:                   nil,
 		server:                    &server.FastHttp{},
 		serverInterceptorHandlers: make([]server.InterceptorHandler, 0, 1),
@@ -53,7 +53,7 @@ type Options struct {
 	version                   string
 	autoMaxProcsMin           int
 	autoMaxProcsMax           int
-	configRetrieverOption     configuares.RetrieverOption
+	configRetrieverOption     configures.RetrieverOption
 	barrier                   service.Barrier
 	server                    server.Http
 	serverInterceptorHandlers []server.InterceptorHandler
@@ -72,8 +72,8 @@ func ConfigRetriever(path string, format string, active string, prefix string, s
 		}
 		active = strings.TrimSpace(active)
 		format = strings.ToUpper(strings.TrimSpace(format))
-		store := configuares.NewFileStore(path, prefix, splitter)
-		o.configRetrieverOption = configuares.RetrieverOption{
+		store := configures.NewFileStore(path, prefix, splitter)
+		o.configRetrieverOption = configures.RetrieverOption{
 			Active: active,
 			Format: format,
 			Store:  store,

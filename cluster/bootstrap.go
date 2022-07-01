@@ -18,7 +18,7 @@ package cluster
 
 import (
 	"context"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
@@ -28,7 +28,7 @@ import (
 
 type BootstrapOptions struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 type Bootstrap interface {

@@ -20,7 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/logger"
@@ -49,7 +49,7 @@ type Handler interface {
 
 type InterceptorHandlerOptions struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 type InterceptorHandler interface {

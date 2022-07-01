@@ -4,9 +4,9 @@ go 1.18
 
 require (
 	github.com/aacfactory/afssl v1.5.0
-	github.com/aacfactory/configuares v1.12.0
+	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.12.0
-	github.com/aacfactory/json v1.12.0
+	github.com/aacfactory/json v1.12.1
 	github.com/aacfactory/logs v1.12.0
 	github.com/aacfactory/workers v1.4.0
 	github.com/go-playground/validator/v10 v10.11.0

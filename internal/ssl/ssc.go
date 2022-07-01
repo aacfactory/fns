@@ -22,7 +22,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/aacfactory/afssl"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"io/ioutil"
 	"strings"
@@ -34,7 +34,7 @@ type SSCLoaderOptions struct {
 	CAKEY string `json:"caKey"`
 }
 
-func SSCLoader(options configuares.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
+func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
 	caPEM := defaultTestSSCCaPEM
 	caKeyPEM := defaultTestSSCCaKeyPEM
 	opt := &SSCLoaderOptions{}

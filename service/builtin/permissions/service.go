@@ -19,7 +19,7 @@ package permissions
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
@@ -74,7 +74,7 @@ func (svc *_service_) Build(options service.Options) (err error) {
 			}
 			componentCfg, hasConfig := options.Config.Node(cn)
 			if !hasConfig {
-				componentCfg, _ = configuares.NewJsonConfig([]byte("{}"))
+				componentCfg, _ = configures.NewJsonConfig([]byte("{}"))
 			}
 			err = component.Build(service.ComponentOptions{
 				Log:    options.Log.With("component", cn),

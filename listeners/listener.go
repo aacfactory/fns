@@ -18,13 +18,13 @@ package listeners
 
 import (
 	"context"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/logs"
 )
 
 type ListenerOptions struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 type Listener interface {

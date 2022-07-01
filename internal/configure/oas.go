@@ -14,10 +14,29 @@
  * limitations under the License.
  */
 
-package configuare
+package configure
 
-type Runtime struct {
-	MaxWorkers           int `json:"maxWorkers"`
-	WorkerMaxIdleSeconds int `json:"workerMaxIdleSeconds"`
-	HandleTimeoutSeconds int `json:"handleTimeoutSeconds"`
+type OASContact struct {
+	Name  string `json:"name"`
+	Url   string `json:"url"`
+	Email string `json:"email"`
+}
+
+type OASLicense struct {
+	Name string `json:"name"`
+	Url  string `json:"url"`
+}
+
+type OASServer struct {
+	URL         string `json:"url"`
+	Description string `json:"description"`
+}
+
+type OAS struct {
+	Title       string      `json:"title"`
+	Description string      `json:"description"`
+	Terms       string      `json:"terms"`
+	Contact     *OASContact `json:"contact"`
+	License     *OASLicense `json:"license"`
+	Servers     []OASServer `json:"servers"`
 }

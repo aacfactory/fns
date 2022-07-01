@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package configuare
+package configure
 
-type LogConfig struct {
-	Level     string `json:"level"`
-	Formatter string `json:"formatter"`
-	Color     bool   `json:"color"`
+type Runtime struct {
+	MaxWorkers           int `json:"maxWorkers"`
+	WorkerMaxIdleSeconds int `json:"workerMaxIdleSeconds"`
+	HandleTimeoutSeconds int `json:"handleTimeoutSeconds"`
 }

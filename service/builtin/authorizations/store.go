@@ -18,14 +18,14 @@ package authorizations
 
 import (
 	"context"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
 
 type TokenStoreOptions struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 type TokenStore interface {

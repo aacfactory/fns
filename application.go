@@ -20,12 +20,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/fns/internal/configuare"
+	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/fns/internal/procs"
 	"github.com/aacfactory/fns/listeners"
@@ -64,7 +64,7 @@ func New(options ...Option) (app Application) {
 	appId := ""
 	appVersion := opt.version
 	// config
-	configRetriever, configRetrieverErr := configuares.NewRetriever(opt.configRetrieverOption)
+	configRetriever, configRetrieverErr := configures.NewRetriever(opt.configRetrieverOption)
 	if configRetrieverErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed for invalid config retriever").WithCause(configRetrieverErr)))
 		return
@@ -74,7 +74,7 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, get config via retriever failed").WithCause(configGetErr)))
 		return
 	}
-	config := configuare.Config{}
+	config := configure.Config{}
 	decodeConfigErr := configRaw.As(&config)
 	if decodeConfigErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, decode config failed").WithCause(decodeConfigErr)))
@@ -320,14 +320,14 @@ func New(options ...Option) (app Application) {
 				return
 			}
 			interceptorHandlerLog := log.With("interceptor", interceptorHandlerName)
-			var interceptorHandlerConfig configuares.Config
+			var interceptorHandlerConfig configures.Config
 			var interceptorHandlerConfigGetErr error
 			if config.Server.Interceptors != nil {
 				interceptorHandlerConfigRaw, hasInterceptorHandlerConfig := config.Server.Interceptors[interceptorHandlerName]
 				if hasInterceptorHandlerConfig {
-					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configuares.NewJsonConfig(interceptorHandlerConfigRaw)
+					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configures.NewJsonConfig(interceptorHandlerConfigRaw)
 				} else {
-					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configuares.NewJsonConfig([]byte{'{', '}'})
+					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configures.NewJsonConfig([]byte{'{', '}'})
 				}
 			}
 			if interceptorHandlerConfigGetErr != nil {
@@ -389,7 +389,7 @@ type application struct {
 	log             logs.Logger
 	running         *commons.SafeFlag
 	autoMaxProcs    *procs.AutoMaxProcs
-	config          configuares.Config
+	config          configures.Config
 	clusterManager  *cluster.Manager
 	endpoints       service.Endpoints
 	http            server.Http
@@ -416,7 +416,7 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 		name := strings.TrimSpace(svc.Name())
 		svcConfig, hasConfig := app.config.Node(name)
 		if !hasConfig {
-			svcConfig, _ = configuares.NewJsonConfig([]byte("{}"))
+			svcConfig, _ = configures.NewJsonConfig([]byte("{}"))
 		}
 		buildErr := svc.Build(service.Options{
 			Log:    app.log.With("fns", "service").With("service", name),
@@ -459,7 +459,7 @@ func (app *application) Run() (err error) {
 			lnName := strings.TrimSpace(ln.Name())
 			lnConfig, hasConfig := app.config.Node(lnName)
 			if !hasConfig {
-				lnConfig, _ = configuares.NewJsonConfig([]byte("{}"))
+				lnConfig, _ = configures.NewJsonConfig([]byte("{}"))
 			}
 			lnOpt := listeners.ListenerOptions{
 				Log:    app.log.With("extra_listener", lnName),

@@ -19,7 +19,7 @@ package ssl
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"io/ioutil"
 	"strings"
@@ -30,7 +30,7 @@ type DefaultLoaderOptions struct {
 	Key  string `json:"key"`
 }
 
-func DefaultLoader(options configuares.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
+func DefaultLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
 	opt := &DefaultLoaderOptions{}
 	optErr := options.As(opt)
 	if optErr != nil {

@@ -19,7 +19,7 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -50,7 +50,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		err = errors.Warning(fmt.Sprintf("fns: %s kind bootstrap is not registerd", kind))
 		return
 	}
-	bootstrapConfig, bootstrapConfigErr := configuares.NewJsonConfig(options.Options)
+	bootstrapConfig, bootstrapConfigErr := configures.NewJsonConfig(options.Options)
 	if bootstrapConfigErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: options is invalid")).WithCause(bootstrapConfigErr)
 		return

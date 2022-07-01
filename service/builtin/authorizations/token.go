@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/secret"
@@ -40,7 +40,7 @@ type Token interface {
 
 type TokenEncodingOptions struct {
 	Log    logs.Logger
-	Config configuares.Config
+	Config configures.Config
 }
 
 type TokenEncoding interface {

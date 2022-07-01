@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package configuare
+package configure
 
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/ssl"
 	"github.com/aacfactory/json"
@@ -50,7 +50,7 @@ func (config *TLS) Config() (serverTLS *tls.Config, clientTLS *tls.Config, err e
 		err = errors.Warning(fmt.Sprintf("fns: can not get %s tls loader", kind))
 		return
 	}
-	loaderConfig, loaderConfigErr := configuares.NewJsonConfig(config.Options)
+	loaderConfig, loaderConfigErr := configures.NewJsonConfig(config.Options)
 	if loaderConfigErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: can not get options of %s tls loader", kind)).WithCause(loaderConfigErr)
 		return

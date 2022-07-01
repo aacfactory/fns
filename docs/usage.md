@@ -30,17 +30,17 @@ type Foo struct {
 }
 
 func (c *Foo) Name() (name string) {
-name = "component_name"
-return
+    name = "component_name"
+    return
 }
 
 func (c *Foo) Build(options service.ComponentOptions) (err error) {
-// build with config
-return
+    // build with config
+    return
 }
 
 func (c *Foo) Close() {
-return
+    return
 }
 ```
 
@@ -57,7 +57,9 @@ return &foo.Foo{}
 ## Create fn
 
 Create go file under created service dir, then create a private go func.
-Finally use `fnc code .` command to generate codes about register fn into service and fn proxy.
+Finally use `fnc codes .` command to generate codes about register fn into service and fn proxy.
+
+
 
 Note: the first argument type must be a `context.Context` and the second argument type must be a `struct`, the first
 return value type must be a `pointer` or `slice`, the second return value type must be `errors.CodeError`.
@@ -95,7 +97,7 @@ type User struct {
     Name string `json:"name"`
     // Gender
     // @title Gender 
-    //@enum F,M,N
+    // @enum F,M,N
     // @description Gender
     Gender string `json:"gender"`
     // Age
@@ -116,7 +118,7 @@ type User struct {
 // get
 // @fn get
 // @validate true
-// @authorization false
+// @authorization true
 // @permission foo,bar
 // @internal false
 // @title Get user profile
@@ -140,3 +142,18 @@ func get(ctx context.Context, argument GetArgument) (v *User, err errors.CodeErr
 }
 
 ```
+
+## Register fn and generate fn proxy
+Direct access between functions is not recommended. Instead, proxy access is used.
+
+```shell
+cd {project path}
+fnc codes .
+```
+Or
+```shell
+cd {project path}
+go generate
+```
+
+In the above case, `users.Get` fn proxy will be generated. 

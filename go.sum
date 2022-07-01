@@ -1,11 +1,11 @@
 github.com/aacfactory/afssl v1.5.0 h1:IzeKuB4b2wq6lQyE8kNYaSiRcP35Foom04nOnfqaCuI=
 github.com/aacfactory/afssl v1.5.0/go.mod h1:gO9Y8nwF/JS4ohdq8KgAFHnFbnLuDEOvRRYNg+nWR94=
-github.com/aacfactory/configuares v1.12.0 h1:8diNms66WUdfy+96VrW0CDgYLtLEp71LTAutWXFZi98=
-github.com/aacfactory/configuares v1.12.0/go.mod h1:RkJCWukjkXAMPW6EcthiMh1MxLciesujsSMSgq2IJrQ=
+github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=
+github.com/aacfactory/configures v1.12.1/go.mod h1:Iw63k3WoJD8eb1HWE6cvkBTFXfoeCqutuj8vVnia1Kg=
 github.com/aacfactory/errors v1.12.0 h1:annMr3MgWDtjlxIz8xk2iqcn7Qpm06cxAs7dpXDytH4=
 github.com/aacfactory/errors v1.12.0/go.mod h1:8XVeG/W1HWO0xQOs84pwRLms0CTHblQc610g0JZn8xo=
-github.com/aacfactory/json v1.12.0 h1:gh/HieNtGVa+GZ1I/uJCL4/ndY4rA8bzxvVYc/qcQUY=
-github.com/aacfactory/json v1.12.0/go.mod h1:Dw6ill/ewdRWQ1tNq6xVKEEWmVl3EtOYNsx2jxxlwzg=
+github.com/aacfactory/json v1.12.1 h1:+yMy4BFdsPb+S5HIRgNsi+oRMFPeQa/DbILywuvhSaQ=
+github.com/aacfactory/json v1.12.1/go.mod h1:nWupQJKp4wB4ccCPGHfwlgpuz7vjuVC+uX4hk7TtMxk=
 github.com/aacfactory/logs v1.12.0 h1:OQ4P/UBmfTrHWocWAER7i1XILx8fbM5e4CEZkzpiE2U=
 github.com/aacfactory/logs v1.12.0/go.mod h1:pLn0dVYZoDeprsqdFBtOBqqnsGWnYkoJLqUaH9qD7/U=
 github.com/aacfactory/workers v1.4.0 h1:lYoOaqd4Uu+Vwx2D23cozk+SLRkvPCxbgXKc/bOwggo=

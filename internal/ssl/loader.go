@@ -19,10 +19,10 @@ package ssl
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/configuares"
+	"github.com/aacfactory/configures"
 )
 
-type Loader func(options configuares.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error)
+type Loader func(options configures.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error)
 
 var (
 	loaders = map[string]Loader{"SSC": SSCLoader, "DEFAULT": DefaultLoader}

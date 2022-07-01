@@ -14,21 +14,13 @@
  * limitations under the License.
  */
 
-package configuare
+package configure
 
-import "github.com/aacfactory/json"
-
-type Cluster struct {
-	DevMode           bool            `json:"devMode"`
-	NodesProxyAddress string          `json:"nodesProxyAddress"`
-	Kind              string          `json:"kind"`
-	Client            ClusterClient   `json:"client"`
-	Options           json.RawMessage `json:"options"`
-}
-
-type ClusterClient struct {
-	MaxIdleConnSeconds    int `json:"maxIdleConnSeconds"`
-	MaxConnsPerHost       int `json:"maxConnsPerHost"`
-	MaxIdleConnsPerHost   int `json:"maxIdleConnsPerHost"`
-	RequestTimeoutSeconds int `json:"requestTimeoutSeconds"`
+type Config struct {
+	Name    string     `json:"name"`
+	Runtime *Runtime   `json:"runtime"`
+	Log     *LogConfig `json:"log"`
+	OAS     *OAS       `json:"oas"`
+	Server  *Server    `json:"server"`
+	Cluster *Cluster   `json:"cluster"`
 }

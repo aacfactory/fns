@@ -50,10 +50,14 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		err = errors.Warning(fmt.Sprintf("fns: %s kind bootstrap is not registerd", kind))
 		return
 	}
-	bootstrapConfig, bootstrapConfigErr := configures.NewJsonConfig(options.Options)
-	if bootstrapConfigErr != nil {
-		err = errors.Warning(fmt.Sprintf("fns: options is invalid")).WithCause(bootstrapConfigErr)
+	optionsConfig, optionsConfigErr := configures.NewJsonConfig(options.Options)
+	if optionsConfigErr != nil {
+		err = errors.Warning(fmt.Sprintf("fns: options is invalid")).WithCause(optionsConfigErr)
 		return
+	}
+	bootstrapConfig, hasBootstrapConfig := optionsConfig.Node(kind)
+	if !hasBootstrapConfig {
+		bootstrapConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
 	bootstrapBuildErr := bootstrap.Build(BootstrapOptions{
 		Config: bootstrapConfig,

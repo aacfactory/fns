@@ -3,8 +3,18 @@
 ---
 
 ## Create service
+1. create service pkg under `modules`
+2. Create `doc.go` under service pkg
 
-Use `fnc service create` command to create a service.
+For example
+```go
+// Package users
+// @service users
+// @title Users
+// @description User service
+// @internal false
+package users
+```
 
 ## Create service components if required
 

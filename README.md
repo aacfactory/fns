@@ -68,15 +68,10 @@ Second: use `fnc` create a fns project.
 ```shell
 mkdir {your project path}
 cd {your project path}
-fnc create .
+fnc create 
 ```
 Third: look `main.go`, `config`, `modules` to understand [project structure](https://github.com/aacfactory/fns/blob/main/docs/structure.md). 
-### Create service and fn
-Use `fnc` to create fn service.
-```shell
-cd {your project path}
-fnc service create
-```
+
 Happy coding. Read [usage](https://github.com/aacfactory/fns/blob/main/docs/usage.md) for more.
 ### Read openapi document
 Setup `swagger-ui`, then open it.

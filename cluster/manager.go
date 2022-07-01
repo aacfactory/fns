@@ -42,7 +42,7 @@ type ManagerOptions struct {
 func NewManager(options ManagerOptions) (manager *Manager, err error) {
 	kind := strings.TrimSpace(options.Kind)
 	if kind == "" {
-		kind = "default"
+		kind = "members"
 		return
 	}
 	bootstrap, hasBootstrap := getRegisteredBootstrap(kind)

@@ -39,7 +39,7 @@ type Bootstrap interface {
 }
 
 var (
-	registeredBootstraps = map[string]Bootstrap{"default": &defaultBootstrap{}}
+	registeredBootstraps = map[string]Bootstrap{"members": &defaultBootstrap{}}
 )
 
 func RegisterBootstrap(kind string, bootstrap Bootstrap) (ok bool) {
@@ -72,12 +72,12 @@ type defaultBootstrap struct {
 
 func (b *defaultBootstrap) Build(options BootstrapOptions) (err error) {
 	members := make([]string, 0, 1)
-	has, getErr := options.Config.Get("members", &members)
+	getErr := options.Config.As(&members)
 	if getErr != nil {
 		err = errors.Warning("fns: members is undefined in cluster.options config")
 		return
 	}
-	if !has || len(members) == 0 {
+	if len(members) == 0 {
 		err = errors.Warning("fns: members is undefined in cluster.options config")
 		return
 	}

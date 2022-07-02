@@ -126,7 +126,7 @@ cluster config, read [doc](https://github.com/aacfactory/fns/blob/main/docs/clus
 cluster:
   devMode: false                  # when dev mode is true, current node will not be pushed to other members
   nodesProxyAddress: "ip:port"    # when dev mode is true, and current node can not use member address to access them, then use a proxy to access members. 
-  kind: ""                        # cluster kind: default, swarm, kubernetes.
+  kind: ""                        # cluster kind: members, swarm, kubernetes.
   client:
     maxIdleConnSeconds: 0
     maxConnsPerHost: 0

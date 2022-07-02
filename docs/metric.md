@@ -21,7 +21,7 @@ Measurement each fn handling result stats in request. so there are more than one
 It is an interface, so you can use `Prometheus` to implement. 
 
 ## Usage
-Add service in `modules/dep.go`
+Add service in `modules/dependencies.go`
 ```go
 func dependencies() (services []service.Service) {
 	services = append(

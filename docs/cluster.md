@@ -2,7 +2,7 @@
 
 ---
 
-## Designated members 
+## members 
 For a fixed number of clusters, existing nodes in other members will be automatically added, but other members will not be found by themselves.
 
 Config:

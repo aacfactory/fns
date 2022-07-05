@@ -115,19 +115,19 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err e
 	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
-	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, err errors.CodeError) {
+	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, doErr errors.CodeError) {
 		ctx = e.SetupContext(ctx)
 		ctx = SetRequest(ctx, r)
 		ep, has := e.group.Get(ctx, service)
 		if !has {
-			err = errors.NotFound("fns: service was not found").WithMeta("service", service)
+			doErr = errors.NotFound("fns: service was not found").WithMeta("service", service)
 			return
 		}
 		ctx = SetTracer(ctx)
 		result := ep.Request(ctx, fn, r.Argument())
 		resultValue, hasResult, handleErr := result.Value(ctx)
 		if handleErr != nil {
-			err = handleErr
+			doErr = handleErr
 		} else {
 			if hasResult {
 				v = resultValue

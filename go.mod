@@ -7,7 +7,7 @@ require (
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.12.0
 	github.com/aacfactory/json v1.12.1
-	github.com/aacfactory/logs v1.12.0
+	github.com/aacfactory/logs v1.12.1
 	github.com/aacfactory/workers v1.4.0
 	github.com/go-playground/validator/v10 v10.11.0
 	github.com/rs/xid v1.4.0

@@ -19,17 +19,17 @@
 
 函数代表着业务, 第一个参数必须是 `context.Context`，第二个参数必须是 `struct`的值类型, 第一个返回值必须是 `pointer` 或者 `slice`,第二个返回值必须是 `errors.CodeError`, 函数的注解如下:
 
-| Annotation    | Type              | Required | Description                 |
-|---------------|-------------------|----------|-----------------------------|
-| fn            | string            | true     | 函数名称                        |
-| validate      | bool              | false    | 是否开启自动参数校验                  |
-| authorization | bool              | false    | 是否开启自动认证校验                  |
-| permission    | []roleName        | false    | 是否开启权限校验，值为角色名，即哪些角色可以访问该函数 |
-| transactional | enum(sql, dgraph) | false    | 是否自动开启和管理数据库事务              |
-| deprecated    | bool              | false    | 是否为弃用                       |
-| title         | string            | false    | 用于OAS的请求标题                  |
-| description   | string            | false    | 用于OAS的请求描述                  |
-| internal      | bool              | false    | 与服务的效果一样                    |
+| Annotation    | Type                               | Required | Description                 |
+|---------------|------------------------------------|----------|-----------------------------|
+| fn            | string                             | true     | 函数名称                        |
+| validate      | bool                               | false    | 是否开启自动参数校验                  |
+| authorization | bool                               | false    | 是否开启自动认证校验                  |
+| permission    | []roleName                         | false    | 是否开启权限校验，值为角色名，即哪些角色可以访问该函数 |
+| transactional | enum(sql, postgres, mysql, dgraph) | false    | 是否自动开启和管理数据库事务              |
+| deprecated    | bool                               | false    | 是否为弃用                       |
+| title         | string                             | false    | 用于OAS的请求标题                  |
+| description   | string                             | false    | 用于OAS的请求描述                  |
+| internal      | bool                               | false    | 与服务的效果一样                    |
 
 ## Context
 请求的上下文是一棵树，每个函数的上下文都附着在这棵树上。

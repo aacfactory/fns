@@ -154,42 +154,13 @@ func New(options ...Option) (app Application) {
 		if clientBuilder == nil {
 			clientBuilder = cluster.FastHttpClientBuilder
 		}
-		clientConfig := config.Cluster.Client
-		maxIdleConnSeconds := clientConfig.MaxIdleConnSeconds
-		if maxIdleConnSeconds < 1 {
-			maxIdleConnSeconds = 10
-		}
-		maxConnsPerHost := clientConfig.MaxConnsPerHost
-		if maxConnsPerHost < 1 {
-			maxConnsPerHost = 0
-		}
-		maxIdleConnsPerHost := clientConfig.MaxIdleConnsPerHost
-		if maxIdleConnsPerHost < 1 {
-			maxIdleConnsPerHost = 0
-		}
-		requestTimeoutSeconds := clientConfig.RequestTimeoutSeconds
-		if requestTimeoutSeconds < 1 {
-			requestTimeoutSeconds = 2
-		}
-		client, clientErr := clientBuilder(cluster.ClientOptions{
-			Log:                 log.With("cluster", "client"),
-			Https:               httpOptions.ServerTLS != nil,
-			TLS:                 httpOptions.ClientTLS,
-			MaxIdleConnDuration: time.Duration(maxIdleConnSeconds) * time.Second,
-			MaxConnsPerHost:     maxConnsPerHost,
-			MaxIdleConnsPerHost: maxIdleConnsPerHost,
-			RequestTimeout:      time.Duration(requestTimeoutSeconds) * time.Second,
-		})
-		if clientErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster client failed").WithCause(clientErr)))
-			return
-		}
 		clusterManagerOptions := cluster.ManagerOptions{
 			Log:               log,
 			Port:              httpOptions.Port,
-			Kind:              config.Cluster.Kind,
-			Options:           config.Cluster.Options,
-			Client:            client,
+			Config:            config.Cluster,
+			ClientHttps:       httpOptions.ServerTLS != nil,
+			ClientTLS:         httpOptions.ClientTLS,
+			ClientBuilder:     clientBuilder,
 			DevMode:           config.Cluster.DevMode,
 			NodesProxyAddress: config.Cluster.NodesProxyAddress,
 		}

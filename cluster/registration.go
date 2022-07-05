@@ -25,6 +25,7 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,13 +48,13 @@ func (r *Registration) Key() (key string) {
 }
 
 func (r *Registration) Request(ctx context.Context, fn string, argument service.Argument) (result service.Result) {
+	fr := service.NewResult()
+	result = fr
 	req, hasReq := service.GetRequest(ctx)
 	if !hasReq {
 		req0, reqErr := service.NewInternalRequest(r.Name, fn, argument)
 		if reqErr != nil {
-			fr := service.NewResult()
 			fr.Failed(errors.Warning("fns: there is no request in context, then to create internal request but failed").WithCause(reqErr).WithMeta("service", r.Name).WithMeta("fn", fn))
-			result = fr
 			return
 		}
 		ctx = service.SetRequest(ctx, req0)
@@ -61,17 +62,17 @@ func (r *Registration) Request(ctx context.Context, fn string, argument service.
 	}
 	local, localErr := json.Marshal(req.Local())
 	if localErr != nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode request local failed").WithCause(localErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		fr.Failed(errors.Warning("fns: remote call failed, encode request local failed").WithCause(localErr).WithMeta("service", r.Name).WithMeta("fn", fn))
 		return
 	}
 	user, userErr := json.Marshal(req.User())
 	if userErr != nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode request user failed").WithCause(userErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		fr.Failed(errors.Warning("fns: remote call failed, encode request user failed").WithCause(userErr).WithMeta("service", r.Name).WithMeta("fn", fn))
 		return
 	}
 	arg, argErr := argument.MarshalJSON()
 	if argErr != nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode argument failed").WithCause(argErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		fr.Failed(errors.Warning("fns: remote call failed, encode argument failed").WithCause(argErr).WithMeta("service", r.Name).WithMeta("fn", fn))
 		return
 	}
 	ir := &internalRequest{
@@ -81,14 +82,14 @@ func (r *Registration) Request(ctx context.Context, fn string, argument service.
 	}
 	reqBody, encodeErr := json.Marshal(ir)
 	if encodeErr != nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: remote call failed, encode internal request body failed").WithCause(encodeErr).WithMeta("service", r.Name).WithMeta("fn", fn)))
+		fr.Failed(errors.Warning("fns: remote call failed, encode internal request body failed").WithCause(encodeErr).WithMeta("service", r.Name).WithMeta("fn", fn))
 		return
 	}
 	reqBody = encodeRequestBody(reqBody)
 	reqHeader := req.Header().Raw().Clone()
 	reqHeader.Set(httpContentType, httpContentTypeProxy)
-	fr := service.NewResult()
-	result = fr
+	reqHeader.Set("X-Fns-Request-Id", req.Id())
+
 	status, _, respBody, callErr := r.client.Do(ctx, http.MethodPost, r.Address, fmt.Sprintf("/%s/%s", r.Name, fn), reqHeader, reqBody)
 	if callErr != nil {
 		r.addUnavailableTimes()
@@ -205,18 +206,22 @@ func (r *Registrations) Get(id string) (v *Registration, has bool) {
 	return
 }
 
-func newRegistrationsManager(log logs.Logger) *RegistrationsManager {
-	return &RegistrationsManager{
+func newRegistrationsManager(log logs.Logger, client Client) (v *RegistrationsManager) {
+	v = &RegistrationsManager{
 		log:    log.With("cluster", "registrations"),
+		client: client,
 		stopCh: make(chan struct{}, 1),
 		events: make(chan *nodeEvent, 512),
 		nodes:  sync.Map{},
 		values: sync.Map{},
 	}
+	v.listenEvents()
+	return
 }
 
 type RegistrationsManager struct {
 	log    logs.Logger
+	client Client
 	stopCh chan struct{}
 	events chan *nodeEvent
 	nodes  sync.Map
@@ -242,6 +247,7 @@ func (manager *RegistrationsManager) register(n *node) {
 	if manager.containsNode(n) {
 		return
 	}
+	n.client = manager.client
 	manager.events <- &nodeEvent{
 		kind:  "register",
 		value: n,
@@ -325,6 +331,14 @@ func (manager *RegistrationsManager) listenEvents() {
 					manager.handleRegister(event.value)
 				} else if event.kind == "deregister" {
 					manager.handleDeregister(event.value)
+				}
+				if manager.log.DebugEnabled() {
+					members := make([]string, 0, 1)
+					nodes := manager.members()
+					for _, n := range nodes {
+						members = append(members, fmt.Sprintf("%s:%s", n.Id_, n.Address))
+					}
+					manager.log.Debug().With("members", fmt.Sprintf("[%s]", strings.Join(members, ","))).Message(fmt.Sprintf("fns: registered members size is %d", len(members)))
 				}
 			case <-manager.stopCh:
 				closed = true

@@ -79,8 +79,20 @@ func (r *futureResult) Value(ctx context.Context) (value interface{}, has bool, 
 		if !ok {
 			return
 		}
-		value = data
-		has = true
+		if data == nil {
+			return
+		}
+		switch data.(type) {
+		case errors.CodeError:
+			err = data.(errors.CodeError)
+			break
+		case error:
+			err = errors.Warning(data.(error).Error())
+			break
+		default:
+			value = data
+			has = true
+		}
 		return
 	}
 }
@@ -101,8 +113,29 @@ func (r *futureResult) Get(ctx context.Context, v interface{}) (has bool, err er
 		case error:
 			err = errors.Warning(data.(error).Error())
 			return
-		case []byte, json.RawMessage:
+		case []byte:
 			value := data.([]byte)
+			if len(value) == 0 {
+				return
+			}
+			switch v.(type) {
+			case *json.RawMessage:
+				vv := v.(*json.RawMessage)
+				*vv = append(*vv, value...)
+			case *[]byte:
+				vv := v.(*[]byte)
+				*vv = append(*vv, value...)
+			default:
+				decodeErr := json.Unmarshal(value, v)
+				if decodeErr != nil {
+					err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(decodeErr)
+					return
+				}
+			}
+			has = true
+			return
+		case json.RawMessage:
+			value := data.(json.RawMessage)
 			if len(value) == 0 {
 				return
 			}

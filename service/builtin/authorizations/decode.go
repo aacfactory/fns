@@ -40,18 +40,18 @@ func decode(ctx context.Context, param DecodeParam) (result *DecodeResult, err e
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
 		return
 	}
-	encoding, encodingOk := encodingComponent.(*tokenEncodingComponent)
+	encoder, encodingOk := encodingComponent.(*tokenEncodingComponent)
 	if !encodingOk {
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
 		return
 	}
-	token, decodeErr := encoding.Decode([]byte(param.Token))
+	token, decodeErr := encoder.Decode([]byte(param.Token))
 	if decodeErr != nil {
 		err = errors.Unauthorized("fns: decode failed").WithCause(decodeErr)
 		return
 	}
-	if token.NotAfter().After(time.Now()) {
-		err = errors.Unauthorized("fns: decode failed").WithCause(decodeErr)
+	if token.NotAfter().Before(time.Now()) {
+		err = errors.Unauthorized("fns: decode failed").WithCause(fmt.Errorf("token is expired"))
 		return
 	}
 	storeComponent, hasStoreComponent := service.GetComponent(ctx, "store")
@@ -59,12 +59,12 @@ func decode(ctx context.Context, param DecodeParam) (result *DecodeResult, err e
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
-	store, storeOk := storeComponent.(*tokenStoreComponent)
+	st, storeOk := storeComponent.(*tokenStoreComponent)
 	if !storeOk {
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
-	if !store.Exist(ctx, token.Id()) {
+	if !st.Exist(ctx, token.Id()) {
 		err = errors.Unauthorized("fns: decode failed").WithCause(fmt.Errorf("token maybe revoked"))
 		return
 	}

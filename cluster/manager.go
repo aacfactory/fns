@@ -18,9 +18,11 @@ package cluster
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
@@ -32,15 +34,16 @@ import (
 type ManagerOptions struct {
 	Log               logs.Logger
 	Port              int
-	Kind              string
-	Options           json.RawMessage
-	Client            Client
+	Config            *configure.Cluster
+	ClientHttps       bool
+	ClientTLS         *tls.Config
+	ClientBuilder     ClientBuilder
 	DevMode           bool
 	NodesProxyAddress string
 }
 
 func NewManager(options ManagerOptions) (manager *Manager, err error) {
-	kind := strings.TrimSpace(options.Kind)
+	kind := strings.TrimSpace(options.Config.Kind)
 	if kind == "" {
 		kind = "members"
 		return
@@ -50,7 +53,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		err = errors.Warning(fmt.Sprintf("fns: %s kind bootstrap is not registerd", kind))
 		return
 	}
-	optionsConfig, optionsConfigErr := configures.NewJsonConfig(options.Options)
+	optionsConfig, optionsConfigErr := configures.NewJsonConfig(options.Config.Options)
 	if optionsConfigErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: options is invalid")).WithCause(optionsConfigErr)
 		return
@@ -77,6 +80,37 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 		err = fmt.Errorf("fns: can not get my ip from bootstrap")
 		return
 	}
+	clientConfig := options.Config.Client
+	maxIdleConnSeconds := clientConfig.MaxIdleConnSeconds
+	if maxIdleConnSeconds < 1 {
+		maxIdleConnSeconds = 10
+	}
+	maxConnsPerHost := clientConfig.MaxConnsPerHost
+	if maxConnsPerHost < 1 {
+		maxConnsPerHost = 0
+	}
+	maxIdleConnsPerHost := clientConfig.MaxIdleConnsPerHost
+	if maxIdleConnsPerHost < 1 {
+		maxIdleConnsPerHost = 0
+	}
+	requestTimeoutSeconds := clientConfig.RequestTimeoutSeconds
+	if requestTimeoutSeconds < 1 {
+		requestTimeoutSeconds = 2
+	}
+	clientOptions := ClientOptions{
+		Log:                 options.Log.With("cluster", "client"),
+		Https:               options.ClientHttps,
+		TLS:                 options.ClientTLS,
+		MaxIdleConnDuration: time.Duration(maxIdleConnSeconds) * time.Second,
+		MaxConnsPerHost:     maxConnsPerHost,
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+		RequestTimeout:      time.Duration(requestTimeoutSeconds) * time.Second,
+	}
+	client, clientErr := options.ClientBuilder(clientOptions)
+	if clientErr != nil {
+		err = errors.Warning("fns: create cluster client failed").WithCause(clientErr)
+		return
+	}
 	manager = &Manager{
 		log:               options.Log.With("cluster", "manager"),
 		devMode:           options.DevMode,
@@ -87,10 +121,10 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 			Id_:      id,
 			Address:  fmt.Sprintf("%s:%d", ip, options.Port),
 			Services: make([]*nodeService, 0, 1),
-			client:   options.Client,
+			client:   client,
 		},
-		client:        options.Client,
-		registrations: newRegistrationsManager(options.Log),
+		client:        client,
+		registrations: newRegistrationsManager(options.Log, client),
 		stopCh:        make(chan struct{}, 1),
 	}
 	return
@@ -133,7 +167,9 @@ func (manager *Manager) linkMembers() {
 	}
 	p, pErr := json.Marshal(manager.node)
 	if pErr != nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: encode node failed").WithCause(pErr)))
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().Message(fmt.Sprintf("%+v", errors.Warning("fns: encode node failed").WithCause(pErr)))
+		}
 		return
 	}
 	body := encodeRequestBody(p)
@@ -144,14 +180,6 @@ func (manager *Manager) linkMembers() {
 		manager.linkMember(address, memberAddresses, memberAddressesLen, header, body)
 	}
 	manager.registrations.removeUnavailableNodes()
-	if manager.log.DebugEnabled() {
-		members := make([]string, 0, 1)
-		nodes := manager.registrations.members()
-		for _, n := range nodes {
-			members = append(members, fmt.Sprintf("%s:%s", n.Id_, n.Address))
-		}
-		manager.log.Debug().With("members", fmt.Sprintf("[%s]", strings.Join(members, ","))).Message(fmt.Sprintf("fns: cluster size is %d", len(nodes)))
-	}
 }
 
 func (manager *Manager) linkMember(target string, members []string, membersLen int, header http.Header, body []byte) {
@@ -164,16 +192,22 @@ func (manager *Manager) linkMember(target string, members []string, membersLen i
 	}
 	status, _, respBody, callErr := manager.client.Do(context.TODO(), http.MethodPost, target, joinPath, header, body)
 	if callErr != nil {
-		if manager.log.WarnEnabled() {
-			manager.log.Warn().With("member", target).With("status", status).With("step", "call").Cause(callErr).Message("fns: link member failed")
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().With("member", target).With("status", status).With("step", "call").Cause(callErr).Message("fns: link member failed")
+		}
+		return
+	}
+	if status != http.StatusOK {
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().With("member", target).With("status", status).With("step", "call").Message("fns: link member failed")
 		}
 		return
 	}
 	nodes := make([]*node, 0, 1)
 	decodeErr := json.Unmarshal(respBody, &nodes)
 	if decodeErr != nil {
-		if manager.log.WarnEnabled() {
-			manager.log.Warn().With("member", target).With("status", status).With("step", "decode response").Cause(decodeErr).Message("fns: link member failed")
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().With("member", target).With("status", status).With("step", "decode response").Cause(decodeErr).Message("fns: link member failed")
 		}
 		return
 	}

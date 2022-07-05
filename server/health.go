@@ -74,7 +74,7 @@ func (h *healthHandler) Handle(writer http.ResponseWriter, request *http.Request
 	case "", "/", httpHealthPath:
 		ok = true
 		body := fmt.Sprintf(
-			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"running\":\"%v\", \"launch\":\"%s\", \"now\":\"%s\"}",
+			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"running\":%v, \"launch\":\"%s\", \"now\":\"%s\"}",
 			h.appName, h.appId, h.version, h.running.IsOn(), h.launchAT, time.Now().Format(time.RFC3339),
 		)
 		writer.WriteHeader(http.StatusOK)

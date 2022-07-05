@@ -40,7 +40,7 @@ func decodeRequestBody(body []byte) (p []byte, ok bool) {
 	head := body[0:8]
 	signatureLen := binary.BigEndian.Uint64(head)
 	signature := body[8 : 8+signatureLen]
-	p = body[16+signatureLen:]
+	p = body[8+signatureLen:]
 	ok = secret.Verify(p, signature)
 	return
 }

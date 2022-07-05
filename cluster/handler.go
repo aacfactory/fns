@@ -18,7 +18,6 @@ package cluster
 
 import (
 	stdjson "encoding/json"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
@@ -104,7 +103,7 @@ func (handler *proxyHandler) Handle(writer http.ResponseWriter, request *http.Re
 	ctx := request.Context()
 	ctx = service.SetRequest(ctx, r)
 	ctx = service.SetTracer(ctx)
-	result, handleErr := handler.endpoints.Handle(request.Context(), r)
+	result, handleErr := handler.endpoints.Handle(ctx, r)
 	var span service.Span
 	tracer, hasTracer := service.GetTracer(ctx)
 	if hasTracer {
@@ -141,11 +140,9 @@ func (handler *proxyHandler) succeed(writer http.ResponseWriter, span service.Sp
 	var spanData []byte = nil
 	if span != nil {
 		p, err := json.Marshal(span)
-		if err != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: encode span to json failed").WithCause(err)))
-			return
+		if err == nil {
+			spanData = p
 		}
-		spanData = p
 	}
 	resp := &response{
 		SpanData: spanData,
@@ -153,7 +150,11 @@ func (handler *proxyHandler) succeed(writer http.ResponseWriter, span service.Sp
 	}
 	p, encodeErr := json.Marshal(resp)
 	if encodeErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: encode response to json failed").WithCause(encodeErr)))
+		if handler.log.WarnEnabled() {
+			handler.log.Warn().Cause(encodeErr).With("cluster", "handler").Message("fns: encode internal response failed")
+		}
+		handler.failed(writer, span, errors.Map(encodeErr))
+		return
 	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(http.StatusOK)
@@ -165,14 +166,21 @@ func (handler *proxyHandler) failed(writer http.ResponseWriter, span service.Spa
 	if span != nil {
 		p, err := json.Marshal(span)
 		if err != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: encode span to json failed").WithCause(err)))
+			if handler.log.WarnEnabled() {
+				handler.log.Warn().Cause(err).With("cluster", "handler").Message("fns: encode span failed")
+			}
+			handler.failed(writer, span, errors.Map(err))
 			return
 		}
 		spanData = p
 	}
 	p, encodeErr := json.Marshal(codeErr)
 	if encodeErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: encode code error to json failed").WithCause(encodeErr).WithCause(codeErr)))
+		if handler.log.WarnEnabled() {
+			handler.log.Warn().Cause(encodeErr).With("cluster", "handler").Message("fns: encode error failed")
+		}
+		handler.failed(writer, span, errors.Map(encodeErr))
+		return
 	}
 	resp := &response{
 		SpanData: spanData,
@@ -180,7 +188,11 @@ func (handler *proxyHandler) failed(writer http.ResponseWriter, span service.Spa
 	}
 	p, encodeErr = json.Marshal(resp)
 	if encodeErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: encode response to json failed").WithCause(encodeErr).WithCause(codeErr)))
+		if handler.log.WarnEnabled() {
+			handler.log.Warn().Cause(encodeErr).With("cluster", "handler").Message("fns: encode internal response failed")
+		}
+		handler.failed(writer, span, errors.Map(encodeErr))
+		return
 	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(codeErr.Code())
@@ -211,14 +223,14 @@ func (handler *clusterHandler) Handle(writer http.ResponseWriter, request *http.
 	switch request.URL.Path {
 	case joinPath:
 		result, handleErr := handler.handleJoin(body, devMode)
-		if handler == nil {
+		if handleErr == nil {
 			handler.succeed(writer, result)
 		} else {
 			handler.failed(writer, handleErr)
 		}
 	case leavePath:
 		handleErr := handler.handleLeave(body, devMode)
-		if handler == nil {
+		if handleErr == nil {
 			handler.succeed(writer, nil)
 		} else {
 			handler.failed(writer, handleErr)
@@ -237,6 +249,10 @@ func (handler *clusterHandler) handleJoin(body []byte, devMode bool) (result []b
 		err = errors.Warning("fns: decode body failed").WithCause(decodeErr)
 		return
 	}
+	if n.Id_ == handler.manager.node.Id_ || n.Address == handler.manager.node.Address {
+		result = []byte{'[', ']'}
+		return
+	}
 	nodes := make([]*node, 0, 1)
 	nodes = append(nodes, handler.manager.node)
 	nodes = append(nodes, handler.manager.registrations.members()...)
@@ -249,6 +265,7 @@ func (handler *clusterHandler) handleJoin(body []byte, devMode bool) (result []b
 	if !devMode {
 		handler.manager.registrations.register(n)
 	}
+
 	return
 }
 
@@ -277,7 +294,11 @@ func (handler *clusterHandler) succeed(writer http.ResponseWriter, body []byte) 
 func (handler *clusterHandler) failed(writer http.ResponseWriter, codeErr errors.CodeError) {
 	p, encodeErr := json.Marshal(codeErr)
 	if encodeErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: encode code error to json failed").WithCause(encodeErr).WithCause(codeErr)))
+		if handler.log.WarnEnabled() {
+			handler.log.Warn().Cause(encodeErr).With("cluster", "handler").Message("fns: encode internal response failed")
+		}
+		handler.failed(writer, errors.Map(encodeErr))
+		return
 	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(codeErr.Code())

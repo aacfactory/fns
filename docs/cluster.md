@@ -8,6 +8,14 @@ For a fixed number of clusters, existing nodes in other members will be automati
 Config:
 ```yaml
 cluster:
+  devMode: false                    # if true, current node will not be pushed into cluster
+  nodesProxyAddress: ""             # used for dev mode and current node can not access members by member's address
+  kind: "members"                   # cluster member finder type
+  client:
+    maxIdleConnSeconds: 10
+    maxConnsPerHost: 512
+    maxIdleConnsPerHost: 64
+    requestTimeoutSeconds: 10
   options:
     members: 
       - "192.168.11.1:8080"

@@ -17,10 +17,14 @@
 package server
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/secret"
+	"github.com/aacfactory/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/pprof"
+	"strings"
 )
 
 const (
@@ -30,6 +34,11 @@ const (
 	httpPprofSymbolPath  = "/debug/pprof/symbol"
 	httpPprofTracePath   = "/debug/pprof/trace"
 )
+
+type PprofArgument struct {
+	Password string `json:"password"`
+	Sec      int    `json:"sec"`
+}
 
 type PprofHandlerOptions struct {
 	Password string
@@ -61,10 +70,27 @@ func (h *pprofHandler) Build(options InterceptorHandlerOptions) (err error) {
 }
 
 func (h *pprofHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-	if request.Method != http.MethodGet {
+	if !(request.Method == http.MethodPost && request.Header.Get(httpContentType) == httpContentTypeJson) {
 		return
 	}
-	password := request.URL.Query().Get("password")
+	if strings.Index(request.URL.Path, "/debug/pprof") != 0 {
+		return
+	}
+	body, readBodyErr := ioutil.ReadAll(request.Body)
+	if readBodyErr != nil {
+		h.failed(writer, errors.NotAcceptable("fns: invalid request body").WithCause(readBodyErr))
+		ok = true
+		return
+	}
+	arg := PprofArgument{}
+	decodeErr := json.Unmarshal(body, &arg)
+	if decodeErr != nil {
+		h.failed(writer, errors.NotAcceptable("fns: read request body").WithCause(decodeErr))
+		ok = true
+		return
+	}
+
+	password := arg.Password
 	if password == "" {
 		return
 	}
@@ -73,6 +99,7 @@ func (h *pprofHandler) Handle(writer http.ResponseWriter, request *http.Request)
 		writer.WriteHeader(http.StatusForbidden)
 		return
 	}
+	request.Form.Set("sec", fmt.Sprintf("%d", arg.Sec))
 	switch request.URL.Path {
 	case httpPprofPath:
 		pprof.Index(writer, request)
@@ -97,4 +124,12 @@ func (h *pprofHandler) Handle(writer http.ResponseWriter, request *http.Request)
 }
 
 func (h *pprofHandler) Close() {
+}
+
+func (h *pprofHandler) failed(writer http.ResponseWriter, codeErr errors.CodeError) {
+	writer.Header().Set(httpServerHeader, httpServerHeaderValue)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(codeErr.Code())
+	p, _ := json.Marshal(codeErr)
+	_, _ = writer.Write(p)
 }

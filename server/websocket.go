@@ -41,7 +41,7 @@ type WebsocketHandlerOptions struct {
 	ReadBufferSize    string
 	WriteBufferSize   string
 	EnableCompression bool
-	MaxConns          uint64
+	MaxConns          int64
 	Cors              *cors.Cors
 	Log               logs.Logger
 	Endpoints         service.Endpoints
@@ -80,8 +80,8 @@ func NewWebsocketHandler(options WebsocketHandlerOptions) (h Handler) {
 
 type websocketHandler struct {
 	log       logs.Logger
-	handling  uint64
-	maxConns  uint64
+	handling  int64
+	maxConns  int64
 	counter   sync.WaitGroup
 	endpoints service.Endpoints
 	upgrader  *websocket.Upgrader
@@ -94,8 +94,8 @@ func (h *websocketHandler) Handle(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	ok = true
-	if atomic.AddUint64(&h.handling, 1) > h.maxConns {
-		atomic.AddUint64(&h.handling, -1)
+	if atomic.AddInt64(&h.handling, 1) > h.maxConns {
+		atomic.AddInt64(&h.handling, -1)
 		err := errors.NotAcceptable("fns: upgrades the HTTP server connection to the WebSocket protocol failed").WithCause(fmt.Errorf("connections is full"))
 		writer.Header().Set(httpServerHeader, httpServerHeaderValue)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
@@ -178,7 +178,7 @@ func (h *websocketHandler) Handle(writer http.ResponseWriter, request *http.Requ
 				break
 			}
 		}
-		atomic.AddUint64(&h.handling, -1)
+		atomic.AddInt64(&h.handling, -1)
 	}(h, socket)
 	return
 }

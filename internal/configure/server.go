@@ -63,7 +63,7 @@ type Websocket struct {
 	ReadBufferSize    string `json:"readBufferSize"`
 	WriteBufferSize   string `json:"writeBufferSize"`
 	EnableCompression bool   `json:"enableCompression"`
-	MaxConns          uint64 `json:"maxConns"`
+	MaxConns          int64  `json:"maxConns"`
 }
 
 type Server struct {

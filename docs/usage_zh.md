@@ -163,3 +163,8 @@ go generate
 ```
 
 在上述例子中， `users.Get` 函数代理会被生成。
+
+## 从上下文中获取 WEBSOCKET ENDPOINT
+```go
+socket, has := wss.GetWebsocketEndpoint(ctx)
+```

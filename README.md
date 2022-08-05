@@ -50,7 +50,6 @@ Fn services for Golang. Simplify the development process by using standardized d
     * [x] Nats.IO
 * [ ] DDD
 * [ ] Extra listeners
-  * [ ] Websockets
   * [ ] MQTT
 * [ ] Third party integration
   * [ ] Oauth

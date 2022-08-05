@@ -59,9 +59,17 @@ func (config *TLS) Config() (serverTLS *tls.Config, clientTLS *tls.Config, err e
 	return
 }
 
+type Websocket struct {
+	ReadBufferSize    string `json:"readBufferSize"`
+	WriteBufferSize   string `json:"writeBufferSize"`
+	EnableCompression bool   `json:"enableCompression"`
+	MaxConns          uint64 `json:"maxConns"`
+}
+
 type Server struct {
 	Port         int                        `json:"port"`
 	Cors         *Cors                      `json:"cors"`
+	Websocket    *Websocket                 `json:"websocket"`
 	TLS          *TLS                       `json:"tls"`
 	Options      json.RawMessage            `json:"options"`
 	Interceptors map[string]json.RawMessage `json:"interceptors"`

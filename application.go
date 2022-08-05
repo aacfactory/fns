@@ -26,6 +26,7 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
+	"github.com/aacfactory/fns/internal/cors"
 	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/fns/internal/procs"
 	"github.com/aacfactory/fns/listeners"
@@ -33,8 +34,10 @@ import (
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -213,33 +216,73 @@ func New(options ...Option) (app Application) {
 		Discovery:             discovery,
 	})
 
+	// cors
+	var cors0 *cors.Cors
+	if config.Server.Cors != nil {
+		allowedOrigins := config.Server.Cors.AllowedOrigins
+		if allowedOrigins == nil {
+			allowedOrigins = make([]string, 0, 1)
+		}
+		if len(allowedOrigins) == 0 {
+			allowedOrigins = append(allowedOrigins, "*")
+		}
+		allowedHeaders := config.Server.Cors.AllowedHeaders
+		if allowedHeaders == nil {
+			allowedHeaders = make([]string, 0, 1)
+		}
+		if sort.SearchStrings(allowedHeaders, "Connection") < 0 {
+			allowedHeaders = append(allowedHeaders, "Connection")
+		}
+		if sort.SearchStrings(allowedHeaders, "Upgrade") < 0 {
+			allowedHeaders = append(allowedHeaders, "Upgrade")
+		}
+		if sort.SearchStrings(allowedHeaders, "X-Forwarded-For") < 0 {
+			allowedHeaders = append(allowedHeaders, "X-Forwarded-For")
+		}
+		if sort.SearchStrings(allowedHeaders, "X-Real-Ip") < 0 {
+			allowedHeaders = append(allowedHeaders, "X-Real-Ip")
+		}
+		exposedHeaders := config.Server.Cors.ExposedHeaders
+		if exposedHeaders == nil {
+			exposedHeaders = make([]string, 0, 1)
+		}
+		exposedHeaders = append(exposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server")
+		cors0 = cors.New(cors.Options{
+			AllowedOrigins:       allowedOrigins,
+			AllowedMethods:       []string{http.MethodGet, http.MethodPost},
+			AllowedHeaders:       allowedHeaders,
+			ExposedHeaders:       exposedHeaders,
+			MaxAge:               config.Server.Cors.MaxAge,
+			AllowCredentials:     config.Server.Cors.AllowCredentials,
+			AllowPrivateNetwork:  true,
+			OptionsPassthrough:   false,
+			OptionsSuccessStatus: http.StatusNoContent,
+		})
+	} else {
+		cors0 = cors.AllowAll()
+	}
 	// http handler
 	httpHandlers := server.NewHandlers()
-	corsOptions := server.CorsHandlerOptions{
-		Customized:       false,
-		AllowedOrigins:   nil,
-		AllowedHeaders:   nil,
-		ExposedHeaders:   nil,
-		AllowCredentials: false,
-		MaxAge:           0,
-	}
-	if config.Server.Cors != nil {
-		corsOptions = server.CorsHandlerOptions{
-			Customized:       true,
-			AllowedOrigins:   config.Server.Cors.AllowedOrigins,
-			AllowedHeaders:   config.Server.Cors.AllowedHeaders,
-			ExposedHeaders:   config.Server.Cors.ExposedHeaders,
-			AllowCredentials: config.Server.Cors.AllowCredentials,
-			MaxAge:           config.Server.Cors.MaxAge,
-		}
-	}
-	httpHandlers.Append(server.NewCorsHandler(corsOptions))
+	httpHandlers.Append(server.NewCorsHandler(server.CorsHandlerOptions{
+		Cors: cors0,
+	}))
 	httpHandlers.Append(server.NewHealthHandler(server.HealthHandlerOptions{
 		AppId:   appId,
 		AppName: name,
 		Version: appVersion,
 		Running: running,
 	}))
+	if config.Server.Websocket != nil {
+		httpHandlers.Append(server.NewWebsocketHandler(server.WebsocketHandlerOptions{
+			ReadBufferSize:    config.Server.Websocket.ReadBufferSize,
+			WriteBufferSize:   config.Server.Websocket.WriteBufferSize,
+			EnableCompression: config.Server.Websocket.EnableCompression,
+			MaxConns:          config.Server.Websocket.MaxConns,
+			Cors:              cors0,
+			Log:               log,
+			Endpoints:         endpoints,
+		}))
+	}
 	docHandlerOptions := server.DocumentHandlerOptions{
 		Log:       log,
 		Version:   appVersion,

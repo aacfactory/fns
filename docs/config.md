@@ -33,6 +33,11 @@ server:
   tls:                        # https, default is nil
     kind: ""                  # tls kind: DEFAULT, SSC, ACME 
     options: {}               # options of kind
+  websocket:
+    readBufferSize: "4k"
+    writeBufferSize: "4k"
+    enableCompression: false
+    maxConns: 0
   options: {}                 # http server options
   interceptors: {}            # http interceptors config
 ```

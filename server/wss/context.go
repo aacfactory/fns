@@ -14,32 +14,22 @@
  * limitations under the License.
  */
 
-package server
+package wss
 
 import (
-	"github.com/aacfactory/fns/internal/cors"
-	"net/http"
+	"context"
+	"github.com/aacfactory/fns/server"
 )
 
-type CorsHandlerOptions struct {
-	Cors *cors.Cors
-}
+const (
+	contextWebsocketKey = "_websocket_"
+)
 
-func NewCorsHandler(options CorsHandlerOptions) (h Handler) {
-	h = &corsHandler{
-		cors: options.Cors,
+func GetWebsocketEndpoint(ctx context.Context) (v server.WebsocketEndpoint, has bool) {
+	vbv := ctx.Value(contextWebsocketKey)
+	if vbv == nil {
+		return
 	}
+	v, has = vbv.(server.WebsocketEndpoint)
 	return
-}
-
-type corsHandler struct {
-	cors *cors.Cors
-}
-
-func (h *corsHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-	ok = h.cors.Handle(writer, request)
-	return
-}
-
-func (h *corsHandler) Close() {
 }

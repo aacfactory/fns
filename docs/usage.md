@@ -169,3 +169,8 @@ go generate
 ```
 
 In the above case, `users.Get` fn proxy will be generated. 
+
+## Get websocket endpoint from context
+```go
+socket, has := wss.GetWebsocketEndpoint(ctx)
+```

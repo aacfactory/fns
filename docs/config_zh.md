@@ -33,6 +33,11 @@ server:
   tls:                        # https, 默认为空
     kind: ""                  # tls 类型: DEFAULT, SSC, ACME 
     options: {}               # 类型配置
+  websocket:
+    readBufferSize: "4k"
+    writeBufferSize: "4k"
+    enableCompression: false
+    maxConns: 0
   options: {}                 # 服务其它配置
   interceptors: {}            # 拦截器配置
 ```

@@ -158,6 +158,13 @@ type RequestLocal interface {
 	Remove(key string)
 }
 
+func NewRequestLocal() (v RequestLocal) {
+	v = &requestLocal{
+		values: make(map[string]interface{}),
+	}
+	return
+}
+
 type requestLocal struct {
 	values map[string]interface{}
 }

@@ -50,7 +50,6 @@ Golang 的类函数式服务，使用标准化进行简化的开发方案。关�
     * [x] Nats.IO
 * [ ] DDD
 * [ ] 额外的服务监听
-    * [ ] Websockets
     * [ ] MQTT
 * [ ] 第三方集成
     * [ ] Oauth

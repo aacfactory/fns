@@ -48,7 +48,7 @@ type argument struct {
 	value interface{}
 }
 
-func (arg argument) MarshalJSON() (data []byte, err error) {
+func (arg *argument) MarshalJSON() (data []byte, err error) {
 	switch arg.value.(type) {
 	case []byte:
 		value := arg.value.([]byte)

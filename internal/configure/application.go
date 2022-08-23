@@ -17,6 +17,7 @@
 package configure
 
 type Config struct {
+	AppId   string     `json:"appId"`
 	Name    string     `json:"name"`
 	Runtime *Runtime   `json:"runtime"`
 	Log     *LogConfig `json:"log"`

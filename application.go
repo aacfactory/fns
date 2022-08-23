@@ -83,6 +83,7 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, decode config failed").WithCause(decodeConfigErr)))
 		return
 	}
+	appId = strings.TrimSpace(config.AppId)
 	name := strings.TrimSpace(config.Name)
 	if name == "" {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, name is undefined in config")))
@@ -151,7 +152,9 @@ func New(options ...Option) (app Application) {
 	// cluster
 	var clusterManager *cluster.Manager
 	if config.Cluster == nil {
-		appId = uid.UID()
+		if appId == "" {
+			appId = uid.UID()
+		}
 	} else {
 		clientBuilder := opt.clientBuilder
 		if clientBuilder == nil {
@@ -159,6 +162,7 @@ func New(options ...Option) (app Application) {
 		}
 		clusterManagerOptions := cluster.ManagerOptions{
 			Log:               log,
+			AppId:             appId,
 			Port:              httpOptions.Port,
 			Config:            config.Cluster,
 			ClientHttps:       httpOptions.ServerTLS != nil,
@@ -173,7 +177,9 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(clusterManagerErr)))
 			return
 		}
-		appId = clusterManager.Node().Id()
+		if appId == "" {
+			appId = clusterManager.Node().Id()
+		}
 	}
 
 	// procs

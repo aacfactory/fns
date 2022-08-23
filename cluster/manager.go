@@ -33,6 +33,7 @@ import (
 
 type ManagerOptions struct {
 	Log               logs.Logger
+	AppId             string
 	Port              int
 	Config            *configure.Cluster
 	ClientHttps       bool
@@ -64,6 +65,7 @@ func NewManager(options ManagerOptions) (manager *Manager, err error) {
 	}
 	bootstrapBuildErr := bootstrap.Build(BootstrapOptions{
 		Config: bootstrapConfig,
+		AppId:  options.AppId,
 		Log:    options.Log.With("cluster", "bootstrap"),
 	})
 	if bootstrapBuildErr != nil {

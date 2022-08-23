@@ -28,6 +28,7 @@ import (
 
 type BootstrapOptions struct {
 	Log    logs.Logger
+	AppId  string
 	Config configures.Config
 }
 
@@ -82,7 +83,11 @@ func (b *defaultBootstrap) Build(options BootstrapOptions) (err error) {
 		return
 	}
 	b.members = members
-	b.id = uid.UID()
+	if options.AppId != "" {
+		b.id = options.AppId
+	} else {
+		b.id = uid.UID()
+	}
 	b.ip = commons.GetGlobalUniCastIpFromHostname()
 	if b.ip == "" {
 		err = errors.Warning("can not get ip from hostname, please set FNS_IP into system env")

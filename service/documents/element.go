@@ -288,14 +288,14 @@ func (element *Element) Schema() (v *oas.Schema) {
 		Ref:                  "",
 	}
 	// Description
-	description := "### Description" + " "
+	description := "### Description" + "\n"
 	description = description + element.Description + " "
 	if element.Validation != "" {
-		description = description + "***Validation***" + " "
+		description = description + "\n\n***Validation***" + " "
 		description = description + "`" + element.Validation + "`" + " "
 	}
 	if element.Enum != nil && len(element.Enum) > 0 {
-		description = description + "***Enum***" + " "
+		description = description + "\n\n***Enum***" + " "
 		description = description + fmt.Sprintf("%v", element.Enum) + " "
 	}
 	v.Description = description

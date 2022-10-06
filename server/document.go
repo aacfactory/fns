@@ -386,6 +386,14 @@ func (h *documentHandler) encode() {
 					Name:        document.Name(),
 					Description: document.Description(),
 				})
+				// doc
+				if document.Elements() != nil {
+					for _, element := range document.Elements() {
+						if _, hasElement := api.Components.Schemas[element.Key()]; !hasElement {
+							api.Components.Schemas[element.Key()] = element.Schema()
+						}
+					}
+				}
 				for _, fn := range document.Fns() {
 					path := &oas.Path{
 						Post: &oas.Operation{

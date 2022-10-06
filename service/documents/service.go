@@ -23,6 +23,7 @@ func NewService(name string, description string) *Service {
 		Name_:        name,
 		Description_: description,
 		Fns_:         make([]service.FnDocument, 0, 1),
+		Elements_:    make(map[string]service.ElementDocument),
 	}
 }
 
@@ -35,6 +36,8 @@ type Service struct {
 	Description_ string `json:"description"`
 	// Fns
 	Fns_ []service.FnDocument `json:"fns"`
+	// Elements
+	Elements_ map[string]service.ElementDocument `json:"elements"`
 }
 
 func (svc *Service) Name() (name string) {
@@ -52,6 +55,30 @@ func (svc *Service) Fns() (fns []service.FnDocument) {
 	return
 }
 
+func (svc *Service) Elements() (elements map[string]service.ElementDocument) {
+	elements = svc.Elements_
+	return
+}
+
 func (svc *Service) AddFn(name string, title string, description string, hasAuthorization bool, deprecated bool, arg *Element, result *Element) {
-	svc.Fns_ = append(svc.Fns_, newFn(name, title, description, hasAuthorization, deprecated, arg, result))
+	argRef := svc.addElement(arg)
+	resultRef := svc.addElement(result)
+	svc.Fns_ = append(svc.Fns_, newFn(name, title, description, hasAuthorization, deprecated, argRef, resultRef))
+}
+
+func (svc *Service) addElement(element *Element) (ref *Element) {
+	if element == nil {
+		return
+	}
+	ref = element.mapToRef()
+	objects := element.objects()
+	if objects == nil || len(objects) == 0 {
+		return
+	}
+	for key, obj := range objects {
+		if _, has := svc.Elements_[key]; !has {
+			svc.Elements_[key] = obj
+		}
+	}
+	return
 }

@@ -24,6 +24,7 @@ type Document interface {
 	Name() (name string)
 	Description() (description string)
 	Fns() []FnDocument
+	Elements() (elements map[string]ElementDocument)
 }
 
 type FnDocument interface {

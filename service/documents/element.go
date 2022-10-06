@@ -79,6 +79,10 @@ func Struct(pkg string, name string, title string, description string) *Element 
 	return NewElement(pkg, name, "object", "", title, description)
 }
 
+func RefStruct(pkg string, name string) *Element {
+	return NewElement(pkg, name, "ref", "", "", "")
+}
+
 func JsonRaw() *Element {
 	v := NewElement("fns", "JsonRawMessage", "object", "", "Json Raw", "Json Raw Message")
 	v.Additional = true
@@ -185,6 +189,11 @@ func (element *Element) isArray() (ok bool) {
 	return
 }
 
+func (element *Element) isRef() (ok bool) {
+	ok = element.Type == "ref"
+	return
+}
+
 func (element *Element) isAdditional() (ok bool) {
 	ok = element.isObject() && element.Additional
 	return
@@ -197,9 +206,38 @@ func (element *Element) AddProperty(name string, prop *Element) *Element {
 	return element
 }
 
+func (element *Element) mapToRef() (ref *Element) {
+	if element.isBuiltin() {
+		ref = element
+	} else if element.isFns() {
+		ref = element
+	} else if element.isEmpty() || element.isObject() {
+		ref = NewElement(element.Package, element.Name, "ref", "", "", "")
+	} else if element.isAdditional() || element.isArray() {
+		ref = element.getItem().mapToRef()
+	} else {
+		ref = element
+	}
+	return
+}
+
 func (element *Element) objects() (v map[string]*Element) {
 	v = make(map[string]*Element)
-	if !element.isBuiltin() && !element.isFns() {
+	if element.isBuiltin() || element.isRef() || element.isFns() {
+		return
+	}
+	if element.isArray() || element.isAdditional() {
+		deps := element.getItem().objects()
+		if deps != nil && len(deps) > 0 {
+			for depKey, dep := range deps {
+				if _, hasDep := v[depKey]; !hasDep {
+					v[depKey] = dep
+				}
+			}
+		}
+		return
+	}
+	if element.isObject() {
 		key := element.Key()
 		if _, has := v[key]; !has {
 			v[key] = element
@@ -218,6 +256,11 @@ func (element *Element) objects() (v map[string]*Element) {
 	return
 }
 
+func (element *Element) getItem() (v *Element) {
+	v = element.Properties[""]
+	return
+}
+
 func (element *Element) Key() (v string) {
 	v = fmt.Sprintf("%s_%s", strings.ReplaceAll(element.Package, "/", "."), element.Name)
 	return
@@ -225,7 +268,7 @@ func (element *Element) Key() (v string) {
 
 func (element *Element) Schema() (v *oas.Schema) {
 	// fns
-	if element.isFns() {
+	if element.isFns() || element.isRef() {
 		v = oas.RefSchema(element.Key())
 		return
 	}
@@ -275,12 +318,12 @@ func (element *Element) Schema() (v *oas.Schema) {
 	}
 	// array
 	if element.isArray() {
-		v.Items = element.Properties[""].Schema()
+		v.Items = element.getItem().Schema()
 		return
 	}
 	// map
 	if element.isAdditional() {
-		v.AdditionalProperties = element.Properties[""].Schema()
+		v.AdditionalProperties = element.getItem().Schema()
 		return
 	}
 	return

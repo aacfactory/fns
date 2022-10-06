@@ -61,7 +61,7 @@ Fn services for Golang. Simplify the development process by using standardized d
 ### Create project
 First: install `fnc` commander.
 ```shell
-go install github.com/aacfactory/fnc
+go install github.com/aacfactory/fnc@latest
 ```
 Second: use `fnc` create a fns project.
 ```shell

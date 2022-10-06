@@ -61,7 +61,7 @@ Golang 的类函数式服务，使用标准化进行简化的开发方案。关�
 ### 创建项目
 第一步: 安装 `fnc` 命令.
 ```shell
-go install github.com/aacfactory/fnc
+go install github.com/aacfactory/fnc@latest
 ```
 第二步: 使用 `fnc`创建项目。
 ```shell

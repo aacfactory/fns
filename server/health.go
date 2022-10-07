@@ -59,6 +59,15 @@ type healthHandler struct {
 	unavailable []byte
 }
 
+func (h *healthHandler) Name() (name string) {
+	name = "health"
+	return
+}
+
+func (h *healthHandler) Build(_ *HandlerOptions) (err error) {
+	return
+}
+
 func (h *healthHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
 	if h.running.IsOff() {
 		writer.Header().Set(httpConnectionHeader, httpConnectionHeaderClose)

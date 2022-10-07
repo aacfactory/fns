@@ -58,7 +58,7 @@ func (h *pprofHandler) Name() (name string) {
 	return
 }
 
-func (h *pprofHandler) Build(options InterceptorHandlerOptions) (err error) {
+func (h *pprofHandler) Build(options *HandlerOptions) (err error) {
 	password := ""
 	_, _ = options.Config.Get("password", &password)
 	if password == "" {

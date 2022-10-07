@@ -25,7 +25,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/fns/internal/cors"
+	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -37,41 +37,14 @@ import (
 	"sync/atomic"
 )
 
-type WebsocketHandlerOptions struct {
-	ReadBufferSize    string
-	WriteBufferSize   string
-	EnableCompression bool
-	MaxConns          int64
-	Cors              *cors.Cors
-	Log               logs.Logger
-	Endpoints         service.Endpoints
-}
-
-func NewWebsocketHandler(options WebsocketHandlerOptions) (h Handler) {
-	readBufferSize, _ := commons.ToBytes(options.ReadBufferSize)
-	writeBufferSize, _ := commons.ToBytes(options.WriteBufferSize)
-	maxConns := options.MaxConns
-	if maxConns == 0 {
-		maxConns = 65535
-	}
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  int(readBufferSize),
-		WriteBufferSize: int(writeBufferSize),
-		WriteBufferPool: nil,
-		Subprotocols:    nil,
-		Error:           nil,
-		CheckOrigin: func(r *http.Request) bool {
-			return options.Cors.OriginAllowed(r)
-		},
-		EnableCompression: options.EnableCompression,
-	}
+func NewWebsocketHandler() (h Handler) {
 	h = &websocketHandler{
-		log:       options.Log.With("fns", "handler").With("handle", "websocket"),
+		log:       nil,
 		handling:  0,
-		maxConns:  maxConns,
+		maxConns:  0,
 		counter:   sync.WaitGroup{},
-		endpoints: options.Endpoints,
-		upgrader:  &upgrader,
+		endpoints: nil,
+		upgrader:  nil,
 		lock:      sync.RWMutex{},
 		closed:    false,
 	}
@@ -87,6 +60,45 @@ type websocketHandler struct {
 	upgrader  *websocket.Upgrader
 	lock      sync.RWMutex
 	closed    bool
+}
+
+func (h *websocketHandler) Name() (name string) {
+	name = "websocket"
+	return
+}
+
+func (h *websocketHandler) Build(options *HandlerOptions) (err error) {
+	config := &configure.Websocket{}
+	has, getErr := options.Config.Get("server.websocket", config)
+	if getErr != nil {
+		err = fmt.Errorf("build websocket handler failed, %v", getErr)
+		return
+	}
+	if !has {
+		err = fmt.Errorf("build websocket handler failed, there is no server.websocket in config")
+		return
+	}
+	readBufferSize, _ := commons.ToBytes(config.ReadBufferSize)
+	writeBufferSize, _ := commons.ToBytes(config.WriteBufferSize)
+	maxConns := config.MaxConns
+	if maxConns == 0 {
+		maxConns = 65535
+	}
+	h.upgrader = &websocket.Upgrader{
+		ReadBufferSize:  int(readBufferSize),
+		WriteBufferSize: int(writeBufferSize),
+		WriteBufferPool: nil,
+		Subprotocols:    nil,
+		Error:           nil,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+		EnableCompression: config.EnableCompression,
+	}
+	h.maxConns = config.MaxConns
+	h.endpoints = options.Endpoints
+	h.log = options.Log.With("fns", "handler").With("handle", "websocket")
+	return
 }
 
 func (h *websocketHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {

@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/logger"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
@@ -42,38 +43,42 @@ const (
 	httpContentTypeJson   = "application/json"
 )
 
+type HandlerOptions struct {
+	Log       logs.Logger
+	Config    configures.Config
+	Endpoints service.Endpoints
+}
+
 type Handler interface {
+	Name() (name string)
+	Build(options *HandlerOptions) (err error)
 	Handle(writer http.ResponseWriter, request *http.Request) (ok bool)
 	Close()
 }
 
-type InterceptorHandlerOptions struct {
-	Log    logs.Logger
-	Config configures.Config
-}
-
-type InterceptorHandler interface {
-	Handler
-	Build(options InterceptorHandlerOptions) (err error)
-	Name() (name string)
-}
-
-func NewHandlers() (handlers *Handlers) {
+func NewHandlers(options *HandlerOptions) (handlers *Handlers) {
 	handlers = &Handlers{
+		options:  options,
 		handlers: make([]Handler, 0, 1),
 	}
 	return
 }
 
 type Handlers struct {
+	options  *HandlerOptions
 	handlers []Handler
 }
 
-func (handlers *Handlers) Append(h Handler) {
+func (handlers *Handlers) Append(h Handler) (err error) {
 	if h == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: append handler into handler chain failed cause handler is nil")))
 	}
+	err = h.Build(handlers.options)
+	if err != nil {
+		return
+	}
 	handlers.handlers = append(handlers.handlers, h)
+	return
 }
 
 func (handlers *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {

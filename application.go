@@ -26,7 +26,6 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
-	"github.com/aacfactory/fns/internal/cors"
 	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/fns/internal/procs"
 	"github.com/aacfactory/fns/listeners"
@@ -34,10 +33,8 @@ import (
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"net/http"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -222,160 +219,66 @@ func New(options ...Option) (app Application) {
 		Discovery:             discovery,
 	})
 
-	// cors
-	var cors0 *cors.Cors
-	if config.Server.Cors != nil {
-		allowedOrigins := config.Server.Cors.AllowedOrigins
-		if allowedOrigins == nil {
-			allowedOrigins = make([]string, 0, 1)
-		}
-		if len(allowedOrigins) == 0 {
-			allowedOrigins = append(allowedOrigins, "*")
-		}
-		allowedHeaders := config.Server.Cors.AllowedHeaders
-		if allowedHeaders == nil {
-			allowedHeaders = make([]string, 0, 1)
-		}
-		if sort.SearchStrings(allowedHeaders, "Connection") < 0 {
-			allowedHeaders = append(allowedHeaders, "Connection")
-		}
-		if sort.SearchStrings(allowedHeaders, "Upgrade") < 0 {
-			allowedHeaders = append(allowedHeaders, "Upgrade")
-		}
-		if sort.SearchStrings(allowedHeaders, "X-Forwarded-For") < 0 {
-			allowedHeaders = append(allowedHeaders, "X-Forwarded-For")
-		}
-		if sort.SearchStrings(allowedHeaders, "X-Real-Ip") < 0 {
-			allowedHeaders = append(allowedHeaders, "X-Real-Ip")
-		}
-		exposedHeaders := config.Server.Cors.ExposedHeaders
-		if exposedHeaders == nil {
-			exposedHeaders = make([]string, 0, 1)
-		}
-		exposedHeaders = append(exposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server")
-		cors0 = cors.New(cors.Options{
-			AllowedOrigins:       allowedOrigins,
-			AllowedMethods:       []string{http.MethodGet, http.MethodPost},
-			AllowedHeaders:       allowedHeaders,
-			ExposedHeaders:       exposedHeaders,
-			MaxAge:               config.Server.Cors.MaxAge,
-			AllowCredentials:     config.Server.Cors.AllowCredentials,
-			AllowPrivateNetwork:  true,
-			OptionsPassthrough:   false,
-			OptionsSuccessStatus: http.StatusNoContent,
-		})
-	} else {
-		cors0 = cors.AllowAll()
-	}
 	// http handler
-	httpHandlers := server.NewHandlers()
-	httpHandlers.Append(server.NewCorsHandler(server.CorsHandlerOptions{
-		Cors: cors0,
-	}))
-	httpHandlers.Append(server.NewHealthHandler(server.HealthHandlerOptions{
+	httpHandlers := server.NewHandlers(&server.HandlerOptions{
+		Log:       log,
+		Config:    configRaw,
+		Endpoints: endpoints,
+	})
+	appendCorsErr := httpHandlers.Append(server.NewCorsHandler())
+	if appendCorsErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(decodeConfigErr)))
+		return
+	}
+	appendHealthErr := httpHandlers.Append(server.NewHealthHandler(server.HealthHandlerOptions{
 		AppId:   appId,
 		AppName: name,
 		Version: appVersion,
 		Running: running,
 	}))
+	if appendHealthErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(appendHealthErr)))
+		return
+	}
 	if config.Server.Websocket != nil {
-		httpHandlers.Append(server.NewWebsocketHandler(server.WebsocketHandlerOptions{
-			ReadBufferSize:    config.Server.Websocket.ReadBufferSize,
-			WriteBufferSize:   config.Server.Websocket.WriteBufferSize,
-			EnableCompression: config.Server.Websocket.EnableCompression,
-			MaxConns:          config.Server.Websocket.MaxConns,
-			Cors:              cors0,
-			Log:               log,
-			Endpoints:         endpoints,
-		}))
+		appendWebsocketErr := httpHandlers.Append(server.NewWebsocketHandler())
+		if appendWebsocketErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(appendWebsocketErr)))
+			return
+		}
 	}
-	docHandlerOptions := server.DocumentHandlerOptions{
-		Log:       log,
-		Version:   appVersion,
-		Document:  nil,
-		Endpoints: endpoints,
+	appendDocumentErr := httpHandlers.Append(server.NewDocumentHandler(server.DocumentHandlerOptions{
+		Version: appVersion,
+	}))
+	if appendDocumentErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(appendDocumentErr)))
+		return
 	}
-	if config.OAS != nil {
-		doc := server.Document{
-			Title:       strings.TrimSpace(config.OAS.Title),
-			Description: strings.TrimSpace(config.OAS.Description),
-			Terms:       strings.TrimSpace(config.OAS.Terms),
-			Contact:     nil,
-			License:     nil,
-			Addresses:   nil,
-		}
-		if config.OAS.Contact != nil {
-			doc.Contact = &server.Contact{
-				Name:  strings.TrimSpace(config.OAS.Contact.Name),
-				Url:   strings.TrimSpace(config.OAS.Contact.Url),
-				Email: strings.TrimSpace(config.OAS.Contact.Email),
-			}
-		}
-		if config.OAS.License != nil {
-			doc.License = &server.License{
-				Name: strings.TrimSpace(config.OAS.License.Name),
-				Url:  strings.TrimSpace(config.OAS.License.Url),
-			}
-		}
-		if config.OAS.Servers != nil && len(config.OAS.Servers) > 0 {
-			doc.Addresses = make([]server.Address, 0, 1)
-			for _, oasServer := range config.OAS.Servers {
-				doc.Addresses = append(doc.Addresses, server.Address{
-					URL:         strings.TrimSpace(oasServer.URL),
-					Description: strings.TrimSpace(oasServer.Description),
-				})
-			}
-		}
-		docHandlerOptions.Document = &doc
-	}
-	httpHandlers.Append(server.NewDocumentHandler(docHandlerOptions))
-	if len(opt.serverInterceptorHandlers) > 0 {
-		for _, handler := range opt.serverInterceptorHandlers {
+
+	if len(opt.serverHandlers) > 0 {
+		for _, handler := range opt.serverHandlers {
 			if handler == nil {
 				continue
 			}
-			interceptorHandlerName := strings.TrimSpace(handler.Name())
-			if interceptorHandlerName == "" {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, one of interceptor handlers has no name")))
+			appendErr := httpHandlers.Append(handler)
+			if appendErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(appendErr)))
 				return
 			}
-			interceptorHandlerLog := log.With("interceptor", interceptorHandlerName)
-			var interceptorHandlerConfig configures.Config
-			var interceptorHandlerConfigGetErr error
-			if config.Server.Interceptors != nil {
-				interceptorHandlerConfigRaw, hasInterceptorHandlerConfig := config.Server.Interceptors[interceptorHandlerName]
-				if hasInterceptorHandlerConfig {
-					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configures.NewJsonConfig(interceptorHandlerConfigRaw)
-				} else {
-					interceptorHandlerConfig, interceptorHandlerConfigGetErr = configures.NewJsonConfig([]byte{'{', '}'})
-				}
-			}
-			if interceptorHandlerConfigGetErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, get interceptor handler config failed").WithCause(interceptorHandlerConfigGetErr).WithMeta("interceptor", interceptorHandlerName)))
-				return
-			}
-			interceptorHBuildErr := handler.Build(server.InterceptorHandlerOptions{
-				Log:    interceptorHandlerLog,
-				Config: interceptorHandlerConfig,
-			})
-			if interceptorHBuildErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, build interceptor handler failed").WithCause(interceptorHBuildErr).WithMeta("interceptor", interceptorHandlerName)))
-				return
-			}
-			httpHandlers.Append(handler)
 		}
 	}
 	if clusterManager != nil {
-		httpHandlers.Append(cluster.NewHandler(cluster.HandlerOptions{
+		_ = httpHandlers.Append(cluster.NewHandler(cluster.HandlerOptions{
 			Log:       log,
 			Endpoints: endpoints,
 			Cluster:   clusterManager,
 		}))
 	}
-	httpHandlers.Append(server.NewServiceHandler(server.ServiceHandlerOptions{
-		Log:       log,
-		Endpoints: endpoints,
-	}))
+	appendServiceErr := httpHandlers.Append(server.NewServiceHandler())
+	if appendServiceErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(appendServiceErr)))
+		return
+	}
 
 	// http server
 	httpServer := opt.server

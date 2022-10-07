@@ -19,6 +19,7 @@ package cluster
 import (
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -62,6 +63,15 @@ type Handler struct {
 	log    logs.Logger
 	proxy  *proxyHandler
 	member *clusterHandler
+}
+
+func (handler *Handler) Name() (name string) {
+	name = "cluster"
+	return
+}
+
+func (handler *Handler) Build(_ *server.HandlerOptions) (err error) {
+	return
 }
 
 func (handler *Handler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {

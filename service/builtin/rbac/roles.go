@@ -30,7 +30,7 @@ func roles(ctx context.Context, argument RolesArgument) (v []*Role, err errors.C
 
 	records, recordsErr := store.Roles(ctx)
 	if recordsErr != nil {
-		err = errors.ServiceError("permissions get roles failed").WithCause(recordsErr)
+		err = errors.ServiceError("rbac get roles failed").WithCause(recordsErr)
 		return
 	}
 	v = make([]*Role, 0, 1)

@@ -31,11 +31,11 @@ type UnbindArgument struct {
 func unbind(ctx context.Context, argument UnbindArgument) (err errors.CodeError) {
 	subject := strings.TrimSpace(argument.Subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions subject unbind roles failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac subject unbind roles failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	if argument.Roles == nil || len(argument.Roles) == 0 {
-		err = errors.ServiceError("permissions subject unbind roles failed").WithCause(fmt.Errorf("roles is nil"))
+		err = errors.ServiceError("rbac subject unbind roles failed").WithCause(fmt.Errorf("roles is nil"))
 		return
 	}
 	store := getStore(ctx)
@@ -44,19 +44,19 @@ func unbind(ctx context.Context, argument UnbindArgument) (err errors.CodeError)
 	for _, role := range argument.Roles {
 		record, recordErr := store.Role(ctx, strings.TrimSpace(role))
 		if recordErr != nil {
-			err = errors.ServiceError("permissions subject unbind roles failed").WithCause(recordErr)
+			err = errors.ServiceError("rbac subject unbind roles failed").WithCause(recordErr)
 			return
 		}
 		records = append(records, record)
 	}
 	if len(records) == 0 {
-		err = errors.ServiceError("permissions subject unbind roles failed").WithCause(fmt.Errorf("roles is invalid"))
+		err = errors.ServiceError("rbac subject unbind roles failed").WithCause(fmt.Errorf("roles is invalid"))
 		return
 	}
 
 	unbindErr := store.Unbind(ctx, subject, records)
 	if unbindErr != nil {
-		err = errors.ServiceError("permissions subject unbind roles failed").WithCause(unbindErr)
+		err = errors.ServiceError("rbac subject unbind roles failed").WithCause(unbindErr)
 		return
 	}
 

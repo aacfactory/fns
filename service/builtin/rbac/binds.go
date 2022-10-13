@@ -31,7 +31,7 @@ type BindsArgument struct {
 func binds(ctx context.Context, argument BindsArgument) (v []*Role, err errors.CodeError) {
 	subject := strings.TrimSpace(argument.Subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions get subject binds roles failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac get subject binds roles failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 
@@ -39,7 +39,7 @@ func binds(ctx context.Context, argument BindsArgument) (v []*Role, err errors.C
 
 	records, recordsErr := store.Binds(ctx, subject)
 	if recordsErr != nil {
-		err = errors.ServiceError("permissions get subject binds roles failed").WithCause(recordsErr)
+		err = errors.ServiceError("rbac get subject binds roles failed").WithCause(recordsErr)
 		return
 	}
 	v = make([]*Role, 0, 1)

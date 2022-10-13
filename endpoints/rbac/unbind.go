@@ -28,16 +28,16 @@ import (
 func Unbind(ctx context.Context, subject string, roles ...string) (err errors.CodeError) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac endpoint unbind role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	if roles == nil || len(roles) == 0 {
-		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("roles is nil"))
+		err = errors.ServiceError("rbac endpoint unbind role failed").WithCause(fmt.Errorf("roles is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.UnbindFn, service.NewArgument(rbac.UnbindArgument{

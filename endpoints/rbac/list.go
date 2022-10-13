@@ -26,7 +26,7 @@ import (
 func ListRoles(ctx context.Context, flat bool) (v []*Role, err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.RolesFn, service.NewArgument(rbac.RolesArgument{

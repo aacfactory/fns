@@ -30,13 +30,13 @@ type RemoveArgument struct {
 func remove(ctx context.Context, argument RemoveArgument) (err errors.CodeError) {
 	name := strings.TrimSpace(argument.Name)
 	if name == "" {
-		err = errors.ServiceError("permissions remove failed").WithCause(fmt.Errorf("name is nil"))
+		err = errors.ServiceError("rbac remove failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
 	store := getStore(ctx)
 	record, getErr := store.Role(ctx, name)
 	if getErr != nil {
-		err = errors.ServiceError("permissions remove failed").WithCause(getErr)
+		err = errors.ServiceError("rbac remove failed").WithCause(getErr)
 		return
 	}
 
@@ -45,17 +45,17 @@ func remove(ctx context.Context, argument RemoveArgument) (err errors.CodeError)
 		LoadChildren: false,
 	})
 	if childrenErr != nil {
-		err = errors.ServiceError("permissions remove failed").WithCause(childrenErr)
+		err = errors.ServiceError("rbac remove failed").WithCause(childrenErr)
 		return
 	}
 	if children != nil && len(children) > 0 {
-		err = errors.ServiceError("permissions remove failed").WithCause(fmt.Errorf("can not role which has children"))
+		err = errors.ServiceError("rbac remove failed").WithCause(fmt.Errorf("can not role which has children"))
 		return
 	}
 
 	removeErr := store.RemoveRole(ctx, record)
 	if removeErr != nil {
-		err = errors.ServiceError("permissions remove failed").WithCause(removeErr)
+		err = errors.ServiceError("rbac remove failed").WithCause(removeErr)
 		return
 	}
 	return

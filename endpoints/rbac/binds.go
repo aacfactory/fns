@@ -28,12 +28,12 @@ import (
 func Binds(ctx context.Context, subject string, flat bool) (v []*Role, err errors.CodeError) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions list binds role failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac endpoint list binds role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.BindsFn, service.NewArgument(rbac.BindsArgument{

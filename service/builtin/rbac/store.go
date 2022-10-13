@@ -103,11 +103,11 @@ func (component *storeComponent) Close() {
 func getStore(ctx context.Context) (v Store) {
 	c, has := service.GetComponent(ctx, "store")
 	if !has {
-		panic(fmt.Sprintf("%+v", errors.Warning("permissions: there is no store in context")))
+		panic(fmt.Sprintf("%+v", errors.Warning("rbac: there is no store in context")))
 	}
 	sc, ok := c.(*storeComponent)
 	if !ok {
-		panic(fmt.Sprintf("%+v", errors.Warning("permissions: type of store in context is invalid")))
+		panic(fmt.Sprintf("%+v", errors.Warning("rbac: type of store in context is invalid")))
 	}
 	v = sc.store
 	return

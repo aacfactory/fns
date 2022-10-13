@@ -28,7 +28,7 @@ import (
 func Save(ctx context.Context, name string, parent string, policies []*Policy) (err errors.CodeError) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		err = errors.ServiceError("permissions save role failed").WithCause(fmt.Errorf("name is nil"))
+		err = errors.ServiceError("rbac endpoint save role failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
 	parent = strings.TrimSpace(parent)
@@ -44,7 +44,7 @@ func Save(ctx context.Context, name string, parent string, policies []*Policy) (
 
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.SaveFn, service.NewArgument(rbac.SaveArgument{

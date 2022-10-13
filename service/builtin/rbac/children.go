@@ -32,7 +32,7 @@ func children(ctx context.Context, argument ChildrenArgument) (v []*Role, err er
 	store := getStore(ctx)
 	records, getErr := store.Children(ctx, parent)
 	if getErr != nil {
-		err = errors.ServiceError("permissions get children of role failed").WithCause(getErr)
+		err = errors.ServiceError("rbac get children of role failed").WithCause(getErr)
 		return
 	}
 	if records == nil || len(records) == 0 {
@@ -47,7 +47,7 @@ func children(ctx context.Context, argument ChildrenArgument) (v []*Role, err er
 				LoadChildren: true,
 			})
 			if childrenErr != nil {
-				err = errors.ServiceError("permissions get children of role failed").WithCause(childrenErr)
+				err = errors.ServiceError("rbac get children of role failed").WithCause(childrenErr)
 				return
 			}
 			if children != nil && len(children) > 0 {

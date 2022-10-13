@@ -36,17 +36,17 @@ type EnforceResult struct {
 func enforce(ctx context.Context, argument EnforceArgument) (result *EnforceResult, err errors.CodeError) {
 	subject := strings.TrimSpace(argument.Subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions enforce failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac enforce failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	object := strings.TrimSpace(argument.Object)
 	if object == "" {
-		err = errors.ServiceError("permissions enforce failed").WithCause(fmt.Errorf("object is nil"))
+		err = errors.ServiceError("rbac enforce failed").WithCause(fmt.Errorf("object is nil"))
 		return
 	}
 	action := strings.TrimSpace(argument.Action)
 	if action == "" {
-		err = errors.ServiceError("permissions enforce failed").WithCause(fmt.Errorf("action is nil"))
+		err = errors.ServiceError("rbac enforce failed").WithCause(fmt.Errorf("action is nil"))
 		return
 	}
 
@@ -55,7 +55,7 @@ func enforce(ctx context.Context, argument EnforceArgument) (result *EnforceResu
 		Flat:    true,
 	})
 	if getBindsErr != nil {
-		err = errors.ServiceError("permissions enforce failed").WithCause(getBindsErr)
+		err = errors.ServiceError("rbac enforce failed").WithCause(getBindsErr)
 		return
 	}
 	result = &EnforceResult{

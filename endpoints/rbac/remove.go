@@ -28,12 +28,12 @@ import (
 func Remove(ctx context.Context, name string) (err errors.CodeError) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		err = errors.ServiceError("permissions remove role failed").WithCause(fmt.Errorf("name is nil"))
+		err = errors.ServiceError("rbac endpoint remove role failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.RemoveFn, service.NewArgument(rbac.RemoveArgument{

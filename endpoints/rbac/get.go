@@ -28,12 +28,12 @@ import (
 func GetRole(ctx context.Context, name string, withChildren bool) (v *Role, err errors.CodeError) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		err = errors.ServiceError("permissions get role failed").WithCause(fmt.Errorf("name is nil"))
+		err = errors.ServiceError("rbac endpoint get role failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{

@@ -80,7 +80,12 @@ func EnforceRequest(ctx context.Context, object string, action string) (ok bool,
 	return
 }
 
-func BatchEnforceRequest(ctx context.Context, objectAndActions [][]string) (ok bool, err errors.CodeError) {
+func BatchEnforceRequest(ctx context.Context, objectAndActions ...string) (ok bool, err errors.CodeError) {
+	objectAndActionsLen := len(objectAndActions)
+	if objectAndActionsLen == 0 || objectAndActionsLen%2 != 0 {
+		err = errors.ServiceError("permissions enforce request failed").WithCause(fmt.Errorf("objects and actions are invalid"))
+		return
+	}
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
 		err = errors.ServiceError("permissions enforce request failed").WithCause(fmt.Errorf("there is no request in context"))
@@ -91,8 +96,9 @@ func BatchEnforceRequest(ctx context.Context, objectAndActions [][]string) (ok b
 	if userId == "" {
 		return
 	}
-	for _, objectAndAction := range objectAndActions {
-		ok, err = Enforce(ctx, userId, objectAndAction[0], objectAndAction[1])
+
+	for i := 0; i < objectAndActionsLen; i = i + 1 {
+		ok, err = Enforce(ctx, userId, objectAndActions[i], objectAndActions[i+1])
 		if err != nil {
 			return
 		}

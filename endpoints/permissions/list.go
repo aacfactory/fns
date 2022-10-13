@@ -19,30 +19,32 @@ package permissions
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"strings"
+	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/builtin/permissions"
 )
 
-type UserUnbindRolesArgument struct {
-	UserId string   `json:"userId"`
-	Roles  []string `json:"roles"`
-}
+func ListRoles(ctx context.Context, flat bool) (v []*Role, err errors.CodeError) {
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	if !hasEndpoint {
+		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		return
+	}
+	fr := endpoint.Request(ctx, permissions.RolesFn, service.NewArgument(permissions.RolesArgument{
+		Flat: flat,
+	}))
 
-func userUnbindRoles(ctx context.Context, argument UserUnbindRolesArgument) (err errors.CodeError) {
-	userId := strings.TrimSpace(argument.UserId)
-	if userId == "" {
-		err = errors.BadRequest("permissions: user id is empty")
+	result := make([]*permissions.Role, 0, 1)
+	has, getResultErr := fr.Get(ctx, &result)
+	if getResultErr != nil {
+		err = getResultErr
 		return
 	}
-	roles := argument.Roles
-	if roles == nil || len(roles) == 0 {
-		err = errors.BadRequest("permissions: roles is empty")
+	if !has {
 		return
 	}
-	ps := getStore(ctx)
-	bindErr := ps.UserUnbindRoles(ctx, userId, roles...)
-	if bindErr != nil {
-		err = errors.ServiceError("permissions: unbind user roles failed").WithCause(bindErr)
-		return
+	v = make([]*Role, 0, 1)
+	for _, role := range result {
+		v = append(v, newRole(role))
 	}
 	return
 }

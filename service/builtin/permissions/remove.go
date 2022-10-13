@@ -23,39 +23,40 @@ import (
 	"strings"
 )
 
-type RoleArgument struct {
-	Name         string `json:"name"`
-	LoadChildren bool   `json:"loadChildren"`
+type RemoveArgument struct {
+	Name string `json:"name"`
 }
 
-func role(ctx context.Context, argument RoleArgument) (v *Role, err errors.CodeError) {
+func remove(ctx context.Context, argument RemoveArgument) (err errors.CodeError) {
 	name := strings.TrimSpace(argument.Name)
 	if name == "" {
-		err = errors.ServiceError("permissions get role failed").WithCause(fmt.Errorf("name is nil"))
+		err = errors.ServiceError("permissions remove failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
 	store := getStore(ctx)
 	record, getErr := store.Role(ctx, name)
 	if getErr != nil {
-		err = errors.ServiceError("permissions get role failed").WithCause(getErr)
-		return
-	}
-	if record == nil {
-		err = errors.ServiceError("permissions get role failed").WithCause(fmt.Errorf("not found"))
+		err = errors.ServiceError("permissions remove failed").WithCause(getErr)
 		return
 	}
 
-	v = record.mapToRole()
-	if argument.LoadChildren {
-		children, childrenErr := children(ctx, ChildrenArgument{
-			Parent:       record.Name,
-			LoadChildren: true,
-		})
-		if childrenErr != nil {
-			err = errors.ServiceError("permissions get role failed").WithCause(childrenErr)
-			return
-		}
-		v.Children = children
+	children, childrenErr := children(ctx, ChildrenArgument{
+		Parent:       name,
+		LoadChildren: false,
+	})
+	if childrenErr != nil {
+		err = errors.ServiceError("permissions remove failed").WithCause(childrenErr)
+		return
+	}
+	if children != nil && len(children) > 0 {
+		err = errors.ServiceError("permissions remove failed").WithCause(fmt.Errorf("can not role which has children"))
+		return
+	}
+
+	removeErr := store.RemoveRole(ctx, record)
+	if removeErr != nil {
+		err = errors.ServiceError("permissions remove failed").WithCause(removeErr)
+		return
 	}
 	return
 }

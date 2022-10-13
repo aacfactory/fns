@@ -129,7 +129,7 @@ type User struct {
 // @fn get
 // @validate true
 // @authorization true
-// @permission foo,bar
+// @permission obj:act,obj_a:act_a
 // @internal false
 // @title Get user profile
 // @description >>>

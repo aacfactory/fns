@@ -25,6 +25,19 @@ import (
 	"github.com/aacfactory/logs"
 )
 
+const (
+	Name       = "permissions"
+	RoleFn     = "role"
+	RolesFn    = "roles"
+	ChildrenFn = "children"
+	SaveFn     = "save"
+	RemoveFn   = "remove"
+	BindFn     = "bind"
+	UnbindFn   = "unbind"
+	BindsFn    = "binds"
+	EnforceFn  = "enforce"
+)
+
 var (
 	store Store = nil
 )
@@ -56,7 +69,7 @@ type _service_ struct {
 }
 
 func (svc *_service_) Name() (name string) {
-	name = "permissions"
+	name = Name
 	return
 }
 
@@ -100,94 +113,122 @@ func (svc *_service_) Document() (doc service.Document) {
 
 func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
-	case "get_user_roles":
-		fnArgument := GetUserRolesArgument{}
+	case RoleFn:
+		fnArgument := RoleArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		v, err = userRoles(ctx, fnArgument)
+		v, err = role(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
 		break
-	case "user_bind_roles":
-		fnArgument := UserBindRolesArgument{}
+	case RolesFn:
+		fnArgument := RolesArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		err = userBindRoles(ctx, fnArgument)
+		v, err = roles(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		v = &service.Empty{}
 		break
-	case "user_unbind_roles":
-		fnArgument := UserUnbindRolesArgument{}
+	case ChildrenFn:
+		fnArgument := ChildrenArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		err = userUnbindRoles(ctx, fnArgument)
+		v, err = children(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		v = &service.Empty{}
 		break
-	case "role":
-		fnArgument := GetRoleArgument{}
+	case SaveFn:
+		fnArgument := SaveArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		v, err = getRole(ctx, fnArgument)
+		err = save(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
 		break
-	case "roles":
-		v, err = getRoles(ctx)
-		if err != nil {
-			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
-			return
-		}
-		break
-	case "save_role":
-		fnArgument := Role{}
+	case RemoveFn:
+		fnArgument := RemoveArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		err = saveRole(ctx, &fnArgument)
+		err = remove(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		v = &service.Empty{}
 		break
-	case "remove_role":
-		fnArgument := RemoveRoleArgument{}
+	case BindsFn:
+		fnArgument := BindsArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		err = removeRole(ctx, fnArgument)
+		v, err = binds(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
 			return
 		}
-		v = &service.Empty{}
+		break
+	case BindFn:
+		fnArgument := BindArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		err = bind(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		break
+	case UnbindFn:
+		fnArgument := UnbindArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		err = unbind(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		break
+	case EnforceFn:
+		fnArgument := EnforceArgument{}
+		argumentErr := argument.As(&fnArgument)
+		if argumentErr != nil {
+			err = errors.BadRequest("permissions: invalid request argument").WithCause(argumentErr).WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
+		v, err = enforce(ctx, fnArgument)
+		if err != nil {
+			err = err.WithMeta("service", "permissions").WithMeta("fn", fn)
+			return
+		}
 		break
 	default:
 		err = errors.NotFound("permissions: fn was not found").WithMeta("service", "permissions").WithMeta("fn", fn)

@@ -22,28 +22,31 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/builtin/permissions"
+	"strings"
 )
 
-func RemoveRole(ctx context.Context, name string) (err errors.CodeError) {
-	request, hasRequest := service.GetRequest(ctx)
-	if !hasRequest {
-		err = errors.Warning("permissions: remove role failed").WithCause(fmt.Errorf("there is no request in context"))
+func Unbind(ctx context.Context, subject string, roles ...string) (err errors.CodeError) {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
-	if !request.User().Authenticated() {
-		err = errors.ServiceError("permissions: there is no authenticated user in context")
+	if roles == nil || len(roles) == 0 {
+		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("roles is nil"))
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, "permissions")
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
+		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, "remove_role", service.NewArgument(&permissions.RemoveRoleArgument{
-		Name: name,
+	fr := endpoint.Request(ctx, permissions.UnbindFn, service.NewArgument(permissions.UnbindArgument{
+		Subject: subject,
+		Roles:   roles,
 	}))
+
 	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
+	_, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr
 		return

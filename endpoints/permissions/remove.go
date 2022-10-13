@@ -18,24 +18,32 @@ package permissions
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/builtin/permissions"
 	"strings"
 )
 
-type RemoveRoleArgument struct {
-	Name string `json:"name"`
-}
-
-func removeRole(ctx context.Context, argument RemoveRoleArgument) (err errors.CodeError) {
-	name := strings.TrimSpace(argument.Name)
+func Remove(ctx context.Context, name string) (err errors.CodeError) {
+	name = strings.TrimSpace(name)
 	if name == "" {
-		err = errors.BadRequest("permissions: role name is empty")
+		err = errors.ServiceError("permissions remove role failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
-	ps := getStore(ctx)
-	removeErr := ps.RemoveRole(ctx, name)
-	if removeErr != nil {
-		err = errors.ServiceError("permissions: remove role failed").WithCause(removeErr)
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	if !hasEndpoint {
+		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
+		return
+	}
+	fr := endpoint.Request(ctx, permissions.RemoveFn, service.NewArgument(permissions.RemoveArgument{
+		Name: name,
+	}))
+
+	result := &service.Empty{}
+	_, getResultErr := fr.Get(ctx, &result)
+	if getResultErr != nil {
+		err = getResultErr
 		return
 	}
 	return

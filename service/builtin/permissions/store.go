@@ -21,9 +21,45 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/wildcard"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
+
+type PolicyRecord struct {
+	Object string `json:"object"`
+	Action string `json:"action"`
+}
+
+type RoleRecord struct {
+	Name     string          `json:"name"`
+	Parent   string          `json:"parent"`
+	Policies []*PolicyRecord `json:"policies"`
+}
+
+func (r *RoleRecord) mapToRole() (v *Role) {
+	v = &Role{
+		Name:     r.Name,
+		Parent:   r.Parent,
+		Children: nil,
+		Policies: nil,
+	}
+	if r.Policies != nil && len(r.Policies) > 0 {
+		policies := make([]*Policy, 0, len(r.Policies))
+		for _, policy := range r.Policies {
+			if policy.Action == "" {
+				policy.Action = "*"
+			}
+			policies = append(policies, &Policy{
+				Object:  policy.Object,
+				Action:  policy.Action,
+				matcher: wildcard.New(policy.Action),
+			})
+		}
+		v.Policies = policies
+	}
+	return
+}
 
 type StoreOptions struct {
 	Log    logs.Logger
@@ -32,13 +68,14 @@ type StoreOptions struct {
 
 type Store interface {
 	Build(options StoreOptions) (err error)
-	Role(ctx context.Context, name string) (role *Role, err error)
-	Roles(ctx context.Context) (roles []*Role, err error)
-	SaveRole(ctx context.Context, role *Role) (err error)
-	RemoveRole(ctx context.Context, name string) (err error)
-	UserRoles(ctx context.Context, userId string) (roles []*Role, err error)
-	UserBindRoles(ctx context.Context, userId string, roleNames ...string) (err error)
-	UserUnbindRoles(ctx context.Context, userId string, roleNames ...string) (err error)
+	Role(ctx context.Context, name string) (role *RoleRecord, err error)
+	Roles(ctx context.Context) (roles []*RoleRecord, err error)
+	Children(ctx context.Context, parent string) (children []*RoleRecord, err error)
+	SaveRole(ctx context.Context, role *RoleRecord) (err error)
+	RemoveRole(ctx context.Context, role *RoleRecord) (err error)
+	Binds(ctx context.Context, subject string) (roles []*RoleRecord, err error)
+	Bind(ctx context.Context, subject string, roles []*RoleRecord) (err error)
+	Unbind(ctx context.Context, subject string, roles []*RoleRecord) (err error)
 	Close() (err error)
 }
 

@@ -22,32 +22,37 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/builtin/permissions"
+	"strings"
 )
 
-func UserUnbindRoles(ctx context.Context, userId string, roles ...string) (err errors.CodeError) {
-	request, hasRequest := service.GetRequest(ctx)
-	if !hasRequest {
-		err = errors.Warning("permissions: user unbind roles failed").WithCause(fmt.Errorf("there is no request in context"))
+func Binds(ctx context.Context, subject string, flat bool) (v []*Role, err errors.CodeError) {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		err = errors.ServiceError("permissions list binds role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
-	if !request.User().Authenticated() {
-		err = errors.ServiceError("permissions: there is no authenticated user in context")
-		return
-	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, "permissions")
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
+		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, "user_unbind_roles", service.NewArgument(&permissions.UserUnbindRolesArgument{
-		UserId: userId,
-		Roles:  roles,
+	fr := endpoint.Request(ctx, permissions.BindsFn, service.NewArgument(permissions.BindsArgument{
+		Subject: subject,
+		Flat:    flat,
 	}))
-	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
+
+	result := make([]*permissions.Role, 0, 1)
+	has, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr
 		return
+	}
+	if !has {
+		return
+	}
+	v = make([]*Role, 0, 1)
+	for _, role := range result {
+		v = append(v, newRole(role))
 	}
 	return
 }

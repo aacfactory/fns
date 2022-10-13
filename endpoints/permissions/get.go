@@ -22,25 +22,26 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/builtin/permissions"
+	"strings"
 )
 
-func GetRoles(ctx context.Context) (v []Role, err errors.CodeError) {
-	request, hasRequest := service.GetRequest(ctx)
-	if !hasRequest {
-		err = errors.Warning("permissions: get roles failed").WithCause(fmt.Errorf("there is no request in context"))
+func GetRole(ctx context.Context, name string, withChildren bool) (v *Role, err errors.CodeError) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = errors.ServiceError("permissions get role failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
-	if !request.User().Authenticated() {
-		err = errors.ServiceError("permissions: there is no authenticated user in context")
-		return
-	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, "permissions")
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
 	if !hasEndpoint {
-		err = errors.Warning("permissions: there is no permissions in context, please deploy permissions service")
+		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, "roles", service.NewArgument(nil))
-	result := make([]*permissions.Role, 0, 1)
+	fr := endpoint.Request(ctx, permissions.RoleFn, service.NewArgument(permissions.RoleArgument{
+		Name:         name,
+		LoadChildren: withChildren,
+	}))
+
+	result := &permissions.Role{}
 	has, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr
@@ -49,9 +50,6 @@ func GetRoles(ctx context.Context) (v []Role, err errors.CodeError) {
 	if !has {
 		return
 	}
-	v = make([]Role, 0, 1)
-	for _, r := range result {
-		v = append(v, newRole(r))
-	}
+	v = newRole(result)
 	return
 }

@@ -14,45 +14,42 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
+	"github.com/aacfactory/fns/service/builtin/rbac"
 	"strings"
 )
 
-func Binds(ctx context.Context, subject string, flat bool) (v []*Role, err errors.CodeError) {
+func Unbind(ctx context.Context, subject string, roles ...string) (err errors.CodeError) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions list binds role failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	if roles == nil || len(roles) == 0 {
+		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("roles is nil"))
+		return
+	}
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
 		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, permissions.BindsFn, service.NewArgument(permissions.BindsArgument{
+	fr := endpoint.Request(ctx, rbac.UnbindFn, service.NewArgument(rbac.UnbindArgument{
 		Subject: subject,
-		Flat:    flat,
+		Roles:   roles,
 	}))
 
-	result := make([]*permissions.Role, 0, 1)
-	has, getResultErr := fr.Get(ctx, &result)
+	result := &service.Empty{}
+	_, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr
 		return
-	}
-	if !has {
-		return
-	}
-	v = make([]*Role, 0, 1)
-	for _, role := range result {
-		v = append(v, newRole(role))
 	}
 	return
 }

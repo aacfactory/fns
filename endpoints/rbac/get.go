@@ -14,26 +14,34 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
+	"github.com/aacfactory/fns/service/builtin/rbac"
+	"strings"
 )
 
-func ListRoles(ctx context.Context, flat bool) (v []*Role, err errors.CodeError) {
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+func GetRole(ctx context.Context, name string, withChildren bool) (v *Role, err errors.CodeError) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = errors.ServiceError("permissions get role failed").WithCause(fmt.Errorf("name is nil"))
+		return
+	}
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
 		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, permissions.RolesFn, service.NewArgument(permissions.RolesArgument{
-		Flat: flat,
+	fr := endpoint.Request(ctx, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{
+		Name:         name,
+		LoadChildren: withChildren,
 	}))
 
-	result := make([]*permissions.Role, 0, 1)
+	result := &rbac.Role{}
 	has, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr
@@ -42,9 +50,6 @@ func ListRoles(ctx context.Context, flat bool) (v []*Role, err errors.CodeError)
 	if !has {
 		return
 	}
-	v = make([]*Role, 0, 1)
-	for _, role := range result {
-		v = append(v, newRole(role))
-	}
+	v = newRole(result)
 	return
 }

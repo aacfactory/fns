@@ -14,43 +14,30 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
+	"github.com/aacfactory/fns/service/builtin/rbac"
 	"strings"
 )
 
-func Save(ctx context.Context, name string, parent string, policies []*Policy) (err errors.CodeError) {
+func Remove(ctx context.Context, name string) (err errors.CodeError) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		err = errors.ServiceError("permissions save role failed").WithCause(fmt.Errorf("name is nil"))
+		err = errors.ServiceError("permissions remove role failed").WithCause(fmt.Errorf("name is nil"))
 		return
 	}
-	parent = strings.TrimSpace(parent)
-	rolePolicies := make([]*permissions.Policy, 0, 1)
-	if policies != nil {
-		for _, policy := range policies {
-			rolePolicies = append(rolePolicies, &permissions.Policy{
-				Object: strings.TrimSpace(policy.Object),
-				Action: strings.TrimSpace(policy.Action),
-			})
-		}
-	}
-
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
 		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, permissions.SaveFn, service.NewArgument(permissions.SaveArgument{
-		Name:     name,
-		Parent:   parent,
-		Policies: rolePolicies,
+	fr := endpoint.Request(ctx, rbac.RemoveFn, service.NewArgument(rbac.RemoveArgument{
+		Name: name,
 	}))
 
 	result := &service.Empty{}

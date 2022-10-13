@@ -14,40 +14,50 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
+	"github.com/aacfactory/fns/service/builtin/rbac"
 	"strings"
 )
 
-func Children(ctx context.Context, parent string, withChildren bool) (v []*Role, err errors.CodeError) {
+func Save(ctx context.Context, name string, parent string, policies []*Policy) (err errors.CodeError) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = errors.ServiceError("permissions save role failed").WithCause(fmt.Errorf("name is nil"))
+		return
+	}
 	parent = strings.TrimSpace(parent)
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	rolePolicies := make([]*rbac.Policy, 0, 1)
+	if policies != nil {
+		for _, policy := range policies {
+			rolePolicies = append(rolePolicies, &rbac.Policy{
+				Object: strings.TrimSpace(policy.Object),
+				Action: strings.TrimSpace(policy.Action),
+			})
+		}
+	}
+
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
 		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, permissions.ChildrenFn, service.NewArgument(permissions.ChildrenArgument{
-		Parent:       parent,
-		LoadChildren: withChildren,
+	fr := endpoint.Request(ctx, rbac.SaveFn, service.NewArgument(rbac.SaveArgument{
+		Name:     name,
+		Parent:   parent,
+		Policies: rolePolicies,
 	}))
 
-	result := make([]*permissions.Role, 0, 1)
-	has, getResultErr := fr.Get(ctx, &result)
+	result := &service.Empty{}
+	_, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr
 		return
-	}
-	if !has {
-		return
-	}
-	v = make([]*Role, 0, 1)
-	for _, role := range result {
-		v = append(v, newRole(role))
 	}
 	return
 }

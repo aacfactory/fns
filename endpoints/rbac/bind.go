@@ -14,33 +14,33 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
+	"github.com/aacfactory/fns/service/builtin/rbac"
 	"strings"
 )
 
-func Unbind(ctx context.Context, subject string, roles ...string) (err errors.CodeError) {
+func Bind(ctx context.Context, subject string, roles ...string) (err errors.CodeError) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("permissions bind role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	if roles == nil || len(roles) == 0 {
-		err = errors.ServiceError("permissions unbind role failed").WithCause(fmt.Errorf("roles is nil"))
+		err = errors.ServiceError("permissions bind role failed").WithCause(fmt.Errorf("roles is nil"))
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
 		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, permissions.UnbindFn, service.NewArgument(permissions.UnbindArgument{
+	fr := endpoint.Request(ctx, rbac.BindFn, service.NewArgument(rbac.BindArgument{
 		Subject: subject,
 		Roles:   roles,
 	}))

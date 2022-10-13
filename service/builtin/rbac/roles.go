@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"

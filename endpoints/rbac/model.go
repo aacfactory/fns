@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
-import "github.com/aacfactory/fns/service/builtin/permissions"
+import "github.com/aacfactory/fns/service/builtin/rbac"
 
 type Policy struct {
 	Object string `json:"object"`
 	Action string `json:"action"`
 }
 
-func newRole(r *permissions.Role) (v *Role) {
+func newRole(r *rbac.Role) (v *Role) {
 	v = &Role{
 		Name:     r.Name,
 		Parent:   r.Parent,

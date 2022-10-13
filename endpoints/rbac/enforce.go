@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package permissions
+package rbac
 
 import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/permissions"
+	"github.com/aacfactory/fns/service/builtin/rbac"
 	"strings"
 )
 
@@ -41,18 +41,18 @@ func Enforce(ctx context.Context, subject string, object string, action string) 
 		err = errors.ServiceError("permissions enforce failed").WithCause(fmt.Errorf("action is nil"))
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, permissions.Name)
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
 		err = errors.Warning("permissions endpoint was not found, please deploy permissions service")
 		return
 	}
-	fr := endpoint.Request(ctx, permissions.EnforceFn, service.NewArgument(permissions.EnforceArgument{
+	fr := endpoint.Request(ctx, rbac.EnforceFn, service.NewArgument(rbac.EnforceArgument{
 		Subject: subject,
 		Object:  object,
 		Action:  action,
 	}))
 
-	result := &permissions.EnforceResult{}
+	result := &rbac.EnforceResult{}
 	has, getResultErr := fr.Get(ctx, &result)
 	if getResultErr != nil {
 		err = getResultErr

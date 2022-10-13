@@ -59,7 +59,7 @@ func loadChildren(roles []*Role, records []*RoleRecord) {
 	for _, r := range roles {
 		children := make([]*Role, 0, 1)
 		for _, record := range records {
-			if r.Name == record.Parent {
+			if r.Code == record.Parent {
 				children = append(children, record.mapToRole())
 			}
 		}

@@ -25,10 +25,12 @@ type Policy struct {
 
 func newRole(r *rbac.Role) (v *Role) {
 	v = &Role{
-		Name:     r.Name,
-		Parent:   r.Parent,
-		Children: nil,
-		Policies: nil,
+		Code:        r.Code,
+		Name:        r.Name,
+		Description: r.Description,
+		Parent:      r.Parent,
+		Children:    nil,
+		Policies:    nil,
 	}
 	if r.Policies != nil && len(r.Policies) > 0 {
 		v.Policies = make([]*Policy, 0, 1)
@@ -49,8 +51,10 @@ func newRole(r *rbac.Role) (v *Role) {
 }
 
 type Role struct {
-	Name     string    `json:"name"`
-	Parent   string    `json:"parent"`
-	Children []*Role   `json:"children"`
-	Policies []*Policy `json:"policies"`
+	Code        string    `json:"code"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Parent      string    `json:"parent"`
+	Children    []*Role   `json:"children"`
+	Policies    []*Policy `json:"policies"`
 }

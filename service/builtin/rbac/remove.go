@@ -24,24 +24,24 @@ import (
 )
 
 type RemoveArgument struct {
-	Name string `json:"name"`
+	Code string `json:"code"`
 }
 
 func remove(ctx context.Context, argument RemoveArgument) (err errors.CodeError) {
-	name := strings.TrimSpace(argument.Name)
-	if name == "" {
-		err = errors.ServiceError("rbac remove failed").WithCause(fmt.Errorf("name is nil"))
+	code := strings.TrimSpace(argument.Code)
+	if code == "" {
+		err = errors.ServiceError("rbac remove failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	store := getStore(ctx)
-	record, getErr := store.Role(ctx, name)
+	record, getErr := store.Role(ctx, code)
 	if getErr != nil {
 		err = errors.ServiceError("rbac remove failed").WithCause(getErr)
 		return
 	}
 
 	children, childrenErr := children(ctx, ChildrenArgument{
-		Parent:       name,
+		Parent:       code,
 		LoadChildren: false,
 	})
 	if childrenErr != nil {

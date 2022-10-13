@@ -25,10 +25,10 @@ import (
 	"strings"
 )
 
-func Save(ctx context.Context, name string, parent string, policies []*Policy) (err errors.CodeError) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		err = errors.ServiceError("rbac endpoint save role failed").WithCause(fmt.Errorf("name is nil"))
+func Save(ctx context.Context, code string, name string, description string, parent string, policies []*Policy) (err errors.CodeError) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		err = errors.ServiceError("rbac endpoint save role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	parent = strings.TrimSpace(parent)
@@ -48,9 +48,11 @@ func Save(ctx context.Context, name string, parent string, policies []*Policy) (
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.SaveFn, service.NewArgument(rbac.SaveArgument{
-		Name:     name,
-		Parent:   parent,
-		Policies: rolePolicies,
+		Code:        code,
+		Name:        name,
+		Description: description,
+		Parent:      parent,
+		Policies:    rolePolicies,
 	}))
 
 	result := &service.Empty{}

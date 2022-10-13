@@ -25,10 +25,10 @@ import (
 	"strings"
 )
 
-func GetRole(ctx context.Context, name string, withChildren bool) (v *Role, err errors.CodeError) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		err = errors.ServiceError("rbac endpoint get role failed").WithCause(fmt.Errorf("name is nil"))
+func GetRole(ctx context.Context, code string, withChildren bool) (v *Role, err errors.CodeError) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		err = errors.ServiceError("rbac endpoint get role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
@@ -37,7 +37,7 @@ func GetRole(ctx context.Context, name string, withChildren bool) (v *Role, err 
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{
-		Name:         name,
+		Code:         code,
 		LoadChildren: withChildren,
 	}))
 

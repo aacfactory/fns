@@ -36,10 +36,12 @@ func (p *Policy) match(action string) (ok bool) {
 }
 
 type Role struct {
-	Name     string    `json:"name"`
-	Parent   string    `json:"parent"`
-	Children []*Role   `json:"children"`
-	Policies []*Policy `json:"policies"`
+	Code        string    `json:"code"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Parent      string    `json:"parent"`
+	Children    []*Role   `json:"children"`
+	Policies    []*Policy `json:"policies"`
 }
 
 func (r *Role) enforce(object string, action string) (ok bool) {
@@ -62,25 +64,5 @@ func (r *Role) enforce(object string, action string) (ok bool) {
 			}
 		}
 	}
-	return
-}
-
-func (r *Role) AddChild(child *Role) {
-	if child == nil {
-		return
-	}
-	if child.Name == "" {
-		return
-	}
-	if r.Children == nil {
-		r.Children = make([]*Role, 0, 1)
-	}
-	for i, role := range r.Children {
-		if role.Name == child.Name {
-			r.Children[i] = child
-			return
-		}
-	}
-	r.Children = append(r.Children, child)
 	return
 }

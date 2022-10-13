@@ -24,18 +24,18 @@ import (
 )
 
 type RoleArgument struct {
-	Name         string `json:"name"`
+	Code         string `json:"code"`
 	LoadChildren bool   `json:"loadChildren"`
 }
 
 func role(ctx context.Context, argument RoleArgument) (v *Role, err errors.CodeError) {
-	name := strings.TrimSpace(argument.Name)
-	if name == "" {
-		err = errors.ServiceError("rbac get role failed").WithCause(fmt.Errorf("name is nil"))
+	code := strings.TrimSpace(argument.Code)
+	if code == "" {
+		err = errors.ServiceError("rbac get role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	store := getStore(ctx)
-	record, getErr := store.Role(ctx, name)
+	record, getErr := store.Role(ctx, code)
 	if getErr != nil {
 		err = errors.ServiceError("rbac get role failed").WithCause(getErr)
 		return

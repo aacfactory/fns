@@ -32,17 +32,21 @@ type PolicyRecord struct {
 }
 
 type RoleRecord struct {
-	Name     string          `json:"name"`
-	Parent   string          `json:"parent"`
-	Policies []*PolicyRecord `json:"policies"`
+	Code        string          `json:"code"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parent      string          `json:"parent"`
+	Policies    []*PolicyRecord `json:"policies"`
 }
 
 func (r *RoleRecord) mapToRole() (v *Role) {
 	v = &Role{
-		Name:     r.Name,
-		Parent:   r.Parent,
-		Children: nil,
-		Policies: nil,
+		Code:        r.Code,
+		Name:        r.Name,
+		Description: r.Description,
+		Parent:      r.Parent,
+		Children:    nil,
+		Policies:    nil,
 	}
 	if r.Policies != nil && len(r.Policies) > 0 {
 		policies := make([]*Policy, 0, len(r.Policies))
@@ -68,7 +72,7 @@ type StoreOptions struct {
 
 type Store interface {
 	Build(options StoreOptions) (err error)
-	Role(ctx context.Context, name string) (role *RoleRecord, err error)
+	Role(ctx context.Context, code string) (role *RoleRecord, err error)
 	Roles(ctx context.Context) (roles []*RoleRecord, err error)
 	Children(ctx context.Context, parent string) (children []*RoleRecord, err error)
 	SaveRole(ctx context.Context, role *RoleRecord) (err error)

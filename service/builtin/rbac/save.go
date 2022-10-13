@@ -24,15 +24,17 @@ import (
 )
 
 type SaveArgument struct {
-	Name     string    `json:"name"`
-	Parent   string    `json:"parent"`
-	Policies []*Policy `json:"policies"`
+	Code        string    `json:"code"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Parent      string    `json:"parent"`
+	Policies    []*Policy `json:"policies"`
 }
 
 func save(ctx context.Context, argument SaveArgument) (err errors.CodeError) {
-	name := strings.TrimSpace(argument.Name)
-	if name == "" {
-		err = errors.ServiceError("rbac save role failed").WithCause(fmt.Errorf("name is nil"))
+	code := strings.TrimSpace(argument.Code)
+	if code == "" {
+		err = errors.ServiceError("rbac save role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	var policies []*PolicyRecord = nil
@@ -57,9 +59,11 @@ func save(ctx context.Context, argument SaveArgument) (err errors.CodeError) {
 	store := getStore(ctx)
 
 	saveErr := store.SaveRole(ctx, &RoleRecord{
-		Name:     name,
-		Parent:   strings.TrimSpace(argument.Parent),
-		Policies: policies,
+		Code:        code,
+		Name:        strings.TrimSpace(argument.Name),
+		Description: strings.TrimSpace(argument.Description),
+		Parent:      strings.TrimSpace(argument.Parent),
+		Policies:    policies,
 	})
 
 	if saveErr != nil {

@@ -25,10 +25,10 @@ import (
 	"strings"
 )
 
-func Remove(ctx context.Context, name string) (err errors.CodeError) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		err = errors.ServiceError("rbac endpoint remove role failed").WithCause(fmt.Errorf("name is nil"))
+func Remove(ctx context.Context, code string) (err errors.CodeError) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		err = errors.ServiceError("rbac endpoint remove role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
@@ -37,7 +37,7 @@ func Remove(ctx context.Context, name string) (err errors.CodeError) {
 		return
 	}
 	fr := endpoint.Request(ctx, rbac.RemoveFn, service.NewArgument(rbac.RemoveArgument{
-		Name: name,
+		Code: code,
 	}))
 
 	result := &service.Empty{}

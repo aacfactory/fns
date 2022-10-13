@@ -79,3 +79,26 @@ func EnforceRequest(ctx context.Context, object string, action string) (ok bool,
 	ok, err = Enforce(ctx, userId, object, action)
 	return
 }
+
+func BatchEnforceRequest(ctx context.Context, objectAndActions [][]string) (ok bool, err errors.CodeError) {
+	request, hasRequest := service.GetRequest(ctx)
+	if !hasRequest {
+		err = errors.ServiceError("permissions enforce request failed").WithCause(fmt.Errorf("there is no request in context"))
+		return
+	}
+
+	userId := request.User().Id()
+	if userId == "" {
+		return
+	}
+	for _, objectAndAction := range objectAndActions {
+		ok, err = Enforce(ctx, userId, objectAndAction[0], objectAndAction[1])
+		if err != nil {
+			return
+		}
+		if !ok {
+			return
+		}
+	}
+	return
+}

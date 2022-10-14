@@ -34,7 +34,7 @@ const (
 	RemoveFn   = "remove"
 	BindFn     = "bind"
 	UnbindFn   = "unbind"
-	BindsFn    = "binds"
+	BoundsFn   = "bounds"
 	EnforceFn  = "enforce"
 )
 
@@ -178,14 +178,14 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 			return
 		}
 		break
-	case BindsFn:
-		fnArgument := BindsArgument{}
+	case BoundsFn:
+		fnArgument := BoundsArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
 			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
-		v, err = binds(ctx, fnArgument)
+		v, err = bounds(ctx, fnArgument)
 		if err != nil {
 			err = err.WithMeta("service", "rbac").WithMeta("fn", fn)
 			return

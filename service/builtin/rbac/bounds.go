@@ -23,15 +23,15 @@ import (
 	"strings"
 )
 
-type BindsArgument struct {
+type BoundsArgument struct {
 	Subject string `json:"subject"`
 	Flat    bool   `json:"flat"`
 }
 
-func binds(ctx context.Context, argument BindsArgument) (v []*Role, err errors.CodeError) {
+func bounds(ctx context.Context, argument BoundsArgument) (v []*Role, err errors.CodeError) {
 	subject := strings.TrimSpace(argument.Subject)
 	if subject == "" {
-		err = errors.ServiceError("rbac get subject binds roles failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac get subject bounds roles failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 
@@ -39,7 +39,7 @@ func binds(ctx context.Context, argument BindsArgument) (v []*Role, err errors.C
 
 	records, recordsErr := store.Binds(ctx, subject)
 	if recordsErr != nil {
-		err = errors.ServiceError("rbac get subject binds roles failed").WithCause(recordsErr)
+		err = errors.ServiceError("rbac get subject bounds roles failed").WithCause(recordsErr)
 		return
 	}
 	v = make([]*Role, 0, 1)

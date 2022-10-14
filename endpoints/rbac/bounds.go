@@ -25,10 +25,10 @@ import (
 	"strings"
 )
 
-func Binds(ctx context.Context, subject string, flat bool) (v []*Role, err errors.CodeError) {
+func Bounds(ctx context.Context, subject string, flat bool) (v []*Role, err errors.CodeError) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		err = errors.ServiceError("rbac endpoint list binds role failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.ServiceError("rbac endpoint list bounds role failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
@@ -36,7 +36,7 @@ func Binds(ctx context.Context, subject string, flat bool) (v []*Role, err error
 		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, rbac.BindsFn, service.NewArgument(rbac.BindsArgument{
+	fr := endpoint.Request(ctx, rbac.BoundsFn, service.NewArgument(rbac.BoundsArgument{
 		Subject: subject,
 		Flat:    flat,
 	}))

@@ -50,7 +50,7 @@ func enforce(ctx context.Context, argument EnforceArgument) (result *EnforceResu
 		return
 	}
 
-	roles, getBindsErr := binds(ctx, BindsArgument{
+	roles, getBindsErr := bounds(ctx, BoundsArgument{
 		Subject: subject,
 		Flat:    true,
 	})

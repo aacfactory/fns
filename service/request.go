@@ -425,3 +425,13 @@ func SetRequest(ctx context.Context, r Request) context.Context {
 	ctx = context.WithValue(ctx, contextRequestKey, r)
 	return ctx
 }
+
+func GetRequestUser(ctx context.Context) (user RequestUser, authenticated bool) {
+	req, hasReq := GetRequest(ctx)
+	if !hasReq {
+		return
+	}
+	user = req.User()
+	authenticated = user.Authenticated()
+	return
+}

@@ -18,14 +18,14 @@ package service
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	stdjson "encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
+	"github.com/valyala/bytebufferpool"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -208,7 +208,7 @@ type Request interface {
 	Header() (header RequestHeader)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
-	Hash() (code string)
+	Hash() (code uint64)
 }
 
 func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
@@ -231,14 +231,15 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 			remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
 		}
 	}
-	hash := md5.New()
-	hash.Write([]byte(service + fn))
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write([]byte(service + fn))
 	authorization := req.Header.Get("Authorization")
 	if authorization != "" {
-		hash.Write([]byte(authorization))
+		_, _ = buf.Write([]byte(authorization))
 	}
-	hash.Write(body)
-	hashCode := hex.EncodeToString(hash.Sum(nil))
+	_, _ = buf.Write(body)
+	hashCode := xxhash.Sum64(buf.Bytes())
+	bytebufferpool.Put(buf)
 	r = &request{
 		id:       uid.UID(),
 		internal: false,
@@ -257,21 +258,22 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 }
 
 func NewInternalRequest(service string, fn string, arg interface{}) (r Request, err errors.CodeError) {
-	hash := md5.New()
-	hash.Write([]byte(service + fn))
+	buf := bytebufferpool.Get()
+	defer bytebufferpool.Put(buf)
+	_, _ = buf.Write([]byte(service + fn))
 	if arg != nil {
 		switch arg.(type) {
 		case []byte:
-			hash.Write(arg.([]byte))
+			_, _ = buf.Write(arg.([]byte))
 			break
 		case string:
-			hash.Write([]byte(arg.(string)))
+			_, _ = buf.Write([]byte(arg.(string)))
 			break
 		case json.RawMessage:
-			hash.Write(arg.(json.RawMessage))
+			_, _ = buf.Write(arg.(json.RawMessage))
 			break
 		case stdjson.RawMessage:
-			hash.Write(arg.(stdjson.RawMessage))
+			_, _ = buf.Write(arg.(stdjson.RawMessage))
 			break
 		case json.Marshaler:
 			encoder := arg.(json.Marshaler)
@@ -280,7 +282,7 @@ func NewInternalRequest(service string, fn string, arg interface{}) (r Request, 
 				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
 				return
 			}
-			hash.Write(p)
+			_, _ = buf.Write(p)
 		case stdjson.Marshaler:
 			encoder := arg.(stdjson.Marshaler)
 			p, encodeErr := encoder.MarshalJSON()
@@ -288,7 +290,7 @@ func NewInternalRequest(service string, fn string, arg interface{}) (r Request, 
 				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
 				return
 			}
-			hash.Write(p)
+			_, _ = buf.Write(p)
 		case Argument:
 			encoder := arg.(Argument)
 			p, encodeErr := encoder.MarshalJSON()
@@ -296,18 +298,18 @@ func NewInternalRequest(service string, fn string, arg interface{}) (r Request, 
 				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
 				return
 			}
-			hash.Write(p)
+			_, _ = buf.Write(p)
 		default:
 			p, encodeErr := json.Marshal(arg)
 			if encodeErr != nil {
 				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
 				return
 			}
-			hash.Write(p)
+			_, _ = buf.Write(p)
 			break
 		}
 	}
-	hashCode := hex.EncodeToString(hash.Sum(nil))
+	hashCode := xxhash.Sum64(buf.Bytes())
 	r = &request{
 		id:       uid.UID(),
 		internal: true,
@@ -335,7 +337,7 @@ type request struct {
 	service  string
 	fn       string
 	argument Argument
-	hashCode string
+	hashCode uint64
 }
 
 func (r *request) Id() (id string) {
@@ -397,7 +399,7 @@ func (r *request) Argument() (argument Argument) {
 	return
 }
 
-func (r *request) Hash() (code string) {
+func (r *request) Hash() (code uint64) {
 	code = r.hashCode
 	return
 }

@@ -18,8 +18,6 @@ package server
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	stdjson "encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -29,7 +27,9 @@ import (
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/cespare/xxhash/v2"
 	"github.com/fasthttp/websocket"
+	"github.com/valyala/bytebufferpool"
 	"io"
 	"net/http"
 	"strings"
@@ -321,7 +321,7 @@ type WebsocketMessage struct {
 	Body   json.RawMessage `json:"body"`
 }
 
-func NewWebsocketRequest(msg *WebsocketMessage, remoteIp string) (r *websocketRequest, err errors.CodeError) {
+func NewWebsocketRequest(msg *WebsocketMessage, remoteIp string) (r *WebsocketRequest, err errors.CodeError) {
 	svc := msg.Header.Get("service")
 	if svc == "" {
 		err = errors.BadRequest("fns: invalid websocket request message, there is no service in message header")
@@ -332,15 +332,16 @@ func NewWebsocketRequest(msg *WebsocketMessage, remoteIp string) (r *websocketRe
 		err = errors.BadRequest("fns: invalid websocket request message, there is no fn in message header")
 		return
 	}
-	hash := md5.New()
-	hash.Write([]byte(svc + fn))
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write([]byte(svc + fn))
 	authorization := msg.Header.Get("authorization")
 	if authorization != "" {
-		hash.Write([]byte(authorization))
+		_, _ = buf.Write([]byte(authorization))
 	}
-	hash.Write(msg.Body)
-	hashCode := hex.EncodeToString(hash.Sum(nil))
-	r = &websocketRequest{
+	_, _ = buf.Write(msg.Body)
+	hashCode := xxhash.Sum64(buf.Bytes())
+	bytebufferpool.Put(buf)
+	r = &WebsocketRequest{
 		id:            uid.UID(),
 		authorization: authorization,
 		remoteIp:      remoteIp,
@@ -355,7 +356,7 @@ func NewWebsocketRequest(msg *WebsocketMessage, remoteIp string) (r *websocketRe
 	return
 }
 
-type websocketRequest struct {
+type WebsocketRequest struct {
 	id            string
 	authorization string
 	remoteIp      string
@@ -365,58 +366,58 @@ type websocketRequest struct {
 	service       string
 	fn            string
 	argument      service.Argument
-	hashCode      string
+	hashCode      uint64
 }
 
-func (r *websocketRequest) Id() (id string) {
+func (r *WebsocketRequest) Id() (id string) {
 	id = r.id
 	return
 }
 
-func (r *websocketRequest) Internal() (ok bool) {
+func (r *WebsocketRequest) Internal() (ok bool) {
 	return
 }
 
-func (r *websocketRequest) Authorization() (v string) {
+func (r *WebsocketRequest) Authorization() (v string) {
 	v = r.authorization
 	return
 }
 
-func (r *websocketRequest) RemoteIp() (v string) {
+func (r *WebsocketRequest) RemoteIp() (v string) {
 	v = r.remoteIp
 	return
 }
 
-func (r *websocketRequest) User() (user service.RequestUser) {
+func (r *WebsocketRequest) User() (user service.RequestUser) {
 	user = r.user
 	return
 }
 
-func (r *websocketRequest) SetUser(id string, attr *json.Object) {
+func (r *WebsocketRequest) SetUser(id string, attr *json.Object) {
 	r.user = service.NewRequestUser(id, attr)
 }
 
-func (r *websocketRequest) Local() (local service.RequestLocal) {
+func (r *WebsocketRequest) Local() (local service.RequestLocal) {
 	local = r.local
 	return
 }
 
-func (r *websocketRequest) Header() (header service.RequestHeader) {
+func (r *WebsocketRequest) Header() (header service.RequestHeader) {
 	header = r.header
 	return
 }
 
-func (r *websocketRequest) Fn() (service string, fn string) {
+func (r *WebsocketRequest) Fn() (service string, fn string) {
 	service, fn = r.service, r.fn
 	return
 }
 
-func (r *websocketRequest) Argument() (argument service.Argument) {
+func (r *WebsocketRequest) Argument() (argument service.Argument) {
 	argument = r.argument
 	return
 }
 
-func (r *websocketRequest) Hash() (code string) {
+func (r *WebsocketRequest) Hash() (code uint64) {
 	code = r.hashCode
 	return
 }

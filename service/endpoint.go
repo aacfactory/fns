@@ -112,7 +112,7 @@ type endpoints struct {
 
 func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
 	service, fn := r.Fn()
-	barrierKey := fmt.Sprintf("%s:%s:%s", service, fn, r.Hash())
+	barrierKey := fmt.Sprintf("%s:%s:%d", service, fn, r.Hash())
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
 	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, doErr errors.CodeError) {

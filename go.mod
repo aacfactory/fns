@@ -9,6 +9,8 @@ require (
 	github.com/aacfactory/json v1.12.1
 	github.com/aacfactory/logs v1.12.1
 	github.com/aacfactory/workers v1.4.0
+	github.com/cespare/xxhash/v2 v2.1.2
+	github.com/fasthttp/websocket v1.5.0
 	github.com/go-playground/validator/v10 v10.11.0
 	github.com/rs/xid v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0
@@ -21,7 +23,6 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
-	github.com/fasthttp/websocket v1.5.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect

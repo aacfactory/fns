@@ -17,12 +17,12 @@
 package cluster
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
+	"github.com/valyala/bytebufferpool"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -89,10 +89,11 @@ func newRequest(req *http.Request) (r service.Request, err errors.CodeError) {
 			remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
 		}
 	}
-	hash := md5.New()
-	hash.Write([]byte(sn + fn))
-	hash.Write(body)
-	hashCode := hex.EncodeToString(hash.Sum(nil))
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write([]byte(sn + fn))
+	_, _ = buf.Write(body)
+	hashCode := xxhash.Sum64(buf.Bytes())
+	bytebufferpool.Put(buf)
 	r = &request{
 		id:       id,
 		remoteIp: remoteIp,
@@ -174,7 +175,7 @@ type request struct {
 	service  string
 	fn       string
 	argument service.Argument
-	hashCode string
+	hashCode uint64
 }
 
 func (r *request) Id() (id string) {
@@ -236,7 +237,7 @@ func (r *request) Argument() (argument service.Argument) {
 	return
 }
 
-func (r *request) Hash() (code string) {
+func (r *request) Hash() (code uint64) {
 	code = r.hashCode
 	return
 }

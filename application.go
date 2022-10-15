@@ -44,6 +44,8 @@ type Application interface {
 	Log() (log logs.Logger)
 	Deploy(service ...service.Service) (err error)
 	Run() (err error)
+	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
+	Execute(ctx context.Context, serviceName string, fn string, argument interface{}) (result interface{}, err errors.CodeError)
 	Sync() (err error)
 }
 
@@ -432,6 +434,64 @@ func (app *application) Run() (err error) {
 	}
 	// on
 	app.running.On()
+	return
+}
+
+func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err error) {
+	runErr := app.Run()
+	if runErr != nil {
+		err = runErr
+		return
+	}
+	if hooks == nil || len(hooks) == 0 {
+		return
+	}
+
+	ctx = service.TODO(ctx, app.endpoints)
+	r, requestErr := service.NewInternalRequest("fns", "hooks", nil)
+	if requestErr != nil {
+		err = errors.Warning("fns run with hooks failed").WithCause(requestErr)
+		return
+	}
+	service.SetRequest(ctx, r)
+	config, hasConfig := app.config.Node("hooks")
+	if !hasConfig {
+		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
+	}
+	for _, hook := range hooks {
+		if hook == nil {
+			continue
+		}
+		hookConfig, hasHookConfig := config.Node(hook.Name())
+		if !hasHookConfig {
+			hookConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
+		}
+		buildErr := hook.Build(&HookOptions{
+			Log:    app.log.With("hook", hook.Name()),
+			Config: hookConfig,
+		})
+		if buildErr != nil {
+			err = errors.Warning("fns run with hooks failed").WithCause(buildErr)
+			return
+		}
+		hookErr := hook.Handle(ctx)
+		if hookErr != nil {
+			err = errors.Warning("fns run with hooks failed").WithCause(hookErr)
+			return
+		}
+	}
+	return
+}
+
+func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}) (result interface{}, err errors.CodeError) {
+	ctx = service.TODO(ctx, app.endpoints)
+	r, requestErr := service.NewInternalRequest(serviceName, fn, argument)
+	if requestErr != nil {
+		err = errors.Warning("fns execute failed").WithCause(requestErr).WithMeta("service", serviceName).WithMeta("fn", fn)
+		return
+	}
+	service.SetRequest(ctx, r)
+	result, err = app.endpoints.Handle(ctx, r)
 	return
 }
 

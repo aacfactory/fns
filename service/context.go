@@ -93,6 +93,14 @@ func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, 
 	return
 }
 
+func TODO(ctx context.Context, ep Endpoints) context.Context {
+	ep0, ok := ep.(*endpoints)
+	if !ok {
+		panic("fns: todo failed")
+	}
+	return initContext(ctx, ep0.appId, ep0.running, ep0.log, ep0.ws, ep0.group, ep0.outboundChannels)
+}
+
 func initContext(ctx context.Context, appId string, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
 		appId:            appId,

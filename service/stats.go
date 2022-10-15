@@ -29,6 +29,10 @@ func tryReportStats(ctx context.Context, service string, fn string, err errors.C
 		ec = err.Code()
 		en = err.Name()
 	}
+	latency := time.Duration(0)
+	if span != nil {
+		latency = span.Latency()
+	}
 	TryFork(ctx, &reportStatsTask{
 		s: &Metric{
 			Service:   service,
@@ -36,7 +40,7 @@ func tryReportStats(ctx context.Context, service string, fn string, err errors.C
 			Succeed:   err != nil,
 			ErrorCode: ec,
 			ErrorName: en,
-			Latency:   span.Latency(),
+			Latency:   latency,
 		},
 	})
 }

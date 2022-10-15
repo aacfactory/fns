@@ -45,7 +45,7 @@ type Application interface {
 	Deploy(service ...service.Service) (err error)
 	Run() (err error)
 	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
-	Execute(ctx context.Context, serviceName string, fn string, argument interface{}) (result interface{}, err errors.CodeError)
+	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError)
 	Sync() (err error)
 }
 
@@ -483,13 +483,27 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 	return
 }
 
-func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}) (result interface{}, err errors.CodeError) {
+func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError) {
 	ctx = service.TODO(ctx, app.endpoints)
 	r, requestErr := service.NewInternalRequest(serviceName, fn, argument)
 	if requestErr != nil {
 		err = errors.Warning("fns execute failed").WithCause(requestErr).WithMeta("service", serviceName).WithMeta("fn", fn)
 		return
 	}
+	opt := &ExecuteOptions{}
+	if options != nil && len(options) > 0 {
+		for _, option := range options {
+			optErr := option(opt)
+			if optErr != nil {
+				err = errors.Warning("fns execute failed").WithCause(optErr).WithMeta("service", serviceName).WithMeta("fn", fn)
+				return
+			}
+		}
+	}
+	if opt.user != nil {
+		r.SetUser(opt.user.Id(), opt.user.Attributes())
+	}
+
 	service.SetRequest(ctx, r)
 	result, err = app.endpoints.Handle(ctx, r)
 	return

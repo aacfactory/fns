@@ -41,7 +41,7 @@ func Remove(ctx context.Context, code string) (err errors.CodeError) {
 	}))
 
 	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, &result)
+	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return

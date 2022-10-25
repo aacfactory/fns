@@ -53,7 +53,7 @@ func Enforce(ctx context.Context, subject string, object string, action string) 
 	}))
 
 	result := &rbac.EnforceResult{}
-	has, getResultErr := fr.Get(ctx, &result)
+	has, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return

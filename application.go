@@ -516,10 +516,10 @@ func (app *application) Sync() (err error) {
 	}
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch,
-		os.Interrupt,
 		syscall.SIGINT,
 		syscall.SIGKILL,
 		syscall.SIGQUIT,
+		syscall.SIGABRT,
 		syscall.SIGTERM,
 	)
 	<-ch

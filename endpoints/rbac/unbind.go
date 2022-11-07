@@ -46,7 +46,7 @@ func Unbind(ctx context.Context, subject string, roles ...string) (err errors.Co
 	}))
 
 	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, &result)
+	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return

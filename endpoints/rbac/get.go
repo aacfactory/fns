@@ -42,7 +42,7 @@ func GetRole(ctx context.Context, code string, withChildren bool) (v *Role, err 
 	}))
 
 	result := &rbac.Role{}
-	has, getResultErr := fr.Get(ctx, &result)
+	has, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return

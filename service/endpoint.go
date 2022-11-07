@@ -131,6 +131,8 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err e
 		} else {
 			if hasResult {
 				v = resultValue
+			} else {
+				v = &Empty{}
 			}
 		}
 		tryReportTracer(ctx)

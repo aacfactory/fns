@@ -34,6 +34,9 @@ func CopyInterface(dst interface{}, src interface{}) (err error) {
 	sv := reflect.ValueOf(src)
 	dv := reflect.Indirect(dpv)
 	if sv.Kind() == reflect.Ptr {
+		if sv.IsNil() {
+			return
+		}
 		sv = sv.Elem()
 	}
 	if sv.IsValid() && sv.Type().AssignableTo(dv.Type()) {

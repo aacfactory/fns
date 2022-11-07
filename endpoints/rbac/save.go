@@ -56,7 +56,7 @@ func Save(ctx context.Context, code string, name string, description string, par
 	}))
 
 	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, &result)
+	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
 		err = getResultErr
 		return

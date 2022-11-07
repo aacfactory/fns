@@ -47,7 +47,7 @@ type Application interface {
 	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
 	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError)
 	Sync() (err error)
-	Kill()
+	Stop()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -314,6 +314,7 @@ func New(options ...Option) (app Application) {
 		extraListeners:  extraListeners,
 		shutdownTimeout: opt.shutdownTimeout,
 		signalCh:        signalCh,
+		synced:          false,
 	}
 	return
 }
@@ -332,6 +333,7 @@ type application struct {
 	extraListeners  []listeners.Listener
 	shutdownTimeout time.Duration
 	signalCh        chan os.Signal
+	synced          bool
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -521,10 +523,14 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 }
 
 func (app *application) Sync() (err error) {
+	if app.synced {
+		return
+	}
 	if app.running.IsOff() {
 		err = errors.Warning("fns: application is not running")
 		return
 	}
+	app.synced = true
 	<-app.signalCh
 	stopped := make(chan struct{}, 1)
 	go app.stop(stopped)
@@ -575,6 +581,15 @@ func (app *application) stop(ch chan struct{}) {
 	return
 }
 
-func (app *application) Kill() {
+func (app *application) Stop() {
+	if app.running.IsOff() {
+		return
+	}
+	if !app.synced {
+		go func(app *application) {
+			_ = app.Sync()
+		}(app)
+		time.Sleep(1 * time.Second)
+	}
 	app.signalCh <- os.Kill
 }

@@ -47,6 +47,7 @@ type Application interface {
 	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
 	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError)
 	Sync() (err error)
+	Kill()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -293,6 +294,14 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create http server failed").WithCause(serverBuildErr)))
 		return
 	}
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh,
+		syscall.SIGINT,
+		syscall.SIGKILL,
+		syscall.SIGQUIT,
+		syscall.SIGABRT,
+		syscall.SIGTERM,
+	)
 	app = &application{
 		log:             log,
 		running:         running,
@@ -304,6 +313,7 @@ func New(options ...Option) (app Application) {
 		httpHandlers:    httpHandlers,
 		extraListeners:  extraListeners,
 		shutdownTimeout: opt.shutdownTimeout,
+		signalCh:        signalCh,
 	}
 	return
 }
@@ -321,6 +331,7 @@ type application struct {
 	httpHandlers    *server.Handlers
 	extraListeners  []listeners.Listener
 	shutdownTimeout time.Duration
+	signalCh        chan os.Signal
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -514,15 +525,7 @@ func (app *application) Sync() (err error) {
 		err = errors.Warning("fns: application is not running")
 		return
 	}
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch,
-		syscall.SIGINT,
-		syscall.SIGKILL,
-		syscall.SIGQUIT,
-		syscall.SIGABRT,
-		syscall.SIGTERM,
-	)
-	<-ch
+	<-app.signalCh
 	stopped := make(chan struct{}, 1)
 	go app.stop(stopped)
 	select {
@@ -570,4 +573,8 @@ func (app *application) stop(ch chan struct{}) {
 	ch <- struct{}{}
 	close(ch)
 	return
+}
+
+func (app *application) Kill() {
+	app.signalCh <- os.Kill
 }

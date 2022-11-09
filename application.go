@@ -487,6 +487,7 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 			err = errors.Warning("fns run with hooks failed").WithCause(buildErr)
 			return
 		}
+		service.SetLog(ctx, app.log.With("hoot", hook.Name()))
 		hookErr := hook.Handle(ctx)
 		if hookErr != nil {
 			err = errors.Warning("fns run with hooks failed").WithCause(hookErr)

@@ -18,7 +18,9 @@ package authorizations
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
@@ -35,6 +37,16 @@ type TokenStore interface {
 	Remove(ctx context.Context, tokenId string) (err error)
 	RemoveUserTokens(ctx context.Context, userId string) (err error)
 	Close() (err error)
+}
+
+func NewTokenStoreComponent(store TokenStore) (component service.Component) {
+	if store == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: new authorizations components failed").WithCause(fmt.Errorf("store is nil"))))
+	}
+	component = &tokenStoreComponent{
+		store: store,
+	}
+	return
 }
 
 type tokenStoreComponent struct {

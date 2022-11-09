@@ -29,12 +29,22 @@ const (
 	name = "stats"
 )
 
-func Service(reporter Reporter) (v service.Service) {
+func Service(components ...service.Component) (v service.Service) {
+	var reporter service.Component
+	for _, component := range components {
+		if component.Name() == "reporter" {
+			reporter = component
+			continue
+		}
+		if reporter != nil {
+			break
+		}
+	}
 	if reporter == nil {
 		panic(errors.Warning("fns: create stats service failed").WithCause(fmt.Errorf("reporter is nil")))
 	}
 	v = &statsService{
-		components: map[string]service.Component{"reporter": &reporterComponent{reporter: reporter}},
+		components: map[string]service.Component{"reporter": reporter},
 	}
 	return
 }

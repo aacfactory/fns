@@ -38,26 +38,23 @@ const (
 	EnforceFn  = "enforce"
 )
 
-var (
-	store Store = nil
-)
-
-func RegisterStore(s Store) {
-	if s == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: register rbac components failed").WithCause(fmt.Errorf("store is nil"))))
+func Service(components ...service.Component) (v service.Service) {
+	var store service.Component
+	for _, component := range components {
+		if component.Name() == "store" {
+			store = component
+			continue
+		}
+		if store != nil {
+			break
+		}
 	}
-	store = s
-}
-
-func Service() (v service.Service) {
 	if store == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: create rbac service failed").WithCause(fmt.Errorf("store is nil"))))
 	}
 	v = &_service_{
 		components: map[string]service.Component{
-			"store": &storeComponent{
-				store: store,
-			},
+			"store": store,
 		},
 	}
 	return

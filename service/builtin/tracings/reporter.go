@@ -36,6 +36,16 @@ type Reporter interface {
 	Close()
 }
 
+func NewReporterComponent(reporter Reporter) (component service.Component) {
+	if reporter == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: new tracings components failed").WithCause(fmt.Errorf("reporter is nil"))))
+	}
+	component = &reporterComponent{
+		reporter: reporter,
+	}
+	return
+}
+
 type reporterComponent struct {
 	reporter Reporter
 }

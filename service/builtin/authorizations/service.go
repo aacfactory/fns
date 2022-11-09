@@ -17,7 +17,6 @@
 package authorizations
 
 import (
-	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
@@ -25,34 +24,32 @@ import (
 	"golang.org/x/net/context"
 )
 
-var (
-	encoding = createDefaultTokenEncoding()
-	store    = createDiscardTokenStore()
-)
-
-func RegisterTokenEncoding(tokenEncoding TokenEncoding) {
-	if tokenEncoding == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: register authorizations components failed").WithCause(fmt.Errorf("encoding is nil"))))
+func Service(components ...service.Component) (v service.Service) {
+	var store service.Component
+	var encoding service.Component
+	for _, component := range components {
+		if component.Name() == "store" {
+			store = component
+			continue
+		}
+		if component.Name() == "encoding" {
+			encoding = component
+			continue
+		}
+		if store != nil && encoding != nil {
+			break
+		}
 	}
-	encoding = tokenEncoding
-}
-
-func RegisterTokenStore(tokenStore TokenStore) {
-	if tokenStore == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: register authorizations components failed").WithCause(fmt.Errorf("store is nil"))))
+	if store == nil {
+		store = NewTokenStoreComponent(&discardTokenStore{})
 	}
-	store = tokenStore
-}
-
-func Service() (v service.Service) {
+	if encoding == nil {
+		encoding = NewTokenEncodingComponent(&DefaultTokenEncoding{})
+	}
 	v = &_service_{
 		components: map[string]service.Component{
-			"store": &tokenStoreComponent{
-				store: store,
-			},
-			"encoding": &tokenEncodingComponent{
-				encoding: encoding,
-			},
+			"store":    store,
+			"encoding": encoding,
 		},
 	}
 	return

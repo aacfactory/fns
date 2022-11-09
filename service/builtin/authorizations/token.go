@@ -49,6 +49,16 @@ type TokenEncoding interface {
 	Decode(authorization []byte) (token Token, err error)
 }
 
+func NewTokenEncodingComponent(encoding TokenEncoding) (component service.Component) {
+	if encoding == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: new authorizations components failed").WithCause(fmt.Errorf("encoding is nil"))))
+	}
+	component = &tokenEncodingComponent{
+		encoding: encoding,
+	}
+	return
+}
+
 type tokenEncodingComponent struct {
 	encoding TokenEncoding
 }

@@ -83,6 +83,16 @@ type Store interface {
 	Close() (err error)
 }
 
+func NewStoreComponent(store Store) (component service.Component) {
+	if store == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: new rbac components failed").WithCause(fmt.Errorf("store is nil"))))
+	}
+	component = &storeComponent{
+		store: store,
+	}
+	return
+}
+
 type storeComponent struct {
 	store Store
 }

@@ -40,7 +40,7 @@ func decode(ctx context.Context, param DecodeParam) (result *DecodeResult, err e
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
 		return
 	}
-	encoder, encodingOk := encodingComponent.(*tokenEncodingComponent)
+	encoder, encodingOk := encodingComponent.(TokenEncodingComponent)
 	if !encodingOk {
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
 		return
@@ -59,7 +59,7 @@ func decode(ctx context.Context, param DecodeParam) (result *DecodeResult, err e
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
-	st, storeOk := storeComponent.(*tokenStoreComponent)
+	st, storeOk := storeComponent.(TokenStoreComponent)
 	if !storeOk {
 		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return

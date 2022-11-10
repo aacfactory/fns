@@ -20,13 +20,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
-	"github.com/aacfactory/logs"
 	"time"
 )
 
@@ -38,55 +36,10 @@ type Token interface {
 	Bytes() (p []byte)
 }
 
-type TokenEncodingOptions struct {
-	Log    logs.Logger
-	Config configures.Config
-}
-
-type TokenEncoding interface {
-	Build(options TokenEncodingOptions) (err error)
+type TokenEncodingComponent interface {
+	service.Component
 	Encode(id string, attributes *json.Object) (token Token, err error)
 	Decode(authorization []byte) (token Token, err error)
-}
-
-func NewTokenEncodingComponent(encoding TokenEncoding) (component service.Component) {
-	if encoding == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: new authorizations components failed").WithCause(fmt.Errorf("encoding is nil"))))
-	}
-	component = &tokenEncodingComponent{
-		encoding: encoding,
-	}
-	return
-}
-
-type tokenEncodingComponent struct {
-	encoding TokenEncoding
-}
-
-func (component *tokenEncodingComponent) Name() (name string) {
-	name = "encoding"
-	return
-}
-
-func (component *tokenEncodingComponent) Build(options service.ComponentOptions) (err error) {
-	err = component.encoding.Build(TokenEncodingOptions{
-		Log:    options.Log,
-		Config: options.Config,
-	})
-	return
-}
-
-func (component *tokenEncodingComponent) Encode(id string, attributes *json.Object) (token Token, err error) {
-	token, err = component.encoding.Encode(id, attributes)
-	return
-}
-
-func (component *tokenEncodingComponent) Decode(authorization []byte) (token Token, err error) {
-	token, err = component.encoding.Decode(authorization)
-	return
-}
-
-func (component *tokenEncodingComponent) Close() {
 }
 
 type defaultToken struct {
@@ -123,15 +76,20 @@ func (t *defaultToken) Bytes() (p []byte) {
 	return
 }
 
-func createDefaultTokenEncoding() TokenEncoding {
-	return &DefaultTokenEncoding{}
+func DefaultTokenEncodingComponent() TokenEncodingComponent {
+	return &defaultTokenEncodingComponent{}
 }
 
-type DefaultTokenEncoding struct {
+type defaultTokenEncodingComponent struct {
 	expires time.Duration
 }
 
-func (encoding *DefaultTokenEncoding) Build(options TokenEncodingOptions) (err error) {
+func (component *defaultTokenEncodingComponent) Name() (name string) {
+	name = "encoding"
+	return
+}
+
+func (component *defaultTokenEncodingComponent) Build(options service.ComponentOptions) (err error) {
 	expireMinutes := 0
 	_, expireMinutesGetErr := options.Config.Get("expireMinutes", &expireMinutes)
 	if expireMinutesGetErr != nil {
@@ -141,15 +99,19 @@ func (encoding *DefaultTokenEncoding) Build(options TokenEncodingOptions) (err e
 	if expireMinutes < 1 {
 		expireMinutes = 24 * 60
 	}
-	encoding.expires = time.Duration(expireMinutes) * time.Minute
+	component.expires = time.Duration(expireMinutes) * time.Minute
 	return
 }
 
-func (encoding *DefaultTokenEncoding) Encode(id string, attributes *json.Object) (t Token, err error) {
+func (component *defaultTokenEncodingComponent) Close() {
+	return
+}
+
+func (component *defaultTokenEncodingComponent) Encode(id string, attributes *json.Object) (token Token, err error) {
 	v := &defaultToken{
 		Id_:        uid.UID(),
 		NotBefore_: time.Now(),
-		NotAfter_:  time.Now().Add(encoding.expires),
+		NotAfter_:  time.Now().Add(component.expires),
 		Uid:        id,
 		Attributes: attributes.Raw(),
 	}
@@ -160,11 +122,11 @@ func (encoding *DefaultTokenEncoding) Encode(id string, attributes *json.Object)
 	}
 	signature := secret.Sign(p)
 	v.p = []byte(fmt.Sprintf("%s.%s", base64.StdEncoding.EncodeToString(p), base64.StdEncoding.EncodeToString(signature)))
-	t = v
+	token = v
 	return
 }
 
-func (encoding *DefaultTokenEncoding) Decode(authorization []byte) (token Token, err error) {
+func (component *defaultTokenEncodingComponent) Decode(authorization []byte) (token Token, err error) {
 	if authorization == nil || len(authorization) < 6 || bytes.Index(authorization, []byte("Fns ")) != 0 {
 		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
@@ -186,5 +148,6 @@ func (encoding *DefaultTokenEncoding) Decode(authorization []byte) (token Token,
 		return
 	}
 	v.p = raw
+	token = v
 	return
 }

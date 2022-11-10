@@ -41,10 +41,10 @@ func Service(components ...service.Component) (v service.Service) {
 		}
 	}
 	if store == nil {
-		store = NewTokenStoreComponent(&discardTokenStore{})
+		store = DefaultTokenStoreComponent()
 	}
 	if encoding == nil {
-		encoding = NewTokenEncodingComponent(&DefaultTokenEncoding{})
+		encoding = DefaultTokenEncodingComponent()
 	}
 	v = &_service_{
 		components: map[string]service.Component{

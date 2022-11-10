@@ -34,7 +34,7 @@ func revoke(ctx context.Context, param RevokeParam) (result *service.Empty, err 
 		err = errors.Warning("fns: revoke failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
-	store, storeOk := storeComponent.(*tokenStoreComponent)
+	store, storeOk := storeComponent.(TokenStoreComponent)
 	if !storeOk {
 		err = errors.Warning("fns: revoke failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return

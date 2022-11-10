@@ -18,106 +18,50 @@ package authorizations
 
 import (
 	"context"
-	"fmt"
-	"github.com/aacfactory/configures"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/logs"
 )
 
-type TokenStoreOptions struct {
-	Log    logs.Logger
-	Config configures.Config
-}
-
-type TokenStore interface {
-	Build(options TokenStoreOptions) (err error)
+type TokenStoreComponent interface {
+	service.Component
 	Exist(ctx context.Context, tokenId string) (ok bool)
 	Save(ctx context.Context, token Token) (err error)
 	Remove(ctx context.Context, tokenId string) (err error)
 	RemoveUserTokens(ctx context.Context, userId string) (err error)
-	Close() (err error)
 }
 
-func NewTokenStoreComponent(store TokenStore) (component service.Component) {
-	if store == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: new authorizations components failed").WithCause(fmt.Errorf("store is nil"))))
-	}
-	component = &tokenStoreComponent{
-		store: store,
-	}
-	return
+func DefaultTokenStoreComponent() TokenStoreComponent {
+	return &defaultTokenStoreComponent{}
 }
 
-type tokenStoreComponent struct {
-	store TokenStore
+type defaultTokenStoreComponent struct {
 }
 
-func (component *tokenStoreComponent) Name() (name string) {
+func (component *defaultTokenStoreComponent) Name() (name string) {
 	name = "store"
 	return
 }
 
-func (component *tokenStoreComponent) Build(options service.ComponentOptions) (err error) {
-	err = component.store.Build(TokenStoreOptions{
-		Log:    options.Log,
-		Config: options.Config,
-	})
+func (component *defaultTokenStoreComponent) Build(options service.ComponentOptions) (err error) {
 	return
 }
 
-func (component *tokenStoreComponent) Exist(ctx context.Context, tokenId string) (ok bool) {
-	ok = component.store.Exist(ctx, tokenId)
+func (component *defaultTokenStoreComponent) Close() {
 	return
 }
 
-func (component *tokenStoreComponent) Save(ctx context.Context, token Token) (err error) {
-	err = component.store.Save(ctx, token)
-	return
-}
-
-func (component *tokenStoreComponent) Remove(ctx context.Context, tokenId string) (err error) {
-	err = component.store.Remove(ctx, tokenId)
-	return
-}
-
-func (component *tokenStoreComponent) RemoveUserTokens(ctx context.Context, userId string) (err error) {
-	err = component.store.RemoveUserTokens(ctx, userId)
-	return
-}
-
-func (component *tokenStoreComponent) Close() {
-	_ = component.store.Close()
-}
-
-func createDiscardTokenStore() TokenStore {
-	return &discardTokenStore{}
-}
-
-type discardTokenStore struct {
-}
-
-func (store *discardTokenStore) Build(options TokenStoreOptions) (err error) {
-	return
-}
-
-func (store *discardTokenStore) Exist(ctx context.Context, tokenId string) (ok bool) {
+func (component *defaultTokenStoreComponent) Exist(ctx context.Context, tokenId string) (ok bool) {
 	ok = true
 	return
 }
 
-func (store *discardTokenStore) Save(ctx context.Context, token Token) (err error) {
+func (component *defaultTokenStoreComponent) Save(ctx context.Context, token Token) (err error) {
 	return
 }
 
-func (store *discardTokenStore) Remove(ctx context.Context, tokenId string) (err error) {
+func (component *defaultTokenStoreComponent) Remove(ctx context.Context, tokenId string) (err error) {
 	return
 }
 
-func (store *discardTokenStore) RemoveUserTokens(ctx context.Context, userId string) (err error) {
-	return
-}
-
-func (store *discardTokenStore) Close() (err error) {
+func (component *defaultTokenStoreComponent) RemoveUserTokens(ctx context.Context, userId string) (err error) {
 	return
 }

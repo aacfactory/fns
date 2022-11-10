@@ -17,6 +17,7 @@
 package service
 
 import (
+	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/json"
@@ -77,6 +78,9 @@ func (arg *argument) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (arg *argument) As(v interface{}) (err errors.CodeError) {
+	if arg.value == nil {
+		return
+	}
 	switch arg.value.(type) {
 	case *Empty, struct{}:
 		break
@@ -107,7 +111,10 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 	default:
 		cpErr := commons.CopyInterface(v, arg.value)
 		if cpErr != nil {
-			err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(cpErr)
+			cpErr = copier.Copy(v, arg.value)
+			if cpErr != nil {
+				err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(cpErr)
+			}
 			return
 		}
 	}

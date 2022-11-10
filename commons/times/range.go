@@ -21,8 +21,25 @@ import (
 	"time"
 )
 
+func NewTimeRange(left time.Time, right time.Time) (v *TimeRange) {
+	v = &TimeRange{
+		Beg: left,
+		End: right,
+	}
+	return
+}
+
+// TimeRange
+// @title TimeRange
+// @description `['2006-01-01T15:04:06', '2006-01-01T15:04:06')`
 type TimeRange struct {
+	// Beg
+	// @title Beg
+	// @description `2006-01-01T15:04:06`
 	Beg time.Time `json:"beg"`
+	// End
+	// @title End
+	// @description `2006-01-01T15:04:06`
 	End time.Time `json:"end"`
 }
 
@@ -31,8 +48,25 @@ func (tr *TimeRange) IsZero() (ok bool) {
 	return
 }
 
+func NewDateRange(left json.Date, right json.Date) (v *DateRange) {
+	v = &DateRange{
+		Beg: left,
+		End: right,
+	}
+	return
+}
+
+// DateRange
+// @title DateRange
+// @description `['2006-01-01', '2006-01-01')`
 type DateRange struct {
+	// Beg
+	// @title Beg
+	// @description `2006-01-01`
 	Beg json.Date `json:"beg"`
+	// End
+	// @title End
+	// @description `2006-01-01`
 	End json.Date `json:"end"`
 }
 

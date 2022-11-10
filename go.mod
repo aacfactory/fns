@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/aacfactory/afssl v1.5.0
 	github.com/aacfactory/configures v1.12.1
+	github.com/aacfactory/copier v1.1.0
 	github.com/aacfactory/errors v1.12.0
 	github.com/aacfactory/json v1.12.1
 	github.com/aacfactory/logs v1.12.1

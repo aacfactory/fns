@@ -2,6 +2,8 @@ github.com/aacfactory/afssl v1.5.0 h1:IzeKuB4b2wq6lQyE8kNYaSiRcP35Foom04nOnfqaCu
 github.com/aacfactory/afssl v1.5.0/go.mod h1:gO9Y8nwF/JS4ohdq8KgAFHnFbnLuDEOvRRYNg+nWR94=
 github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=
 github.com/aacfactory/configures v1.12.1/go.mod h1:Iw63k3WoJD8eb1HWE6cvkBTFXfoeCqutuj8vVnia1Kg=
+github.com/aacfactory/copier v1.1.0 h1:7bdVGV/HrGOMmUpvuLU27YEob4HIAct7sohmApFAUg0=
+github.com/aacfactory/copier v1.1.0/go.mod h1:E8z/tTEuclAnCvzOnIZdVAqMyVWemSjkxs/SYZZ8JuU=
 github.com/aacfactory/errors v1.12.0 h1:annMr3MgWDtjlxIz8xk2iqcn7Qpm06cxAs7dpXDytH4=
 github.com/aacfactory/errors v1.12.0/go.mod h1:8XVeG/W1HWO0xQOs84pwRLms0CTHblQc610g0JZn8xo=
 github.com/aacfactory/json v1.12.1 h1:+yMy4BFdsPb+S5HIRgNsi+oRMFPeQa/DbILywuvhSaQ=

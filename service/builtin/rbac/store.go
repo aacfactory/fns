@@ -65,13 +65,8 @@ func (r *RoleRecord) mapToRole() (v *Role) {
 	return
 }
 
-type StoreOptions struct {
-	Log    logs.Logger
-	Config configures.Config
-}
-
-type Store interface {
-	Build(options StoreOptions) (err error)
+type StoreComponent interface {
+	service.Component
 	Role(ctx context.Context, code string) (role *RoleRecord, err error)
 	Roles(ctx context.Context) (roles []*RoleRecord, err error)
 	Children(ctx context.Context, parent string) (children []*RoleRecord, err error)
@@ -80,49 +75,21 @@ type Store interface {
 	Binds(ctx context.Context, subject string) (roles []*RoleRecord, err error)
 	Bind(ctx context.Context, subject string, roles []*RoleRecord) (err error)
 	Unbind(ctx context.Context, subject string, roles []*RoleRecord) (err error)
-	Close() (err error)
 }
 
-func NewStoreComponent(store Store) (component service.Component) {
-	if store == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: new rbac components failed").WithCause(fmt.Errorf("store is nil"))))
-	}
-	component = &storeComponent{
-		store: store,
-	}
-	return
+type StoreOptions struct {
+	Log    logs.Logger
+	Config configures.Config
 }
 
-type storeComponent struct {
-	store Store
-}
-
-func (component *storeComponent) Name() (name string) {
-	name = "store"
-	return
-}
-
-func (component *storeComponent) Build(options service.ComponentOptions) (err error) {
-	err = component.store.Build(StoreOptions{
-		Log:    options.Log,
-		Config: options.Config,
-	})
-	return
-}
-
-func (component *storeComponent) Close() {
-	_ = component.store.Close()
-}
-
-func getStore(ctx context.Context) (v Store) {
+func getStore(ctx context.Context) (v StoreComponent) {
 	c, has := service.GetComponent(ctx, "store")
 	if !has {
 		panic(fmt.Sprintf("%+v", errors.Warning("rbac: there is no store in context")))
 	}
-	sc, ok := c.(*storeComponent)
-	if !ok {
+	v, has = c.(StoreComponent)
+	if !has {
 		panic(fmt.Sprintf("%+v", errors.Warning("rbac: type of store in context is invalid")))
 	}
-	v = sc.store
 	return
 }

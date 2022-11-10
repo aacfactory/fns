@@ -17,8 +17,8 @@
 package fns
 
 import (
-	"context"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
 
@@ -28,7 +28,6 @@ type HookOptions struct {
 }
 
 type Hook interface {
-	Name() (name string)
+	service.Task
 	Build(options *HookOptions) (err error)
-	Handle(ctx context.Context) (err error)
 }

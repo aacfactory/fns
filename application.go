@@ -47,7 +47,7 @@ type Application interface {
 	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
 	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError)
 	Sync() (err error)
-	Stop()
+	Quit()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -211,8 +211,10 @@ func New(options ...Option) (app Application) {
 	if clusterManager != nil {
 		discovery = clusterManager.Registrations()
 	}
+	signalCh := make(chan os.Signal, 1)
 	endpoints := service.NewEndpoints(service.EndpointsOptions{
 		AppId:                 appId,
+		AppStopChan:           signalCh,
 		Running:               running,
 		Log:                   log,
 		MaxWorkers:            serviceMaxWorkers,
@@ -294,7 +296,6 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create http server failed").WithCause(serverBuildErr)))
 		return
 	}
-	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh,
 		syscall.SIGINT,
 		syscall.SIGKILL,
@@ -488,11 +489,7 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 			return
 		}
 		ctx = service.SetLog(ctx, app.log.With("hoot", hook.Name()))
-		hookErr := hook.Handle(ctx)
-		if hookErr != nil {
-			err = errors.Warning("fns run with hooks failed").WithCause(hookErr)
-			return
-		}
+		service.Fork(ctx, hook)
 	}
 	return
 }
@@ -582,7 +579,7 @@ func (app *application) stop(ch chan struct{}) {
 	return
 }
 
-func (app *application) Stop() {
+func (app *application) Quit() {
 	if app.running.IsOff() {
 		return
 	}
@@ -592,5 +589,5 @@ func (app *application) Stop() {
 		}(app)
 		time.Sleep(1 * time.Second)
 	}
-	app.signalCh <- os.Kill
+	app.signalCh <- syscall.SIGQUIT
 }

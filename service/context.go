@@ -22,6 +22,8 @@ import (
 	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"os"
+	"syscall"
 )
 
 const (
@@ -98,12 +100,13 @@ func TODO(ctx context.Context, ep Endpoints) context.Context {
 	if !ok {
 		panic("fns: todo failed")
 	}
-	return initContext(ctx, ep0.appId, ep0.running, ep0.log, ep0.ws, ep0.group, ep0.outboundChannels)
+	return initContext(ctx, ep0.appId, ep0.appStopChan, ep0.running, ep0.log, ep0.ws, ep0.group, ep0.outboundChannels)
 }
 
-func initContext(ctx context.Context, appId string, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
+func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
 		appId:            appId,
+		appStopChan:      appStopChan,
 		running:          running,
 		log:              log,
 		ws:               ws,
@@ -140,6 +143,14 @@ func ApplicationIsRunning(ctx context.Context) (ok bool) {
 	return
 }
 
+func AbortApplication(ctx context.Context) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
+	rt.appStopChan <- syscall.SIGABRT
+}
+
 func GetOutboundChannel(ctx context.Context, listener string, name string) (channel listeners.OutboundChannel, has bool) {
 	rt := getRuntime(ctx)
 	if rt == nil {
@@ -155,6 +166,7 @@ func GetOutboundChannel(ctx context.Context, listener string, name string) (chan
 
 type contextValue struct {
 	appId            string
+	appStopChan      chan os.Signal
 	running          *commons.SafeFlag
 	log              logs.Logger
 	ws               workers.Workers

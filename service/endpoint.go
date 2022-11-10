@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"os"
 	"time"
 )
 
@@ -53,6 +54,7 @@ type Endpoints interface {
 
 type EndpointsOptions struct {
 	AppId                 string
+	AppStopChan           chan os.Signal
 	Running               *commons.SafeFlag
 	Log                   logs.Logger
 	MaxWorkers            int
@@ -81,11 +83,12 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 		barrier = defaultBarrier()
 	}
 	v = &endpoints{
-		appId:   options.AppId,
-		running: options.Running,
-		log:     options.Log,
-		ws:      ws,
-		barrier: barrier,
+		appId:       options.AppId,
+		appStopChan: options.AppStopChan,
+		running:     options.Running,
+		log:         options.Log,
+		ws:          ws,
+		barrier:     barrier,
 		group: &group{
 			appId:     options.AppId,
 			log:       options.Log.With("fns", "service group"),
@@ -101,6 +104,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 
 type endpoints struct {
 	appId            string
+	appStopChan      chan os.Signal
 	running          *commons.SafeFlag
 	log              logs.Logger
 	ws               workers.Workers
@@ -201,7 +205,7 @@ func (e *endpoints) RegisterOutboundChannels(name string, channels listeners.Out
 
 func (e *endpoints) SetupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
-		ctx = initContext(ctx, e.appId, e.running, e.log, e.ws, e.group, e.outboundChannels)
+		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.ws, e.group, e.outboundChannels)
 	}
 	return ctx
 }

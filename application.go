@@ -466,7 +466,7 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 		err = errors.Warning("fns run with hooks failed").WithCause(requestErr)
 		return
 	}
-	service.SetRequest(ctx, r)
+	ctx = service.SetRequest(ctx, r)
 	config, hasConfig := app.config.Node("hooks")
 	if !hasConfig {
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
@@ -487,7 +487,7 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 			err = errors.Warning("fns run with hooks failed").WithCause(buildErr)
 			return
 		}
-		service.SetLog(ctx, app.log.With("hoot", hook.Name()))
+		ctx = service.SetLog(ctx, app.log.With("hoot", hook.Name()))
 		hookErr := hook.Handle(ctx)
 		if hookErr != nil {
 			err = errors.Warning("fns run with hooks failed").WithCause(hookErr)
@@ -518,7 +518,7 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 		r.SetUser(opt.user.Id(), opt.user.Attributes())
 	}
 
-	service.SetRequest(ctx, r)
+	ctx = service.SetRequest(ctx, r)
 	result, err = app.endpoints.Handle(ctx, r)
 	return
 }

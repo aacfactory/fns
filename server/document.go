@@ -241,7 +241,7 @@ func (h *documentHandler) encode() {
 		api.Components.Schemas["fns_Empty"] = &oas.Schema{
 			Key:         "fns_Empty",
 			Title:       "Empty",
-			Description: "",
+			Description: "Empty object",
 			Type:        "object",
 		}
 		// headers

@@ -18,5 +18,5 @@ package service
 
 // Empty
 // @name Empty
-// @description Empty
+// @description Empty object
 type Empty struct{}

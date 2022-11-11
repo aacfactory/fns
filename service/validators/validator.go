@@ -55,10 +55,14 @@ func (v *validate) Validate(value interface{}) (err errors.CodeError) {
 		err = errors.Warning(fmt.Sprintf("fns: validate value failed")).WithCause(validateErr)
 		return
 	}
-	err = errors.BadRequest("fns: value is invalid")
+	err = errors.ServiceError("fns: value is invalid")
 	for _, validationError := range validationErrors {
 		sf := validationError.Namespace()
-		exp := sf[strings.Index(sf, ".")+1:]
+		idx := strings.Index(sf, ".")
+		if idx < 0 {
+			continue
+		}
+		exp := sf[idx+1:]
 		key, message := validateFieldMessage(reflect.TypeOf(value), exp)
 		if key == "" {
 			err = errors.Warning(fmt.Sprintf("fns: validate value failed for json tag of %s was not founed", sf))

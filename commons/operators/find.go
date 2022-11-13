@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 
-package arrays_test
+package operators
 
-import (
-	"fmt"
-	"github.com/aacfactory/fns/commons/container/arrays"
-	"testing"
-)
+import "context"
 
-func TestSort(t *testing.T) {
-
-	ss := []int{9, 2, 3, 6, 2}
-	rr, sortErr := arrays.Sort(ss, func(a int, b int) (int, error) {
-		return a - b, nil
-	})
-	fmt.Println(rr, sortErr, ss)
-
+func Find[T any](ctx context.Context, array []T, fn func(context.Context, T) (bool, error)) (r T, found bool, err error) {
+	if array == nil || len(array) == 0 {
+		return
+	}
+	for _, e := range array {
+		found, err = fn(ctx, e)
+		if err != nil {
+			return
+		}
+		if found {
+			r = e
+			return
+		}
+	}
+	return
 }

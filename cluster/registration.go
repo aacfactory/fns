@@ -208,24 +208,26 @@ func (r *Registrations) Get(id string) (v *Registration, has bool) {
 
 func newRegistrationsManager(log logs.Logger, client Client) (v *RegistrationsManager) {
 	v = &RegistrationsManager{
-		log:    log.With("cluster", "registrations"),
-		client: client,
-		stopCh: make(chan struct{}, 1),
-		events: make(chan *nodeEvent, 512),
-		nodes:  sync.Map{},
-		values: sync.Map{},
+		log:      log.With("cluster", "registrations"),
+		client:   client,
+		stopCh:   make(chan struct{}, 1),
+		events:   make(chan *nodeEvent, 512),
+		nodes:    sync.Map{},
+		visitors: sync.Map{},
+		values:   sync.Map{},
 	}
 	v.listenEvents()
 	return
 }
 
 type RegistrationsManager struct {
-	log    logs.Logger
-	client Client
-	stopCh chan struct{}
-	events chan *nodeEvent
-	nodes  sync.Map
-	values sync.Map
+	log      logs.Logger
+	client   Client
+	stopCh   chan struct{}
+	events   chan *nodeEvent
+	nodes    sync.Map
+	visitors sync.Map
+	values   sync.Map
 }
 
 func (manager *RegistrationsManager) members() (values []*node) {
@@ -240,6 +242,11 @@ func (manager *RegistrationsManager) members() (values []*node) {
 
 func (manager *RegistrationsManager) containsNode(node *node) (ok bool) {
 	_, ok = manager.nodes.Load(node.Id_)
+	return
+}
+
+func (manager *RegistrationsManager) containsVisitor(node *node) (ok bool) {
+	_, ok = manager.visitors.Load(node.Id_)
 	return
 }
 
@@ -267,48 +274,63 @@ func (manager *RegistrationsManager) deregister(n *node) {
 }
 
 func (manager *RegistrationsManager) handleRegister(node *node) {
-	if manager.containsNode(node) {
-		return
-	}
-	manager.nodes.Store(node.Id_, node)
-	registrations := node.registrations()
-	for _, registration := range registrations {
-		value, has := manager.values.Load(registration.Name)
-		if has {
-			registered := value.(*Registrations)
-			_, exist := registered.Get(registration.Id)
-			if exist {
-				continue
+	if node.Visitor {
+		if manager.containsVisitor(node) {
+			return
+		}
+		manager.visitors.Store(node.Id_, node)
+	} else {
+		if manager.containsNode(node) {
+			return
+		}
+		manager.nodes.Store(node.Id_, node)
+		registrations := node.registrations()
+		for _, registration := range registrations {
+			value, has := manager.values.Load(registration.Name)
+			if has {
+				registered := value.(*Registrations)
+				_, exist := registered.Get(registration.Id)
+				if exist {
+					continue
+				}
+				registered.Append(registration)
+			} else {
+				manager.values.Store(registration.Name, newRegistrations(registration))
 			}
-			registered.Append(registration)
-		} else {
-			manager.values.Store(registration.Name, newRegistrations(registration))
 		}
 	}
 	return
 }
 
 func (manager *RegistrationsManager) handleDeregister(n *node) {
-	existNode0, hasNode := manager.nodes.Load(n.Id_)
-	if !hasNode {
-		return
-	}
-	manager.nodes.Delete(n.Id_)
-	existNode := existNode0.(*node)
-	registrations := existNode.registrations()
-	for _, registration := range registrations {
-		value, has := manager.values.Load(registration.Name)
-		if !has {
-			continue
+	if n.Visitor {
+		_, hasVisitor := manager.visitors.Load(n.Id_)
+		if !hasVisitor {
+			return
 		}
-		registered := value.(*Registrations)
-		existed, exist := registered.Get(registration.Id)
-		if !exist {
-			continue
+		manager.visitors.Delete(n.Id_)
+	} else {
+		existNode0, hasNode := manager.nodes.Load(n.Id_)
+		if !hasNode {
+			return
 		}
-		registered.Remove(existed)
-		if registered.Size() == 0 {
-			manager.values.Delete(registration.Name)
+		manager.nodes.Delete(n.Id_)
+		existNode := existNode0.(*node)
+		registrations := existNode.registrations()
+		for _, registration := range registrations {
+			value, has := manager.values.Load(registration.Name)
+			if !has {
+				continue
+			}
+			registered := value.(*Registrations)
+			existed, exist := registered.Get(registration.Id)
+			if !exist {
+				continue
+			}
+			registered.Remove(existed)
+			if registered.Size() == 0 {
+				manager.values.Delete(registration.Name)
+			}
 		}
 	}
 	return
@@ -351,6 +373,14 @@ func (manager *RegistrationsManager) listenEvents() {
 func (manager *RegistrationsManager) removeUnavailableNodes() {
 	unavailableNodes := make([]*node, 0, 1)
 	manager.nodes.Range(func(_, value interface{}) bool {
+		n := value.(*node)
+		if n.available() {
+			return true
+		}
+		unavailableNodes = append(unavailableNodes, n)
+		return true
+	})
+	manager.visitors.Range(func(_, value interface{}) bool {
 		n := value.(*node)
 		if n.available() {
 			return true

@@ -275,7 +275,6 @@ func (handler *clusterHandler) handleJoin(body []byte, devMode bool) (result []b
 	if !devMode {
 		handler.manager.registrations.register(n)
 	}
-
 	return
 }
 

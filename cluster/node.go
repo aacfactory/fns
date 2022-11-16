@@ -35,6 +35,7 @@ type nodeService struct {
 type node struct {
 	Id_          string         `json:"id"`
 	Address      string         `json:"address"`
+	Visitor      bool           `json:"visitor"`
 	ProxyAddress string         `json:"proxyAddress"`
 	Services     []*nodeService `json:"services"`
 	client       Client
@@ -53,6 +54,9 @@ func (node *node) AppendService(service string, internal bool) {
 
 func (node *node) registrations() (registrations []*Registration) {
 	registrations = make([]*Registration, 0, 1)
+	if node.Visitor {
+		return
+	}
 	address := node.Address
 	if node.ProxyAddress != "" {
 		address = node.ProxyAddress

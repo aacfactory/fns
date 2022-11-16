@@ -23,6 +23,7 @@ type Cluster struct {
 	NodesProxyAddress string          `json:"nodesProxyAddress"`
 	Kind              string          `json:"kind"`
 	Client            ClusterClient   `json:"client"`
+	Visitor           bool            `json:"visitor"`
 	Options           json.RawMessage `json:"options"`
 }
 

@@ -224,11 +224,20 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 		err = errors.NotAcceptable("fns: invalid request body")
 		return
 	}
-	remoteIp := req.RemoteAddr
-	if remoteIp != "" {
-		if strings.Index(remoteIp, ".") > 0 && strings.Index(remoteIp, ":") > 0 {
-			// ip:port
-			remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
+	remoteIp := req.Header.Get("X-Real-Ip")
+	if remoteIp == "" {
+		forwarded := req.Header.Get("X-Forwarded-For")
+		if forwarded != "" {
+			forwardedIps := strings.Split(forwarded, ",")
+			remoteIp = strings.TrimSpace(forwardedIps[len(forwardedIps)-1])
+		}
+	}
+	if remoteIp == "" {
+		remoteIp = req.RemoteAddr
+		if remoteIp != "" {
+			if strings.Index(remoteIp, ".") > 0 && strings.Index(remoteIp, ":") > 0 {
+				remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
+			}
 		}
 	}
 	buf := bytebufferpool.Get()
@@ -236,6 +245,13 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	authorization := req.Header.Get("Authorization")
 	if authorization != "" {
 		_, _ = buf.Write([]byte(authorization))
+	}
+	if remoteIp != "" {
+		_, _ = buf.Write([]byte(remoteIp))
+	}
+	userAgent := req.UserAgent()
+	if userAgent != "" {
+		_, _ = buf.Write([]byte(userAgent))
 	}
 	_, _ = buf.Write(body)
 	hashCode := xxhash.Sum64(buf.Bytes())
@@ -365,16 +381,6 @@ func (r *request) Local() (local RequestLocal) {
 }
 
 func (r *request) RemoteIp() (v string) {
-	realIp := r.header.Get("X-Real-Ip")
-	if realIp != "" {
-		return
-	}
-	forwarded := r.header.Get("X-Forwarded-For")
-	if forwarded != "" {
-		items := strings.Split(forwarded, ",")
-		v = strings.TrimSpace(items[len(items)-1])
-		return
-	}
 	v = r.remoteIp
 	return
 }

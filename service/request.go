@@ -224,6 +224,10 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 		err = errors.NotAcceptable("fns: invalid request body")
 		return
 	}
+	id := req.Header.Get("X-Fns-Request-Id")
+	if id == "" {
+		id = uid.UID()
+	}
 	remoteIp := req.Header.Get("X-Real-Ip")
 	if remoteIp == "" {
 		forwarded := req.Header.Get("X-Forwarded-For")
@@ -257,7 +261,7 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	hashCode := xxhash.Sum64(buf.Bytes())
 	bytebufferpool.Put(buf)
 	r = &request{
-		id:       uid.UID(),
+		id:       id,
 		internal: false,
 		remoteIp: remoteIp,
 		user:     NewRequestUser("", json.NewObject()),

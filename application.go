@@ -105,6 +105,11 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create logger failed").WithCause(logErr)))
 		return
 	}
+	// barrier
+	barrier := opt.barrier
+	if barrier == nil {
+		barrier = service.DefaultBarrier()
+	}
 	// extra listener
 	extraListeners := opt.extraListeners
 
@@ -220,7 +225,7 @@ func New(options ...Option) (app Application) {
 		MaxWorkers:            serviceMaxWorkers,
 		MaxIdleWorkerDuration: time.Duration(serviceMaxIdleWorkerSeconds) * time.Second,
 		HandleTimeout:         time.Duration(serviceHandleTimeoutSeconds) * time.Second,
-		Barrier:               opt.barrier,
+		Barrier:               barrier,
 		Discovery:             discovery,
 	})
 
@@ -309,6 +314,7 @@ func New(options ...Option) (app Application) {
 		autoMaxProcs:    goprocs,
 		config:          configRaw,
 		clusterManager:  clusterManager,
+		barrier:         barrier,
 		endpoints:       endpoints,
 		http:            httpServer,
 		httpHandlers:    httpHandlers,
@@ -328,6 +334,7 @@ type application struct {
 	autoMaxProcs    *procs.AutoMaxProcs
 	config          configures.Config
 	clusterManager  *cluster.Manager
+	barrier         service.Barrier
 	endpoints       service.Endpoints
 	http            server.Http
 	httpHandlers    *server.Handlers
@@ -358,8 +365,9 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 			svcConfig, _ = configures.NewJsonConfig([]byte("{}"))
 		}
 		buildErr := svc.Build(service.Options{
-			Log:    app.log.With("fns", "service").With("service", name),
-			Config: svcConfig,
+			Log:     app.log.With("fns", "service").With("service", name),
+			Config:  svcConfig,
+			Barrier: app.barrier,
 		})
 		if buildErr != nil {
 			err = errors.Warning(fmt.Sprintf("fns: deploy %s service failed", name)).WithCause(buildErr)

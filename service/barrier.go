@@ -27,7 +27,7 @@ type Barrier interface {
 	Forget(ctx context.Context, key string)
 }
 
-func defaultBarrier() Barrier {
+func DefaultBarrier() Barrier {
 	return &sfgBarrier{
 		v: &singleflight.Group{},
 	}

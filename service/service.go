@@ -36,8 +36,9 @@ type Component interface {
 }
 
 type Options struct {
-	Log    logs.Logger
-	Config configures.Config
+	Log     logs.Logger
+	Config  configures.Config
+	Barrier Barrier
 }
 
 // Service

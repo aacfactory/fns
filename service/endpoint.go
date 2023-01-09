@@ -78,17 +78,13 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 	if handleTimeout < 1 {
 		handleTimeout = 10 * time.Second
 	}
-	barrier := options.Barrier
-	if barrier == nil {
-		barrier = defaultBarrier()
-	}
 	v = &endpoints{
 		appId:       options.AppId,
 		appStopChan: options.AppStopChan,
 		running:     options.Running,
 		log:         options.Log,
 		ws:          ws,
-		barrier:     barrier,
+		barrier:     options.Barrier,
 		group: &group{
 			appId:     options.AppId,
 			log:       options.Log.With("fns", "service group"),

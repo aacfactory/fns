@@ -55,7 +55,6 @@ type Service interface {
 
 type Listenable interface {
 	Service
-	Sharing() (ok bool)
 	Listen(ctx context.Context) (err error)
 }
 

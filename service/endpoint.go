@@ -21,10 +21,10 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,7 +46,8 @@ type Handler interface {
 type Endpoints interface {
 	Handler
 	Mount(svc Service)
-	RegisterOutboundChannels(name string, channels listeners.OutboundChannels)
+	Services() (services []string)
+	Listen() (err error)
 	Documents() (v map[string]Document)
 	SetupContext(ctx context.Context) context.Context
 	Close()
@@ -92,22 +93,20 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 			services:  make(map[string]Service),
 			discovery: options.Discovery,
 		},
-		outboundChannels: make(map[string]listeners.OutboundChannels),
-		handleTimeout:    handleTimeout,
+		handleTimeout: handleTimeout,
 	}
 	return
 }
 
 type endpoints struct {
-	appId            string
-	appStopChan      chan os.Signal
-	running          *commons.SafeFlag
-	log              logs.Logger
-	ws               workers.Workers
-	barrier          Barrier
-	group            *group
-	outboundChannels map[string]listeners.OutboundChannels
-	handleTimeout    time.Duration
+	appId         string
+	appStopChan   chan os.Signal
+	running       *commons.SafeFlag
+	log           logs.Logger
+	ws            workers.Workers
+	barrier       Barrier
+	group         *group
+	handleTimeout time.Duration
 }
 
 func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
@@ -152,56 +151,56 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err e
 
 func (e *endpoints) Mount(svc Service) {
 	e.group.add(svc)
-	ln, ok := svc.(Listenable)
-	if ok {
-		ctx := e.SetupContext(context.TODO())
-		go func(ctx context.Context, ln Listenable, log logs.Logger) {
-			for {
-				stopped := false
-				select {
-				case <-time.After(3 * time.Minute):
-					stopped = true
-					if log.WarnEnabled() {
-						log.Warn().With("fns", "listenable service").Message(fmt.Sprintf("fns: %s can not listen cause app is not running", ln.Name()))
-					}
-					break
-				case <-time.After(1 * time.Second):
-					if ApplicationIsRunning(ctx) {
-						go func(ctx context.Context, ln Listenable) {
-							lnErr := ln.Listen(ctx)
-							if lnErr != nil {
-								if log.ErrorEnabled() {
-									lnErr = errors.Warning(fmt.Sprintf("fns: %s listen falied", ln.Name())).WithCause(lnErr).WithMeta("service", ln.Name())
-									log.Error().With("fns", "listenable service").Message(fmt.Sprintf("%+v", lnErr))
-								}
-							}
-						}(ctx, ln)
-						if log.DebugEnabled() {
-							log.Debug().Caller().With("fns", "listenable service").Message(fmt.Sprintf("fns: %s is listening", ln.Name()))
-						}
-						stopped = true
-					} else {
-						if log.DebugEnabled() {
-							log.Debug().Caller().With("fns", "listenable service").Message(fmt.Sprintf("fns: %s try to listen again", ln.Name()))
-						}
-					}
-				}
-				if stopped {
-					break
-				}
-			}
-		}(ctx, ln, e.log)
-	}
 }
 
-func (e *endpoints) RegisterOutboundChannels(name string, channels listeners.OutboundChannels) {
-	e.outboundChannels[name] = channels
+func (e *endpoints) Services() (services []string) {
+	services = make([]string, 0, 1)
+	for _, service := range e.group.services {
+		services = append(services, service.Name())
+	}
+	return
+}
+
+func (e *endpoints) Listen() (err error) {
+	errCh := make(chan error, 8)
+	lns := 0
+	closed := int64(0)
+	for _, svc := range e.group.services {
+		ln, ok := svc.(Listenable)
+		if !ok {
+			continue
+		}
+		lns++
+		ctx := e.SetupContext(context.TODO())
+		go func(ctx context.Context, ln Listenable, errCh chan error) {
+			lnErr := ln.Listen(ctx)
+			if lnErr != nil {
+				lnErr = errors.Warning(fmt.Sprintf("fns: %s listen falied", ln.Name())).WithCause(lnErr).WithMeta("service", ln.Name())
+				if atomic.LoadInt64(&closed) == 0 {
+					errCh <- lnErr
+				}
+			}
+		}(ctx, ln, errCh)
+	}
+	if lns == 0 {
+		close(errCh)
+		return
+	}
+	select {
+	case lnErr := <-errCh:
+		atomic.AddInt64(&closed, 1)
+		err = errors.Warning("fns: endpoints listen failed").WithCause(lnErr)
+		break
+	case <-time.After(time.Duration(lns*3) * time.Second):
+		break
+	}
+	close(errCh)
 	return
 }
 
 func (e *endpoints) SetupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
-		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.ws, e.group, e.outboundChannels)
+		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.ws, e.group)
 	}
 	return ctx
 }

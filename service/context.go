@@ -19,7 +19,6 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"os"
@@ -73,7 +72,10 @@ func CanAccessInternal(ctx context.Context) (ok bool) {
 	if !hasTracer {
 		return
 	}
-	ok = t.Span() != nil
+	if t.Span() == nil {
+		return
+	}
+	ok = t.Span().Parent() != nil
 	return
 }
 
@@ -100,18 +102,17 @@ func TODO(ctx context.Context, ep Endpoints) context.Context {
 	if !ok {
 		panic("fns: todo failed")
 	}
-	return initContext(ctx, ep0.appId, ep0.appStopChan, ep0.running, ep0.log, ep0.ws, ep0.group, ep0.outboundChannels)
+	return initContext(ctx, ep0.appId, ep0.appStopChan, ep0.running, ep0.log, ep0.ws, ep0.group)
 }
 
-func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, outboundChannels map[string]listeners.OutboundChannels) context.Context {
+func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
-		appId:            appId,
-		appStopChan:      appStopChan,
-		running:          running,
-		log:              log,
-		ws:               ws,
-		discovery:        discovery,
-		outboundChannels: outboundChannels,
+		appId:       appId,
+		appStopChan: appStopChan,
+		running:     running,
+		log:         log,
+		ws:          ws,
+		discovery:   discovery,
 	})
 	return ctx
 }
@@ -151,25 +152,11 @@ func AbortApplication(ctx context.Context) {
 	rt.appStopChan <- syscall.SIGABRT
 }
 
-func GetOutboundChannel(ctx context.Context, listener string, name string) (channel listeners.OutboundChannel, has bool) {
-	rt := getRuntime(ctx)
-	if rt == nil {
-		return
-	}
-	channels, exist := rt.outboundChannels[listener]
-	if !exist {
-		return
-	}
-	channel, has = channels.Get(name)
-	return
-}
-
 type contextValue struct {
-	appId            string
-	appStopChan      chan os.Signal
-	running          *commons.SafeFlag
-	log              logs.Logger
-	ws               workers.Workers
-	discovery        EndpointDiscovery
-	outboundChannels map[string]listeners.OutboundChannels
+	appId       string
+	appStopChan chan os.Signal
+	running     *commons.SafeFlag
+	log         logs.Logger
+	ws          workers.Workers
+	discovery   EndpointDiscovery
 }

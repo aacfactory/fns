@@ -18,45 +18,19 @@ package server
 
 import (
 	"fmt"
-	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/json"
 	"net/http"
 	"time"
 )
 
 const (
-	httpHealthPath            = "/health"
-	httpConnectionHeader      = "Connection"
-	httpConnectionHeaderClose = "close"
+	httpHealthPath = "/health"
 )
 
-type HealthHandlerOptions struct {
-	AppId   string
-	AppName string
-	Version string
-	Running *commons.SafeFlag
-}
-
-func NewHealthHandler(options HealthHandlerOptions) (h Handler) {
-	h = &healthHandler{
-		appId:       options.AppId,
-		appName:     options.AppName,
-		version:     options.Version,
-		launchAT:    time.Now().Format(time.RFC3339),
-		running:     options.Running,
-		unavailable: json.UnsafeMarshal(errors.Unavailable("fns: service is unavailable").WithMeta("fns", "http")),
-	}
-	return
-}
-
 type healthHandler struct {
-	appId       string
-	appName     string
-	version     string
-	launchAT    string
-	running     *commons.SafeFlag
-	unavailable []byte
+	appId    string
+	appName  string
+	version  string
+	launchAT string
 }
 
 func (h *healthHandler) Name() (name string) {
@@ -64,34 +38,28 @@ func (h *healthHandler) Name() (name string) {
 	return
 }
 
-func (h *healthHandler) Build(_ *HandlerOptions) (err error) {
+func (h *healthHandler) Build(options *HandlerOptions) (err error) {
+	h.appId = options.AppId
+	h.appName = options.AppName
+	h.version = options.AppVersion
+	h.launchAT = time.Now().Format(time.RFC3339)
 	return
 }
 
-func (h *healthHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-	if h.running.IsOff() {
-		writer.Header().Set(httpConnectionHeader, httpConnectionHeaderClose)
-		writer.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = writer.Write(h.unavailable)
-		ok = true
-		return
-	}
-	if request.Method != http.MethodGet {
-		return
-	}
-	switch request.URL.Path {
-	case "", "/", httpHealthPath:
-		ok = true
-		body := fmt.Sprintf(
-			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"running\":%v, \"launch\":\"%s\", \"now\":\"%s\"}",
-			h.appName, h.appId, h.version, h.running.IsOn(), h.launchAT, time.Now().Format(time.RFC3339),
-		)
-		writer.WriteHeader(http.StatusOK)
-		_, _ = writer.Write([]byte(body))
-		break
-	default:
-		return
-	}
+func (h *healthHandler) Accept(request *http.Request) (ok bool) {
+	ok = request.Method == http.MethodGet && request.URL.Path == httpHealthPath
+	return
+}
+
+func (h *healthHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	body := fmt.Sprintf(
+		"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\"}",
+		h.appName, h.appId, h.version, h.launchAT, time.Now().Format(time.RFC3339),
+	)
+	writer.Header().Set(httpServerHeader, httpServerHeaderValue)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write([]byte(body))
 	return
 }
 

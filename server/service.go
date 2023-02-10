@@ -33,15 +33,6 @@ const (
 	httpLatencyHeader = "X-Fns-Latency"
 )
 
-func NewServiceHandler() (h Handler) {
-	h = &serviceHandler{
-		log:       nil,
-		counter:   sync.WaitGroup{},
-		endpoints: nil,
-	}
-	return
-}
-
 type serviceHandler struct {
 	log       logs.Logger
 	counter   sync.WaitGroup
@@ -54,12 +45,13 @@ func (h *serviceHandler) Name() (name string) {
 }
 
 func (h *serviceHandler) Build(options *HandlerOptions) (err error) {
-	h.log = options.Log.With("fns", "handler").With("handle", "service")
+	h.log = options.Log
+	h.counter = sync.WaitGroup{}
 	h.endpoints = options.Endpoints
 	return
 }
 
-func (h *serviceHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
+func (h *serviceHandler) Accept(request *http.Request) (ok bool) {
 	if request.Method != http.MethodPost {
 		return
 	}
@@ -70,6 +62,10 @@ func (h *serviceHandler) Handle(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	ok = true
+	return
+}
+
+func (h *serviceHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	r, requestErr := service.NewRequest(request)
 	if requestErr != nil {
 		h.failed(writer, "", 0, requestErr)

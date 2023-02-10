@@ -17,84 +17,66 @@
 package server
 
 import (
-	"fmt"
 	"github.com/aacfactory/fns/internal/configure"
-	"github.com/aacfactory/fns/internal/cors"
+	"github.com/rs/cors"
 	"net/http"
 	"sort"
 )
 
-func NewCorsHandler() (h Handler) {
-	h = &corsHandler{}
-	return
-}
-
-type corsHandler struct {
-	cors *cors.Cors
-}
-
-func (h *corsHandler) Name() (name string) {
-	name = "cors"
-	return
-}
-
-func (h *corsHandler) Build(options *HandlerOptions) (err error) {
-	config := &configure.Cors{}
-	has, getErr := options.Config.Get("server.cors", config)
-	if getErr != nil {
-		err = fmt.Errorf("build cors handler failed, %v", getErr)
-		return
+func NewCorsHandler(config *configure.Cors) (h *cors.Cors) {
+	if config == nil {
+		config = &configure.Cors{
+			AllowedOrigins:   []string{"*"},
+			AllowedHeaders:   []string{"*"},
+			ExposedHeaders:   nil,
+			AllowCredentials: false,
+			MaxAge:           0,
+		}
 	}
-	if has {
-		allowedOrigins := config.AllowedOrigins
-		if allowedOrigins == nil {
-			allowedOrigins = make([]string, 0, 1)
-		}
-		if len(allowedOrigins) == 0 {
-			allowedOrigins = append(allowedOrigins, "*")
-		}
-		allowedHeaders := config.AllowedHeaders
-		if allowedHeaders == nil {
-			allowedHeaders = make([]string, 0, 1)
-		}
-		if sort.SearchStrings(allowedHeaders, "Connection") < 0 {
-			allowedHeaders = append(allowedHeaders, "Connection")
-		}
-		if sort.SearchStrings(allowedHeaders, "Upgrade") < 0 {
-			allowedHeaders = append(allowedHeaders, "Upgrade")
-		}
-		if sort.SearchStrings(allowedHeaders, "X-Forwarded-For") < 0 {
-			allowedHeaders = append(allowedHeaders, "X-Forwarded-For")
-		}
-		if sort.SearchStrings(allowedHeaders, "X-Real-Ip") < 0 {
-			allowedHeaders = append(allowedHeaders, "X-Real-Ip")
-		}
-		exposedHeaders := config.ExposedHeaders
-		if exposedHeaders == nil {
-			exposedHeaders = make([]string, 0, 1)
-		}
-		exposedHeaders = append(exposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server")
-		h.cors = cors.New(cors.Options{
-			AllowedOrigins:       allowedOrigins,
-			AllowedMethods:       []string{http.MethodGet, http.MethodPost},
-			AllowedHeaders:       allowedHeaders,
-			ExposedHeaders:       exposedHeaders,
-			MaxAge:               config.MaxAge,
-			AllowCredentials:     config.AllowCredentials,
-			AllowPrivateNetwork:  true,
-			OptionsPassthrough:   false,
-			OptionsSuccessStatus: http.StatusNoContent,
-		})
-	} else {
-		h.cors = cors.AllowAll()
+	if config.AllowedOrigins == nil || len(config.AllowedOrigins) == 0 {
+		config.AllowedOrigins = []string{"*"}
 	}
+	if config.AllowedHeaders == nil || len(config.AllowedHeaders) == 0 {
+		config.AllowedHeaders = make([]string, 0, 1)
+		config.AllowedHeaders = append(config.AllowedHeaders, "*")
+	}
+	if config.AllowedHeaders[0] != "*" {
+		if sort.SearchStrings(config.AllowedHeaders, "Connection") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "Connection")
+		}
+		if sort.SearchStrings(config.AllowedHeaders, "Upgrade") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "Upgrade")
+		}
+		if sort.SearchStrings(config.AllowedHeaders, "X-Forwarded-For") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "X-Forwarded-For")
+		}
+		if sort.SearchStrings(config.AllowedHeaders, "X-Real-Ip") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "X-Real-Ip")
+		}
+		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Client-Id") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Client-Id")
+		}
+		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Request-Timeout") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Request-Timeout")
+		}
+	}
+	if config.ExposedHeaders == nil {
+		config.ExposedHeaders = make([]string, 0, 1)
+	}
+	config.ExposedHeaders = append(config.ExposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server")
+	h = cors.New(cors.Options{
+		AllowedOrigins:         config.AllowedOrigins,
+		AllowOriginFunc:        nil,
+		AllowOriginRequestFunc: nil,
+		AllowedMethods:         []string{http.MethodGet, http.MethodPost},
+		AllowedHeaders:         config.AllowedHeaders,
+		ExposedHeaders:         config.ExposedHeaders,
+		MaxAge:                 config.MaxAge,
+		AllowCredentials:       config.AllowCredentials,
+		AllowPrivateNetwork:    config.AllowPrivateNetwork,
+		OptionsPassthrough:     false,
+		OptionsSuccessStatus:   204,
+		Debug:                  false,
+	})
 	return
-}
-
-func (h *corsHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-	ok = h.cors.Handle(writer, request)
-	return
-}
-
-func (h *corsHandler) Close() {
 }

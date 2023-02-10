@@ -18,13 +18,12 @@ package server
 
 import (
 	"fmt"
-	"github.com/aacfactory/fns/internal/configure"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/oas"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
-	"strings"
 	"sync"
 )
 
@@ -32,24 +31,6 @@ const (
 	httpDocumentRawPath = "/documents/raw"
 	httpDocumentOASPath = "/documents/oas"
 )
-
-type DocumentHandlerOptions struct {
-	Version string
-}
-
-func NewDocumentHandler(options DocumentHandlerOptions) (h Handler) {
-	doc := defaultDocument()
-	doc.version = options.Version
-	h = &documentHandler{
-		log:       nil,
-		doc:       doc,
-		endpoints: nil,
-		once:      sync.Once{},
-		raw:       nil,
-		oas:       nil,
-	}
-	return
-}
 
 type documentHandler struct {
 	log       logs.Logger
@@ -66,63 +47,43 @@ func (h *documentHandler) Name() (name string) {
 }
 
 func (h *documentHandler) Build(options *HandlerOptions) (err error) {
-	config := &configure.OAS{}
-	has, getErr := options.Config.Get("oas", config)
-	if getErr != nil {
-		err = fmt.Errorf("build document handler failed, %v", getErr)
+	h.log = options.Log
+	h.doc = &Document{}
+	configErr := options.Config.As(h.doc)
+	if configErr != nil {
+		err = errors.Warning("fns: document handler build failed").WithCause(configErr)
 		return
 	}
-	if has {
-		h.doc.Title = strings.TrimSpace(config.Title)
-		h.doc.Description = strings.TrimSpace(config.Description)
-		h.doc.Terms = strings.TrimSpace(config.Terms)
-
-		if config.Contact != nil {
-			h.doc.Contact = &Contact{
-				Name:  strings.TrimSpace(config.Contact.Name),
-				Url:   strings.TrimSpace(config.Contact.Url),
-				Email: strings.TrimSpace(config.Contact.Email),
-			}
-		}
-		if config.License != nil {
-			h.doc.License = &License{
-				Name: strings.TrimSpace(config.License.Name),
-				Url:  strings.TrimSpace(config.License.Url),
-			}
-		}
-		if config.Servers != nil && len(config.Servers) > 0 {
-			h.doc.Addresses = make([]Address, 0, 1)
-			for _, oasServer := range config.Servers {
-				h.doc.Addresses = append(h.doc.Addresses, Address{
-					URL:         strings.TrimSpace(oasServer.URL),
-					Description: strings.TrimSpace(oasServer.Description),
-				})
-			}
-		}
+	if h.doc.Title == "" {
+		h.doc.Title = "FNS"
 	}
+	if h.doc.Description == "" {
+		h.doc.Description = "Fn services"
+	}
+	h.doc.version = options.AppVersion
 
-	h.log = options.Log.With("fns", "handler").With("handler", "document")
 	h.endpoints = options.Endpoints
-
+	h.once = sync.Once{}
 	return
 }
 
-func (h *documentHandler) Handle(writer http.ResponseWriter, request *http.Request) (ok bool) {
-	if request.Method != http.MethodGet {
-		return
-	}
+func (h *documentHandler) Accept(request *http.Request) (ok bool) {
+	ok = request.Method == http.MethodGet && (request.URL.Path == httpDocumentRawPath || request.URL.Path == httpDocumentOASPath)
+	return
+}
+
+func (h *documentHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	switch request.URL.Path {
 	case httpDocumentRawPath:
-		ok = true
 		h.encode()
 		h.write(writer, h.raw)
 		break
 	case httpDocumentOASPath:
-		ok = true
 		h.encode()
 		h.write(writer, h.oas)
 		break
 	default:
+		h.write(writer, []byte{'{', '}'})
 		return
 	}
 	return

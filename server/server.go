@@ -20,11 +20,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/logger"
-	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
@@ -32,7 +31,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -43,75 +41,54 @@ const (
 	httpContentTypeJson   = "application/json"
 )
 
-type HandlerOptions struct {
-	Log       logs.Logger
-	Config    configures.Config
-	Endpoints service.Endpoints
-}
-
-type Handler interface {
-	Name() (name string)
-	Build(options *HandlerOptions) (err error)
-	Handle(writer http.ResponseWriter, request *http.Request) (ok bool)
-	Close()
-}
-
-func NewHandlers(options *HandlerOptions) (handlers *Handlers) {
-	handlers = &Handlers{
-		options:  options,
-		handlers: make([]Handler, 0, 1),
-	}
-	return
-}
-
-type Handlers struct {
-	options  *HandlerOptions
-	handlers []Handler
-}
-
-func (handlers *Handlers) Append(h Handler) (err error) {
-	if h == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: append handler into handler chain failed cause handler is nil")))
-	}
-	err = h.Build(handlers.options)
-	if err != nil {
-		return
-	}
-	handlers.handlers = append(handlers.handlers, h)
-	return
-}
-
-func (handlers *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	handled := false
-	for _, handler := range handlers.handlers {
-		if handler.Handle(writer, request) {
-			handled = true
-			break
-		}
-	}
-	if !handled {
-		writer.Header().Set(httpServerHeader, httpServerHeaderValue)
-		writer.Header().Set(httpContentType, httpContentTypeJson)
-		writer.WriteHeader(http.StatusNotImplemented)
-	}
-	return
-}
-
-func (handlers *Handlers) Close() {
-	waiter := &sync.WaitGroup{}
-	for _, handler := range handlers.handlers {
-		waiter.Add(1)
-		go func(handler Handler, waiter *sync.WaitGroup) {
-			handler.Close()
-			waiter.Done()
-		}(handler, waiter)
-	}
-	waiter.Wait()
-}
-
 type HttpClient interface {
 	Do(ctx context.Context, method string, url string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
 	Close()
+}
+
+func NewHttpOptions(config *configure.Server, log logs.Logger, handler http.Handler) (opt HttpOptions, err error) {
+	log = log.With("fns", "http")
+	opt = HttpOptions{
+		Port:      0,
+		ServerTLS: nil,
+		ClientTLS: nil,
+		Handler:   handler,
+		Log:       log,
+		Options:   nil,
+	}
+	if config == nil {
+		return
+	}
+	var serverTLS *tls.Config
+	var clientTLS *tls.Config
+	if config.TLS != nil {
+		var tlsErr error
+		serverTLS, clientTLS, tlsErr = config.TLS.Config()
+		if tlsErr != nil {
+			err = errors.Warning("new http options failed").WithCause(tlsErr)
+			return
+		}
+	}
+	opt.ServerTLS = serverTLS
+	opt.ClientTLS = clientTLS
+	port := config.Port
+	if port == 0 {
+		if serverTLS == nil {
+			port = 80
+		} else {
+			port = 443
+		}
+	}
+	if port < 1 || port > 65535 {
+		err = errors.Warning("new http options failed").WithCause(fmt.Errorf("port is invalid, port must great than 1024 or less than 65536"))
+		return
+	}
+	opt.Port = port
+	if config.Options == nil {
+		config.Options = []byte("{}")
+	}
+	opt.Options = config.Options
+	return
 }
 
 type HttpOptions struct {
@@ -120,26 +97,20 @@ type HttpOptions struct {
 	ClientTLS *tls.Config
 	Handler   http.Handler
 	Log       logs.Logger
-	Raw       *json.Object
-}
-
-func (options HttpOptions) GetOption(key string, value interface{}) (has bool, err error) {
-	has = options.Raw.Contains(key)
-	if !has {
-		return
-	}
-	err = options.Raw.Get(key, value)
-	if err != nil {
-		err = errors.Warning(fmt.Sprintf("fns: http server options get %s failed", key)).WithCause(err).WithMeta("fns", "http")
-		return
-	}
-	return
+	Options   json.RawMessage
 }
 
 type Http interface {
 	Build(options HttpOptions) (err error)
 	ListenAndServe() (err error)
 	Close() (err error)
+}
+
+type FastHttpOptions struct {
+	ReadTimeoutSeconds   int    `json:"readTimeoutSeconds"`
+	MaxWorkerIdleSeconds int    `json:"maxWorkerIdleSeconds"`
+	MaxRequestBody       string `json:"maxRequestBody"`
+	ReduceMemoryUsage    bool   `json:"reduceMemoryUsage"`
 }
 
 type FastHttp struct {
@@ -149,8 +120,7 @@ type FastHttp struct {
 }
 
 func (srv *FastHttp) Build(options HttpOptions) (err error) {
-	srv.log = options.Log.With("fns", "http")
-
+	srv.log = options.Log
 	var ln net.Listener
 	if options.ServerTLS == nil {
 		ln, err = net.Listen("tcp", fmt.Sprintf(":%d", options.Port))
@@ -163,32 +133,19 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 	}
 	srv.ln = ln
 
-	var optionErr error
-	readTimeoutSeconds := 0
-	_, optionErr = options.GetOption("readTimeoutSeconds", &readTimeoutSeconds)
-	if optionErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
+	opt := &FastHttpOptions{}
+	optErr := json.Unmarshal(options.Options, opt)
+	if optErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("fns", "http")
 		return
 	}
-	if readTimeoutSeconds < 1 {
-		readTimeoutSeconds = 2
+	if opt.ReadTimeoutSeconds < 1 {
+		opt.ReadTimeoutSeconds = 2
 	}
-	maxWorkerIdleSeconds := 0
-	_, optionErr = options.GetOption("maxWorkerIdleSeconds", &maxWorkerIdleSeconds)
-	if optionErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
-		return
+	if opt.MaxWorkerIdleSeconds < 1 {
+		opt.MaxWorkerIdleSeconds = 10
 	}
-	if maxWorkerIdleSeconds < 1 {
-		maxWorkerIdleSeconds = 10
-	}
-	maxRequestBody := ""
-	_, optionErr = options.GetOption("maxRequestBody", &maxRequestBody)
-	if optionErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
-		return
-	}
-	maxRequestBody = strings.ToUpper(strings.TrimSpace(maxRequestBody))
+	maxRequestBody := strings.ToUpper(strings.TrimSpace(opt.MaxRequestBody))
 	if maxRequestBody == "" {
 		maxRequestBody = "4MB"
 	}
@@ -197,17 +154,13 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 		err = errors.Warning("fns: build server failed").WithCause(maxRequestBodySizeErr).WithMeta("fns", "http")
 		return
 	}
-	reduceMemoryUsage := false
-	_, optionErr = options.GetOption("reduceMemoryUsage", &reduceMemoryUsage)
-	if optionErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(optionErr).WithMeta("fns", "http")
-		return
-	}
+	reduceMemoryUsage := opt.ReduceMemoryUsage
+
 	srv.srv = &fasthttp.Server{
 		Handler:                            fasthttpadaptor.NewFastHTTPHandler(options.Handler),
 		ErrorHandler:                       fastHttpErrorHandler,
-		ReadTimeout:                        time.Duration(readTimeoutSeconds) * time.Second,
-		MaxIdleWorkerDuration:              time.Duration(maxWorkerIdleSeconds) * time.Second,
+		ReadTimeout:                        time.Duration(opt.ReadTimeoutSeconds) * time.Second,
+		MaxIdleWorkerDuration:              time.Duration(opt.MaxWorkerIdleSeconds) * time.Second,
 		MaxRequestBodySize:                 int(maxRequestBodySize),
 		ReduceMemoryUsage:                  reduceMemoryUsage,
 		DisablePreParseMultipartForm:       true,

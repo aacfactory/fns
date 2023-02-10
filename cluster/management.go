@@ -14,29 +14,24 @@
  * limitations under the License.
  */
 
-package configure
+package cluster
 
-type OASContact struct {
-	Name  string `json:"name"`
-	Url   string `json:"url"`
-	Email string `json:"email"`
+import (
+	"github.com/aacfactory/fns/service"
+	"sync"
+	"time"
+)
+
+type Shared interface {
+	Locker(name string, timeout time.Duration) (locker sync.Locker, err error)
+	Set(key string, value []byte, timeout time.Duration) (err error)
+	Get(key string) (value []byte, err error)
+	Remove(key string) (err error)
 }
 
-type OASLicense struct {
-	Name string `json:"name"`
-	Url  string `json:"url"`
-}
-
-type OASServer struct {
-	URL         string `json:"url"`
-	Description string `json:"description"`
-}
-
-type OAS struct {
-	Title       string      `json:"title"`
-	Description string      `json:"description"`
-	Terms       string      `json:"terms"`
-	Contact     *OASContact `json:"contact"`
-	License     *OASLicense `json:"license"`
-	Servers     []OASServer `json:"servers"`
+type Management interface {
+	Join() (err error)
+	Leave() (err error)
+	Publish(services []string) (err error)
+	Discovery() (discovery service.EndpointDiscovery)
 }

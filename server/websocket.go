@@ -37,20 +37,6 @@ import (
 	"sync/atomic"
 )
 
-func NewWebsocketHandler() (h Handler) {
-	h = &websocketHandler{
-		log:       nil,
-		handling:  0,
-		maxConns:  0,
-		counter:   sync.WaitGroup{},
-		endpoints: nil,
-		upgrader:  nil,
-		lock:      sync.RWMutex{},
-		closed:    false,
-	}
-	return
-}
-
 type websocketHandler struct {
 	log       logs.Logger
 	handling  int64

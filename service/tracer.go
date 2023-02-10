@@ -65,6 +65,13 @@ func tryReportTracer(ctx context.Context) {
 	if r.Internal() {
 		return
 	}
+	rootSpan := t.RootSpan()
+	if rootSpan == nil {
+		return
+	}
+	if rootSpan.FinishedAT().IsZero() {
+		return
+	}
 	TryFork(ctx, &reportTracerTask{
 		t: t,
 	})
@@ -91,6 +98,7 @@ type Tracer interface {
 	Id() (id string)
 	StartSpan(service string, fn string) (span Span)
 	Span() (span Span)
+	RootSpan() (span Span)
 }
 
 func NewTracer(id string) Tracer {
@@ -116,28 +124,38 @@ func (t *tracer) Id() (id string) {
 
 func (t *tracer) StartSpan(service string, fn string) (span Span) {
 	t.lock.Lock()
-	if t.Root == nil {
+	if t.current == nil {
 		span = newSpan(t.Id_, service, fn, nil)
 		t.Root = span
 		t.current = span
 		t.lock.Unlock()
 		return
 	}
-	span = newSpan(t.Id_, service, fn, t.current)
 	if t.current.FinishedAT().IsZero() {
-		// prev not finished, current as parent
+		// current not finished, current as parent
 		span = newSpan(t.Id_, service, fn, t.current)
 	} else {
-		// pre finished, current's parent as parent
-		span = newSpan(t.Id_, service, fn, t.current.Parent())
-		// new as current
-		t.current = span
+		// current finished, current's unfinished parent as parent
+		parent := t.current.Parent()
+		for {
+			if parent.FinishedAT().IsZero() {
+				break
+			}
+			parent = parent.Parent()
+		}
+		span = newSpan(t.Id_, service, fn, parent)
 	}
+	t.current = span
 	t.lock.Unlock()
 	return
 }
 
 func (t *tracer) Span() (span Span) {
+	span = t.current
+	return
+}
+
+func (t *tracer) RootSpan() (span Span) {
 	span = t.Root
 	return
 }

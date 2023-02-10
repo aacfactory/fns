@@ -19,10 +19,8 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configures"
-	"github.com/aacfactory/fns/cluster"
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/secret"
-	"github.com/aacfactory/fns/listeners"
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
@@ -37,6 +35,7 @@ type Option func(*Options) error
 
 var (
 	defaultOptions = &Options{
+		name:                  "fns",
 		version:               "0.0.0",
 		autoMaxProcsMin:       0,
 		autoMaxProcsMax:       0,
@@ -44,12 +43,12 @@ var (
 		barrier:               nil,
 		server:                &server.FastHttp{},
 		serverHandlers:        make([]server.Handler, 0, 1),
-		extraListeners:        make([]listeners.Listener, 0, 1),
 		shutdownTimeout:       60 * time.Second,
 	}
 )
 
 type Options struct {
+	name                  string
 	version               string
 	autoMaxProcsMin       int
 	autoMaxProcsMax       int
@@ -57,8 +56,6 @@ type Options struct {
 	barrier               service.Barrier
 	server                server.Http
 	serverHandlers        []server.Handler
-	clientBuilder         cluster.ClientBuilder
-	extraListeners        []listeners.Listener
 	shutdownTimeout       time.Duration
 }
 
@@ -92,6 +89,17 @@ func ConfigActiveFromENV(key string) (active string) {
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
+
+func Name(name string) Option {
+	return func(options *Options) error {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("set name failed for empty")
+		}
+		options.name = name
+		return nil
+	}
+}
 
 func Version(version string) Option {
 	return func(options *Options) error {
@@ -169,42 +177,6 @@ func Handlers(handlers ...server.Handler) Option {
 			return nil
 		}
 		options.serverHandlers = append(options.serverHandlers, handlers...)
-		return nil
-	}
-}
-
-func ClusterClientBuilder(builder cluster.ClientBuilder) Option {
-	return func(options *Options) error {
-		if builder == nil {
-			return fmt.Errorf("customize cluster client failed for builder is nil")
-		}
-		options.clientBuilder = builder
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func ExtraListeners(lns ...listeners.Listener) Option {
-	return func(options *Options) error {
-		if lns == nil || len(lns) == 0 {
-			return nil
-		}
-		for _, ln := range lns {
-			if ln == nil {
-				return fmt.Errorf("add extra listener failed for one of them is nil")
-			}
-			lnName := strings.TrimSpace(ln.Name())
-			if lnName == "" {
-				return fmt.Errorf("add extra listener failed for one of them has no name")
-			}
-			for _, listener := range options.extraListeners {
-				if listener.Name() == lnName {
-					return fmt.Errorf("add extra listener failed for one of them has same name")
-				}
-			}
-			options.extraListeners = append(options.extraListeners, ln)
-		}
 		return nil
 	}
 }

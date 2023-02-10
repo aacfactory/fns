@@ -17,11 +17,8 @@
 package configure
 
 type Config struct {
-	AppId   string     `json:"appId"`
-	Name    string     `json:"name"`
 	Runtime *Runtime   `json:"runtime"`
 	Log     *LogConfig `json:"log"`
-	OAS     *OAS       `json:"oas"`
 	Server  *Server    `json:"server"`
 	Cluster *Cluster   `json:"cluster"`
 }

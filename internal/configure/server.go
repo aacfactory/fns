@@ -27,11 +27,12 @@ import (
 )
 
 type Cors struct {
-	AllowedOrigins   []string `json:"allowedOrigins"`
-	AllowedHeaders   []string `json:"allowedHeaders"`
-	ExposedHeaders   []string `json:"exposedHeaders"`
-	AllowCredentials bool     `json:"allowCredentials"`
-	MaxAge           int      `json:"maxAge"`
+	AllowedOrigins      []string `json:"allowedOrigins"`
+	AllowedHeaders      []string `json:"allowedHeaders"`
+	ExposedHeaders      []string `json:"exposedHeaders"`
+	AllowCredentials    bool     `json:"allowCredentials"`
+	MaxAge              int      `json:"maxAge"`
+	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"`
 }
 
 type TLS struct {
@@ -66,11 +67,20 @@ type Websocket struct {
 	MaxConns          int64  `json:"maxConns"`
 }
 
+func DefaultServer() *Server {
+	return &Server{
+		Port:     80,
+		Cors:     nil,
+		TLS:      nil,
+		Options:  nil,
+		Handlers: nil,
+	}
+}
+
 type Server struct {
-	Port         int                        `json:"port"`
-	Cors         *Cors                      `json:"cors"`
-	Websocket    *Websocket                 `json:"websocket"`
-	TLS          *TLS                       `json:"tls"`
-	Options      json.RawMessage            `json:"options"`
-	Interceptors map[string]json.RawMessage `json:"interceptors"`
+	Port     int             `json:"port"`
+	Cors     *Cors           `json:"cors"`
+	TLS      *TLS            `json:"tls"`
+	Options  json.RawMessage `json:"options"`
+	Handlers json.RawMessage `json:"handlers"`
 }

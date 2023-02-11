@@ -19,6 +19,7 @@ package configure
 import "github.com/aacfactory/json"
 
 type Cluster struct {
+	Name              string          `json:"name"`
 	DevMode           bool            `json:"devMode"`
 	NodesProxyAddress string          `json:"nodesProxyAddress"`
 	Kind              string          `json:"kind"`

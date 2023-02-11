@@ -40,7 +40,7 @@ import (
 type Application interface {
 	Log() (log logs.Logger)
 	Deploy(service ...service.Service) (err error)
-	Run() (err error)
+	Run(ctx context.Context) (err error)
 	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
 	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError)
 	Sync() (err error)
@@ -97,15 +97,44 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create logger failed").WithCause(logErr)))
 		return
 	}
-	// barrier
-	barrier := opt.barrier
-	if barrier == nil {
-		barrier = service.DefaultBarrier()
+
+	// cluster
+	var clusterManagement cluster.Management
+	if config.Cluster != nil {
+		clusterName := strings.TrimSpace(config.Cluster.Name)
+		clusterOptions := config.Cluster.Options
+		if clusterOptions == nil || len(clusterOptions) == 0 {
+			clusterOptions = []byte{'{', '}'}
+		}
+		clusterConfig, clusterConfigErr := configures.NewJsonConfig(config.Cluster.Options)
+		if clusterConfigErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("config of %s is invalid, %v", clusterName, clusterConfigErr))))
+			return
+		}
+		clusterBuilder, hasClusterBuilder := cluster.GetManagementBuilder(clusterName)
+		if !hasClusterBuilder {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s is not defined", clusterName))))
+			return
+		}
+		var clusterBuildErr error
+		clusterManagement, clusterBuildErr = clusterBuilder(clusterConfig)
+		if clusterBuildErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(errors.Map(clusterBuildErr))))
+			return
+		}
 	}
 
-	// todo cluster
-	var clusterManagement cluster.Management
-
+	// barrier
+	var barrier service.Barrier
+	if opt.barrier != nil {
+		barrier = opt.barrier
+	} else {
+		if clusterManagement == nil {
+			barrier = service.DefaultBarrier()
+		} else {
+			barrier = clusterManagement.Barrier()
+		}
+	}
 	// procs
 	goprocs := procs.New(procs.Options{
 		Log: log,
@@ -117,6 +146,7 @@ func New(options ...Option) (app Application) {
 	serviceMaxWorkers := 0
 	serviceMaxIdleWorkerSeconds := 0
 	serviceHandleTimeoutSeconds := 0
+	localSharedMemSize := uint64(0)
 	if config.Runtime != nil {
 		serviceMaxWorkers = config.Runtime.MaxWorkers
 		if serviceMaxWorkers < 1 {
@@ -130,13 +160,27 @@ func New(options ...Option) (app Application) {
 		if serviceHandleTimeoutSeconds < 1 {
 			serviceHandleTimeoutSeconds = 10
 		}
+		localSharedMemSizeStr := strings.TrimSpace(config.Runtime.LocalSharedMemSize)
+		if localSharedMemSizeStr == "" {
+			localSharedMemSizeStr = "256M"
+		}
+		var localSharedMemSizeErr error
+		localSharedMemSize, localSharedMemSizeErr = commons.ToBytes(localSharedMemSizeStr)
+		if localSharedMemSizeErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create endpoints failed").WithCause(errors.Map(localSharedMemSizeErr))))
+			return
+		}
 	}
 	var discovery service.EndpointDiscovery
 	if clusterManagement != nil {
 		discovery = clusterManagement.Discovery()
 	}
+	var shared service.Shared
+	if clusterManagement != nil {
+		shared = clusterManagement.Shared()
+	}
 	signalCh := make(chan os.Signal, 1)
-	endpoints := service.NewEndpoints(service.EndpointsOptions{
+	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
 		AppId:                 appId,
 		AppStopChan:           signalCh,
 		Running:               running,
@@ -145,7 +189,13 @@ func New(options ...Option) (app Application) {
 		MaxIdleWorkerDuration: time.Duration(serviceMaxIdleWorkerSeconds) * time.Second,
 		HandleTimeout:         time.Duration(serviceHandleTimeoutSeconds) * time.Second,
 		Discovery:             discovery,
+		Shared:                shared,
+		LocalSharedMemSize:    int64(localSharedMemSize),
 	})
+	if endpointsErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create endpoints failed").WithCause(errors.Map(endpointsErr))))
+		return
+	}
 
 	// http >>>
 	httpConfig := config.Server
@@ -265,7 +315,7 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 	return
 }
 
-func (app *application) Run() (err error) {
+func (app *application) Run(ctx context.Context) (err error) {
 	if app.running.IsOn() {
 		err = errors.Warning("fns: application is running")
 		return
@@ -301,14 +351,9 @@ func (app *application) Run() (err error) {
 	}
 	// cluster publish
 	if app.clusterManagement != nil {
-		joinErr := app.clusterManagement.Join()
+		joinErr := app.clusterManagement.Join(ctx, app.endpoints)
 		if joinErr != nil {
 			err = errors.Warning("fns: run application failed").WithCause(joinErr)
-			return
-		}
-		publishErr := app.clusterManagement.Publish(app.endpoints.Services())
-		if publishErr != nil {
-			err = errors.Warning("fns: run application failed").WithCause(publishErr)
 			return
 		}
 	}
@@ -318,7 +363,7 @@ func (app *application) Run() (err error) {
 }
 
 func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err error) {
-	runErr := app.Run()
+	runErr := app.Run(ctx)
 	if runErr != nil {
 		err = runErr
 		return
@@ -417,7 +462,7 @@ func (app *application) stop(ch chan struct{}) {
 	app.running.Off()
 	// cluster leave
 	if app.clusterManagement != nil {
-		leaveErr := app.clusterManagement.Leave()
+		leaveErr := app.clusterManagement.Leave(context.TODO())
 		if leaveErr != nil {
 			if app.log.WarnEnabled() {
 				app.log.Warn().Cause(leaveErr).Message("fns: an error occurred in the stop application")

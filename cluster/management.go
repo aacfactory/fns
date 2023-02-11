@@ -17,21 +17,30 @@
 package cluster
 
 import (
+	"context"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/service"
-	"sync"
-	"time"
 )
 
-type Shared interface {
-	Locker(name string, timeout time.Duration) (locker sync.Locker, err error)
-	Set(key string, value []byte, timeout time.Duration) (err error)
-	Get(key string) (value []byte, err error)
-	Remove(key string) (err error)
-}
+type ManagementBuilder func(config configures.Config) (management Management, err error)
 
 type Management interface {
-	Join() (err error)
-	Leave() (err error)
-	Publish(services []string) (err error)
+	Join(ctx context.Context, endpoints service.Endpoints) (err error)
+	Leave(ctx context.Context) (err error)
+	Barrier() (barrier service.Barrier)
 	Discovery() (discovery service.EndpointDiscovery)
+	Shared() (shared service.Shared)
+}
+
+var (
+	managements = make(map[string]ManagementBuilder)
+)
+
+func RegisterManagementBuilder(name string, builder ManagementBuilder) {
+	managements[name] = builder
+}
+
+func GetManagementBuilder(name string) (builder ManagementBuilder, has bool) {
+	builder, has = managements[name]
+	return
 }

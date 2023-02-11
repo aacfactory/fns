@@ -62,9 +62,11 @@ type EndpointsOptions struct {
 	MaxIdleWorkerDuration time.Duration
 	HandleTimeout         time.Duration
 	Discovery             EndpointDiscovery
+	Shared                Shared
+	LocalSharedMemSize    int64
 }
 
-func NewEndpoints(options EndpointsOptions) (v Endpoints) {
+func NewEndpoints(options EndpointsOptions) (v Endpoints, err error) {
 	maxWorkers := options.MaxWorkers
 	if maxWorkers < 1 {
 		maxWorkers = 256 * 1024
@@ -77,6 +79,13 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 	handleTimeout := options.HandleTimeout
 	if handleTimeout < 1 {
 		handleTimeout = 10 * time.Second
+	}
+	shared := options.Shared
+	if shared == nil {
+		shared, err = newMemShared(options.LocalSharedMemSize)
+		if err != nil {
+			return
+		}
 	}
 	v = &endpoints{
 		appId:       options.AppId,
@@ -91,6 +100,7 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 			services:  make(map[string]Service),
 			discovery: options.Discovery,
 		},
+		shared:        shared,
 		handleTimeout: handleTimeout,
 	}
 	return
@@ -103,6 +113,7 @@ type endpoints struct {
 	log           logs.Logger
 	ws            workers.Workers
 	group         *group
+	shared        Shared
 	handleTimeout time.Duration
 }
 
@@ -186,7 +197,7 @@ func (e *endpoints) Listen() (err error) {
 
 func (e *endpoints) SetupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
-		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.ws, e.group)
+		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.ws, e.group, e.shared)
 	}
 	return ctx
 }

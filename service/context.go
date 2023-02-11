@@ -18,11 +18,14 @@ package service
 
 import (
 	"context"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"os"
+	"sync"
 	"syscall"
+	"time"
 )
 
 const (
@@ -97,15 +100,41 @@ func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, 
 	return
 }
 
+func GetSharedStore(ctx context.Context) (store SharedStore) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
+	shared := rt.shared
+	if shared == nil {
+		return
+	}
+	store = shared.Store()
+	return
+}
+
+func GetSharedLocker(ctx context.Context, key []byte, timeout time.Duration) (locker sync.Locker, err errors.CodeError) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
+	shared := rt.shared
+	if shared == nil {
+		return
+	}
+	locker, err = shared.Lock(key, timeout)
+	return
+}
+
 func TODO(ctx context.Context, ep Endpoints) context.Context {
 	ep0, ok := ep.(*endpoints)
 	if !ok {
 		panic("fns: todo failed")
 	}
-	return initContext(ctx, ep0.appId, ep0.appStopChan, ep0.running, ep0.log, ep0.ws, ep0.group)
+	return initContext(ctx, ep0.appId, ep0.appStopChan, ep0.running, ep0.log, ep0.ws, ep0.group, ep0.shared)
 }
 
-func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery) context.Context {
+func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, running *commons.SafeFlag, log logs.Logger, ws workers.Workers, discovery EndpointDiscovery, shared Shared) context.Context {
 	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
 		appId:       appId,
 		appStopChan: appStopChan,
@@ -113,6 +142,7 @@ func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, 
 		log:         log,
 		ws:          ws,
 		discovery:   discovery,
+		shared:      shared,
 	})
 	return ctx
 }
@@ -159,4 +189,5 @@ type contextValue struct {
 	log         logs.Logger
 	ws          workers.Workers
 	discovery   EndpointDiscovery
+	shared      Shared
 }

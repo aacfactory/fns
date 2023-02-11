@@ -17,7 +17,8 @@
 package configure
 
 type Runtime struct {
-	MaxWorkers           int `json:"maxWorkers"`
-	WorkerMaxIdleSeconds int `json:"workerMaxIdleSeconds"`
-	HandleTimeoutSeconds int `json:"handleTimeoutSeconds"`
+	MaxWorkers           int    `json:"maxWorkers"`
+	WorkerMaxIdleSeconds int    `json:"workerMaxIdleSeconds"`
+	HandleTimeoutSeconds int    `json:"handleTimeoutSeconds"`
+	LocalSharedMemSize   string `json:"localSharedMemSize"`
 }

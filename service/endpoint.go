@@ -61,7 +61,6 @@ type EndpointsOptions struct {
 	MaxWorkers            int
 	MaxIdleWorkerDuration time.Duration
 	HandleTimeout         time.Duration
-	Barrier               Barrier
 	Discovery             EndpointDiscovery
 }
 
@@ -85,7 +84,6 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints) {
 		running:     options.Running,
 		log:         options.Log,
 		ws:          ws,
-		barrier:     options.Barrier,
 		group: &group{
 			appId:     options.AppId,
 			log:       options.Log.With("fns", "service group"),
@@ -104,48 +102,36 @@ type endpoints struct {
 	running       *commons.SafeFlag
 	log           logs.Logger
 	ws            workers.Workers
-	barrier       Barrier
 	group         *group
 	handleTimeout time.Duration
 }
 
 func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
 	service, fn := r.Fn()
-	barrierKey := fmt.Sprintf("%s:%s:%d", service, fn, r.Hash())
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
-	handleResult, handleErr, _ := e.barrier.Do(ctx, barrierKey, func() (v interface{}, doErr errors.CodeError) {
-		ctx = e.SetupContext(ctx)
-		ctx = SetRequest(ctx, r)
-		ep, has := e.group.Get(ctx, service)
-		if !has {
-			doErr = errors.NotFound("fns: service was not found").WithMeta("service", service)
-			return
-		}
-		ctx = SetTracer(ctx)
-		result := ep.Request(ctx, fn, r.Argument())
-		resultValue, hasResult, handleErr := result.Value(ctx)
-		if handleErr != nil {
-			doErr = handleErr
-		} else {
-			if hasResult {
-				v = resultValue
-			} else {
-				v = &Empty{}
-			}
-		}
-		tryReportTracer(ctx)
+	ctx = e.SetupContext(ctx)
+	ctx = SetRequest(ctx, r)
+	ep, has := e.group.Get(ctx, service)
+	if !has {
+		cancel()
+		err = errors.NotFound("fns: service was not found").WithMeta("service", service).WithMeta("requestId", r.Id())
 		return
-	})
-	e.barrier.Forget(ctx, barrierKey)
-	cancel()
+	}
+	ctx = SetTracer(ctx)
+	result := ep.Request(ctx, fn, r.Argument())
+	resultValue, hasResultValue, handleErr := result.Value(ctx)
 	if handleErr != nil {
 		err = handleErr.WithMeta("requestId", r.Id())
-		return
+	} else {
+		if hasResultValue {
+			v = resultValue
+		} else {
+			v = &Empty{}
+		}
 	}
-	if handleResult != nil {
-		v = handleResult
-	}
+	tryReportTracer(ctx)
+	cancel()
 	return
 }
 

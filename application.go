@@ -144,7 +144,6 @@ func New(options ...Option) (app Application) {
 		MaxWorkers:            serviceMaxWorkers,
 		MaxIdleWorkerDuration: time.Duration(serviceMaxIdleWorkerSeconds) * time.Second,
 		HandleTimeout:         time.Duration(serviceHandleTimeoutSeconds) * time.Second,
-		Barrier:               barrier,
 		Discovery:             discovery,
 	})
 

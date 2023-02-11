@@ -204,6 +204,7 @@ type Request interface {
 	RemoteIp() (v string)
 	User() (user RequestUser)
 	SetUser(id string, attr *json.Object)
+	ClientId() (id string)
 	Local() (local RequestLocal)
 	Header() (header RequestHeader)
 	Fn() (service string, fn string)
@@ -246,17 +247,6 @@ func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
 	}
 	buf := bytebufferpool.Get()
 	_, _ = buf.Write([]byte(service + fn))
-	authorization := req.Header.Get("Authorization")
-	if authorization != "" {
-		_, _ = buf.Write([]byte(authorization))
-	}
-	if remoteIp != "" {
-		_, _ = buf.Write([]byte(remoteIp))
-	}
-	userAgent := req.UserAgent()
-	if userAgent != "" {
-		_, _ = buf.Write([]byte(userAgent))
-	}
 	_, _ = buf.Write(body)
 	hashCode := xxhash.Sum64(buf.Bytes())
 	bytebufferpool.Put(buf)
@@ -381,6 +371,11 @@ func (r *request) SetUser(id string, attributes *json.Object) {
 
 func (r *request) Local() (local RequestLocal) {
 	local = r.local
+	return
+}
+
+func (r *request) ClientId() (id string) {
+	id = r.header.Get("X-Fns-Client-Id")
 	return
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
+	"time"
 )
 
 type ComponentOptions struct {
@@ -78,12 +79,14 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 
 type Abstract struct {
 	name       string
+	barrier    Barrier
 	internal   bool
 	log        logs.Logger
 	components map[string]Component
 }
 
 func (svc *Abstract) Build(options Options) (err error) {
+	svc.barrier = options.Barrier
 	svc.log = options.Log
 	if svc.components != nil {
 		for _, component := range svc.components {
@@ -136,5 +139,31 @@ func (svc *Abstract) Close() {
 
 func (svc *Abstract) Log() (log logs.Logger) {
 	log = svc.log
+	return
+}
+
+func (svc *Abstract) Execute(ctx context.Context, shared bool, handler func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
+	result, err = svc.ExecuteWithTimeout(ctx, shared, 1300*time.Millisecond, handler)
+	return
+}
+
+func (svc *Abstract) ExecuteWithTimeout(ctx context.Context, shared bool, timeout time.Duration, handler func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, timeout)
+	req, hasRequest := GetRequest(ctx)
+	if !hasRequest || svc.barrier == nil {
+		result, err = handler()
+		cancel()
+		return
+	}
+	key := ""
+	if shared {
+		key = fmt.Sprintf("request:%d", req.Hash())
+	} else {
+		key = fmt.Sprintf("request:%s:%d", req.ClientId(), req.Hash())
+	}
+	result, err, _ = svc.barrier.Do(ctx, key, handler)
+	svc.barrier.Forget(ctx, key)
+	cancel()
 	return
 }

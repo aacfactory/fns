@@ -22,27 +22,26 @@ import (
 	"time"
 )
 
-func newFn(ctx context.Context, svc Service, fn string, argument Argument, result ResultWriter) *fnExecutor {
-	return &fnExecutor{ctx: ctx, svc: svc, fn: fn, argument: argument, result: result}
+func newFn(svc Service, fn string, argument Argument, result ResultWriter) *fnExecutor {
+	return &fnExecutor{svc: svc, fn: fn, argument: argument, result: result}
 }
 
 type fnExecutor struct {
-	ctx      context.Context
 	svc      Service
 	fn       string
 	argument Argument
 	result   ResultWriter
 }
 
-func (f *fnExecutor) Execute() {
-	rootLog := getRuntime(f.ctx).log
+func (f *fnExecutor) Execute(ctx context.Context) {
+	rootLog := getRuntime(ctx).log
 
 	fnLog := rootLog.With("service", f.svc.Name()).With("fn", f.fn)
-	req, hasReq := GetRequest(f.ctx)
+	req, hasReq := GetRequest(ctx)
 	if hasReq {
 		fnLog = fnLog.With("requestId", req.Id())
 	}
-	ctx := SetLog(f.ctx, fnLog)
+	ctx = SetLog(ctx, fnLog)
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
 		ctx = setComponents(ctx, f.svc.Components())
 	}

@@ -22,7 +22,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
-	"github.com/aacfactory/workers"
 	"os"
 	"sync/atomic"
 	"time"
@@ -54,28 +53,18 @@ type Endpoints interface {
 }
 
 type EndpointsOptions struct {
-	AppId                 string
-	AppStopChan           chan os.Signal
-	Running               *commons.SafeFlag
-	Log                   logs.Logger
-	MaxWorkers            int
-	MaxIdleWorkerDuration time.Duration
-	HandleTimeout         time.Duration
-	Discovery             EndpointDiscovery
-	Shared                Shared
-	LocalSharedMemSize    int64
+	AppId              string
+	AppStopChan        chan os.Signal
+	Running            *commons.SafeFlag
+	Log                logs.Logger
+	Workers            Workers
+	HandleTimeout      time.Duration
+	Discovery          EndpointDiscovery
+	Shared             Shared
+	LocalSharedMemSize int64
 }
 
 func NewEndpoints(options EndpointsOptions) (v Endpoints, err error) {
-	maxWorkers := options.MaxWorkers
-	if maxWorkers < 1 {
-		maxWorkers = 256 * 1024
-	}
-	maxIdleWorkerDuration := options.MaxIdleWorkerDuration
-	if maxIdleWorkerDuration < 1 {
-		maxIdleWorkerDuration = 3 * time.Second
-	}
-	ws := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(maxIdleWorkerDuration))
 	handleTimeout := options.HandleTimeout
 	if handleTimeout < 1 {
 		handleTimeout = 10 * time.Second
@@ -92,11 +81,10 @@ func NewEndpoints(options EndpointsOptions) (v Endpoints, err error) {
 		appStopChan: options.AppStopChan,
 		running:     options.Running,
 		log:         options.Log,
-		ws:          ws,
 		group: &group{
 			appId:     options.AppId,
 			log:       options.Log.With("fns", "service group"),
-			ws:        ws,
+			ws:        options.Workers,
 			services:  make(map[string]Service),
 			discovery: options.Discovery,
 		},
@@ -111,7 +99,6 @@ type endpoints struct {
 	appStopChan   chan os.Signal
 	running       *commons.SafeFlag
 	log           logs.Logger
-	ws            workers.Workers
 	group         *group
 	shared        Shared
 	handleTimeout time.Duration
@@ -197,7 +184,7 @@ func (e *endpoints) Listen() (err error) {
 
 func (e *endpoints) SetupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
-		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.ws, e.group, e.shared)
+		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.group.ws, e.group, e.shared)
 	}
 	return ctx
 }
@@ -208,18 +195,17 @@ func (e *endpoints) Documents() (v map[string]Document) {
 }
 
 func (e *endpoints) Close() {
-	e.ws.Close()
 	e.group.close()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newEndpoint(ws workers.Workers, svc Service) *endpoint {
+func newEndpoint(ws Workers, svc Service) *endpoint {
 	return &endpoint{ws: ws, svc: svc}
 }
 
 type endpoint struct {
-	ws  workers.Workers
+	ws  Workers
 	svc Service
 }
 
@@ -235,7 +221,7 @@ func (e *endpoint) Request(ctx context.Context, fn string, argument Argument) (r
 		}
 		ctx = SetRequest(ctx, req)
 	}
-	if !e.ws.Dispatch(newFn(ctx, e.svc, fn, argument, fr)) {
+	if !e.ws.Dispatch(ctx, newFn(e.svc, fn, argument, fr)) {
 		fr.Failed(errors.Unavailable("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", e.svc.Name()).WithMeta("fn", fn))
 	}
 	result = fr

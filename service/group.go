@@ -19,13 +19,12 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/logs"
-	"github.com/aacfactory/workers"
 )
 
 type group struct {
 	appId     string
 	log       logs.Logger
-	ws        workers.Workers
+	ws        Workers
 	services  map[string]Service
 	discovery EndpointDiscovery
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
+	"github.com/aacfactory/workers"
 	"os"
 	"os/signal"
 	"strings"
@@ -141,21 +142,25 @@ func New(options ...Option) (app Application) {
 		Min: opt.autoMaxProcsMin,
 		Max: opt.autoMaxProcsMax,
 	})
+	// worker
+	maxWorkers := 0
+	maxIdleWorkerSeconds := 0
+	if config.Runtime != nil {
+		maxWorkers = config.Runtime.MaxWorkers
+		if maxWorkers < 1 {
+			maxWorkers = 256 * 1024
+		}
+		maxIdleWorkerSeconds = config.Runtime.WorkerMaxIdleSeconds
+		if maxIdleWorkerSeconds < 1 {
+			maxIdleWorkerSeconds = 60
+		}
+	}
+	worker := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(time.Duration(maxIdleWorkerSeconds)*time.Second))
 
 	// endpoints
-	serviceMaxWorkers := 0
-	serviceMaxIdleWorkerSeconds := 0
 	serviceHandleTimeoutSeconds := 0
 	localSharedMemSize := uint64(0)
 	if config.Runtime != nil {
-		serviceMaxWorkers = config.Runtime.MaxWorkers
-		if serviceMaxWorkers < 1 {
-			serviceMaxWorkers = 0
-		}
-		serviceMaxIdleWorkerSeconds = config.Runtime.WorkerMaxIdleSeconds
-		if serviceMaxIdleWorkerSeconds < 1 {
-			serviceMaxIdleWorkerSeconds = 10
-		}
 		serviceHandleTimeoutSeconds = config.Runtime.HandleTimeoutSeconds
 		if serviceHandleTimeoutSeconds < 1 {
 			serviceHandleTimeoutSeconds = 10
@@ -181,16 +186,15 @@ func New(options ...Option) (app Application) {
 	}
 	signalCh := make(chan os.Signal, 1)
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
-		AppId:                 appId,
-		AppStopChan:           signalCh,
-		Running:               running,
-		Log:                   log,
-		MaxWorkers:            serviceMaxWorkers,
-		MaxIdleWorkerDuration: time.Duration(serviceMaxIdleWorkerSeconds) * time.Second,
-		HandleTimeout:         time.Duration(serviceHandleTimeoutSeconds) * time.Second,
-		Discovery:             discovery,
-		Shared:                shared,
-		LocalSharedMemSize:    int64(localSharedMemSize),
+		AppId:              appId,
+		AppStopChan:        signalCh,
+		Running:            running,
+		Log:                log,
+		Workers:            worker,
+		HandleTimeout:      time.Duration(serviceHandleTimeoutSeconds) * time.Second,
+		Discovery:          discovery,
+		Shared:             shared,
+		LocalSharedMemSize: int64(localSharedMemSize),
 	})
 	if endpointsErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create endpoints failed").WithCause(errors.Map(endpointsErr))))
@@ -270,6 +274,7 @@ type application struct {
 	log               logs.Logger
 	running           *commons.SafeFlag
 	autoMaxProcs      *procs.AutoMaxProcs
+	worker            workers.Workers
 	config            configures.Config
 	clusterManagement cluster.Management
 	barrier           service.Barrier
@@ -479,6 +484,9 @@ func (app *application) stop(ch chan struct{}) {
 	}
 	// endpoints
 	app.endpoints.Close()
+	// workers
+	app.worker.Close()
+	// return
 	ch <- struct{}{}
 	close(ch)
 	return

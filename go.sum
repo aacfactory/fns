@@ -10,8 +10,8 @@ github.com/aacfactory/json v1.12.1 h1:+yMy4BFdsPb+S5HIRgNsi+oRMFPeQa/DbILywuvhSa
 github.com/aacfactory/json v1.12.1/go.mod h1:nWupQJKp4wB4ccCPGHfwlgpuz7vjuVC+uX4hk7TtMxk=
 github.com/aacfactory/logs v1.12.1 h1:dhRYVu6Xd+rQK6Sz6N2NKzgQ+rei1ih5LQqla+e27ow=
 github.com/aacfactory/logs v1.12.1/go.mod h1:DCuo80UPk+upZ68QpoZl1dqJC4HQG355snKl/kZxV5Q=
-github.com/aacfactory/workers v1.4.0 h1:lYoOaqd4Uu+Vwx2D23cozk+SLRkvPCxbgXKc/bOwggo=
-github.com/aacfactory/workers v1.4.0/go.mod h1:JO3KI+4hfz/wvHtTEzMNffUnuECOc9Uhm6Rf3BLIiwQ=
+github.com/aacfactory/workers v1.5.0 h1:wWHWgUfZ/MnXErqeBuHJC6ulH8uQztL/okhbhv/XsaU=
+github.com/aacfactory/workers v1.5.0/go.mod h1:JO3KI+4hfz/wvHtTEzMNffUnuECOc9Uhm6Rf3BLIiwQ=
 github.com/andybalholm/brotli v1.0.4 h1:V7DdXeJtZscaqfNuAdSRuRFzuiKlHSC/Zh3zl9qY3JY=
 github.com/andybalholm/brotli v1.0.4/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=

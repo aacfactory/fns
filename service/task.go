@@ -18,20 +18,17 @@ package service
 
 import (
 	"context"
+	"github.com/aacfactory/workers"
 )
 
+type Workers interface {
+	Dispatch(ctx context.Context, task workers.Task) (ok bool)
+	MustDispatch(ctx context.Context, task workers.Task)
+}
+
 type Task interface {
+	workers.Task
 	Name() (name string)
-	Execute(ctx context.Context)
-}
-
-type forkedTask struct {
-	ctx context.Context
-	v   Task
-}
-
-func (t *forkedTask) Execute() {
-	t.v.Execute(t.ctx)
 }
 
 func TryFork(ctx context.Context, task Task) (ok bool) {
@@ -51,10 +48,7 @@ func TryFork(ctx context.Context, task Task) (ok bool) {
 	if vcm != nil {
 		nc = setComponents(ctx, vcm.(map[string]Component))
 	}
-	ok = rt.ws.Dispatch(&forkedTask{
-		ctx: nc,
-		v:   task,
-	})
+	ok = rt.ws.Dispatch(ctx, task)
 	return
 }
 
@@ -75,9 +69,6 @@ func Fork(ctx context.Context, task Task) {
 	if vcm != nil {
 		nc = setComponents(ctx, vcm.(map[string]Component))
 	}
-	rt.ws.MustDispatch(&forkedTask{
-		ctx: nc,
-		v:   task,
-	})
+	rt.ws.MustDispatch(ctx, task)
 	return
 }

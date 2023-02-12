@@ -22,7 +22,6 @@ import (
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/server"
-	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
 	"os"
 	"strings"
@@ -40,7 +39,6 @@ var (
 		autoMaxProcsMin:       0,
 		autoMaxProcsMax:       0,
 		configRetrieverOption: configure.DefaultConfigRetrieverOption(),
-		barrier:               nil,
 		server:                &server.FastHttp{},
 		serverHandlers:        make([]server.Handler, 0, 1),
 		shutdownTimeout:       60 * time.Second,
@@ -53,7 +51,6 @@ type Options struct {
 	autoMaxProcsMin       int
 	autoMaxProcsMax       int
 	configRetrieverOption configures.RetrieverOption
-	barrier               service.Barrier
 	server                server.Http
 	serverHandlers        []server.Handler
 	shutdownTimeout       time.Duration
@@ -138,16 +135,6 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
-
-func Barrier(barrier service.Barrier) Option {
-	return func(options *Options) error {
-		if barrier == nil {
-			return fmt.Errorf("customize barrier failed for nil")
-		}
-		options.barrier = barrier
-		return nil
-	}
-}
 
 func ShutdownTimeout(timeout time.Duration) Option {
 	return func(options *Options) error {

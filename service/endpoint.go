@@ -21,94 +21,155 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/internal/configure"
+	"github.com/aacfactory/fns/internal/shareds"
+	"github.com/aacfactory/fns/shared"
 	"github.com/aacfactory/logs"
+	"github.com/aacfactory/workers"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 )
 
 type Endpoint interface {
+	Name() (name string)
 	Request(ctx context.Context, fn string, argument Argument) (result Result)
 }
 
+type EndpointDiscoveryGetOption func(options *EndpointDiscoveryGetOptions) (err error)
+
+type EndpointDiscoveryGetOptions struct {
+	scope string
+	id    string
+}
+
+func Exact(id string) EndpointDiscoveryGetOption {
+	return func(options *EndpointDiscoveryGetOptions) (err error) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			err = errors.Warning("fns: exact id is nil")
+			return
+		}
+		options.id = id
+		return
+	}
+}
+
+const (
+	localScope = "local"
+)
+
+func LocalScope() EndpointDiscoveryGetOption {
+	return func(options *EndpointDiscoveryGetOptions) (err error) {
+		options.scope = localScope
+		return
+	}
+}
+
 type EndpointDiscovery interface {
-	Get(ctx context.Context, service string) (endpoint Endpoint, has bool)
-	GetExact(ctx context.Context, service string, id string) (endpoint Endpoint, has bool)
+	Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type Handler interface {
-	Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError)
-}
-
-type Endpoints interface {
-	Handler
-	Mount(svc Service)
-	Services() (services []string)
-	Listen() (err error)
-	Documents() (v map[string]Document)
-	SetupContext(ctx context.Context) context.Context
-	Close()
-}
-
 type EndpointsOptions struct {
-	AppId              string
-	AppStopChan        chan os.Signal
-	Running            *commons.SafeFlag
-	Log                logs.Logger
-	Workers            Workers
-	HandleTimeout      time.Duration
-	Discovery          EndpointDiscovery
-	Shared             Shared
-	LocalSharedMemSize int64
+	AppId  string
+	Log    logs.Logger
+	Config *configure.Runtime
 }
 
-func NewEndpoints(options EndpointsOptions) (v Endpoints, err error) {
-	handleTimeout := options.HandleTimeout
-	if handleTimeout < 1 {
-		handleTimeout = 10 * time.Second
+func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
+	// config
+	config := options.Config
+	if config == nil {
+		config = &configure.Runtime{}
 	}
-	shared := options.Shared
-	if shared == nil {
-		shared, err = newMemShared(options.LocalSharedMemSize)
-		if err != nil {
-			return
-		}
+	// workers
+	maxWorkers := config.MaxWorkers
+	if maxWorkers < 1 {
+		maxWorkers = 256 * 1024
 	}
-	v = &endpoints{
-		appId:       options.AppId,
-		appStopChan: options.AppStopChan,
-		running:     options.Running,
-		log:         options.Log,
-		group: &group{
-			appId:     options.AppId,
-			log:       options.Log.With("fns", "service group"),
-			ws:        options.Workers,
-			services:  make(map[string]Service),
-			discovery: options.Discovery,
-		},
-		shared:        shared,
-		handleTimeout: handleTimeout,
+	maxIdleWorkerSeconds := config.WorkerMaxIdleSeconds
+	if maxIdleWorkerSeconds < 1 {
+		maxIdleWorkerSeconds = 60
+	}
+	worker := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(time.Duration(maxIdleWorkerSeconds)*time.Second))
+	// shared store
+	sharedMemSizeStr := strings.TrimSpace(config.LocalSharedMemSize)
+	if sharedMemSizeStr == "" {
+		sharedMemSizeStr = "64M"
+	}
+	sharedMemSize, sharedMemSizeErr := commons.ToBytes(sharedMemSizeStr)
+	if sharedMemSizeErr != nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
+		return
+	}
+	sharedStore, createSharedStoreErr := shareds.NewLocalStore(int64(sharedMemSize))
+	if createSharedStoreErr != nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(createSharedStoreErr)
+		return
+	}
+	// timeout
+	handleTimeoutSeconds := options.Config.HandleTimeoutSeconds
+	if handleTimeoutSeconds < 1 {
+		handleTimeoutSeconds = 10
+	}
+	v = &Endpoints{
+		log:           options.Log,
+		appId:         options.AppId,
+		running:       commons.NewSafeFlag(false),
+		barrier:       DefaultBarrier(),
+		worker:        worker,
+		sharedLockers: shareds.NewLocalLockers(),
+		sharedStore:   sharedStore,
+		handleTimeout: time.Duration(handleTimeoutSeconds) * time.Second,
+		discovery:     nil,
 	}
 	return
 }
 
-type endpoints struct {
-	appId         string
-	appStopChan   chan os.Signal
-	running       *commons.SafeFlag
+type Endpoints struct {
 	log           logs.Logger
-	group         *group
-	shared        Shared
+	appId         string
+	running       *commons.SafeFlag
+	worker        Workers
 	handleTimeout time.Duration
+	barrier       Barrier
+	sharedLockers shared.Lockers
+	sharedStore   shared.Store
+	discovery     EndpointDiscovery
 }
 
-func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
+func (e *Endpoints) Run() {
+	e.running.On()
+}
+
+func (e *Endpoints) IsRunning() (ok bool) {
+	ok = e.running.IsOn()
+	return
+}
+
+func (e *Endpoints) Upgrade(barrier Barrier, store shared.Store, lockers shared.Lockers, discovery EndpointDiscovery) {
+	e.barrier = barrier
+	if e.sharedStore != nil {
+		e.sharedStore.Close()
+	}
+	e.sharedStore = store
+	e.sharedLockers = lockers
+	e.discovery = discovery
+}
+
+func (e *Endpoints) Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool) {
+
+	return
+}
+
+func (e *Endpoints) Handle(ctx context.Context, r Request) (v interface{}, err errors.CodeError) {
 	service, fn := r.Fn()
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
-	ctx = e.SetupContext(ctx)
+	ctx = e.setupContext(ctx)
 	ctx = SetRequest(ctx, r)
 	ep, has := e.group.Get(ctx, service)
 	if !has {
@@ -133,19 +194,11 @@ func (e *endpoints) Handle(ctx context.Context, r Request) (v interface{}, err e
 	return
 }
 
-func (e *endpoints) Mount(svc Service) {
+func (e *Endpoints) Mount(svc Service) {
 	e.group.add(svc)
 }
 
-func (e *endpoints) Services() (services []string) {
-	services = make([]string, 0, 1)
-	for _, service := range e.group.services {
-		services = append(services, service.Name())
-	}
-	return
-}
-
-func (e *endpoints) Listen() (err error) {
+func (e *Endpoints) Listen() (err error) {
 	errCh := make(chan error, 8)
 	lns := 0
 	closed := int64(0)
@@ -155,7 +208,7 @@ func (e *endpoints) Listen() (err error) {
 			continue
 		}
 		lns++
-		ctx := e.SetupContext(context.TODO())
+		ctx := e.setupContext(context.TODO())
 		go func(ctx context.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)
 			if lnErr != nil {
@@ -182,35 +235,50 @@ func (e *endpoints) Listen() (err error) {
 	return
 }
 
-func (e *endpoints) SetupContext(ctx context.Context) context.Context {
+func (e *Endpoints) setupContext(ctx context.Context) context.Context {
 	if getRuntime(ctx) == nil {
 		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.group.ws, e.group, e.shared)
 	}
 	return ctx
 }
 
-func (e *endpoints) Documents() (v map[string]Document) {
+func (e *Endpoints) Documents() (v Documents) {
 	v = e.group.documents()
 	return
 }
 
-func (e *endpoints) Close() {
+func (e *Endpoints) Close() {
 	e.group.close()
+	e.running.Off()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newEndpoint(ws Workers, svc Service) *endpoint {
-	return &endpoint{ws: ws, svc: svc}
+func newEndpoint(worker Workers, svc Service) *endpoint {
+	return &endpoint{worker: worker, svc: svc}
 }
 
 type endpoint struct {
-	ws  Workers
-	svc Service
+	appId         string
+	appStopChan   chan os.Signal
+	running       *commons.SafeFlag
+	log           logs.Logger
+	discovery     EndpointDiscovery
+	sharedLockers shared.Lockers
+	sharedStore   shared.Store
+	handleTimeout time.Duration
+	worker        Workers
+	svc           Service
+}
+
+func (e *endpoint) Name() (name string) {
+	name = e.svc.Name()
+	return
 }
 
 func (e *endpoint) Request(ctx context.Context, fn string, argument Argument) (result Result) {
 	fr := NewResult()
+	// todo setup context with rt shared timeout
 	_, hasRequest := GetRequest(ctx)
 	if !hasRequest {
 		req, reqErr := NewInternalRequest(e.svc.Name(), fn, argument)
@@ -221,9 +289,19 @@ func (e *endpoint) Request(ctx context.Context, fn string, argument Argument) (r
 		}
 		ctx = SetRequest(ctx, req)
 	}
-	if !e.ws.Dispatch(ctx, newFn(e.svc, fn, argument, fr)) {
+	// todo tracer
+	if !e.worker.Dispatch(ctx, newFn(e.svc, fn, argument, fr)) {
 		fr.Failed(errors.Unavailable("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", e.svc.Name()).WithMeta("fn", fn))
 	}
 	result = fr
+	// todo try report tracer
 	return
+}
+
+func (e *endpoint) setupContext(ctx context.Context) context.Context {
+	if getRuntime(ctx) == nil {
+		ctx = initContext(ctx, e.appId, e.appStopChan, e.running, e.log, e.group.ws, e.group, e.shared)
+		// todo timeout
+	}
+	return ctx
 }

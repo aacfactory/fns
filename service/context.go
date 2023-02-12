@@ -18,13 +18,9 @@ package service
 
 import (
 	"context"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/logs"
 	"os"
-	"sync"
-	"syscall"
-	"time"
 )
 
 const (
@@ -95,63 +91,34 @@ func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, 
 	if rt == nil {
 		return
 	}
-	v, has = rt.discovery.GetExact(ctx, name, id)
+	v, has = rt.discovery.Get(ctx, name, Exact(id))
 	return
 }
 
-func GetSharedStore(ctx context.Context) (store SharedStore) {
-	rt := getRuntime(ctx)
-	if rt == nil {
-		return
-	}
-	shared := rt.shared
-	if shared == nil {
-		return
-	}
-	store = shared.Store()
-	return
+func TODO(ctx context.Context, ep *Endpoints) context.Context {
+	return withRuntime(ctx, ep)
 }
 
-func GetSharedLocker(ctx context.Context, key []byte, timeout time.Duration) (locker sync.Locker, err errors.CodeError) {
-	rt := getRuntime(ctx)
-	if rt == nil {
-		return
+func withRuntime(ctx context.Context, ep *Endpoints) context.Context {
+	if getRuntime(ctx) != nil {
+		return ctx
 	}
-	shared := rt.shared
-	if shared == nil {
-		return
-	}
-	locker, err = shared.Lock(key, timeout)
-	return
-}
-
-func TODO(ctx context.Context, ep Endpoints) context.Context {
-	ep0, ok := ep.(*endpoints)
-	if !ok {
-		panic("fns: todo failed")
-	}
-	return initContext(ctx, ep0.appId, ep0.appStopChan, ep0.running, ep0.log, ep0.group.ws, ep0.group, ep0.shared)
-}
-
-func initContext(ctx context.Context, appId string, appStopChan chan os.Signal, running *commons.SafeFlag, log logs.Logger, ws Workers, discovery EndpointDiscovery, shared Shared) context.Context {
-	ctx = context.WithValue(ctx, contextRuntimeKey, &contextValue{
-		appId:       appId,
-		appStopChan: appStopChan,
-		running:     running,
-		log:         log,
-		ws:          ws,
-		discovery:   discovery,
-		shared:      shared,
+	return context.WithValue(ctx, contextRuntimeKey, &runtimes{
+		appId:     ep.appId,
+		running:   ep.running,
+		log:       ep.log,
+		worker:    ep.worker,
+		discovery: ep.discovery,
+		barrier:   ep.barrier,
 	})
-	return ctx
 }
 
-func getRuntime(ctx context.Context) (v *contextValue) {
+func getRuntime(ctx context.Context) (v *runtimes) {
 	rt := ctx.Value(contextRuntimeKey)
 	if rt == nil {
 		return nil
 	}
-	v = rt.(*contextValue)
+	v = rt.(*runtimes)
 	return
 }
 
@@ -173,20 +140,15 @@ func ApplicationIsRunning(ctx context.Context) (ok bool) {
 	return
 }
 
-func AbortApplication(ctx context.Context) {
-	rt := getRuntime(ctx)
-	if rt == nil {
-		return
-	}
-	rt.appStopChan <- syscall.SIGABRT
+func AbortApplication() {
+	os.Exit(9)
 }
 
-type contextValue struct {
-	appId       string
-	appStopChan chan os.Signal
-	running     *commons.SafeFlag
-	log         logs.Logger
-	ws          Workers
-	discovery   EndpointDiscovery
-	shared      Shared
+type runtimes struct {
+	appId     string
+	running   *commons.SafeFlag
+	log       logs.Logger
+	worker    Workers
+	discovery EndpointDiscovery
+	barrier   Barrier
 }

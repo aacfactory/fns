@@ -37,9 +37,8 @@ type Component interface {
 }
 
 type Options struct {
-	Log     logs.Logger
-	Config  configures.Config
-	Barrier Barrier
+	Log    logs.Logger
+	Config configures.Config
 }
 
 // Service
@@ -79,14 +78,12 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 
 type Abstract struct {
 	name       string
-	barrier    Barrier
 	internal   bool
 	log        logs.Logger
 	components map[string]Component
 }
 
 func (svc *Abstract) Build(options Options) (err error) {
-	svc.barrier = options.Barrier
 	svc.log = options.Log
 	if svc.components != nil {
 		for _, component := range svc.components {
@@ -148,22 +145,23 @@ func (svc *Abstract) Execute(ctx context.Context, shared bool, handler func() (r
 }
 
 func (svc *Abstract) ExecuteWithTimeout(ctx context.Context, shared bool, timeout time.Duration, handler func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, timeout)
 	req, hasRequest := GetRequest(ctx)
-	if !hasRequest || svc.barrier == nil {
+	if !hasRequest {
 		result, err = handler()
-		cancel()
 		return
 	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, timeout)
+	cancel()
+	barrier := GetBarrier(ctx)
 	key := ""
 	if shared {
 		key = fmt.Sprintf("request:%d", req.Hash())
 	} else {
 		key = fmt.Sprintf("request:%s:%d", req.ClientId(), req.Hash())
 	}
-	result, err, _ = svc.barrier.Do(ctx, key, handler)
-	svc.barrier.Forget(ctx, key)
+	result, err, _ = barrier.Do(ctx, key, handler)
+	barrier.Forget(ctx, key)
 	cancel()
 	return
 }

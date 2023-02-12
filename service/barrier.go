@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"golang.org/x/sync/singleflight"
 )
@@ -50,4 +51,14 @@ func (b *sfgBarrier) Do(_ context.Context, key string, fn func() (result interfa
 
 func (b *sfgBarrier) Forget(_ context.Context, key string) {
 	b.v.Forget(key)
+}
+
+func GetBarrier(ctx context.Context) (barrier Barrier) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: barrier was not found")))
+		return
+	}
+	barrier = rt.barrier
+	return
 }

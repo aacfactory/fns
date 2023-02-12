@@ -19,7 +19,6 @@ package server
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -33,12 +32,12 @@ const (
 )
 
 type HandlerOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion string
-	Log        logs.Logger
-	Config     configures.Config
-	Endpoints  service.Endpoints
+	AppId             string
+	AppName           string
+	AppVersion        string
+	Log               logs.Logger
+	Config            configures.Config
+	EndpointDiscovery service.EndpointDiscovery
 }
 
 type Handler interface {
@@ -49,23 +48,23 @@ type Handler interface {
 	Close()
 }
 
-func NewHandlers(appId string, appName string, appVersion string, appRunning *commons.SafeFlag, configRaw json.RawMessage, log logs.Logger, endpoints service.Endpoints) (handlers *Handlers, err errors.CodeError) {
-	if configRaw == nil || len(configRaw) == 0 {
-		configRaw = []byte{'{', '}'}
-	}
-	config, configErr := configures.NewJsonConfig(configRaw)
-	if configErr != nil {
-		err = errors.Warning("fns: create handlers failed").WithCause(err)
-		return
-	}
+type HandlersOptions struct {
+	AppId      string
+	AppName    string
+	AppVersion string
+	Log        logs.Logger
+	Config     configures.Config
+	Endpoints  *service.Endpoints
+}
+
+func NewHandlers(options HandlersOptions) (handlers *Handlers, err errors.CodeError) {
 	handlers = &Handlers{
-		appId:      appId,
-		appName:    appName,
-		appVersion: appVersion,
-		appRunning: appRunning,
-		log:        log,
-		config:     config,
-		endpoints:  endpoints,
+		appId:      options.AppId,
+		appName:    options.AppName,
+		appVersion: options.AppVersion,
+		log:        options.Log,
+		config:     options.Config,
+		endpoints:  options.Endpoints,
 		handlers:   make([]Handler, 0, 1),
 	}
 	// health
@@ -93,10 +92,9 @@ type Handlers struct {
 	appId      string
 	appName    string
 	appVersion string
-	appRunning *commons.SafeFlag
 	log        logs.Logger
 	config     configures.Config
-	endpoints  service.Endpoints
+	endpoints  *service.Endpoints
 	handlers   []Handler
 }
 
@@ -110,12 +108,12 @@ func (handlers *Handlers) Append(h Handler) (err errors.CodeError) {
 		handleConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
 	options := &HandlerOptions{
-		AppId:      handlers.appId,
-		AppName:    handlers.appName,
-		AppVersion: handlers.appVersion,
-		Log:        handlers.log.With("handler", name),
-		Config:     handleConfig,
-		Endpoints:  handlers.endpoints,
+		AppId:             handlers.appId,
+		AppName:           handlers.appName,
+		AppVersion:        handlers.appVersion,
+		Log:               handlers.log.With("handler", name),
+		Config:            handleConfig,
+		EndpointDiscovery: handlers.endpoints,
 	}
 	buildErr := h.Build(options)
 	if buildErr != nil {
@@ -127,7 +125,7 @@ func (handlers *Handlers) Append(h Handler) (err errors.CodeError) {
 }
 
 func (handlers *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if handlers.appRunning.IsOff() {
+	if !handlers.endpoints.IsRunning() {
 		writer.Header().Set(httpConnectionHeader, httpConnectionHeaderClose)
 		writer.Header().Set(httpServerHeader, httpServerHeaderValue)
 		writer.Header().Set(httpContentType, httpContentTypeJson)

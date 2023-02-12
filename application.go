@@ -21,16 +21,14 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/cluster"
+	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/commons/uid"
-	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/fns/internal/procs"
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
-	"github.com/aacfactory/workers"
 	"os"
 	"os/signal"
 	"strings"
@@ -82,8 +80,6 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, decode config failed").WithCause(decodeConfigErr)))
 		return
 	}
-	// running
-	running := commons.NewSafeFlag(false)
 	// log
 	logOptions := logger.LogOptions{
 		Name: appName,
@@ -99,105 +95,21 @@ func New(options ...Option) (app Application) {
 		return
 	}
 
-	// cluster
-	var clusterManagement cluster.Management
-	if config.Cluster != nil {
-		clusterName := strings.TrimSpace(config.Cluster.Name)
-		clusterOptions := config.Cluster.Options
-		if clusterOptions == nil || len(clusterOptions) == 0 {
-			clusterOptions = []byte{'{', '}'}
-		}
-		clusterConfig, clusterConfigErr := configures.NewJsonConfig(config.Cluster.Options)
-		if clusterConfigErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("config of %s is invalid, %v", clusterName, clusterConfigErr))))
-			return
-		}
-		clusterBuilder, hasClusterBuilder := cluster.GetManagementBuilder(clusterName)
-		if !hasClusterBuilder {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s is not defined", clusterName))))
-			return
-		}
-		var clusterBuildErr error
-		clusterManagement, clusterBuildErr = clusterBuilder(clusterConfig)
-		if clusterBuildErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(errors.Map(clusterBuildErr))))
-			return
-		}
-	}
-
-	// barrier
-	var barrier service.Barrier
-	if opt.barrier != nil {
-		barrier = opt.barrier
-	} else {
-		if clusterManagement == nil {
-			barrier = service.DefaultBarrier()
-		} else {
-			barrier = clusterManagement.Barrier()
-		}
-	}
 	// procs
 	goprocs := procs.New(procs.Options{
 		Log: log,
 		Min: opt.autoMaxProcsMin,
 		Max: opt.autoMaxProcsMax,
 	})
-	// worker
-	maxWorkers := 0
-	maxIdleWorkerSeconds := 0
-	if config.Runtime != nil {
-		maxWorkers = config.Runtime.MaxWorkers
-		if maxWorkers < 1 {
-			maxWorkers = 256 * 1024
-		}
-		maxIdleWorkerSeconds = config.Runtime.WorkerMaxIdleSeconds
-		if maxIdleWorkerSeconds < 1 {
-			maxIdleWorkerSeconds = 60
-		}
-	}
-	worker := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(time.Duration(maxIdleWorkerSeconds)*time.Second))
 
 	// endpoints
-	serviceHandleTimeoutSeconds := 0
-	localSharedMemSize := uint64(0)
-	if config.Runtime != nil {
-		serviceHandleTimeoutSeconds = config.Runtime.HandleTimeoutSeconds
-		if serviceHandleTimeoutSeconds < 1 {
-			serviceHandleTimeoutSeconds = 10
-		}
-		localSharedMemSizeStr := strings.TrimSpace(config.Runtime.LocalSharedMemSize)
-		if localSharedMemSizeStr == "" {
-			localSharedMemSizeStr = "256M"
-		}
-		var localSharedMemSizeErr error
-		localSharedMemSize, localSharedMemSizeErr = commons.ToBytes(localSharedMemSizeStr)
-		if localSharedMemSizeErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create endpoints failed").WithCause(errors.Map(localSharedMemSizeErr))))
-			return
-		}
-	}
-	var discovery service.EndpointDiscovery
-	if clusterManagement != nil {
-		discovery = clusterManagement.Discovery()
-	}
-	var shared service.Shared
-	if clusterManagement != nil {
-		shared = clusterManagement.Shared()
-	}
-	signalCh := make(chan os.Signal, 1)
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
-		AppId:              appId,
-		AppStopChan:        signalCh,
-		Running:            running,
-		Log:                log,
-		Workers:            worker,
-		HandleTimeout:      time.Duration(serviceHandleTimeoutSeconds) * time.Second,
-		Discovery:          discovery,
-		Shared:             shared,
-		LocalSharedMemSize: int64(localSharedMemSize),
+		AppId:  appId,
+		Log:    log,
+		Config: config.Runtime,
 	})
 	if endpointsErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create endpoints failed").WithCause(errors.Map(endpointsErr))))
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(endpointsErr))))
 		return
 	}
 
@@ -207,7 +119,23 @@ func New(options ...Option) (app Application) {
 		httpConfig = configure.DefaultServer()
 	}
 	// http handlers
-	httpHandlers, httpHandlersErr := server.NewHandlers(appId, appName, appVersion, running, httpConfig.Handlers, log, endpoints)
+	httpHandlersConfigRaw := httpConfig.Handlers
+	if httpHandlersConfigRaw == nil || len(httpHandlersConfigRaw) == 0 {
+		httpHandlersConfigRaw = []byte{'{', '}'}
+	}
+	httpHandlersConfig, httpHandlersConfigErr := configures.NewJsonConfig(httpHandlersConfigRaw)
+	if httpHandlersConfigErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(httpHandlersConfigErr))))
+		return
+	}
+	httpHandlers, httpHandlersErr := server.NewHandlers(server.HandlersOptions{
+		AppId:      appId,
+		AppName:    appName,
+		AppVersion: appVersion,
+		Log:        log,
+		Config:     httpHandlersConfig,
+		Endpoints:  endpoints,
+	})
 	if httpHandlersErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(httpHandlersErr))))
 		return
@@ -244,6 +172,42 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	// http <<<
+
+	// cluster
+	var cluster clusters.Cluster
+	if config.Cluster != nil {
+		clusterName := strings.TrimSpace(config.Cluster.Name)
+		clusterOptions := config.Cluster.Options
+		if clusterOptions == nil || len(clusterOptions) == 0 {
+			clusterOptions = []byte{'{', '}'}
+		}
+		clusterConfig, clusterConfigErr := configures.NewJsonConfig(config.Cluster.Options)
+		if clusterConfigErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("config of %s is invalid, %v", clusterName, clusterConfigErr))))
+			return
+		}
+		clusterBuilder, hasClusterBuilder := clusters.GetClusterBuilder(clusterName)
+		if !hasClusterBuilder {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s is not defined", clusterName))))
+			return
+		}
+		var clusterBuildErr error
+		cluster, clusterBuildErr = clusterBuilder(clusters.ClusterBuilderOptions{
+			Config:    clusterConfig,
+			Endpoints: endpoints,
+		})
+		if clusterBuildErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(errors.Map(clusterBuildErr))))
+			return
+		}
+		discovery := cluster.EndpointDiscovery()
+		barrier := cluster.Shared().Barrier()
+		store := cluster.Shared().Store()
+		lockers := cluster.Shared().Lockers()
+		endpoints.Upgrade(barrier, store, lockers, discovery)
+	}
+
+	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh,
 		syscall.SIGINT,
 		syscall.SIGKILL,
@@ -252,18 +216,16 @@ func New(options ...Option) (app Application) {
 		syscall.SIGTERM,
 	)
 	app = &application{
-		log:               log,
-		running:           running,
-		autoMaxProcs:      goprocs,
-		config:            configRaw,
-		clusterManagement: clusterManagement,
-		barrier:           barrier,
-		endpoints:         endpoints,
-		http:              httpServer,
-		httpHandlers:      httpHandlers,
-		shutdownTimeout:   opt.shutdownTimeout,
-		signalCh:          signalCh,
-		synced:            false,
+		log:             log,
+		autoMaxProcs:    goprocs,
+		config:          configRaw,
+		cluster:         cluster,
+		endpoints:       endpoints,
+		http:            httpServer,
+		httpHandlers:    httpHandlers,
+		shutdownTimeout: opt.shutdownTimeout,
+		signalCh:        signalCh,
+		synced:          false,
 	}
 	return
 }
@@ -271,19 +233,16 @@ func New(options ...Option) (app Application) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type application struct {
-	log               logs.Logger
-	running           *commons.SafeFlag
-	autoMaxProcs      *procs.AutoMaxProcs
-	worker            workers.Workers
-	config            configures.Config
-	clusterManagement cluster.Management
-	barrier           service.Barrier
-	endpoints         service.Endpoints
-	http              server.Http
-	httpHandlers      *server.Handlers
-	shutdownTimeout   time.Duration
-	signalCh          chan os.Signal
-	synced            bool
+	log             logs.Logger
+	autoMaxProcs    *procs.AutoMaxProcs
+	config          configures.Config
+	cluster         clusters.Cluster
+	endpoints       *service.Endpoints
+	http            server.Http
+	httpHandlers    *server.Handlers
+	shutdownTimeout time.Duration
+	signalCh        chan os.Signal
+	synced          bool
 }
 
 func (app *application) Log() (log logs.Logger) {
@@ -307,9 +266,8 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 			svcConfig, _ = configures.NewJsonConfig([]byte("{}"))
 		}
 		buildErr := svc.Build(service.Options{
-			Log:     app.log.With("fns", "service").With("service", name),
-			Config:  svcConfig,
-			Barrier: app.barrier,
+			Log:    app.log.With("fns", "service").With("service", name),
+			Config: svcConfig,
 		})
 		if buildErr != nil {
 			err = errors.Warning(fmt.Sprintf("fns: deploy %s service failed", name)).WithCause(buildErr)
@@ -321,7 +279,7 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 }
 
 func (app *application) Run(ctx context.Context) (err error) {
-	if app.running.IsOn() {
+	if app.endpoints.IsRunning() {
 		err = errors.Warning("fns: application is running")
 		return
 	}
@@ -355,15 +313,15 @@ func (app *application) Run(ctx context.Context) (err error) {
 		return
 	}
 	// cluster publish
-	if app.clusterManagement != nil {
-		joinErr := app.clusterManagement.Join(ctx, app.endpoints)
+	if app.cluster != nil {
+		joinErr := app.cluster.Join(ctx)
 		if joinErr != nil {
 			err = errors.Warning("fns: run application failed").WithCause(joinErr)
 			return
 		}
 	}
 	// on
-	app.running.On()
+	app.endpoints.Run()
 	return
 }
 
@@ -440,7 +398,7 @@ func (app *application) Sync() (err error) {
 	if app.synced {
 		return
 	}
-	if app.running.IsOff() {
+	if !app.endpoints.IsRunning() {
 		err = errors.Warning("fns: application is not running")
 		return
 	}
@@ -463,17 +421,17 @@ func (app *application) Sync() (err error) {
 
 func (app *application) stop(ch chan struct{}) {
 	defer app.autoMaxProcs.Reset()
-	// off
-	app.running.Off()
 	// cluster leave
-	if app.clusterManagement != nil {
-		leaveErr := app.clusterManagement.Leave(context.TODO())
+	if app.cluster != nil {
+		leaveErr := app.cluster.Leave(context.TODO())
 		if leaveErr != nil {
 			if app.log.WarnEnabled() {
 				app.log.Warn().Cause(leaveErr).Message("fns: an error occurred in the stop application")
 			}
 		}
 	}
+	// endpoints
+	app.endpoints.Close()
 	// http
 	app.httpHandlers.Close()
 	httpCloseErr := app.http.Close()
@@ -482,10 +440,6 @@ func (app *application) stop(ch chan struct{}) {
 			app.log.Warn().Cause(httpCloseErr).Message("fns: an error occurred in the stop application")
 		}
 	}
-	// endpoints
-	app.endpoints.Close()
-	// workers
-	app.worker.Close()
 	// return
 	ch <- struct{}{}
 	close(ch)
@@ -493,7 +447,7 @@ func (app *application) stop(ch chan struct{}) {
 }
 
 func (app *application) Quit() {
-	if app.running.IsOff() {
+	if !app.endpoints.IsRunning() {
 		return
 	}
 	if !app.synced {

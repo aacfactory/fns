@@ -48,7 +48,7 @@ func TryFork(ctx context.Context, task Task) (ok bool) {
 	if vcm != nil {
 		nc = setComponents(ctx, vcm.(map[string]Component))
 	}
-	ok = rt.ws.Dispatch(ctx, task)
+	ok = rt.worker.Dispatch(ctx, task)
 	return
 }
 
@@ -69,6 +69,6 @@ func Fork(ctx context.Context, task Task) {
 	if vcm != nil {
 		nc = setComponents(ctx, vcm.(map[string]Component))
 	}
-	rt.ws.MustDispatch(ctx, task)
+	rt.worker.MustDispatch(ctx, task)
 	return
 }

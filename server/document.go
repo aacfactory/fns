@@ -42,7 +42,7 @@ type documentHandler struct {
 }
 
 func (h *documentHandler) Name() (name string) {
-	name = "document"
+	name = "documents"
 	return
 }
 

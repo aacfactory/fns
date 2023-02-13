@@ -65,6 +65,11 @@ func tryReportTracer(ctx context.Context) {
 	if r.Internal() {
 		return
 	}
+	ts, hasService := GetEndpoint(ctx, "tracings")
+	if !hasService {
+		return
+	}
+
 	rootSpan := t.RootSpan()
 	if rootSpan == nil {
 		return
@@ -73,12 +78,14 @@ func tryReportTracer(ctx context.Context) {
 		return
 	}
 	TryFork(ctx, &reportTracerTask{
-		t: t,
+		t:        t,
+		endpoint: ts,
 	})
 }
 
 type reportTracerTask struct {
-	t Tracer
+	t        Tracer
+	endpoint Endpoint
 }
 
 func (task *reportTracerTask) Name() (name string) {
@@ -87,11 +94,7 @@ func (task *reportTracerTask) Name() (name string) {
 }
 
 func (task *reportTracerTask) Execute(ctx context.Context) {
-	ts, hasService := GetEndpoint(ctx, "tracings")
-	if !hasService {
-		return
-	}
-	_ = ts.Request(ctx, NewRequest(ctx, "tracings", "report", NewArgument(task.t)))
+	_ = task.endpoint.Request(ctx, NewRequest(ctx, "tracings", "report", NewArgument(task.t)))
 }
 
 type Tracer interface {

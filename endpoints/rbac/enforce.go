@@ -76,7 +76,7 @@ func EnforceRequest(ctx context.Context, object string, action string) (ok bool,
 	if userId == "" {
 		return
 	}
-	ok, err = Enforce(ctx, userId, object, action)
+	ok, err = Enforce(ctx, userId.String(), object, action)
 	return
 }
 
@@ -98,7 +98,7 @@ func BatchEnforceRequest(ctx context.Context, objectAndActions ...string) (ok bo
 	}
 
 	for i := 0; i < objectAndActionsLen; i = i + 1 {
-		ok, err = Enforce(ctx, userId, objectAndActions[i], objectAndActions[i+1])
+		ok, err = Enforce(ctx, userId.String(), objectAndActions[i], objectAndActions[i+1])
 		if err != nil {
 			return
 		}

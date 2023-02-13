@@ -42,8 +42,8 @@ func Verify(ctx context.Context) (err errors.CodeError) {
 	if request.User().Authenticated() {
 		return
 	}
-	token := request.Authorization()
-	if token == "" {
+	token, hasToken := request.Header().Authorization()
+	if !hasToken {
 		err = errors.Unauthorized("authorizations: verify user authorizations failed").WithCause(fmt.Errorf("there is no authorization in request"))
 		return
 	}
@@ -61,6 +61,7 @@ func Verify(ctx context.Context) (err errors.CodeError) {
 		err = getResultErr
 		return
 	}
-	request.SetUser(result.Id, result.Attr)
+	request.User().SetId(service.RequestUserId(result.Id))
+	request.User().SetAttributes(result.Attr)
 	return
 }

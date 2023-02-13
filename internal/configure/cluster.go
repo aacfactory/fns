@@ -19,18 +19,12 @@ package configure
 import "github.com/aacfactory/json"
 
 type Cluster struct {
-	Name              string          `json:"name"`
-	DevMode           bool            `json:"devMode"`
-	NodesProxyAddress string          `json:"nodesProxyAddress"`
-	Kind              string          `json:"kind"`
-	Client            ClusterClient   `json:"client"`
-	Visitor           bool            `json:"visitor"`
-	Options           json.RawMessage `json:"options"`
+	Name    string          `json:"name"`
+	DevMode *ClusterDevMode `json:"devMode"`
+	Options json.RawMessage `json:"options"`
 }
 
-type ClusterClient struct {
-	MaxIdleConnSeconds    int `json:"maxIdleConnSeconds"`
-	MaxConnsPerHost       int `json:"maxConnsPerHost"`
-	MaxIdleConnsPerHost   int `json:"maxIdleConnsPerHost"`
-	RequestTimeoutSeconds int `json:"requestTimeoutSeconds"`
+type ClusterDevMode struct {
+	ProxyAddress string `json:"proxyAddress"`
+	TLS          TLS    `json:"tls"`
 }

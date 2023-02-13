@@ -18,17 +18,24 @@ package clusters
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/logs"
 )
 
+type DevMode struct {
+	ProxyAddress string
+	ClientTLS    *tls.Config
+}
+
 type ClusterBuilderOptions struct {
 	Config     configures.Config
 	AppId      string
 	AppVersion versions.Version
 	Log        logs.Logger
+	DevMode    *DevMode
 	Endpoints  service.DeployedEndpoints
 }
 

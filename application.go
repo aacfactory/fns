@@ -197,6 +197,23 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s is not defined", clusterName))))
 			return
 		}
+		var devMode *clusters.DevMode
+		if config.Cluster.DevMode != nil {
+			clusterProxyAddress := strings.TrimSpace(config.Cluster.DevMode.ProxyAddress)
+			if clusterProxyAddress == "" {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s dev mode was enabled but proxy address is not defined", clusterName))))
+				return
+			}
+			_, proxyClientTLS, proxyClientTLSErr := config.Cluster.DevMode.TLS.Config()
+			if proxyClientTLSErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(fmt.Errorf("%s dev mode was enabled but tls is invalid", clusterName))))
+				return
+			}
+			devMode = &clusters.DevMode{
+				ProxyAddress: clusterProxyAddress,
+				ClientTLS:    proxyClientTLS,
+			}
+		}
 		var clusterBuildErr error
 		cluster, clusterBuildErr = clusterBuilder(clusters.ClusterBuilderOptions{
 			Config:     clusterConfig,
@@ -204,6 +221,7 @@ func New(options ...Option) (app Application) {
 			AppVersion: appVersion,
 			Log:        log.With("fns", "cluster"),
 			Endpoints:  endpoints,
+			DevMode:    devMode,
 		})
 		if clusterBuildErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(errors.Map(clusterBuildErr))))

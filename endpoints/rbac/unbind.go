@@ -40,10 +40,10 @@ func Unbind(ctx context.Context, subject string, roles ...string) (err errors.Co
 		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, rbac.UnbindFn, service.NewArgument(rbac.UnbindArgument{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.UnbindFn, service.NewArgument(rbac.UnbindArgument{
 		Subject: subject,
 		Roles:   roles,
-	}))
+	})))
 
 	result := &service.Empty{}
 	_, getResultErr := fr.Get(ctx, result)

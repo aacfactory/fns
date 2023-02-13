@@ -36,10 +36,10 @@ func GetRole(ctx context.Context, code string, withChildren bool) (v *Role, err 
 		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{
 		Code:         code,
 		LoadChildren: withChildren,
-	}))
+	})))
 
 	result := &rbac.Role{}
 	has, getResultErr := fr.Get(ctx, result)

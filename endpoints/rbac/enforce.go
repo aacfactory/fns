@@ -46,11 +46,11 @@ func Enforce(ctx context.Context, subject string, object string, action string) 
 		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, rbac.EnforceFn, service.NewArgument(rbac.EnforceArgument{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.EnforceFn, service.NewArgument(rbac.EnforceArgument{
 		Subject: subject,
 		Object:  object,
 		Action:  action,
-	}))
+	})))
 
 	result := &rbac.EnforceResult{}
 	has, getResultErr := fr.Get(ctx, result)

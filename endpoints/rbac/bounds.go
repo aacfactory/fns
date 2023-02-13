@@ -36,10 +36,10 @@ func Bounds(ctx context.Context, subject string, flat bool) (v []*Role, err erro
 		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, rbac.BoundsFn, service.NewArgument(rbac.BoundsArgument{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.BoundsFn, service.NewArgument(rbac.BoundsArgument{
 		Subject: subject,
 		Flat:    flat,
-	}))
+	})))
 
 	result := make([]*rbac.Role, 0, 1)
 	has, getResultErr := fr.Get(ctx, &result)

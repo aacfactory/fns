@@ -31,10 +31,10 @@ func Children(ctx context.Context, parent string, withChildren bool) (v []*Role,
 		err = errors.Warning("rbac endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, rbac.ChildrenFn, service.NewArgument(rbac.ChildrenArgument{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.ChildrenFn, service.NewArgument(rbac.ChildrenArgument{
 		Parent:       parent,
 		LoadChildren: withChildren,
-	}))
+	})))
 
 	result := make([]*rbac.Role, 0, 1)
 	has, getResultErr := fr.Get(ctx, &result)

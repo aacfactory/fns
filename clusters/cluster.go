@@ -29,7 +29,7 @@ type ClusterBuilderOptions struct {
 	AppId      string
 	AppVersion versions.Version
 	Log        logs.Logger
-	Endpoints  *service.Endpoints
+	Endpoints  service.DeployedEndpoints
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)

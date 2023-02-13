@@ -22,35 +22,34 @@ import (
 	"time"
 )
 
-func newFn(svc Service, fn string, argument Argument, result ResultWriter) *fnExecutor {
-	return &fnExecutor{svc: svc, fn: fn, argument: argument, result: result}
+func newFnTask(svc Service, request Request, result ResultWriter) *fnTask {
+	return &fnTask{svc: svc, request: request, result: result}
 }
 
-type fnExecutor struct {
-	svc      Service
-	fn       string
-	argument Argument
-	result   ResultWriter
+type fnTask struct {
+	svc     Service
+	request Request
+	result  ResultWriter
 }
 
-func (f *fnExecutor) Execute(ctx context.Context) {
+func (f *fnTask) Execute(ctx context.Context) {
 	rootLog := getRuntime(ctx).log
-
-	fnLog := rootLog.With("service", f.svc.Name()).With("fn", f.fn)
+	serviceName, fnName := f.request.Fn()
+	fnLog := rootLog.With("service", serviceName).With("fn", fnName)
 	req, hasReq := GetRequest(ctx)
 	if hasReq {
 		fnLog = fnLog.With("requestId", req.Id())
 	}
-	ctx = SetLog(ctx, fnLog)
+	ctx = withLog(ctx, fnLog)
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
-		ctx = setComponents(ctx, f.svc.Components())
+		ctx = withComponents(ctx, f.svc.Components())
 	}
 	t, hasTracer := GetTracer(ctx)
 	var sp Span = nil
 	if hasTracer {
-		sp = t.StartSpan(f.svc.Name(), f.fn)
+		sp = t.StartSpan(f.svc.Name(), fnName)
 	}
-	v, err := f.svc.Handle(ctx, f.fn, f.argument)
+	v, err := f.svc.Handle(ctx, fnName, f.request.Argument())
 	if sp != nil {
 		sp.Finish()
 		if err == nil {
@@ -66,7 +65,7 @@ func (f *fnExecutor) Execute(ctx context.Context) {
 	} else {
 		f.result.Succeed(v)
 	}
-	tryReportStats(ctx, f.svc.Name(), f.fn, err, sp)
+	tryReportStats(ctx, serviceName, fnName, err, sp)
 	if fnLog.DebugEnabled() {
 		latency := time.Duration(0)
 		if sp != nil {
@@ -76,6 +75,6 @@ func (f *fnExecutor) Execute(ctx context.Context) {
 		if err != nil {
 			handled = "failed"
 		}
-		fnLog.Debug().Caller().With("latency", latency).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", f.svc.Name(), f.fn, handled, latency))
+		fnLog.Debug().Caller().With("latency", latency).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", serviceName, fnName, handled, latency))
 	}
 }

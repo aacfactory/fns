@@ -20,8 +20,6 @@ import (
 	"github.com/aacfactory/fns/internal/oas"
 )
 
-type Documents map[string]Document
-
 type Document interface {
 	Name() (name string)
 	Description() (description string)

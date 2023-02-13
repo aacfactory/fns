@@ -43,10 +43,10 @@ func TryFork(ctx context.Context, task Task) (ok bool) {
 		taskName = "-"
 	}
 	log = log.With("task", taskName)
-	nc = SetLog(nc, log)
+	nc = withLog(nc, log)
 	vcm := ctx.Value(contextComponentsKey)
 	if vcm != nil {
-		nc = setComponents(ctx, vcm.(map[string]Component))
+		nc = withComponents(ctx, vcm.(map[string]Component))
 	}
 	ok = rt.worker.Dispatch(ctx, task)
 	return
@@ -64,10 +64,10 @@ func Fork(ctx context.Context, task Task) {
 		taskName = "-"
 	}
 	log = log.With("task", taskName)
-	nc = SetLog(nc, log)
+	nc = withLog(nc, log)
 	vcm := ctx.Value(contextComponentsKey)
 	if vcm != nil {
-		nc = setComponents(ctx, vcm.(map[string]Component))
+		nc = withComponents(ctx, vcm.(map[string]Component))
 	}
 	rt.worker.MustDispatch(ctx, task)
 	return

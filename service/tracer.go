@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	contextTracerKey = "_tracer_"
+	contextTracerKey = "@fns_tracer"
 )
 
 func GetTracer(ctx context.Context) (t Tracer, has bool) {
@@ -39,7 +39,7 @@ func GetTracer(ctx context.Context) (t Tracer, has bool) {
 	return
 }
 
-func SetTracer(ctx context.Context) context.Context {
+func withTracer(ctx context.Context) context.Context {
 	_, has := GetTracer(ctx)
 	if has {
 		return ctx
@@ -91,7 +91,7 @@ func (task *reportTracerTask) Execute(ctx context.Context) {
 	if !hasService {
 		return
 	}
-	_ = ts.Request(ctx, "report", NewArgument(task.t))
+	_ = ts.Request(ctx, NewRequest(ctx, "tracings", "report", NewArgument(task.t)))
 }
 
 type Tracer interface {

@@ -158,7 +158,7 @@ func (svc *Abstract) ExecuteWithTimeout(ctx context.Context, shared bool, timeou
 	if shared {
 		key = fmt.Sprintf("request:%d", req.Hash())
 	} else {
-		key = fmt.Sprintf("request:%s:%d", req.ClientId(), req.Hash())
+		key = fmt.Sprintf("request:%s:%d", req.RemoteClientIp(), req.Hash())
 	}
 	result, err, _ = barrier.Do(ctx, key, handler)
 	barrier.Forget(ctx, key)

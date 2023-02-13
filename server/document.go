@@ -17,6 +17,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/oas"
@@ -33,12 +34,12 @@ const (
 )
 
 type documentHandler struct {
-	log       logs.Logger
-	doc       *Document
-	endpoints service.Endpoints
-	once      sync.Once
-	raw       []byte
-	oas       []byte
+	log               logs.Logger
+	doc               *Document
+	endpointDiscovery service.EndpointDiscovery
+	once              sync.Once
+	raw               []byte
+	oas               []byte
 }
 
 func (h *documentHandler) Name() (name string) {
@@ -61,8 +62,9 @@ func (h *documentHandler) Build(options *HandlerOptions) (err error) {
 		h.doc.Description = "Fn services"
 	}
 	h.doc.version = options.AppVersion
-
-	h.endpoints = options.Endpoints
+	h.endpointDiscovery = options.EndpointDiscovery
+	h.raw = []byte{'{', '}'}
+	h.oas = []byte{'{', '}'}
 	h.once = sync.Once{}
 	return
 }
@@ -105,9 +107,20 @@ func (h *documentHandler) write(writer http.ResponseWriter, body []byte) {
 func (h *documentHandler) encode() {
 	h.once.Do(func() {
 		// raw
-		sds := h.endpoints.Documents()
-		if sds != nil || len(sds) > 0 {
-			dr, drErr := json.Marshal(sds)
+		endpoints := h.endpointDiscovery.List(context.TODO(), service.LocalScoped())
+		if endpoints == nil || len(endpoints) == 0 {
+			return
+		}
+		documents := make(map[string]service.Document)
+		for _, endpoint := range endpoints {
+			document := endpoint.Document()
+			if document == nil {
+				continue
+			}
+			documents[endpoint.Name()] = document
+		}
+		if documents != nil || len(documents) > 0 {
+			dr, drErr := json.Marshal(documents)
 			if drErr != nil {
 				if h.log.WarnEnabled() {
 					h.log.Warn().Cause(drErr).Message("fns: encode service documents failed")
@@ -383,8 +396,8 @@ func (h *documentHandler) encode() {
 		}
 		api.Paths["/health"] = checkHealthPath
 		// service
-		if sds != nil || len(sds) > 0 {
-			for _, document := range sds {
+		if documents != nil || len(documents) > 0 {
+			for _, document := range documents {
 				// tags
 				api.Tags = append(api.Tags, &oas.Tag{
 					Name:        document.Name(),

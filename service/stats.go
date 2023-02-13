@@ -59,7 +59,7 @@ func (task *reportStatsTask) Execute(ctx context.Context) {
 	if !hasService {
 		return
 	}
-	_ = ts.Request(ctx, "report", NewArgument(task.s))
+	_ = ts.Request(ctx, NewRequest(ctx, "stats", "report", NewArgument(task.s)))
 }
 
 type Metric struct {

@@ -19,9 +19,11 @@ package server
 import (
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -34,9 +36,9 @@ const (
 )
 
 type serviceHandler struct {
-	log       logs.Logger
-	counter   sync.WaitGroup
-	endpoints service.Endpoints
+	log               logs.Logger
+	counter           sync.WaitGroup
+	endpointDiscovery service.EndpointDiscovery
 }
 
 func (h *serviceHandler) Name() (name string) {
@@ -47,7 +49,7 @@ func (h *serviceHandler) Name() (name string) {
 func (h *serviceHandler) Build(options *HandlerOptions) (err error) {
 	h.log = options.Log
 	h.counter = sync.WaitGroup{}
-	h.endpoints = options.Endpoints
+	h.endpointDiscovery = options.EndpointDiscovery
 	return
 }
 
@@ -66,47 +68,94 @@ func (h *serviceHandler) Accept(request *http.Request) (ok bool) {
 }
 
 func (h *serviceHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	r, requestErr := service.NewRequest(request)
-	if requestErr != nil {
-		h.failed(writer, "", 0, requestErr)
+	pathItems := strings.Split(request.URL.Path, "/")
+	if len(pathItems) != 3 {
+		h.failed(writer, "", 0, errors.BadRequest("fns: invalid request url path"))
 		return
 	}
+	serviceName := pathItems[1]
+	fnName := pathItems[2]
+	body, readBodyErr := ioutil.ReadAll(request.Body)
+	if readBodyErr != nil {
+		h.failed(writer, "", 0, errors.BadRequest("fns: read body failed").WithCause(readBodyErr))
+		return
+	}
+	id := request.Header.Get("X-Fns-Request-Id")
+	if id == "" {
+		id = uid.UID()
+	}
+	remoteIp := request.Header.Get("X-Real-Ip")
+	if remoteIp == "" {
+		forwarded := request.Header.Get("X-Forwarded-For")
+		if forwarded != "" {
+			forwardedIps := strings.Split(forwarded, ",")
+			remoteIp = strings.TrimSpace(forwardedIps[len(forwardedIps)-1])
+		}
+	}
+	if remoteIp == "" {
+		remoteIp = request.RemoteAddr
+		if remoteIp != "" {
+			if strings.Index(remoteIp, ".") > 0 && strings.Index(remoteIp, ":") > 0 {
+				remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
+			}
+		}
+	}
+
 	h.counter.Add(1)
 	handleBegAT := time.Time{}
 	latency := time.Duration(0)
 	if h.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	result, handleErr := h.endpoints.Handle(request.Context(), r)
+
+	endpoint, hasEndpoint := h.endpointDiscovery.Get(request.Context(), serviceName, service.LocalScoped())
+	if !hasEndpoint {
+		h.failed(writer, "", 0, errors.NotFound("service was not found").WithMeta("service", serviceName))
+		return
+	}
+
+	endpointRequest := service.NewRequest(
+		request.Context(),
+		serviceName,
+		fnName,
+		service.NewArgument(body),
+		service.WithHttpRequestHeader(request.Header),
+		service.WithRemoteClientIp(remoteIp),
+		service.WithRequestId(id),
+	)
+
+	result := endpoint.Request(request.Context(), endpointRequest)
+
 	if h.log.DebugEnabled() {
 		latency = time.Now().Sub(handleBegAT)
 	}
-	if handleErr == nil {
-		if result == nil {
-			h.succeed(writer, r.Id(), latency, nil)
-		} else {
-			switch result.(type) {
+	resultValue, hasResultValue, requestErr := result.Value(request.Context())
+	if requestErr != nil {
+		h.failed(writer, id, latency, requestErr)
+	} else {
+		if hasResultValue {
+			switch resultValue.(type) {
 			case []byte:
-				h.succeed(writer, r.Id(), latency, result.([]byte))
+				h.succeed(writer, id, latency, resultValue.([]byte))
 				break
 			case json.RawMessage:
-				h.succeed(writer, r.Id(), latency, result.(json.RawMessage))
+				h.succeed(writer, id, latency, resultValue.(json.RawMessage))
 				break
 			case stdjson.RawMessage:
-				h.succeed(writer, r.Id(), latency, result.(stdjson.RawMessage))
+				h.succeed(writer, id, latency, resultValue.(stdjson.RawMessage))
 				break
 			default:
-				p, encodeErr := json.Marshal(result)
+				p, encodeErr := json.Marshal(resultValue)
 				if encodeErr != nil {
-					h.failed(writer, r.Id(), latency, errors.Warning("fns: encoding result failed").WithCause(encodeErr))
+					h.failed(writer, id, latency, errors.Warning("fns: encoding result failed").WithCause(encodeErr))
 				} else {
-					h.succeed(writer, r.Id(), latency, p)
+					h.succeed(writer, id, latency, p)
 				}
 				break
 			}
+		} else {
+			h.succeed(writer, id, latency, []byte{'{', '}'})
 		}
-	} else {
-		h.failed(writer, r.Id(), latency, handleErr)
 	}
 	h.counter.Done()
 	return

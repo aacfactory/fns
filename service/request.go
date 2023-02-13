@@ -18,29 +18,29 @@ package service
 
 import (
 	"context"
-	stdjson "encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
-	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
-	"io/ioutil"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 type RequestHeader interface {
 	Contains(key string) (ok bool)
 	Get(key string) (value string)
 	Values(key string) (values []string)
-	Raw() (v http.Header)
+	Set(key string, value string)
+	Add(key string, value string)
+	ForEach(fn func(key string, values []string) (next bool))
+	Authorization() (authorization string, has bool)
+	MapToHttpHeader() (v http.Header)
 }
 
-func NewRequestHeader(value http.Header) RequestHeader {
-	return &requestHeader{value: value}
+func newRequestHeader() RequestHeader {
+	return &requestHeader{value: http.Header(make(map[string][]string))}
 }
 
 type requestHeader struct {
@@ -62,54 +62,98 @@ func (header *requestHeader) Values(key string) (values []string) {
 	return
 }
 
-func (header *requestHeader) Raw() (v http.Header) {
+func (header *requestHeader) Set(key string, value string) {
+	header.value.Set(key, value)
+}
+
+func (header *requestHeader) Add(key string, value string) {
+	header.value.Add(key, value)
+}
+
+func (header *requestHeader) ForEach(fn func(key string, values []string) (next bool)) {
+	if fn == nil {
+		return
+	}
+	for key, values := range header.value {
+		next := fn(key, values)
+		if !next {
+			break
+		}
+	}
+}
+
+func (header *requestHeader) Authorization() (authorization string, has bool) {
+	authorization = header.Get("Authorization")
+	has = authorization != ""
+	return
+}
+
+func (header *requestHeader) ClientId() (id string) {
+	id = header.Get("X-Fns-Client-Id")
+	return
+}
+
+func (header *requestHeader) MapToHttpHeader() (v http.Header) {
 	v = header.value
 	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type RequestUserId string
+
+func (id RequestUserId) Int() (n int64) {
+	s := string(id)
+	v, parseErr := strconv.ParseInt(s, 10, 64)
+	if parseErr != nil {
+		panic(errors.Warning(fmt.Sprintf("fns: parse user id to int failed")).WithMeta("scope", "system").WithMeta("id", s).WithCause(parseErr))
+	}
+	n = v
+	return
+}
+
+func (id RequestUserId) String() string {
+	return string(id)
+}
+
 type RequestUser interface {
 	json.Marshaler
 	json.Unmarshaler
 	Authenticated() (ok bool)
-	Id() (id string)
-	IntId() (id int64)
+	Id() (id RequestUserId)
+	SetId(id RequestUserId)
 	Attributes() (attributes *json.Object)
+	SetAttributes(attributes *json.Object)
 }
 
-func NewRequestUser(id string, attributes *json.Object) (u RequestUser) {
+func newRequestUser(id RequestUserId, attributes *json.Object) (u RequestUser) {
+	if attributes == nil {
+		attributes = json.NewObject()
+	}
 	u = &requestUser{
-		id:            id,
-		authenticated: id != "",
-		attributes:    attributes,
+		id:         id,
+		attributes: attributes,
 	}
 	return
 }
 
 type requestUser struct {
-	authenticated bool
-	id            string
-	attributes    *json.Object
+	id         RequestUserId
+	attributes *json.Object
 }
 
 func (u *requestUser) Authenticated() (ok bool) {
-	ok = u.authenticated
+	ok = u.id != ""
 	return
 }
 
-func (u *requestUser) Id() (id string) {
+func (u *requestUser) Id() (id RequestUserId) {
 	id = u.id
 	return
 }
 
-func (u *requestUser) IntId() (id int64) {
-	n, parseErr := strconv.ParseInt(u.id, 10, 64)
-	if parseErr != nil {
-		panic(errors.Warning(fmt.Sprintf("fns: parse user id to int failed")).WithMeta("scope", "system").WithMeta("id", u.id).WithCause(parseErr))
-	}
-	id = n
-	return
+func (u *requestUser) SetId(id RequestUserId) {
+	u.id = id
 }
 
 func (u *requestUser) Attributes() (attributes *json.Object) {
@@ -117,10 +161,17 @@ func (u *requestUser) Attributes() (attributes *json.Object) {
 	return
 }
 
+func (u *requestUser) SetAttributes(attributes *json.Object) {
+	if attributes == nil {
+		attributes = json.NewObject()
+	}
+	u.attributes = attributes
+}
+
 func (u *requestUser) MarshalJSON() (p []byte, err error) {
 	o := json.NewObject()
 	_ = o.Put("id", u.id)
-	_ = o.Put("authenticated", u.authenticated)
+	_ = o.Put("authenticated", u.Authenticated())
 	if u.attributes == nil {
 		u.attributes = json.NewObject()
 	}
@@ -132,10 +183,6 @@ func (u *requestUser) MarshalJSON() (p []byte, err error) {
 func (u *requestUser) UnmarshalJSON(p []byte) (err error) {
 	o := json.NewObjectFromBytes(p)
 	err = o.Get("id", &u.id)
-	if err != nil {
-		return
-	}
-	err = o.Get("authenticated", &u.authenticated)
 	if err != nil {
 		return
 	}
@@ -151,188 +198,195 @@ func (u *requestUser) UnmarshalJSON(p []byte) (err error) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type RequestLocal interface {
+type RequestTrunk interface {
 	json.Marshaler
-	Scan(key string, value interface{}) (has bool, err errors.CodeError)
-	Put(key string, value interface{})
+	Get(key string) (value []byte, has bool)
+	Put(key string, value []byte)
+	ForEach(fn func(key string, value []byte) (next bool))
 	Remove(key string)
 }
 
-func NewRequestLocal() (v RequestLocal) {
-	v = &requestLocal{
-		values: make(map[string]interface{}),
+func newRequestTrunk() RequestTrunk {
+	return &requestTrunk{
+		values: make(map[string][]byte),
 	}
+}
+
+type requestTrunk struct {
+	values map[string][]byte
+}
+
+func (trunk *requestTrunk) MarshalJSON() (p []byte, err error) {
+	p, err = json.Marshal(trunk.values)
 	return
 }
 
-type requestLocal struct {
-	values map[string]interface{}
+func (trunk *requestTrunk) Get(key string) (value []byte, has bool) {
+	value, has = trunk.values[key]
+	return
 }
 
-func (local *requestLocal) Scan(key string, value interface{}) (has bool, err errors.CodeError) {
-	v, exist := local.values[key]
-	if !exist {
+func (trunk *requestTrunk) Put(key string, value []byte) {
+	trunk.values[key] = value
+}
+
+func (trunk *requestTrunk) ForEach(fn func(key string, value []byte) (next bool)) {
+	if fn == nil {
 		return
 	}
-	cpErr := commons.CopyInterface(value, v)
-	if cpErr != nil {
-		err = errors.Warning("fns: request local scan failed").WithCause(cpErr).WithMeta("key", key)
-		return
+	for ket, value := range trunk.values {
+		next := fn(ket, value)
+		if !next {
+			break
+		}
 	}
-	return
 }
 
-func (local *requestLocal) Put(key string, value interface{}) {
-	local.values[key] = value
-}
-
-func (local *requestLocal) Remove(key string) {
-	delete(local.values, key)
-}
-
-func (local *requestLocal) MarshalJSON() (p []byte, err error) {
-	p, err = json.Marshal(local.values)
-	return
+func (trunk *requestTrunk) Remove(key string) {
+	delete(trunk.values, key)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type Request interface {
 	Id() (id string)
-	Internal() (ok bool)
-	Authorization() (v string)
-	RemoteIp() (v string)
-	User() (user RequestUser)
-	SetUser(id string, attr *json.Object)
-	ClientId() (id string)
-	Local() (local RequestLocal)
 	Header() (header RequestHeader)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
+	Internal() (ok bool)
+	RemoteClientIp() (ip string)
+	User() (user RequestUser)
+	Trunk() (trunk RequestTrunk)
 	Hash() (code uint64)
 }
 
-func NewRequest(req *http.Request) (r Request, err errors.CodeError) {
-	pathItems := strings.Split(req.URL.Path, "/")
-	if len(pathItems) != 3 {
-		err = errors.NotAcceptable("fns: invalid request url path")
-		return
+type RequestOption func(*RequestOptions)
+
+func WithRequestId(id string) RequestOption {
+	return func(options *RequestOptions) {
+		options.id = id
 	}
-	service := pathItems[1]
-	fn := pathItems[2]
-	body, readBodyErr := ioutil.ReadAll(req.Body)
-	if readBodyErr != nil {
-		err = errors.NotAcceptable("fns: invalid request body")
-		return
-	}
-	id := req.Header.Get("X-Fns-Request-Id")
-	if id == "" {
-		id = uid.UID()
-	}
-	remoteIp := req.Header.Get("X-Real-Ip")
-	if remoteIp == "" {
-		forwarded := req.Header.Get("X-Forwarded-For")
-		if forwarded != "" {
-			forwardedIps := strings.Split(forwarded, ",")
-			remoteIp = strings.TrimSpace(forwardedIps[len(forwardedIps)-1])
-		}
-	}
-	if remoteIp == "" {
-		remoteIp = req.RemoteAddr
-		if remoteIp != "" {
-			if strings.Index(remoteIp, ".") > 0 && strings.Index(remoteIp, ":") > 0 {
-				remoteIp = remoteIp[0:strings.Index(remoteIp, ":")]
-			}
-		}
-	}
-	buf := bytebufferpool.Get()
-	_, _ = buf.Write([]byte(service + fn))
-	_, _ = buf.Write(body)
-	hashCode := xxhash.Sum64(buf.Bytes())
-	bytebufferpool.Put(buf)
-	r = &request{
-		id:       id,
-		internal: false,
-		remoteIp: remoteIp,
-		user:     NewRequestUser("", json.NewObject()),
-		local: &requestLocal{
-			values: make(map[string]interface{}),
-		},
-		header:   NewRequestHeader(req.Header),
-		service:  service,
-		fn:       fn,
-		argument: NewArgument(body),
-		hashCode: hashCode,
-	}
-	return
 }
 
-func NewInternalRequest(service string, fn string, arg interface{}) (r Request, err errors.CodeError) {
-	buf := bytebufferpool.Get()
-	defer bytebufferpool.Put(buf)
-	_, _ = buf.Write([]byte(service + fn))
-	if arg != nil {
-		switch arg.(type) {
-		case []byte:
-			_, _ = buf.Write(arg.([]byte))
-			break
-		case string:
-			_, _ = buf.Write([]byte(arg.(string)))
-			break
-		case json.RawMessage:
-			_, _ = buf.Write(arg.(json.RawMessage))
-			break
-		case stdjson.RawMessage:
-			_, _ = buf.Write(arg.(stdjson.RawMessage))
-			break
-		case json.Marshaler:
-			encoder := arg.(json.Marshaler)
-			p, encodeErr := encoder.MarshalJSON()
-			if encodeErr != nil {
-				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
-				return
+func WithHttpRequestHeader(header http.Header) RequestOption {
+	return func(options *RequestOptions) {
+		for key, values := range header {
+			for _, value := range values {
+				options.header.Add(key, value)
 			}
-			_, _ = buf.Write(p)
-		case stdjson.Marshaler:
-			encoder := arg.(stdjson.Marshaler)
-			p, encodeErr := encoder.MarshalJSON()
-			if encodeErr != nil {
-				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
-				return
-			}
-			_, _ = buf.Write(p)
-		case Argument:
-			encoder := arg.(Argument)
-			p, encodeErr := encoder.MarshalJSON()
-			if encodeErr != nil {
-				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
-				return
-			}
-			_, _ = buf.Write(p)
-		default:
-			p, encodeErr := json.Marshal(arg)
-			if encodeErr != nil {
-				err = errors.Warning("fns: new internal request failed").WithCause(encodeErr)
-				return
-			}
-			_, _ = buf.Write(p)
-			break
 		}
 	}
-	hashCode := xxhash.Sum64(buf.Bytes())
-	r = &request{
-		id:       uid.UID(),
-		internal: true,
-		remoteIp: "",
-		user:     NewRequestUser("", json.NewObject()),
-		local: &requestLocal{
-			values: make(map[string]interface{}),
-		},
-		header:   NewRequestHeader(http.Header{}),
-		service:  service,
-		fn:       fn,
-		argument: NewArgument(arg),
-		hashCode: hashCode,
+}
+
+func WithRemoteClientIp(ip string) RequestOption {
+	return func(options *RequestOptions) {
+		options.remoteClientIp = ip
+	}
+}
+
+func WithInternalRequest() RequestOption {
+	return func(options *RequestOptions) {
+		options.internal = true
+	}
+}
+
+func WithRequestUser(id RequestUserId, attributes *json.Object) RequestOption {
+	return func(options *RequestOptions) {
+		options.user = newRequestUser(id, attributes)
+	}
+}
+
+type RequestOptions struct {
+	id             string
+	header         RequestHeader
+	remoteClientIp string
+	internal       bool
+	user           RequestUser
+}
+
+func NewRequest(ctx context.Context, service string, fn string, argument Argument, options ...RequestOption) (v Request) {
+	opt := &RequestOptions{
+		id:             "",
+		header:         newRequestHeader(),
+		remoteClientIp: "",
+		user:           nil,
+	}
+	if options != nil && len(options) > 0 {
+		for _, option := range options {
+			option(opt)
+		}
+	}
+	prev, hasPrev := GetRequest(ctx)
+	if hasPrev {
+		id := opt.id
+		internal := false
+		if id == "" {
+			id = prev.Id()
+			internal = true
+		} else {
+			internal = opt.internal
+		}
+		header := prev.Header()
+		if len(opt.header.MapToHttpHeader()) > 0 {
+			opt.header.ForEach(func(key string, values []string) (next bool) {
+				for _, value := range values {
+					header.Add(key, value)
+				}
+				next = true
+				return
+			})
+		}
+		remoteClientIp := opt.remoteClientIp
+		if remoteClientIp == "" {
+			remoteClientIp = prev.RemoteClientIp()
+		}
+		user := opt.user
+		if user == nil {
+			user = prev.User()
+		}
+		v = &request{
+			id:       id,
+			internal: internal,
+			remoteIp: remoteClientIp,
+			user:     user,
+			trunk:    prev.Trunk(),
+			header:   header,
+			service:  service,
+			fn:       fn,
+			argument: argument,
+			hashCode: 0,
+		}
+	} else {
+		id := opt.id
+		if id == "" {
+			id = uid.UID()
+		}
+		header := newRequestHeader()
+		if len(opt.header.MapToHttpHeader()) > 0 {
+			opt.header.ForEach(func(key string, values []string) (next bool) {
+				for _, value := range values {
+					header.Add(key, value)
+				}
+				next = true
+				return
+			})
+		}
+		user := opt.user
+		if user == nil {
+			user = newRequestUser("", nil)
+		}
+		v = &request{
+			id:       id,
+			internal: opt.internal,
+			remoteIp: opt.remoteClientIp,
+			user:     user,
+			trunk:    newRequestTrunk(),
+			header:   header,
+			service:  service,
+			fn:       fn,
+			argument: argument,
+			hashCode: 0,
+		}
 	}
 	return
 }
@@ -342,7 +396,7 @@ type request struct {
 	internal bool
 	remoteIp string
 	user     RequestUser
-	local    RequestLocal
+	trunk    RequestTrunk
 	header   RequestHeader
 	service  string
 	fn       string
@@ -365,27 +419,18 @@ func (r *request) User() (user RequestUser) {
 	return
 }
 
-func (r *request) SetUser(id string, attributes *json.Object) {
-	r.user = NewRequestUser(id, attributes)
-}
-
-func (r *request) Local() (local RequestLocal) {
-	local = r.local
+func (r *request) Trunk() (trunk RequestTrunk) {
+	trunk = r.trunk
 	return
 }
 
-func (r *request) ClientId() (id string) {
-	id = r.header.Get("X-Fns-Client-Id")
-	return
-}
-
-func (r *request) RemoteIp() (v string) {
+func (r *request) RemoteClientIp() (v string) {
 	v = r.remoteIp
 	return
 }
 
-func (r *request) Authorization() (v string) {
-	v = r.header.Get("Authorization")
+func (r *request) SetRemoteClientIp(ip string) {
+	r.remoteIp = ip
 	return
 }
 
@@ -405,6 +450,20 @@ func (r *request) Argument() (argument Argument) {
 }
 
 func (r *request) Hash() (code uint64) {
+	if r.hashCode > 0 {
+		code = r.hashCode
+		return
+	}
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write([]byte(r.service + r.fn))
+	if r.argument != nil {
+		arg, _ := json.Marshal(r.argument)
+		if arg != nil {
+			_, _ = buf.Write(arg)
+		}
+	}
+	r.hashCode = xxhash.Sum64(buf.Bytes())
+	bytebufferpool.Put(buf)
 	code = r.hashCode
 	return
 }
@@ -412,7 +471,7 @@ func (r *request) Hash() (code uint64) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 const (
-	contextRequestKey = "_request_"
+	contextRequestKey = "@fns_request"
 )
 
 func GetRequest(ctx context.Context) (r Request, has bool) {
@@ -424,13 +483,8 @@ func GetRequest(ctx context.Context) (r Request, has bool) {
 	return
 }
 
-func SetRequest(ctx context.Context, r Request) context.Context {
-	_, has := GetRequest(ctx)
-	if has {
-		return ctx
-	}
-	ctx = context.WithValue(ctx, contextRequestKey, r)
-	return ctx
+func withRequest(ctx context.Context, r Request) context.Context {
+	return context.WithValue(ctx, contextRequestKey, r)
 }
 
 func GetRequestUser(ctx context.Context) (user RequestUser, authenticated bool) {

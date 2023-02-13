@@ -18,15 +18,23 @@ package fns
 
 import "github.com/aacfactory/fns/service"
 
-type ExecuteOption func(*ExecuteOptions) error
+type ExecuteOption func(*ExecuteOptions)
 
 type ExecuteOptions struct {
-	user service.RequestUser
+	user     service.RequestUser
+	internal bool
 }
 
-func ExecuteWithUser(user service.RequestUser) ExecuteOption {
-	return func(o *ExecuteOptions) error {
+func ExecuteWithRequestUser(user service.RequestUser) ExecuteOption {
+	return func(o *ExecuteOptions) {
 		o.user = user
-		return nil
+		return
+	}
+}
+
+func ExecuteAsInternalRequest() ExecuteOption {
+	return func(o *ExecuteOptions) {
+		o.internal = true
+		return
 	}
 }

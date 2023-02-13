@@ -334,18 +334,13 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 	if hooks == nil || len(hooks) == 0 {
 		return
 	}
+	ctx = service.Todo(ctx, app.endpoints)
 
-	ctx = service.TODO(ctx, app.endpoints)
-	r, requestErr := service.NewInternalRequest("fns", "hooks", nil)
-	if requestErr != nil {
-		err = errors.Warning("fns run with hooks failed").WithCause(requestErr)
-		return
-	}
-	ctx = service.SetRequest(ctx, r)
 	config, hasConfig := app.config.Node("hooks")
 	if !hasConfig {
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
+
 	for _, hook := range hooks {
 		if hook == nil {
 			continue
@@ -362,35 +357,43 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 			err = errors.Warning("fns run with hooks failed").WithCause(buildErr)
 			return
 		}
-		ctx = service.SetLog(ctx, app.log.With("hoot", hook.Name()))
+
 		service.Fork(ctx, hook)
 	}
 	return
 }
 
-func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError) {
-	ctx = service.TODO(ctx, app.endpoints)
-	r, requestErr := service.NewInternalRequest(serviceName, fn, argument)
-	if requestErr != nil {
-		err = errors.Warning("fns execute failed").WithCause(requestErr).WithMeta("service", serviceName).WithMeta("fn", fn)
+func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (v interface{}, err errors.CodeError) {
+	if serviceName == "" || fn == "" {
+		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service name or fn is invalid"))
 		return
 	}
+	ctx = service.Todo(ctx, app.endpoints)
+	endpoint, hasEndpoint := app.endpoints.Get(ctx, serviceName)
+	if !hasEndpoint {
+		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service was not found")).WithMeta("service", serviceName)
+		return
+	}
+
 	opt := &ExecuteOptions{}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
-			optErr := option(opt)
-			if optErr != nil {
-				err = errors.Warning("fns execute failed").WithCause(optErr).WithMeta("service", serviceName).WithMeta("fn", fn)
-				return
-			}
+			option(opt)
 		}
 	}
+	requestOptions := make([]service.RequestOption, 0, 1)
 	if opt.user != nil {
-		r.SetUser(opt.user.Id(), opt.user.Attributes())
+		requestOptions = append(requestOptions, service.WithRequestUser(opt.user.Id(), opt.user.Attributes()))
+	}
+	if opt.internal {
+		requestOptions = append(requestOptions, service.WithInternalRequest())
 	}
 
-	ctx = service.SetRequest(ctx, r)
-	result, err = app.endpoints.Handle(ctx, r)
+	result := endpoint.Request(ctx, service.NewRequest(ctx, serviceName, fn, service.NewArgument(argument), requestOptions...))
+	v, _, err = result.Value(ctx)
+	if err != nil {
+		err = errors.Warning("fns: execute failed").WithCause(err).WithMeta("service", serviceName)
+	}
 	return
 }
 

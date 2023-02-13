@@ -17,80 +17,13 @@
 package shared
 
 import (
-	"context"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"time"
 )
-
-const (
-	storeContextKey = "@fns_shared_store"
-)
-
-func WithStore(ctx context.Context, store Store) context.Context {
-	return context.WithValue(ctx, storeContextKey, store)
-}
 
 type Store interface {
 	Set(key []byte, value []byte, timeout time.Duration) (err errors.CodeError)
 	Get(key []byte) (value []byte, err errors.CodeError)
 	Remove(key []byte) (err errors.CodeError)
 	Close()
-}
-
-func getStore(ctx context.Context) (store Store, err errors.CodeError) {
-	v := ctx.Value(storeContextKey)
-	if v == nil {
-		err = errors.Warning("fns: get shared store failed").WithCause(fmt.Errorf("not exist"))
-		return
-	}
-	ok := false
-	store, ok = v.(Store)
-	if !ok {
-		err = errors.Warning("fns: get shared store failed").WithCause(fmt.Errorf("type is not matched"))
-		return
-	}
-	return
-}
-
-func Get(ctx context.Context, key []byte) (value []byte, err errors.CodeError) {
-	store, getStoreErr := getStore(ctx)
-	if getStoreErr != nil {
-		err = errors.Warning("fns: get from shared store failed").WithCause(getStoreErr)
-		return
-	}
-	value, err = store.Get(key)
-	if err != nil {
-		err = errors.Warning("fns: get from shared store failed").WithCause(err)
-		return
-	}
-	return
-}
-
-func Set(ctx context.Context, key []byte, value []byte, timeout time.Duration) (err errors.CodeError) {
-	store, getStoreErr := getStore(ctx)
-	if getStoreErr != nil {
-		err = errors.Warning("fns: set into shared store failed").WithCause(getStoreErr)
-		return
-	}
-	err = store.Set(key, value, timeout)
-	if err != nil {
-		err = errors.Warning("fns: set int shared store failed").WithCause(err)
-		return
-	}
-	return
-}
-
-func Remove(ctx context.Context, key []byte) (err errors.CodeError) {
-	store, getStoreErr := getStore(ctx)
-	if getStoreErr != nil {
-		err = errors.Warning("fns: remove from shared store failed").WithCause(getStoreErr)
-		return
-	}
-	err = store.Remove(key)
-	if err != nil {
-		err = errors.Warning("fns: remove from shared store failed").WithCause(err)
-		return
-	}
-	return
 }

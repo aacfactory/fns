@@ -18,39 +18,11 @@ package shared
 
 import (
 	"context"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"sync"
 	"time"
 )
 
-const (
-	lockerContextKey = "@fns_shared_locker"
-)
-
-func WithLocker(ctx context.Context, lockers Lockers) context.Context {
-	return context.WithValue(ctx, lockerContextKey, lockers)
-}
-
 type Lockers interface {
 	Get(ctx context.Context, key []byte, timeout time.Duration) (locker sync.Locker, err errors.CodeError)
-}
-
-func Locker(ctx context.Context, key []byte, timeout time.Duration) (locker sync.Locker, err errors.CodeError) {
-	v := ctx.Value(lockerContextKey)
-	if v == nil {
-		err = errors.Warning("fns: get shared lockers failed").WithCause(fmt.Errorf("not exist"))
-		return
-	}
-	lockers, ok := v.(Lockers)
-	if !ok {
-		err = errors.Warning("fns: get shared lockers failed").WithCause(fmt.Errorf("type is not matched"))
-		return
-	}
-	locker, err = lockers.Get(ctx, key, timeout)
-	if err != nil {
-		err = errors.ServiceError("fns: locker failed").WithCause(err)
-		return
-	}
-	return
 }

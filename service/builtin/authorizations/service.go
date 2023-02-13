@@ -24,6 +24,10 @@ import (
 	"golang.org/x/net/context"
 )
 
+const (
+	Name = "authorizations"
+)
+
 func Service(components ...service.Component) (v service.Service) {
 	var store service.Component
 	var encoding service.Component
@@ -61,7 +65,7 @@ type _service_ struct {
 }
 
 func (svc *_service_) Name() (name string) {
-	name = "authorizations"
+	name = Name
 	return
 }
 

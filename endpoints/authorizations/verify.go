@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/builtin/authorizations"
 	"github.com/aacfactory/json"
 )
 
@@ -52,9 +53,9 @@ func Verify(ctx context.Context) (err errors.CodeError) {
 		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
 		return
 	}
-	fr := endpoint.Request(ctx, "decode", service.NewArgument(&decodeParam{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "decode", service.NewArgument(&decodeParam{
 		Token: token,
-	}))
+	})))
 	result := &decodeResult{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {

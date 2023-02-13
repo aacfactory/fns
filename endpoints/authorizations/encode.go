@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/builtin/authorizations"
 	"github.com/aacfactory/json"
 )
 
@@ -46,10 +47,11 @@ func Encode(ctx context.Context, userId string, userAttributes *json.Object) (to
 	if userAttributes == nil {
 		userAttributes = json.NewObject()
 	}
-	fr := endpoint.Request(ctx, "encode", service.NewArgument(&encodeParam{
+
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "encode", service.NewArgument(&encodeParam{
 		Id:         userId,
 		Attributes: userAttributes,
-	}))
+	})))
 	result := &encodeResult{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {

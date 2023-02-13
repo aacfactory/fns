@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/builtin/authorizations"
 )
 
 type revokeParam struct {
@@ -38,9 +39,9 @@ func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
 		err = errors.Warning("authorizations: revoke token failed").WithCause(fmt.Errorf("tokenId is empty"))
 		return
 	}
-	fr := endpoint.Request(ctx, "revoke", service.NewArgument(&revokeParam{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
 		TokenId: tokenId,
-	}))
+	})))
 	result := &service.Empty{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {
@@ -60,9 +61,9 @@ func RevokeUserTokens(ctx context.Context, userId string) (err errors.CodeError)
 		err = errors.Warning("authorizations: revoke user tokens failed").WithCause(fmt.Errorf("userId is empty"))
 		return
 	}
-	fr := endpoint.Request(ctx, "revoke", service.NewArgument(&revokeParam{
+	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
 		UserId: userId,
-	}))
+	})))
 	result := &service.Empty{}
 	_, getResultErr := fr.Get(ctx, result)
 	if getResultErr != nil {

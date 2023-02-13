@@ -23,6 +23,10 @@ import (
 )
 
 func tryReportStats(ctx context.Context, service string, fn string, err errors.CodeError, span Span) {
+	ts, hasService := GetEndpoint(ctx, "stats")
+	if !hasService {
+		return
+	}
 	ec := 0
 	en := ""
 	if err != nil {
@@ -42,11 +46,13 @@ func tryReportStats(ctx context.Context, service string, fn string, err errors.C
 			ErrorName: en,
 			Latency:   latency,
 		},
+		endpoint: ts,
 	})
 }
 
 type reportStatsTask struct {
-	s *Metric
+	s        *Metric
+	endpoint Endpoint
 }
 
 func (task *reportStatsTask) Name() (name string) {
@@ -55,11 +61,7 @@ func (task *reportStatsTask) Name() (name string) {
 }
 
 func (task *reportStatsTask) Execute(ctx context.Context) {
-	ts, hasService := GetEndpoint(ctx, "stats")
-	if !hasService {
-		return
-	}
-	_ = ts.Request(ctx, NewRequest(ctx, "stats", "report", NewArgument(task.s)))
+	_ = task.endpoint.Request(ctx, NewRequest(ctx, "stats", "report", NewArgument(task.s)))
 }
 
 type Metric struct {

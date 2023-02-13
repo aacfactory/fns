@@ -19,6 +19,8 @@ package server
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -34,10 +36,10 @@ const (
 type HandlerOptions struct {
 	AppId             string
 	AppName           string
-	AppVersion        string
+	AppVersion        versions.Version
 	Log               logs.Logger
 	Config            configures.Config
-	EndpointDiscovery service.EndpointDiscovery
+	DeployedEndpoints service.DeployedEndpoints
 }
 
 type Handler interface {
@@ -49,23 +51,25 @@ type Handler interface {
 }
 
 type HandlersOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion string
-	Log        logs.Logger
-	Config     configures.Config
-	Endpoints  *service.Endpoints
+	AppId             string
+	AppName           string
+	AppVersion        versions.Version
+	Log               logs.Logger
+	Config            configures.Config
+	DeployedEndpoints service.DeployedEndpoints
+	Running           *commons.SafeFlag
 }
 
 func NewHandlers(options HandlersOptions) (handlers *Handlers, err errors.CodeError) {
 	handlers = &Handlers{
-		appId:      options.AppId,
-		appName:    options.AppName,
-		appVersion: options.AppVersion,
-		log:        options.Log,
-		config:     options.Config,
-		endpoints:  options.Endpoints,
-		handlers:   make([]Handler, 0, 1),
+		appId:             options.AppId,
+		appName:           options.AppName,
+		appVersion:        options.AppVersion,
+		log:               options.Log,
+		config:            options.Config,
+		deployedEndpoints: options.DeployedEndpoints,
+		handlers:          make([]Handler, 0, 1),
+		running:           options.Running,
 	}
 	// health
 	err = handlers.Append(&healthHandler{})
@@ -89,13 +93,14 @@ func NewHandlers(options HandlersOptions) (handlers *Handlers, err errors.CodeEr
 }
 
 type Handlers struct {
-	appId      string
-	appName    string
-	appVersion string
-	log        logs.Logger
-	config     configures.Config
-	endpoints  *service.Endpoints
-	handlers   []Handler
+	appId             string
+	appName           string
+	appVersion        versions.Version
+	log               logs.Logger
+	config            configures.Config
+	deployedEndpoints service.DeployedEndpoints
+	running           *commons.SafeFlag
+	handlers          []Handler
 }
 
 func (handlers *Handlers) Append(h Handler) (err errors.CodeError) {
@@ -113,7 +118,7 @@ func (handlers *Handlers) Append(h Handler) (err errors.CodeError) {
 		AppVersion:        handlers.appVersion,
 		Log:               handlers.log.With("handler", name),
 		Config:            handleConfig,
-		EndpointDiscovery: handlers.endpoints,
+		DeployedEndpoints: handlers.deployedEndpoints,
 	}
 	buildErr := h.Build(options)
 	if buildErr != nil {
@@ -125,7 +130,7 @@ func (handlers *Handlers) Append(h Handler) (err errors.CodeError) {
 }
 
 func (handlers *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if !handlers.endpoints.IsRunning() {
+	if handlers.running.IsOff() {
 		writer.Header().Set(httpConnectionHeader, httpConnectionHeaderClose)
 		writer.Header().Set(httpServerHeader, httpServerHeaderValue)
 		writer.Header().Set(httpContentType, httpContentTypeJson)

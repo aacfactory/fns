@@ -20,6 +20,7 @@ import (
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -36,9 +37,10 @@ const (
 )
 
 type serviceHandler struct {
-	log               logs.Logger
-	counter           sync.WaitGroup
-	endpointDiscovery service.EndpointDiscovery
+	log       logs.Logger
+	counter   sync.WaitGroup
+	version   versions.Version
+	endpoints map[string]service.Endpoint
 }
 
 func (h *serviceHandler) Name() (name string) {
@@ -49,7 +51,11 @@ func (h *serviceHandler) Name() (name string) {
 func (h *serviceHandler) Build(options *HandlerOptions) (err error) {
 	h.log = options.Log
 	h.counter = sync.WaitGroup{}
-	h.endpointDiscovery = options.EndpointDiscovery
+	h.version = options.AppVersion
+	h.endpoints = make(map[string]service.Endpoint)
+	for _, endpoint := range options.DeployedEndpoints.Deployed() {
+		h.endpoints[endpoint.Name()] = endpoint
+	}
 	return
 }
 
@@ -100,6 +106,35 @@ func (h *serviceHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			}
 		}
 	}
+	version := request.Header.Get("X-Fns-Version")
+	if version != "" {
+		leftVersion := versions.Version{}
+		rightVersion := versions.Version{}
+		var parseVersionErr error
+		versionRange := strings.Split(version, ",")
+		leftVersionValue := strings.TrimSpace(versionRange[0])
+		if leftVersionValue != "" {
+			leftVersion, parseVersionErr = versions.Parse(leftVersionValue)
+			if parseVersionErr != nil {
+				h.failed(writer, "", 0, errors.BadRequest("fns: read request version failed").WithCause(parseVersionErr))
+				return
+			}
+		}
+		if len(versionRange) > 1 {
+			rightVersionValue := strings.TrimSpace(versionRange[1])
+			if rightVersionValue != "" {
+				rightVersion, parseVersionErr = versions.Parse(rightVersionValue)
+				if parseVersionErr != nil {
+					h.failed(writer, "", 0, errors.BadRequest("fns: read request version failed").WithCause(parseVersionErr))
+					return
+				}
+			}
+		}
+		if !h.version.Between(leftVersion, rightVersion) {
+			h.failed(writer, "", 0, errors.NotAcceptable("fns: request version is not acceptable").WithMeta("version", h.version.String()))
+			return
+		}
+	}
 
 	h.counter.Add(1)
 	handleBegAT := time.Time{}
@@ -108,7 +143,7 @@ func (h *serviceHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		handleBegAT = time.Now()
 	}
 
-	endpoint, hasEndpoint := h.endpointDiscovery.Get(request.Context(), serviceName, service.LocalScoped())
+	endpoint, hasEndpoint := h.endpoints[serviceName]
 	if !hasEndpoint {
 		h.failed(writer, "", 0, errors.NotFound("service was not found").WithMeta("service", serviceName))
 		return

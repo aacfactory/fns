@@ -19,6 +19,7 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/server"
@@ -35,7 +36,7 @@ type Option func(*Options) error
 var (
 	defaultOptions = &Options{
 		name:                  "fns",
-		version:               "0.0.0",
+		version:               versions.New(0, 0, 1),
 		autoMaxProcsMin:       0,
 		autoMaxProcsMax:       0,
 		configRetrieverOption: configure.DefaultConfigRetrieverOption(),
@@ -47,7 +48,7 @@ var (
 
 type Options struct {
 	name                  string
-	version               string
+	version               versions.Version
 	autoMaxProcsMin       int
 	autoMaxProcsMax       int
 	configRetrieverOption configures.RetrieverOption
@@ -104,7 +105,11 @@ func Version(version string) Option {
 		if version == "" {
 			return fmt.Errorf("set version failed for empty")
 		}
-		options.version = version
+		ver, parseErr := versions.Parse(version)
+		if parseErr != nil {
+			return parseErr
+		}
+		options.version = ver
 		return nil
 	}
 }

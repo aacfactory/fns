@@ -82,21 +82,12 @@ func CanAccessInternal(ctx context.Context) (ok bool) {
 	return
 }
 
-func GetEndpoint(ctx context.Context, name string) (v Endpoint, has bool) {
+func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryGetOption) (v Endpoint, has bool) {
 	rt := getRuntime(ctx)
 	if rt == nil {
 		return
 	}
-	v, has = rt.discovery.Get(ctx, name)
-	return
-}
-
-func GetExactEndpoint(ctx context.Context, name string, id string) (v Endpoint, has bool) {
-	rt := getRuntime(ctx)
-	if rt == nil {
-		return
-	}
-	v, has = rt.discovery.Get(ctx, name, Exact(id))
+	v, has = rt.discovery.Get(ctx, name, options...)
 	return
 }
 

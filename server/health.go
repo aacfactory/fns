@@ -41,7 +41,7 @@ func (h *healthHandler) Name() (name string) {
 func (h *healthHandler) Build(options *HandlerOptions) (err error) {
 	h.appId = options.AppId
 	h.appName = options.AppName
-	h.version = options.AppVersion
+	h.version = options.AppVersion.String()
 	h.launchAT = time.Now().Format(time.RFC3339)
 	return
 }

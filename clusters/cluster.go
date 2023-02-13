@@ -19,12 +19,17 @@ package clusters
 import (
 	"context"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/logs"
 )
 
 type ClusterBuilderOptions struct {
-	Config    configures.Config
-	Endpoints *service.Endpoints
+	Config     configures.Config
+	AppId      string
+	AppVersion versions.Version
+	Log        logs.Logger
+	Endpoints  *service.Endpoints
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)

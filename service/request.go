@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type RequestHeader interface {
@@ -36,6 +38,7 @@ type RequestHeader interface {
 	Add(key string, value string)
 	ForEach(fn func(key string, values []string) (next bool))
 	Authorization() (authorization string, has bool)
+	VersionRange() (left versions.Version, right versions.Version, err error)
 	MapToHttpHeader() (v http.Header)
 }
 
@@ -90,6 +93,36 @@ func (header *requestHeader) Authorization() (authorization string, has bool) {
 
 func (header *requestHeader) ClientId() (id string) {
 	id = header.Get("X-Fns-Client-Id")
+	return
+}
+
+func (header *requestHeader) VersionRange() (left versions.Version, right versions.Version, err error) {
+	version := header.Get("X-Fns-Version")
+	if version == "" {
+		right = versions.Max()
+		return
+	}
+	versionRange := strings.Split(version, ",")
+	leftVersionValue := strings.TrimSpace(versionRange[0])
+	if leftVersionValue != "" {
+		left, err = versions.Parse(leftVersionValue)
+		if err != nil {
+			err = errors.BadRequest("fns: read request version failed").WithCause(err)
+			return
+		}
+	}
+	if len(versionRange) > 1 {
+		rightVersionValue := strings.TrimSpace(versionRange[1])
+		if rightVersionValue != "" {
+			right, err = versions.Parse(rightVersionValue)
+			if err != nil {
+				err = errors.BadRequest("fns: read request version failed").WithCause(err)
+				return
+			}
+		}
+	} else {
+		right = versions.Max()
+	}
 	return
 }
 

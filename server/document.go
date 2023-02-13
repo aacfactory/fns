@@ -17,7 +17,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/oas"
@@ -34,12 +33,12 @@ const (
 )
 
 type documentHandler struct {
-	log               logs.Logger
-	doc               *Document
-	endpointDiscovery service.EndpointDiscovery
-	once              sync.Once
-	raw               []byte
-	oas               []byte
+	log       logs.Logger
+	doc       *Document
+	endpoints service.DeployedEndpoints
+	once      sync.Once
+	raw       []byte
+	oas       []byte
 }
 
 func (h *documentHandler) Name() (name string) {
@@ -61,8 +60,8 @@ func (h *documentHandler) Build(options *HandlerOptions) (err error) {
 	if h.doc.Description == "" {
 		h.doc.Description = "Fn services"
 	}
-	h.doc.version = options.AppVersion
-	h.endpointDiscovery = options.EndpointDiscovery
+	h.doc.version = options.AppVersion.String()
+	h.endpoints = options.DeployedEndpoints
 	h.raw = []byte{'{', '}'}
 	h.oas = []byte{'{', '}'}
 	h.once = sync.Once{}
@@ -107,7 +106,7 @@ func (h *documentHandler) write(writer http.ResponseWriter, body []byte) {
 func (h *documentHandler) encode() {
 	h.once.Do(func() {
 		// raw
-		endpoints := h.endpointDiscovery.List(context.TODO(), service.LocalScoped())
+		endpoints := h.endpoints.Deployed()
 		if endpoints == nil || len(endpoints) == 0 {
 			return
 		}

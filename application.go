@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/fns/internal/procs"
@@ -101,12 +102,16 @@ func New(options ...Option) (app Application) {
 		Min: opt.autoMaxProcsMin,
 		Max: opt.autoMaxProcsMax,
 	})
+	// running
+	running := commons.NewSafeFlag(false)
 
 	// endpoints
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
-		AppId:  appId,
-		Log:    log,
-		Config: config.Runtime,
+		AppId:      appId,
+		AppVersion: appVersion,
+		Log:        log,
+		Running:    running,
+		Config:     config.Runtime,
 	})
 	if endpointsErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(endpointsErr))))
@@ -129,12 +134,13 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	httpHandlers, httpHandlersErr := server.NewHandlers(server.HandlersOptions{
-		AppId:      appId,
-		AppName:    appName,
-		AppVersion: appVersion,
-		Log:        log,
-		Config:     httpHandlersConfig,
-		Endpoints:  endpoints,
+		AppId:             appId,
+		AppName:           appName,
+		AppVersion:        appVersion,
+		Log:               log,
+		Config:            httpHandlersConfig,
+		DeployedEndpoints: endpoints,
+		Running:           running,
 	})
 	if httpHandlersErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(httpHandlersErr))))
@@ -193,8 +199,11 @@ func New(options ...Option) (app Application) {
 		}
 		var clusterBuildErr error
 		cluster, clusterBuildErr = clusterBuilder(clusters.ClusterBuilderOptions{
-			Config:    clusterConfig,
-			Endpoints: endpoints,
+			Config:     clusterConfig,
+			AppId:      appId,
+			AppVersion: appVersion,
+			Log:        log.With("fns", "cluster"),
+			Endpoints:  endpoints,
 		})
 		if clusterBuildErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(errors.Map(clusterBuildErr))))
@@ -220,6 +229,7 @@ func New(options ...Option) (app Application) {
 		autoMaxProcs:    goprocs,
 		config:          configRaw,
 		cluster:         cluster,
+		running:         running,
 		endpoints:       endpoints,
 		http:            httpServer,
 		httpHandlers:    httpHandlers,
@@ -237,6 +247,7 @@ type application struct {
 	autoMaxProcs    *procs.AutoMaxProcs
 	config          configures.Config
 	cluster         clusters.Cluster
+	running         *commons.SafeFlag
 	endpoints       *service.Endpoints
 	http            server.Http
 	httpHandlers    *server.Handlers
@@ -279,7 +290,7 @@ func (app *application) Deploy(services ...service.Service) (err error) {
 }
 
 func (app *application) Run(ctx context.Context) (err error) {
-	if app.endpoints.IsRunning() {
+	if app.running.IsOn() {
 		err = errors.Warning("fns: application is running")
 		return
 	}
@@ -321,7 +332,7 @@ func (app *application) Run(ctx context.Context) (err error) {
 		}
 	}
 	// on
-	app.endpoints.Run()
+	app.running.On()
 	return
 }
 
@@ -401,7 +412,7 @@ func (app *application) Sync() (err error) {
 	if app.synced {
 		return
 	}
-	if !app.endpoints.IsRunning() {
+	if app.running.IsOff() {
 		err = errors.Warning("fns: application is not running")
 		return
 	}
@@ -424,6 +435,8 @@ func (app *application) Sync() (err error) {
 
 func (app *application) stop(ch chan struct{}) {
 	defer app.autoMaxProcs.Reset()
+	// off
+	app.running.Off()
 	// cluster leave
 	if app.cluster != nil {
 		leaveErr := app.cluster.Leave(context.TODO())
@@ -450,7 +463,7 @@ func (app *application) stop(ch chan struct{}) {
 }
 
 func (app *application) Quit() {
-	if !app.endpoints.IsRunning() {
+	if app.running.IsOff() {
 		return
 	}
 	if !app.synced {

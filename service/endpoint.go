@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/shareds"
@@ -40,8 +41,8 @@ type Endpoint interface {
 type EndpointDiscoveryGetOption func(options *EndpointDiscoveryGetOptions)
 
 type EndpointDiscoveryGetOptions struct {
-	scope string
-	id    string
+	id           string
+	versionRange []versions.Version
 }
 
 func Exact(id string) EndpointDiscoveryGetOption {
@@ -51,28 +52,29 @@ func Exact(id string) EndpointDiscoveryGetOption {
 	}
 }
 
-const (
-	localScoped = "local"
-)
-
-func LocalScoped() EndpointDiscoveryGetOption {
+func VersionRange(left versions.Version, right versions.Version) EndpointDiscoveryGetOption {
 	return func(options *EndpointDiscoveryGetOptions) {
-		options.scope = localScoped
+		options.versionRange = append(options.versionRange, left, right)
 		return
 	}
 }
 
 type EndpointDiscovery interface {
 	Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool)
-	List(ctx context.Context, options ...EndpointDiscoveryGetOption) (endpoints []Endpoint)
+}
+
+type DeployedEndpoints interface {
+	Deployed() (endpoints []Endpoint)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type EndpointsOptions struct {
-	AppId  string
-	Log    logs.Logger
-	Config *configure.Runtime
+	AppId      string
+	AppVersion versions.Version
+	Log        logs.Logger
+	Running    *commons.SafeFlag
+	Config     *configure.Runtime
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
@@ -114,7 +116,8 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	v = &Endpoints{
 		log:           options.Log,
 		appId:         options.AppId,
-		running:       commons.NewSafeFlag(false),
+		appVersion:    options.AppVersion,
+		running:       options.Running,
 		barrier:       DefaultBarrier(),
 		worker:        worker,
 		sharedLockers: shareds.NewLocalLockers(),
@@ -129,6 +132,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 type Endpoints struct {
 	log           logs.Logger
 	appId         string
+	appVersion    versions.Version
 	running       *commons.SafeFlag
 	worker        Workers
 	handleTimeout time.Duration
@@ -137,15 +141,6 @@ type Endpoints struct {
 	sharedStore   shared.Store
 	discovery     EndpointDiscovery
 	deployed      map[string]*endpoint
-}
-
-func (e *Endpoints) Run() {
-	e.running.On()
-}
-
-func (e *Endpoints) IsRunning() (ok bool) {
-	ok = e.running.IsOn()
-	return
 }
 
 func (e *Endpoints) Upgrade(barrier Barrier, store shared.Store, lockers shared.Lockers, discovery EndpointDiscovery) {
@@ -163,54 +158,42 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 		return
 	}
 	opt := &EndpointDiscoveryGetOptions{
-		scope: "",
-		id:    "",
+		id:           "",
+		versionRange: make([]versions.Version, 0, 1),
 	}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
 			option(opt)
 		}
 	}
+	versionMatched := true
+	if len(opt.versionRange) > 0 {
+		versionMatched = e.appVersion.Between(opt.versionRange[0], opt.versionRange[1])
+	}
 	if opt.id != "" {
-		if opt.id == e.appId {
+		if opt.id == e.appId && versionMatched {
 			endpoint, has = e.deployed[service]
 			return
 		}
-		if opt.scope != localScoped && e.discovery != nil && CanAccessInternal(ctx) {
+		if e.discovery != nil && CanAccessInternal(ctx) {
 			endpoint, has = e.discovery.Get(ctx, service, options...)
 		}
 	} else {
 		endpoint, has = e.deployed[service]
-		if !has && opt.scope != localScoped && e.discovery != nil && CanAccessInternal(ctx) {
-			endpoint, has = e.discovery.Get(ctx, service)
+		if has && versionMatched {
+			return
+		}
+		if e.discovery != nil && CanAccessInternal(ctx) {
+			endpoint, has = e.discovery.Get(ctx, service, options...)
 		}
 	}
 	return
 }
 
-func (e *Endpoints) List(ctx context.Context, options ...EndpointDiscoveryGetOption) (endpoints []Endpoint) {
-	opt := &EndpointDiscoveryGetOptions{
-		scope: "",
-		id:    "",
-	}
-	if options != nil && len(options) > 0 {
-		for _, option := range options {
-			option(opt)
-		}
-	}
+func (e *Endpoints) Deployed() (endpoints []Endpoint) {
 	endpoints = make([]Endpoint, 0, 1)
 	for _, ep := range e.deployed {
 		endpoints = append(endpoints, ep)
-	}
-	if opt.scope == localScoped {
-		return
-	}
-	if e.discovery == nil || !CanAccessInternal(ctx) {
-		return
-	}
-	remotes := e.discovery.List(ctx)
-	if remotes != nil && len(remotes) > 0 {
-		endpoints = append(endpoints, remotes...)
 	}
 	return
 }
@@ -268,7 +251,6 @@ func (e *Endpoints) Listen() (err error) {
 }
 
 func (e *Endpoints) Close() {
-	e.running.Off()
 	for _, ep := range e.deployed {
 		ep.svc.Close()
 	}

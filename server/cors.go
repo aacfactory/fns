@@ -59,11 +59,14 @@ func NewCorsHandler(config *configure.Cors) (h *cors.Cors) {
 		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Request-Timeout") < 0 {
 			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Request-Timeout")
 		}
+		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Version") < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Version")
+		}
 	}
 	if config.ExposedHeaders == nil {
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
-	config.ExposedHeaders = append(config.ExposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server")
+	config.ExposedHeaders = append(config.ExposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server", "X-Fns-Version")
 	h = cors.New(cors.Options{
 		AllowedOrigins:         config.AllowedOrigins,
 		AllowOriginFunc:        nil,

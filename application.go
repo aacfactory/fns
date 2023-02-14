@@ -210,18 +210,21 @@ func New(options ...Option) (app Application) {
 				return
 			}
 			devMode = &clusters.DevMode{
-				ProxyAddress: clusterProxyAddress,
-				ClientTLS:    proxyClientTLS,
+				ProxyAddress:   clusterProxyAddress,
+				ProxyClientTLS: proxyClientTLS,
 			}
 		}
 		var clusterBuildErr error
 		cluster, clusterBuildErr = clusterBuilder(clusters.ClusterBuilderOptions{
-			Config:     clusterConfig,
-			AppId:      appId,
-			AppVersion: appVersion,
-			Log:        log.With("fns", "cluster"),
-			Endpoints:  endpoints,
-			DevMode:    devMode,
+			Config:  clusterConfig,
+			Log:     log.With("fns", "cluster"),
+			DevMode: devMode,
+			App: clusters.ApplicationInfo{
+				AppId:      appId,
+				AppVersion: appVersion,
+				Handlers:   httpHandlers.HandlerNames(),
+				Endpoints:  endpoints,
+			},
 		})
 		if clusterBuildErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, create cluster failed").WithCause(errors.Map(clusterBuildErr))))
@@ -255,6 +258,15 @@ func New(options ...Option) (app Application) {
 		signalCh:        signalCh,
 		synced:          false,
 	}
+	if opt.services != nil && len(opt.services) > 0 {
+		for _, svc := range opt.services {
+			deployErr := app.Deploy(svc)
+			if deployErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, deploy service failed").WithCause(errors.Map(deployErr))))
+				return
+			}
+		}
+	}
 	return
 }
 
@@ -280,6 +292,10 @@ func (app *application) Log() (log logs.Logger) {
 }
 
 func (app *application) Deploy(services ...service.Service) (err error) {
+	if app.running.IsOn() {
+		err = errors.Warning("fns: can not deployed service when application is running")
+		return
+	}
 	if services == nil || len(services) == 0 {
 		err = errors.Warning("fns: no services deployed")
 		return

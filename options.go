@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/fns/internal/configure"
 	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/server"
+	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
 	"os"
 	"strings"
@@ -42,6 +43,7 @@ var (
 		configRetrieverOption: configure.DefaultConfigRetrieverOption(),
 		server:                &server.FastHttp{},
 		serverHandlers:        make([]server.Handler, 0, 1),
+		services:              make([]service.Service, 0, 1),
 		shutdownTimeout:       60 * time.Second,
 	}
 )
@@ -54,6 +56,7 @@ type Options struct {
 	configRetrieverOption configures.RetrieverOption
 	server                server.Http
 	serverHandlers        []server.Handler
+	services              []service.Service
 	shutdownTimeout       time.Duration
 }
 
@@ -169,6 +172,27 @@ func Handlers(handlers ...server.Handler) Option {
 			return nil
 		}
 		options.serverHandlers = append(options.serverHandlers, handlers...)
+		return nil
+	}
+}
+
+func Services(services ...service.Service) Option {
+	return func(options *Options) error {
+		if services == nil || len(services) == 0 {
+			return nil
+		}
+		for _, s := range services {
+			if s == nil {
+				return fmt.Errorf("can not deploy a nil service")
+			}
+			name := s.Name()
+			for _, o := range options.services {
+				if name == o.Name() {
+					return fmt.Errorf("can not deploy duplicated service")
+				}
+			}
+			options.services = append(options.services, s)
+		}
 		return nil
 	}
 }

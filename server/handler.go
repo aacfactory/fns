@@ -156,6 +156,14 @@ func (handlers *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Re
 	return
 }
 
+func (handlers *Handlers) HandlerNames() (names []string) {
+	names = make([]string, 0, 1)
+	for _, handler := range handlers.handlers {
+		names = append(names, handler.Name())
+	}
+	return
+}
+
 func (handlers *Handlers) Close() {
 	waiter := &sync.WaitGroup{}
 	for _, handler := range handlers.handlers {

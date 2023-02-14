@@ -26,17 +26,22 @@ import (
 )
 
 type DevMode struct {
-	ProxyAddress string
-	ClientTLS    *tls.Config
+	ProxyAddress   string
+	ProxyClientTLS *tls.Config
+}
+
+type ApplicationInfo struct {
+	AppId      string
+	AppVersion versions.Version
+	Handlers   []string
+	Endpoints  service.DeployedEndpoints
 }
 
 type ClusterBuilderOptions struct {
-	Config     configures.Config
-	AppId      string
-	AppVersion versions.Version
-	Log        logs.Logger
-	DevMode    *DevMode
-	Endpoints  service.DeployedEndpoints
+	Config  configures.Config
+	Log     logs.Logger
+	DevMode *DevMode
+	App     ApplicationInfo
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)

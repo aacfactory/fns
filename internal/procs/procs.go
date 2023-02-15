@@ -17,7 +17,6 @@
 package procs
 
 import (
-	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/logs"
 	"go.uber.org/automaxprocs/maxprocs"
 	"runtime"
@@ -55,10 +54,7 @@ type AutoMaxProcs struct {
 
 func (p *AutoMaxProcs) Enable() {
 	if p.min > 0 {
-		maxprocsLog := &logger.Printf{
-			Core: p.log,
-		}
-		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(maxprocsLog.Printf))
+		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(logs.MapToLogger(p.log, logs.DebugLevel, false).Printf))
 		if setErr != nil {
 			if p.log.DebugEnabled() {
 				p.log.Debug().Message("fns: set automaxprocs failed, use runtime.GOMAXPROCS(0) insteadof")

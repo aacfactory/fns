@@ -23,7 +23,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
-	"github.com/aacfactory/fns/internal/logger"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/fasthttp"
@@ -169,7 +168,7 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 		NoDefaultDate:                      false,
 		NoDefaultContentType:               false,
 		CloseOnShutdown:                    true,
-		Logger:                             &logger.Printf{Core: options.Log},
+		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
 	}
 	return
 }

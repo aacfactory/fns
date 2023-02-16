@@ -1,6 +1,6 @@
 module github.com/aacfactory/fns
 
-go 1.18
+go 1.20
 
 require (
 	github.com/aacfactory/afssl v1.5.0

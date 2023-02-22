@@ -24,7 +24,7 @@ import (
 	"github.com/aacfactory/afssl"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"io/ioutil"
+	"os"
 	"strings"
 	"time"
 )
@@ -50,12 +50,12 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 			err = errors.Warning("fns: load ssc kind tls config failed").WithCause(fmt.Errorf("caKey is undefined"))
 			return
 		}
-		caKeyPEM, err = ioutil.ReadFile(caKey)
+		caKeyPEM, err = os.ReadFile(caKey)
 		if err != nil {
 			err = errors.Warning("fns: load ssc kind tls config failed").WithCause(err)
 			return
 		}
-		caPEM, err = ioutil.ReadFile(ca)
+		caPEM, err = os.ReadFile(ca)
 		if err != nil {
 			err = errors.Warning("fns: load ssc kind tls config failed").WithCause(err)
 			return
@@ -83,8 +83,8 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createServerErr)
 		return
 	}
-	clientCAs := x509.NewCertPool()
-	if !clientCAs.AppendCertsFromPEM(caPEM) {
+	cas := x509.NewCertPool()
+	if !cas.AppendCertsFromPEM(caPEM) {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(fmt.Errorf("append client ca pool failed"))
 		return
 	}
@@ -94,7 +94,7 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 		return
 	}
 	serverTLS = &tls.Config{
-		ClientCAs:    clientCAs,
+		ClientCAs:    cas,
 		Certificates: []tls.Certificate{serverCertificate},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
@@ -103,18 +103,13 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createClientErr)
 		return
 	}
-	rootCAs := x509.NewCertPool()
-	if !rootCAs.AppendCertsFromPEM(caPEM) {
-		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(fmt.Errorf("append root ca pool failed"))
-		return
-	}
 	clientCertificate, clientCertificateErr := tls.X509KeyPair(clientCert, clientKey)
 	if clientCertificateErr != nil {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(clientCertificateErr)
 		return
 	}
 	clientTLS = &tls.Config{
-		RootCAs:            rootCAs,
+		RootCAs:            cas,
 		Certificates:       []tls.Certificate{clientCertificate},
 		InsecureSkipVerify: true,
 	}

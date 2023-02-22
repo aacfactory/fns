@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"io/ioutil"
+	"os"
 	"strings"
 )
 
@@ -42,7 +42,7 @@ func DefaultLoader(options configures.Config) (serverTLS *tls.Config, clientTLS 
 		err = errors.Warning("fns: load default kind tls config failed").WithCause(fmt.Errorf("cert is undefined"))
 		return
 	}
-	certPEM, readCertErr := ioutil.ReadFile(cert)
+	certPEM, readCertErr := os.ReadFile(cert)
 	if readCertErr != nil {
 		err = errors.Warning("fns: load default kind tls config failed").WithCause(readCertErr)
 		return
@@ -52,7 +52,7 @@ func DefaultLoader(options configures.Config) (serverTLS *tls.Config, clientTLS 
 		err = errors.Warning("fns: load default kind tls config failed").WithCause(fmt.Errorf("key is undefined"))
 		return
 	}
-	keyPEM, readKeyErr := ioutil.ReadFile(key)
+	keyPEM, readKeyErr := os.ReadFile(key)
 	if readKeyErr != nil {
 		err = errors.Warning("fns: load default kind tls config failed").WithCause(readKeyErr)
 		return

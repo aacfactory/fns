@@ -20,11 +20,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/fns/internal/configure"
-	"github.com/aacfactory/fns/internal/shareds"
-	"github.com/aacfactory/fns/shared"
+	"github.com/aacfactory/fns/service/internal/commons/flags"
+	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"strings"
@@ -32,58 +31,27 @@ import (
 	"time"
 )
 
-type Endpoint interface {
-	Name() (name string)
-	Document() (document Document)
-	Request(ctx context.Context, request Request) (result Result)
-}
-
-type EndpointDiscoveryGetOption func(options *EndpointDiscoveryGetOptions)
-
-type EndpointDiscoveryGetOptions struct {
-	id           string
-	versionRange []versions.Version
-}
-
-func Exact(id string) EndpointDiscoveryGetOption {
-	return func(options *EndpointDiscoveryGetOptions) {
-		options.id = strings.TrimSpace(id)
-		return
-	}
-}
-
-func VersionRange(left versions.Version, right versions.Version) EndpointDiscoveryGetOption {
-	return func(options *EndpointDiscoveryGetOptions) {
-		options.versionRange = append(options.versionRange, left, right)
-		return
-	}
-}
-
-type EndpointDiscovery interface {
-	Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool)
-}
-
-type DeployedEndpoints interface {
-	Deployed() (endpoints []Endpoint)
-}
-
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type EndpointsOptions struct {
 	AppId      string
 	AppVersion versions.Version
 	Log        logs.Logger
-	Running    *commons.SafeFlag
-	Config     *configure.Runtime
+	Running    *flags.Flag
+	Config     *Config
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	// config
+
+	// log >>>
+
+	// log <<<
+	// workers >>>
 	config := options.Config
 	if config == nil {
 		config = &configure.Runtime{}
 	}
-	// workers
 	maxWorkers := config.MaxWorkers
 	if maxWorkers < 1 {
 		maxWorkers = 256 * 1024
@@ -93,12 +61,13 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		maxIdleWorkerSeconds = 60
 	}
 	worker := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(time.Duration(maxIdleWorkerSeconds)*time.Second))
-	// shared store
+	// workers <<<
+	// shared store >>>
 	sharedMemSizeStr := strings.TrimSpace(config.LocalSharedMemSize)
 	if sharedMemSizeStr == "" {
 		sharedMemSizeStr = "64M"
 	}
-	sharedMemSize, sharedMemSizeErr := commons.ToBytes(sharedMemSizeStr)
+	sharedMemSize, sharedMemSizeErr := bytex.ToBytes(sharedMemSizeStr)
 	if sharedMemSizeErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
 		return
@@ -108,17 +77,40 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		err = errors.Warning("fns: create endpoints failed").WithCause(createSharedStoreErr)
 		return
 	}
+	// shared store <<<
+	// shared lockers >>>
+	// shared lockers <<<
+
+	// barrier >>>
+	// barrier <<<
+
+	// cluster >>>
+	// cluster <<<
+
+	// http >>>
+	// http <<<
+
 	// timeout
 	handleTimeoutSeconds := options.Config.HandleTimeoutSeconds
 	if handleTimeoutSeconds < 1 {
 		handleTimeoutSeconds = 10
 	}
 	v = &Endpoints{
+		rt: &runtimes{
+			appId:         options.AppId,
+			running:       flags.New(false),
+			log:           options.Log,
+			worker:        worker,
+			discovery:     nil,
+			barrier:       nil,
+			sharedLockers: nil,
+			sharedStore:   nil,
+		},
 		log:           options.Log,
 		appId:         options.AppId,
 		appVersion:    options.AppVersion,
 		running:       options.Running,
-		barrier:       DefaultBarrier(),
+		barrier:       defaultBarrier(),
 		worker:        worker,
 		sharedLockers: shareds.NewLocalLockers(),
 		sharedStore:   sharedStore,
@@ -126,14 +118,17 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		discovery:     nil,
 		deployed:      make(map[string]*endpoint),
 	}
+
+	v.rt.discovery = v
 	return
 }
 
 type Endpoints struct {
+	rt            *runtimes
 	log           logs.Logger
 	appId         string
 	appVersion    versions.Version
-	running       *commons.SafeFlag
+	running       *flags.Flag
 	worker        Workers
 	handleTimeout time.Duration
 	barrier       Barrier
@@ -159,6 +154,7 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 	}
 	opt := &EndpointDiscoveryGetOptions{
 		id:           "",
+		native:       false,
 		versionRange: make([]versions.Version, 0, 1),
 	}
 	if options != nil && len(options) > 0 {
@@ -175,7 +171,7 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 			endpoint, has = e.deployed[service]
 			return
 		}
-		if e.discovery != nil && CanAccessInternal(ctx) {
+		if e.discovery != nil && CanAccessInternal(ctx) && !opt.native {
 			endpoint, has = e.discovery.Get(ctx, service, options...)
 		}
 	} else {
@@ -183,17 +179,9 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 		if has && versionMatched {
 			return
 		}
-		if e.discovery != nil && CanAccessInternal(ctx) {
+		if e.discovery != nil && CanAccessInternal(ctx) && !opt.native {
 			endpoint, has = e.discovery.Get(ctx, service, options...)
 		}
-	}
-	return
-}
-
-func (e *Endpoints) Deployed() (endpoints []Endpoint) {
-	endpoints = make([]Endpoint, 0, 1)
-	for _, ep := range e.deployed {
-		endpoints = append(endpoints, ep)
 	}
 	return
 }
@@ -214,6 +202,7 @@ func (e *Endpoints) Mount(svc Service) {
 }
 
 func (e *Endpoints) Listen() (err error) {
+	// todo listen http
 	errCh := make(chan error, 8)
 	lns := 0
 	closed := int64(0)
@@ -251,6 +240,8 @@ func (e *Endpoints) Listen() (err error) {
 }
 
 func (e *Endpoints) Close() {
+	// todo close http
+	// todo close http handler
 	for _, ep := range e.deployed {
 		ep.svc.Close()
 	}
@@ -258,9 +249,16 @@ func (e *Endpoints) Close() {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type Endpoint interface {
+	Name() (name string)
+	Internal() (ok bool)
+	Document() (document Document)
+	Request(ctx context.Context, request Request) (result Result)
+}
+
 type endpoint struct {
 	appId         string
-	running       *commons.SafeFlag
+	running       *flags.Flag
 	log           logs.Logger
 	discovery     EndpointDiscovery
 	barrier       Barrier
@@ -276,10 +274,12 @@ func (e *endpoint) Name() (name string) {
 	return
 }
 
+func (e *endpoint) Internal() (ok bool) {
+	ok = e.svc.Internal()
+	return
+}
+
 func (e *endpoint) Document() (document Document) {
-	if e.svc.Internal() {
-		return
-	}
 	document = e.svc.Document()
 	return
 }
@@ -290,6 +290,7 @@ func (e *endpoint) Request(ctx context.Context, req Request) (result Result) {
 	ctx = withTracer(ctx)
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
+	// todo 双重barrier，1. request.code+deviceId，2，request.code
 
 	fr := NewResult()
 	if !e.worker.Dispatch(ctx, newFnTask(e.svc, req, fr)) {

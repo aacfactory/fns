@@ -14,38 +14,30 @@
  * limitations under the License.
  */
 
-package secret
+package ipx
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
+	"net"
+	"os"
 )
 
-var (
-	key = []byte("+-fns")
-)
-
-func Key(v []byte) {
-	if v == nil || len(v) == 0 {
-		v = []byte("+-fns")
+func GetGlobalUniCastIpFromHostname() (ipv4 string) {
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname, _ = os.LookupEnv("HOSTNAME")
 	}
-	key = v
-}
-
-func Sign(target []byte) (signature []byte) {
-	h := hmac.New(sha256.New, key)
-	signature = []byte(base64.URLEncoding.EncodeToString(h.Sum(target)))
-	return
-}
-
-func Verify(target []byte, signature []byte) (ok bool) {
-	hashed, hashedErr := base64.URLEncoding.DecodeString(string(signature))
-	if hashedErr != nil {
+	if hostname == "" {
 		return
 	}
-	h := hmac.New(sha256.New, key)
-	tmp := h.Sum(target)
-	ok = hmac.Equal(tmp, hashed)
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return
+	}
+	for _, ip := range ips {
+		if ip.IsGlobalUnicast() {
+			ipv4 = ip.To4().String()
+			break
+		}
+	}
 	return
 }

@@ -37,6 +37,8 @@ type RequestHeader interface {
 	Set(key string, value string)
 	Add(key string, value string)
 	ForEach(fn func(key string, values []string) (next bool))
+	DeviceId() (id string)
+	DeviceIp() (ip string)
 	Authorization() (authorization string, has bool)
 	VersionRange() (left versions.Version, right versions.Version, err error)
 	MapToHttpHeader() (v http.Header)
@@ -91,13 +93,18 @@ func (header *requestHeader) Authorization() (authorization string, has bool) {
 	return
 }
 
-func (header *requestHeader) ClientId() (id string) {
-	id = header.Get("X-Fns-Client-Id")
+func (header *requestHeader) DeviceId() (id string) {
+	id = header.Get(httpDeviceIdHeader)
+	return
+}
+
+func (header *requestHeader) DeviceIp() (id string) {
+	id = header.Get(httpDeviceIpHeader)
 	return
 }
 
 func (header *requestHeader) VersionRange() (left versions.Version, right versions.Version, err error) {
-	version := header.Get("X-Fns-Version")
+	version := header.Get(httpRequestVersionsHeader)
 	if version == "" {
 		right = versions.Max()
 		return
@@ -233,6 +240,7 @@ func (u *requestUser) UnmarshalJSON(p []byte) (err error) {
 
 type RequestTrunk interface {
 	json.Marshaler
+	json.Unmarshaler
 	Get(key string) (value []byte, has bool)
 	Put(key string, value []byte)
 	ForEach(fn func(key string, value []byte) (next bool))
@@ -251,6 +259,16 @@ type requestTrunk struct {
 
 func (trunk *requestTrunk) MarshalJSON() (p []byte, err error) {
 	p, err = json.Marshal(trunk.values)
+	return
+}
+
+func (trunk *requestTrunk) UnmarshalJSON(p []byte) (err error) {
+	values := make(map[string][]byte)
+	err = json.Unmarshal(p, &values)
+	if err != nil {
+		return
+	}
+	trunk.values = values
 	return
 }
 
@@ -287,7 +305,6 @@ type Request interface {
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
 	Internal() (ok bool)
-	RemoteClientIp() (ip string)
 	User() (user RequestUser)
 	Trunk() (trunk RequestTrunk)
 	Hash() (code uint64)
@@ -311,9 +328,9 @@ func WithHttpRequestHeader(header http.Header) RequestOption {
 	}
 }
 
-func WithRemoteClientIp(ip string) RequestOption {
+func WithDeviceIp(ip string) RequestOption {
 	return func(options *RequestOptions) {
-		options.remoteClientIp = ip
+		options.deviceIp = ip
 	}
 }
 
@@ -329,26 +346,40 @@ func WithRequestUser(id RequestUserId, attributes *json.Object) RequestOption {
 	}
 }
 
-type RequestOptions struct {
-	id             string
-	header         RequestHeader
-	remoteClientIp string
-	internal       bool
-	user           RequestUser
+func WithRequestTrunk(trunk RequestTrunk) RequestOption {
+	return func(options *RequestOptions) {
+		options.trunk = trunk
+	}
 }
 
-func NewRequest(ctx context.Context, service string, fn string, argument Argument, options ...RequestOption) (v Request) {
+type RequestOptions struct {
+	id       string
+	header   RequestHeader
+	deviceIp string
+	internal bool
+	user     RequestUser
+	trunk    RequestTrunk
+}
+
+func NewRequest(ctx context.Context, deviceId string, service string, fn string, argument Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
-		id:             "",
-		header:         newRequestHeader(),
-		remoteClientIp: "",
-		user:           nil,
+		id:       "",
+		header:   newRequestHeader(),
+		deviceIp: "",
+		user:     nil,
+		internal: false,
+		trunk:    newRequestTrunk(),
 	}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
 			option(opt)
 		}
 	}
+	opt.header.Add(httpDeviceIdHeader, deviceId)
+	if opt.deviceIp != "" {
+		opt.header.Add(httpDeviceIpHeader, opt.deviceIp)
+	}
+
 	prev, hasPrev := GetRequest(ctx)
 	if hasPrev {
 		id := opt.id
@@ -369,10 +400,6 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 				return
 			})
 		}
-		remoteClientIp := opt.remoteClientIp
-		if remoteClientIp == "" {
-			remoteClientIp = prev.RemoteClientIp()
-		}
 		user := opt.user
 		if user == nil {
 			user = prev.User()
@@ -380,7 +407,6 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 		v = &request{
 			id:       id,
 			internal: internal,
-			remoteIp: remoteClientIp,
 			user:     user,
 			trunk:    prev.Trunk(),
 			header:   header,
@@ -411,9 +437,8 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 		v = &request{
 			id:       id,
 			internal: opt.internal,
-			remoteIp: opt.remoteClientIp,
 			user:     user,
-			trunk:    newRequestTrunk(),
+			trunk:    opt.trunk,
 			header:   header,
 			service:  service,
 			fn:       fn,
@@ -427,7 +452,6 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 type request struct {
 	id       string
 	internal bool
-	remoteIp string
 	user     RequestUser
 	trunk    RequestTrunk
 	header   RequestHeader
@@ -454,16 +478,6 @@ func (r *request) User() (user RequestUser) {
 
 func (r *request) Trunk() (trunk RequestTrunk) {
 	trunk = r.trunk
-	return
-}
-
-func (r *request) RemoteClientIp() (v string) {
-	v = r.remoteIp
-	return
-}
-
-func (r *request) SetRemoteClientIp(ip string) {
-	r.remoteIp = ip
 	return
 }
 
@@ -528,4 +542,16 @@ func GetRequestUser(ctx context.Context) (user RequestUser, authenticated bool) 
 	user = req.User()
 	authenticated = user.Authenticated()
 	return
+}
+
+type internalRequest struct {
+	User  *requestUser    `json:"user"`
+	Trunk *requestTrunk   `json:"trunk"`
+	Body  json.RawMessage `json:"body"`
+}
+
+type internalResponse struct {
+	Trunk  *requestUser    `json:"trunk"`
+	Tracer *tracer         `json:"tracer"`
+	Body   json.RawMessage `json:"body"`
 }

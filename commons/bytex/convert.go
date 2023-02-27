@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package commons
+package bytex
 
-import "strings"
+import "unsafe"
 
-type Wildcard struct {
-	Prefix string
-	Suffix string
+func FromString(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-func (w Wildcard) Match(s string) bool {
-	return len(s) >= len(w.Prefix)+len(w.Suffix) && strings.HasPrefix(s, w.Prefix) && strings.HasSuffix(s, w.Suffix)
+func ToString(p []byte) string {
+	return unsafe.String(unsafe.SliceData(p), len(p))
+	//return *(*string)(unsafe.Pointer(&p))
 }

@@ -19,7 +19,7 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/service/internal/commons/objects"
 	"github.com/aacfactory/json"
 )
 
@@ -174,7 +174,7 @@ func (r *futureResult) Get(ctx context.Context, v interface{}) (has bool, err er
 				vv := v.(*[]byte)
 				*vv = append(*vv, value...)
 			default:
-				cpErr := commons.CopyInterface(v, data)
+				cpErr := objects.CopyInterface(v, data)
 				if cpErr != nil {
 					err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(cpErr)
 					return

@@ -19,15 +19,16 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/service/shared"
 	"golang.org/x/sync/singleflight"
 )
 
 type Barrier interface {
-	Do(ctx context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError, shared bool)
+	Do(ctx context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError)
 	Forget(ctx context.Context, key string)
 }
 
-func DefaultBarrier() Barrier {
+func defaultBarrier() Barrier {
 	return &sfgBarrier{
 		v: &singleflight.Group{},
 	}
@@ -37,9 +38,9 @@ type sfgBarrier struct {
 	v *singleflight.Group
 }
 
-func (b *sfgBarrier) Do(_ context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError, shared bool) {
+func (b *sfgBarrier) Do(_ context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
 	var doErr error
-	result, doErr, shared = b.v.Do(key, func() (interface{}, error) {
+	result, doErr, _ = b.v.Do(key, func() (interface{}, error) {
 		return fn()
 	})
 	if doErr != nil {
@@ -50,4 +51,24 @@ func (b *sfgBarrier) Do(_ context.Context, key string, fn func() (result interfa
 
 func (b *sfgBarrier) Forget(_ context.Context, key string) {
 	b.v.Forget(key)
+}
+
+func clusterBarrier(store shared.Store) Barrier {
+	return &sharedBarrier{
+		store: store,
+	}
+}
+
+type sharedBarrier struct {
+	store shared.Store
+}
+
+func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (barrier *sharedBarrier) Forget(ctx context.Context, key string) {
+	//TODO implement me
+	panic("implement me")
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package commons
+package objects
 
 import (
 	"fmt"

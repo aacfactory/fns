@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/internal/configure"
-	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
@@ -36,11 +34,13 @@ type Option func(*Options) error
 
 var (
 	defaultOptions = &Options{
+		id:                    "",
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
+		secretKey:             []byte("Fns-SK"),
 		autoMaxProcsMin:       0,
 		autoMaxProcsMax:       0,
-		configRetrieverOption: configure.DefaultConfigRetrieverOption(),
+		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		server:                &server.FastHttp{},
 		serverHandlers:        make([]server.Handler, 0, 1),
 		services:              make([]service.Service, 0, 1),
@@ -49,8 +49,10 @@ var (
 )
 
 type Options struct {
+	id                    string
 	name                  string
 	version               versions.Version
+	secretKey             []byte
 	autoMaxProcsMin       int
 	autoMaxProcsMax       int
 	configRetrieverOption configures.RetrieverOption
@@ -91,6 +93,17 @@ func ConfigActiveFromENV(key string) (active string) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+func Id(id string) Option {
+	return func(options *Options) error {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return fmt.Errorf("set id failed for empty")
+		}
+		options.id = id
+		return nil
+	}
+}
+
 func Name(name string) Option {
 	return func(options *Options) error {
 		name = strings.TrimSpace(name)
@@ -119,13 +132,13 @@ func Version(version string) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func SecretKey(data string) Option {
+func SecretKey(key string) Option {
 	return func(options *Options) error {
-		data = strings.TrimSpace(data)
-		if data == "" {
+		key = strings.TrimSpace(key)
+		if key == "" {
 			return fmt.Errorf("set secret key failed for empty data")
 		}
-		secret.Key([]byte(data))
+		options.secretKey = []byte(key)
 		return nil
 	}
 }

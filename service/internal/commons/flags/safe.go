@@ -14,10 +14,39 @@
  * limitations under the License.
  */
 
-package configure
+package flags
 
-type LogConfig struct {
-	Level     string `json:"level"`
-	Formatter string `json:"formatter"`
-	Color     bool   `json:"color"`
+import "sync/atomic"
+
+func New(on bool) *Flag {
+	return &Flag{
+		value: func(on bool) int64 {
+			if on {
+				return int64(1)
+			}
+			return int64(0)
+		}(on),
+	}
+}
+
+type Flag struct {
+	value int64
+}
+
+func (f *Flag) On() {
+	atomic.StoreInt64(&f.value, 1)
+}
+
+func (f *Flag) Off() {
+	atomic.StoreInt64(&f.value, 0)
+}
+
+func (f *Flag) IsOn() (ok bool) {
+	ok = atomic.LoadInt64(&f.value) == 1
+	return
+}
+
+func (f *Flag) IsOff() (ok bool) {
+	ok = atomic.LoadInt64(&f.value) == 0
+	return
 }

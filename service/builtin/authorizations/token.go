@@ -19,12 +19,14 @@ package authorizations
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
-	"github.com/aacfactory/fns/internal/secret"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
+	"math/rand"
 	"time"
 )
 
@@ -120,7 +122,10 @@ func (component *defaultTokenEncodingComponent) Encode(id string, attributes *js
 		err = errors.Warning("fns: default token encoding failed").WithCause(encodeErr).WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
-	signature := secret.Sign(p)
+	num := rand.Uint64()
+	signature := make([]byte, 16)
+	binary.BigEndian.PutUint64(signature[0:8], num)
+	binary.LittleEndian.PutUint64(signature[8:16], xxhash.Sum64(bytes.Join([][]byte{p, p[0:8]}, []byte{})))
 	v.p = []byte(fmt.Sprintf("%s.%s", base64.StdEncoding.EncodeToString(p), base64.StdEncoding.EncodeToString(signature)))
 	token = v
 	return
@@ -137,7 +142,11 @@ func (component *defaultTokenEncodingComponent) Decode(authorization []byte) (to
 		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
-	if !secret.Verify(items[0], items[1]) {
+	if len(items[1]) != 16 {
+		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+		return
+	}
+	if xxhash.Sum64(bytes.Join([][]byte{items[0], items[1][0:8]}, []byte{})) != binary.LittleEndian.Uint64(items[1][8:16]) {
 		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}

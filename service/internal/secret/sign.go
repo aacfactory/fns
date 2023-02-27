@@ -14,39 +14,37 @@
  * limitations under the License.
  */
 
-package commons
+package secret
 
-import "sync/atomic"
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+)
 
-func NewSafeFlag(on bool) *SafeFlag {
-	return &SafeFlag{
-		value: func(on bool) int64 {
-			if on {
-				return int64(1)
-			}
-			return int64(0)
-		}(on),
+func NewSigner(key []byte) *Signer {
+	return &Signer{
+		key: key,
 	}
 }
 
-type SafeFlag struct {
-	value int64
+type Signer struct {
+	key []byte
 }
 
-func (f *SafeFlag) On() {
-	atomic.StoreInt64(&f.value, 1)
-}
-
-func (f *SafeFlag) Off() {
-	atomic.StoreInt64(&f.value, 0)
-}
-
-func (f *SafeFlag) IsOn() (ok bool) {
-	ok = atomic.LoadInt64(&f.value) == 1
+func (s *Signer) Sign(target []byte) (signature []byte) {
+	h := hmac.New(sha256.New, s.key)
+	signature = []byte(base64.URLEncoding.EncodeToString(h.Sum(target)))
 	return
 }
 
-func (f *SafeFlag) IsOff() (ok bool) {
-	ok = atomic.LoadInt64(&f.value) == 0
+func (s *Signer) Verify(target []byte, signature []byte) (ok bool) {
+	hashed, hashedErr := base64.URLEncoding.DecodeString(string(signature))
+	if hashedErr != nil {
+		return
+	}
+	h := hmac.New(sha256.New, s.key)
+	tmp := h.Sum(target)
+	ok = hmac.Equal(tmp, hashed)
 	return
 }

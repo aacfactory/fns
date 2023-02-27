@@ -22,7 +22,6 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
-	"time"
 )
 
 type ComponentOptions struct {
@@ -136,32 +135,5 @@ func (svc *Abstract) Close() {
 
 func (svc *Abstract) Log() (log logs.Logger) {
 	log = svc.log
-	return
-}
-
-func (svc *Abstract) Execute(ctx context.Context, shared bool, handler func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
-	result, err = svc.ExecuteWithTimeout(ctx, shared, 1300*time.Millisecond, handler)
-	return
-}
-
-func (svc *Abstract) ExecuteWithTimeout(ctx context.Context, shared bool, timeout time.Duration, handler func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
-	req, hasRequest := GetRequest(ctx)
-	if !hasRequest {
-		result, err = handler()
-		return
-	}
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, timeout)
-	cancel()
-	barrier := GetBarrier(ctx)
-	key := ""
-	if shared {
-		key = fmt.Sprintf("request:%d", req.Hash())
-	} else {
-		key = fmt.Sprintf("request:%s:%d", req.RemoteClientIp(), req.Hash())
-	}
-	result, err, _ = barrier.Do(ctx, key, handler)
-	barrier.Forget(ctx, key)
-	cancel()
 	return
 }

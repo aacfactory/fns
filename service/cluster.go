@@ -14,43 +14,36 @@
  * limitations under the License.
  */
 
-package clusters
+package service
 
 import (
 	"context"
-	"crypto/tls"
-	"github.com/aacfactory/configures"
-	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 )
 
-type DevMode struct {
-	ProxyAddress   string
-	ProxyClientTLS *tls.Config
-}
-
-type ApplicationInfo struct {
-	AppId      string
-	AppVersion versions.Version
-	Handlers   []string
-	Endpoints  service.DeployedEndpoints
-}
-
 type ClusterBuilderOptions struct {
-	Config  configures.Config
-	Log     logs.Logger
-	DevMode *DevMode
-	App     ApplicationInfo
+	Config     *ClusterConfig
+	Log        logs.Logger
+	AppId      string
+	AppName    string
+	AppVersion string
+	Address    string
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
 
+// Cluster 只给address，然后service通过register的ch获得address（新增和删除），调用/services/stats获取列表，
+// 判断是否有websocket的方式为用address，调用get /applications/handlers 获取，判断有没有，一般是services，websockets，mqtt，
 type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
-	EndpointDiscovery() (discovery service.EndpointDiscovery)
 	Shared() (shared Shared)
+}
+
+type Shared interface {
+	Lockers() (lockers shared.Lockers)
+	Store() (store shared.Store)
 }
 
 var (
@@ -61,7 +54,7 @@ func RegisterClusterBuilder(name string, builder ClusterBuilder) {
 	builders[name] = builder
 }
 
-func GetClusterBuilder(name string) (builder ClusterBuilder, has bool) {
+func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
 	builder, has = builders[name]
 	return
 }

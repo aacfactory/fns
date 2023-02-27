@@ -26,3 +26,28 @@ import (
 type Lockers interface {
 	Get(ctx context.Context, key []byte, timeout time.Duration) (locker sync.Locker, err errors.CodeError)
 }
+
+func NewLocalLockers() *LocalLockers {
+	return &LocalLockers{
+		mutex:   new(sync.Mutex),
+		lockers: make(map[string]sync.Locker),
+	}
+}
+
+type LocalLockers struct {
+	mutex   *sync.Mutex
+	lockers map[string]sync.Locker
+}
+
+func (lockers *LocalLockers) Get(_ context.Context, key []byte, _ time.Duration) (locker sync.Locker, err errors.CodeError) {
+	lockers.mutex.Lock()
+	defer lockers.mutex.Unlock()
+	mKey := string(key)
+	has := false
+	locker, has = lockers.lockers[mKey]
+	if has {
+		locker = &sync.Mutex{}
+		lockers.lockers[mKey] = locker
+	}
+	return
+}

@@ -17,6 +17,7 @@
 package oas
 
 type Path struct {
+	Get  *Operation `json:"get,omitempty"`
 	Post *Operation `json:"post,omitempty"`
 }
 

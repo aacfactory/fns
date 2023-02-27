@@ -9,6 +9,7 @@ require (
 	github.com/aacfactory/errors v1.12.0
 	github.com/aacfactory/json v1.12.1
 	github.com/aacfactory/logs v1.13.0
+	github.com/aacfactory/systems v0.2.0
 	github.com/aacfactory/workers v1.6.0
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dgraph-io/ristretto v0.1.1

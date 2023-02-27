@@ -19,7 +19,7 @@ package service
 import (
 	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/service/internal/commons/objects"
 	"github.com/aacfactory/json"
 )
 
@@ -93,7 +93,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 				return
 			}
 		} else {
-			cpErr := commons.CopyInterface(v, arg.value)
+			cpErr := objects.CopyInterface(v, arg.value)
 			if cpErr != nil {
 				err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(cpErr)
 				return
@@ -109,7 +109,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 		}
 		break
 	default:
-		cpErr := commons.CopyInterface(v, arg.value)
+		cpErr := objects.CopyInterface(v, arg.value)
 		if cpErr != nil {
 			cpErr = copier.Copy(v, arg.value)
 			if cpErr != nil {

@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-package server
+package service
 
 import (
-	"github.com/aacfactory/fns/internal/configure"
 	"github.com/rs/cors"
 	"net/http"
 	"sort"
 )
 
-func NewCorsHandler(config *configure.Cors) (h *cors.Cors) {
+func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
 	if config == nil {
-		config = &configure.Cors{
+		config = &CorsConfig{
 			AllowedOrigins:   []string{"*"},
 			AllowedHeaders:   []string{"*"},
 			ExposedHeaders:   nil,
@@ -41,32 +40,42 @@ func NewCorsHandler(config *configure.Cors) (h *cors.Cors) {
 		config.AllowedHeaders = append(config.AllowedHeaders, "*")
 	}
 	if config.AllowedHeaders[0] != "*" {
-		if sort.SearchStrings(config.AllowedHeaders, "Connection") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "Connection")
+		if sort.SearchStrings(config.AllowedHeaders, httpConnectionHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpConnectionHeader)
 		}
-		if sort.SearchStrings(config.AllowedHeaders, "Upgrade") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "Upgrade")
+		if sort.SearchStrings(config.AllowedHeaders, httpUpgradeHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpUpgradeHeader)
 		}
-		if sort.SearchStrings(config.AllowedHeaders, "X-Forwarded-For") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "X-Forwarded-For")
+		if sort.SearchStrings(config.AllowedHeaders, httpXForwardedForHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpXForwardedForHeader)
 		}
-		if sort.SearchStrings(config.AllowedHeaders, "X-Real-Ip") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "X-Real-Ip")
+		if sort.SearchStrings(config.AllowedHeaders, httpDeviceIpHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpDeviceIpHeader)
 		}
-		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Client-Id") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Client-Id")
+		if sort.SearchStrings(config.AllowedHeaders, httpDeviceIdHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpDeviceIdHeader)
 		}
-		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Request-Timeout") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Request-Timeout")
+		if sort.SearchStrings(config.AllowedHeaders, httpRequestIdHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestIdHeader)
 		}
-		if sort.SearchStrings(config.AllowedHeaders, "X-Fns-Version") < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, "X-Fns-Version")
+		if sort.SearchStrings(config.AllowedHeaders, httpRequestSignatureHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestSignatureHeader)
+		}
+		if sort.SearchStrings(config.AllowedHeaders, httpRequestTimeoutHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestTimeoutHeader)
+		}
+		if sort.SearchStrings(config.AllowedHeaders, httpRequestVersionsHeader) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestVersionsHeader)
 		}
 	}
 	if config.ExposedHeaders == nil {
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
-	config.ExposedHeaders = append(config.ExposedHeaders, "X-Fns-Request-Id", "X-Fns-Latency", "Connection", "Server", "X-Fns-Version")
+	config.ExposedHeaders = append(
+		config.ExposedHeaders,
+		httpAppIdHeader, httpAppNameHeader, httpAppVersionHeader,
+		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
+	)
 	h = cors.New(cors.Options{
 		AllowedOrigins:         config.AllowedOrigins,
 		AllowOriginFunc:        nil,

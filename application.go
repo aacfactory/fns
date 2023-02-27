@@ -23,12 +23,12 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/commons/uid"
-	"github.com/aacfactory/fns/internal/commons"
 	"github.com/aacfactory/fns/internal/configure"
-	"github.com/aacfactory/fns/internal/logger"
-	"github.com/aacfactory/fns/internal/procs"
 	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/internal/commons/flags"
+	"github.com/aacfactory/fns/service/internal/logger"
+	"github.com/aacfactory/fns/service/internal/procs"
 	"github.com/aacfactory/logs"
 	"os"
 	"os/signal"
@@ -61,7 +61,10 @@ func New(options ...Option) (app Application) {
 		}
 	}
 	// app
-	appId := uid.UID()
+	appId := strings.TrimSpace(opt.id)
+	if appId == "" {
+		appId = uid.UID()
+	}
 	appName := opt.name
 	appVersion := opt.version
 	// config
@@ -103,7 +106,7 @@ func New(options ...Option) (app Application) {
 		Max: opt.autoMaxProcsMax,
 	})
 	// running
-	running := commons.NewSafeFlag(false)
+	running := flags.New(false)
 
 	// endpoints
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
@@ -159,7 +162,7 @@ func New(options ...Option) (app Application) {
 		}
 	}
 	// http cors
-	corsHandler := server.NewCorsHandler(httpConfig.Cors)
+	corsHandler := service.NewCorsHandler(httpConfig.Cors)
 	// http handler
 	httpHandler := corsHandler.Handler(httpHandlers)
 	// http server
@@ -277,7 +280,7 @@ type application struct {
 	autoMaxProcs    *procs.AutoMaxProcs
 	config          configures.Config
 	cluster         clusters.Cluster
-	running         *commons.SafeFlag
+	running         *flags.Flag
 	endpoints       *service.Endpoints
 	http            server.Http
 	httpHandlers    *server.Handlers

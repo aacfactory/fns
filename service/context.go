@@ -20,8 +20,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
-	"github.com/aacfactory/fns/shared"
+	"github.com/aacfactory/fns/service/internal/commons/flags"
+	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 	"os"
 	"sync"
@@ -91,7 +91,7 @@ func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryG
 	return
 }
 
-func withRuntime(ctx context.Context, appId string, log logs.Logger, worker Workers, discovery EndpointDiscovery, barrier Barrier, sharedLockers shared.Lockers, sharedStore shared.Store, running *commons.SafeFlag) context.Context {
+func withRuntime(ctx context.Context, appId string, log logs.Logger, worker Workers, discovery EndpointDiscovery, barrier Barrier, sharedLockers shared.Lockers, sharedStore shared.Store, running *flags.Flag) context.Context {
 	if getRuntime(ctx) != nil {
 		return ctx
 	}
@@ -194,7 +194,7 @@ func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {
 
 type runtimes struct {
 	appId         string
-	running       *commons.SafeFlag
+	running       *flags.Flag
 	log           logs.Logger
 	worker        Workers
 	discovery     EndpointDiscovery

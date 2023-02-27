@@ -14,19 +14,27 @@
  * limitations under the License.
  */
 
-package shareds
+package shared
 
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/internal/commons"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/dgraph-io/ristretto"
 	"time"
 )
 
-func NewLocalStore(memSize int64) (store *LocalStore, err error) {
+type Store interface {
+	Set(key []byte, value []byte) (err errors.CodeError)
+	SetWithTTL(key []byte, value []byte, timeout time.Duration) (err errors.CodeError)
+	Get(key []byte) (value []byte, err errors.CodeError)
+	Remove(key []byte) (err errors.CodeError)
+	Close()
+}
+
+func NewLocalStore(memSize int64) (store Store, err error) {
 	if memSize < 1 {
-		memSize = 64 * commons.MEGABYTE
+		memSize = 64 * bytex.MEGABYTE
 	}
 	cache, cacheErr := ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,
@@ -43,11 +51,18 @@ func NewLocalStore(memSize int64) (store *LocalStore, err error) {
 	return
 }
 
+// todo cache and spanmap
 type LocalStore struct {
 	cache *ristretto.Cache
 }
 
-func (store *LocalStore) Set(key []byte, value []byte, timeout time.Duration) (err errors.CodeError) {
+func (store *LocalStore) Set(key []byte, value []byte) (err errors.CodeError) {
+	store.cache.Set(key, value, int64(len(value)))
+	// todo use span map
+	return
+}
+
+func (store *LocalStore) SetWithTTL(key []byte, value []byte, timeout time.Duration) (err errors.CodeError) {
 	store.cache.SetWithTTL(key, value, int64(len(value)), timeout)
 	return
 }

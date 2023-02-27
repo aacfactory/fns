@@ -247,6 +247,7 @@ type Endpoint interface {
 	Internal() (ok bool)
 	Document() (document Document)
 	Request(ctx context.Context, r Request) (result Result)
+	RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError)
 }
 
 type endpoint struct {

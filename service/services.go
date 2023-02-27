@@ -232,7 +232,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		}
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
 	}
-
+	// request
 	var req Request
 	if internal {
 		ir := &internalRequest{}
@@ -269,35 +269,36 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 			WithRequestId(id),
 		)
 	}
+	// send
 	handleBegAT := time.Time{}
 	latency := time.Duration(0)
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	result := ep.Request(ctx, req)
-	if handler.log.DebugEnabled() {
-		latency = time.Now().Sub(handleBegAT)
-	}
-	resultValue, hasResultValue, requestErr := result.Value(ctx)
+	result, hasResult, requestErr := ep.RequestSync(ctx, req)
 	if cancel != nil {
 		cancel()
 	}
+	if handler.log.DebugEnabled() {
+		latency = time.Now().Sub(handleBegAT)
+	}
+	// write
 	if requestErr != nil {
 		handler.failed(writer, id, latency, requestErr)
 	} else {
-		if hasResultValue {
-			switch resultValue.(type) {
+		if hasResult {
+			switch result.(type) {
 			case []byte:
-				handler.succeed(writer, id, latency, resultValue.([]byte))
+				handler.succeed(writer, id, latency, result.([]byte))
 				break
 			case json.RawMessage:
-				handler.succeed(writer, id, latency, resultValue.(json.RawMessage))
+				handler.succeed(writer, id, latency, result.(json.RawMessage))
 				break
 			case stdjson.RawMessage:
-				handler.succeed(writer, id, latency, resultValue.(stdjson.RawMessage))
+				handler.succeed(writer, id, latency, result.(stdjson.RawMessage))
 				break
 			default:
-				p, encodeErr := json.Marshal(resultValue)
+				p, encodeErr := json.Marshal(result)
 				if encodeErr != nil {
 					handler.failed(writer, id, latency, errors.Warning("fns: encoding result failed").WithCause(encodeErr))
 				} else {

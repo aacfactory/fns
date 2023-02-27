@@ -17,6 +17,7 @@
 package service
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configures"
@@ -340,8 +341,8 @@ type HttpOptions struct {
 }
 
 type HttpClient interface {
-	Get(path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error)
-	Post(path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
+	Get(ctx context.Context, path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error)
+	Post(ctx context.Context, path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
 }
 
 type HttpClientDialer interface {
@@ -356,16 +357,132 @@ type Http interface {
 }
 
 type FastHttpOptions struct {
-	ReadTimeoutSeconds   int    `json:"readTimeoutSeconds"`
-	MaxWorkerIdleSeconds int    `json:"maxWorkerIdleSeconds"`
-	MaxRequestBody       string `json:"maxRequestBody"`
-	ReduceMemoryUsage    bool   `json:"reduceMemoryUsage"`
+	ReadTimeoutSeconds   int                    `json:"readTimeoutSeconds"`
+	MaxWorkerIdleSeconds int                    `json:"maxWorkerIdleSeconds"`
+	MaxRequestBodySize   string                 `json:"maxRequestBodySize"`
+	ReduceMemoryUsage    bool                   `json:"reduceMemoryUsage"`
+	Client               *FastHttpClientOptions `json:"client"`
+}
+
+type FastHttpClientOptions struct {
+	DialDualStack             bool   `json:"dialDualStack"`
+	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
+	MaxIdleConnSeconds        int    `json:"maxIdleConnSeconds"`
+	MaxConnSeconds            int    `json:"maxConnSeconds"`
+	MaxIdemponentCallAttempts int    `json:"maxIdemponentCallAttempts"`
+	ReadBufferSize            string `json:"readBufferSize"`
+	WriteBufferSize           string `json:"writeBufferSize"`
+	ReadTimeoutSeconds        int    `json:"readTimeoutSeconds"`
+	WriteTimeoutSeconds       int    `json:"writeTimeoutSeconds"`
+	MaxResponseBodySize       string `json:"maxResponseBodySize"`
+	MaxConnWaitTimeoutSeconds int    `json:"maxConnWaitTimeoutSeconds"`
+}
+
+func defaultFastHttpClientOptions() *FastHttpClientOptions {
+	return &FastHttpClientOptions{
+		DialDualStack:             false,
+		MaxConnsPerHost:           0,
+		MaxIdleConnSeconds:        0,
+		MaxConnSeconds:            0,
+		MaxIdemponentCallAttempts: 0,
+		ReadBufferSize:            "4MB",
+		WriteBufferSize:           "4MB",
+		ReadTimeoutSeconds:        0,
+		WriteTimeoutSeconds:       0,
+		MaxResponseBodySize:       "4MB",
+		MaxConnWaitTimeoutSeconds: 0,
+	}
+}
+
+type FastHttpClient struct {
+	ssl     bool
+	address string
+	tr      *fasthttp.Client
+}
+
+func (client *FastHttpClient) Get(ctx context.Context, path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error) {
+	req := client.prepareRequest(bytex.FromString(http.MethodGet), path, header)
+	resp := fasthttp.AcquireResponse()
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		err = client.tr.DoDeadline(req, resp, deadline)
+	} else {
+		err = client.tr.Do(req, resp)
+	}
+	if err != nil {
+		err = errors.Warning("fns: fasthttp client do get failed").WithCause(err)
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(resp)
+		return
+	}
+	status = resp.StatusCode()
+	respHeader = http.Header{}
+	resp.Header.VisitAll(func(key, value []byte) {
+		respHeader.Add(bytex.ToString(key), bytex.ToString(value))
+	})
+	respBody = resp.Body()
+	fasthttp.ReleaseRequest(req)
+	fasthttp.ReleaseResponse(resp)
+	return
+}
+
+func (client *FastHttpClient) Post(ctx context.Context, path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
+	req := client.prepareRequest(bytex.FromString(http.MethodPost), path, header)
+	if body != nil && len(body) > 0 {
+		req.SetBodyRaw(body)
+	}
+	resp := fasthttp.AcquireResponse()
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		err = client.tr.DoDeadline(req, resp, deadline)
+	} else {
+		err = client.tr.Do(req, resp)
+	}
+	if err != nil {
+		err = errors.Warning("fns: fasthttp client do post failed").WithCause(err)
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(resp)
+		return
+	}
+	status = resp.StatusCode()
+	respHeader = http.Header{}
+	resp.Header.VisitAll(func(key, value []byte) {
+		respHeader.Add(bytex.ToString(key), bytex.ToString(value))
+	})
+	respBody = resp.Body()
+	fasthttp.ReleaseRequest(req)
+	fasthttp.ReleaseResponse(resp)
+	return
+}
+
+func (client *FastHttpClient) prepareRequest(method []byte, path string, header http.Header) (req *fasthttp.Request) {
+	req = fasthttp.AcquireRequest()
+	uri := req.URI()
+	if client.ssl {
+		uri.SetSchemeBytes(bytex.FromString("https"))
+	} else {
+		uri.SetSchemeBytes(bytex.FromString("http"))
+	}
+	uri.SetPathBytes(bytex.FromString(path))
+	uri.SetHostBytes(bytex.FromString(client.address))
+	req.Header.SetMethodBytes(method)
+	if header != nil && len(header) > 0 {
+		for k, vv := range header {
+			for _, v := range vv {
+				req.Header.Add(k, v)
+			}
+		}
+	}
+	req.Header.SetBytesKV(bytex.FromString(httpContentType), bytex.FromString(httpContentTypeJson))
+	return
 }
 
 type FastHttp struct {
-	log logs.Logger
-	ln  net.Listener
-	srv *fasthttp.Server
+	log    logs.Logger
+	ssl    bool
+	ln     net.Listener
+	client *fasthttp.Client
+	srv    *fasthttp.Server
 }
 
 func (srv *FastHttp) Build(options HttpOptions) (err error) {
@@ -375,11 +492,13 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 		ln, err = net.Listen("tcp", fmt.Sprintf(":%d", options.Port))
 	} else {
 		ln, err = tls.Listen("tcp", fmt.Sprintf(":%d", options.Port), options.ServerTLS)
+		srv.ssl = true
 	}
 	if err != nil {
 		err = errors.Warning("fns: build server failed").WithCause(err).WithMeta("fns", "http")
 		return
 	}
+
 	srv.ln = ln
 
 	opt := &FastHttpOptions{}
@@ -394,7 +513,7 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 	if opt.MaxWorkerIdleSeconds < 1 {
 		opt.MaxWorkerIdleSeconds = 10
 	}
-	maxRequestBody := strings.ToUpper(strings.TrimSpace(opt.MaxRequestBody))
+	maxRequestBody := strings.ToUpper(strings.TrimSpace(opt.MaxRequestBodySize))
 	if maxRequestBody == "" {
 		maxRequestBody = "4MB"
 	}
@@ -420,6 +539,71 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 		CloseOnShutdown:                    true,
 		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
 	}
+
+	// client
+	var clientOpt *FastHttpClientOptions
+	if opt.Client != nil {
+		clientOpt = opt.Client
+	} else {
+		clientOpt = defaultFastHttpClientOptions()
+	}
+
+	readBufferSize := strings.ToUpper(strings.TrimSpace(clientOpt.ReadBufferSize))
+	if readBufferSize == "" {
+		readBufferSize = "4MB"
+	}
+	readBuffer, readBufferErr := bytex.ToBytes(readBufferSize)
+	if readBufferErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(readBufferErr).WithMeta("fns", "http")
+		return
+	}
+
+	writeBufferSize := strings.ToUpper(strings.TrimSpace(clientOpt.WriteBufferSize))
+	if writeBufferSize == "" {
+		writeBufferSize = "4MB"
+	}
+	writeBuffer, writeBufferErr := bytex.ToBytes(writeBufferSize)
+	if writeBufferErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(writeBufferErr).WithMeta("fns", "http")
+		return
+	}
+
+	maxResponseBodySize := strings.ToUpper(strings.TrimSpace(clientOpt.MaxResponseBodySize))
+	if maxResponseBodySize == "" {
+		maxResponseBodySize = "4MB"
+	}
+	maxResponseBody, maxResponseBodyErr := bytex.ToBytes(maxResponseBodySize)
+	if maxResponseBodyErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(maxResponseBodyErr).WithMeta("fns", "http")
+		return
+	}
+
+	srv.client = &fasthttp.Client{
+		NoDefaultUserAgentHeader:      true,
+		DialDualStack:                 false,
+		TLSConfig:                     options.ClientTLS,
+		MaxConnsPerHost:               clientOpt.MaxConnsPerHost,
+		MaxIdleConnDuration:           time.Duration(clientOpt.MaxIdleConnSeconds) * time.Second,
+		MaxConnDuration:               time.Duration(clientOpt.MaxConnSeconds) * time.Second,
+		MaxIdemponentCallAttempts:     clientOpt.MaxIdemponentCallAttempts,
+		ReadBufferSize:                int(readBuffer),
+		WriteBufferSize:               int(writeBuffer),
+		ReadTimeout:                   time.Duration(clientOpt.ReadTimeoutSeconds) * time.Second,
+		WriteTimeout:                  time.Duration(clientOpt.WriteTimeoutSeconds) * time.Second,
+		MaxResponseBodySize:           int(maxResponseBody),
+		DisableHeaderNamesNormalizing: false,
+		DisablePathNormalizing:        false,
+		MaxConnWaitTimeout:            time.Duration(clientOpt.MaxConnWaitTimeoutSeconds) * time.Second,
+	}
+	return
+}
+
+func (srv *FastHttp) Dial(address string) (client HttpClient, err error) {
+	client = &FastHttpClient{
+		ssl:     srv.ssl,
+		address: address,
+		tr:      srv.client,
+	}
 	return
 }
 
@@ -444,4 +628,32 @@ func fastHttpErrorHandler(ctx *fasthttp.RequestCtx, err error) {
 	ctx.SetStatusCode(555)
 	ctx.SetContentType(httpContentTypeJson)
 	ctx.SetBody([]byte(fmt.Sprintf("{\"error\": \"%s\"}", err.Error())))
+}
+
+func newFastHttp(handler http.Handler, log logs.Logger, config *HttpConfig) (v Http, err error) {
+	var serverTLS *tls.Config
+	var clientTLS *tls.Config
+	if config.TLS != nil {
+		serverTLS, clientTLS, err = config.TLS.Config()
+		if err != nil {
+			err = errors.Warning("fns: create http failed").WithCause(err)
+			return
+		}
+	}
+	f := &FastHttp{}
+	cors := newCorsHandler(config.Cors)
+
+	buildErr := f.Build(HttpOptions{
+		Port:      config.Port,
+		ServerTLS: serverTLS,
+		ClientTLS: clientTLS,
+		Handler:   cors.Handler(handler),
+		Log:       log.With("http", "fasthttp"),
+		Options:   config.Options,
+	})
+	if buildErr != nil {
+		err = errors.Warning("fns: create http failed").WithCause(buildErr)
+		return
+	}
+	return
 }

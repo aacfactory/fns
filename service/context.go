@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
@@ -116,6 +117,15 @@ func GetApplicationId(ctx context.Context) (appId string) {
 	return
 }
 
+func GetApplicationVersion(ctx context.Context) (appVersion versions.Version) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		return
+	}
+	appVersion = rt.appVersion
+	return
+}
+
 func GetBarrier(ctx context.Context) (barrier Barrier) {
 	rt := getRuntime(ctx)
 	if rt == nil {
@@ -181,6 +191,7 @@ func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {
 
 type runtimes struct {
 	appId         string
+	appVersion    versions.Version
 	running       *flags.Flag
 	log           logs.Logger
 	worker        Workers

@@ -19,37 +19,65 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
+	"github.com/valyala/bytebufferpool"
 	"time"
 )
 
-func newFnTask(svc Service, request Request, result ResultWriter) *fnTask {
-	return &fnTask{svc: svc, request: request, result: result}
+func newFnTask(svc Service, barrier Barrier, request Request, result ResultWriter, handleTimeout time.Duration) *fnTask {
+	return &fnTask{svc: svc, barrier: barrier, request: request, result: result, handleTimeout: handleTimeout}
 }
 
 type fnTask struct {
-	svc     Service
-	request Request
-	result  ResultWriter
+	svc           Service
+	barrier       Barrier
+	request       Request
+	result        ResultWriter
+	handleTimeout time.Duration
 }
 
 func (f *fnTask) Execute(ctx context.Context) {
 	rootLog := getRuntime(ctx).log
 	serviceName, fnName := f.request.Fn()
-	fnLog := rootLog.With("service", serviceName).With("fn", fnName)
-	req, hasReq := GetRequest(ctx)
-	if hasReq {
-		fnLog = fnLog.With("requestId", req.Id())
-	}
-	ctx = withLog(ctx, fnLog)
-	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
-		ctx = withComponents(ctx, f.svc.Components())
-	}
+
 	t, hasTracer := GetTracer(ctx)
 	var sp Span = nil
 	if hasTracer {
 		sp = t.StartSpan(f.svc.Name(), fnName)
 	}
-	v, err := f.svc.Handle(ctx, fnName, f.request.Argument())
+
+	arg := f.request.Argument()
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write([]byte(serviceName + fnName))
+	if arg != nil {
+		p, _ := json.Marshal(arg)
+		if p != nil && len(p) > 0 {
+			_, _ = buf.Write(p)
+		}
+	}
+	lbk := fmt.Sprintf("%d", xxhash.Sum64(buf.Bytes()))
+	_, _ = buf.Write(bytex.FromString(f.request.Header().DeviceId()))
+	hbk := fmt.Sprintf("%d", xxhash.Sum64(buf.Bytes()))
+	bytebufferpool.Put(buf)
+
+	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
+		ctx = withComponents(ctx, f.svc.Components())
+	}
+	fnLog := rootLog.With("service", serviceName).With("fn", fnName).With("requestId", f.request.Id())
+	ctx = withLog(ctx, fnLog)
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, f.handleTimeout)
+	v, err := f.barrier.Do(ctx, hbk, func() (result interface{}, err errors.CodeError) {
+		result, err = f.barrier.Do(ctx, lbk, func() (result interface{}, err errors.CodeError) {
+			result, err = f.svc.Handle(ctx, fnName, f.request.Argument())
+			return
+		})
+		return
+	})
+	cancel()
 	if sp != nil {
 		sp.Finish()
 		if err == nil {

@@ -23,8 +23,6 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/json"
-	"github.com/cespare/xxhash/v2"
-	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"strconv"
 	"strings"
@@ -307,7 +305,6 @@ type Request interface {
 	Internal() (ok bool)
 	User() (user RequestUser)
 	Trunk() (trunk RequestTrunk)
-	Hash() (code uint64)
 }
 
 type RequestOption func(*RequestOptions)
@@ -413,7 +410,6 @@ func NewRequest(ctx context.Context, deviceId string, service string, fn string,
 			service:  service,
 			fn:       fn,
 			argument: argument,
-			hashCode: 0,
 		}
 	} else {
 		id := opt.id
@@ -443,7 +439,6 @@ func NewRequest(ctx context.Context, deviceId string, service string, fn string,
 			service:  service,
 			fn:       fn,
 			argument: argument,
-			hashCode: 0,
 		}
 	}
 	return
@@ -458,7 +453,6 @@ type request struct {
 	service  string
 	fn       string
 	argument Argument
-	hashCode uint64
 }
 
 func (r *request) Id() (id string) {
@@ -493,25 +487,6 @@ func (r *request) Fn() (service string, fn string) {
 
 func (r *request) Argument() (argument Argument) {
 	argument = r.argument
-	return
-}
-
-func (r *request) Hash() (code uint64) {
-	if r.hashCode > 0 {
-		code = r.hashCode
-		return
-	}
-	buf := bytebufferpool.Get()
-	_, _ = buf.Write([]byte(r.service + r.fn))
-	if r.argument != nil {
-		arg, _ := json.Marshal(r.argument)
-		if arg != nil {
-			_, _ = buf.Write(arg)
-		}
-	}
-	r.hashCode = xxhash.Sum64(buf.Bytes())
-	bytebufferpool.Put(buf)
-	code = r.hashCode
 	return
 }
 

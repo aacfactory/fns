@@ -17,6 +17,7 @@
 package service
 
 import (
+	"context"
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -27,6 +28,7 @@ import (
 	"github.com/aacfactory/logs"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -205,6 +207,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 			}
 		}
 	}
+
 	// id
 	id := r.Header.Get(httpRequestIdHeader)
 	if id == "" {
@@ -217,16 +220,32 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		return
 	}
 
+	// timeout
+	ctx := r.Context()
+	var cancel context.CancelFunc
+	timeout := r.Header.Get(httpRequestTimeoutHeader)
+	if timeout != "" {
+		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
+		if parseTimeoutErr != nil {
+			handler.failed(writer, "", 0, errors.BadRequest("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			return
+		}
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
+	}
+
 	var req Request
 	if internal {
 		ir := &internalRequest{}
 		decodeErr := json.Unmarshal(body, ir)
 		if decodeErr != nil {
 			handler.failed(writer, "", 0, errors.NotAcceptable("fns: decode internal request failed").WithCause(decodeErr))
+			if cancel != nil {
+				cancel()
+			}
 			return
 		}
 		req = NewRequest(
-			r.Context(),
+			ctx,
 			devId,
 			serviceName,
 			fnName,
@@ -240,7 +259,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		)
 	} else {
 		req = NewRequest(
-			r.Context(),
+			ctx,
 			devId,
 			serviceName,
 			fnName,
@@ -255,11 +274,14 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	result := ep.Request(r.Context(), req)
+	result := ep.Request(ctx, req)
 	if handler.log.DebugEnabled() {
 		latency = time.Now().Sub(handleBegAT)
 	}
-	resultValue, hasResultValue, requestErr := result.Value(r.Context())
+	resultValue, hasResultValue, requestErr := result.Value(ctx)
+	if cancel != nil {
+		cancel()
+	}
 	if requestErr != nil {
 		handler.failed(writer, id, latency, requestErr)
 	} else {

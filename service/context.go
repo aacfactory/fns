@@ -91,20 +91,11 @@ func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryG
 	return
 }
 
-func withRuntime(ctx context.Context, appId string, log logs.Logger, worker Workers, discovery EndpointDiscovery, barrier Barrier, sharedLockers shared.Lockers, sharedStore shared.Store, running *flags.Flag) context.Context {
+func withRuntime(ctx context.Context, rt *runtimes) context.Context {
 	if getRuntime(ctx) != nil {
 		return ctx
 	}
-	return context.WithValue(ctx, contextRuntimeKey, &runtimes{
-		appId:         appId,
-		log:           log,
-		worker:        worker,
-		discovery:     discovery,
-		barrier:       barrier,
-		sharedLockers: sharedLockers,
-		sharedStore:   sharedStore,
-		running:       running,
-	})
+	return context.WithValue(ctx, contextRuntimeKey, rt)
 }
 
 func getRuntime(ctx context.Context) (v *runtimes) {
@@ -164,11 +155,7 @@ func AbortApplication() {
 }
 
 func Todo(ctx context.Context, endpoints *Endpoints) context.Context {
-	rt := getRuntime(ctx)
-	if rt != nil {
-		return ctx
-	}
-	return withRuntime(ctx, endpoints.appId, endpoints.log, endpoints.worker, endpoints.discovery, endpoints.barrier, endpoints.sharedLockers, endpoints.sharedStore, endpoints.running)
+	return withRuntime(ctx, endpoints.rt)
 }
 
 func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {

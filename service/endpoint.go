@@ -35,9 +35,8 @@ import (
 
 type EndpointsOptions struct {
 	AppId      string
+	AppName    string
 	AppVersion versions.Version
-	Log        logs.Logger
-	Running    *flags.Flag
 	Config     *Config
 }
 
@@ -78,6 +77,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	// shared store <<<
+
 	// shared lockers >>>
 	// shared lockers <<<
 
@@ -188,16 +188,9 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 
 func (e *Endpoints) Mount(svc Service) {
 	e.deployed[svc.Name()] = &endpoint{
-		appId:         e.appId,
-		log:           e.log,
-		discovery:     e.discovery,
-		barrier:       e.barrier,
-		sharedLockers: e.sharedLockers,
-		sharedStore:   e.sharedStore,
+		rt:            e.rt,
 		handleTimeout: e.handleTimeout,
-		worker:        e.worker,
 		svc:           svc,
-		running:       e.running,
 	}
 }
 
@@ -212,7 +205,7 @@ func (e *Endpoints) Listen() (err error) {
 			continue
 		}
 		lns++
-		ctx := withRuntime(context.TODO(), e.appId, e.log, e.worker, e.discovery, e.barrier, e.sharedLockers, e.sharedStore, e.running)
+		ctx := withRuntime(context.TODO(), e.rt)
 		go func(ctx context.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)
 			if lnErr != nil {
@@ -253,20 +246,13 @@ type Endpoint interface {
 	Name() (name string)
 	Internal() (ok bool)
 	Document() (document Document)
-	Request(ctx context.Context, request Request) (result Result)
+	Request(ctx context.Context, r Request) (result Result)
 }
 
 type endpoint struct {
-	appId         string
-	running       *flags.Flag
-	log           logs.Logger
-	discovery     EndpointDiscovery
-	barrier       Barrier
-	sharedLockers shared.Lockers
-	sharedStore   shared.Store
 	handleTimeout time.Duration
-	worker        Workers
 	svc           Service
+	rt            *runtimes
 }
 
 func (e *endpoint) Name() (name string) {
@@ -284,17 +270,13 @@ func (e *endpoint) Document() (document Document) {
 	return
 }
 
-func (e *endpoint) Request(ctx context.Context, req Request) (result Result) {
-	ctx = withRuntime(ctx, e.appId, e.log, e.worker, e.discovery, e.barrier, e.sharedLockers, e.sharedStore, e.running)
-	ctx = withRequest(ctx, req)
+func (e *endpoint) Request(ctx context.Context, r Request) (result Result) {
+	ctx = withRuntime(ctx, e.rt)
+	ctx = withRequest(ctx, r)
 	ctx = withTracer(ctx)
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, e.handleTimeout)
-	// todo 双重barrier，1. request.code+deviceId，2，request.code
-
 	fr := NewResult()
-	if !e.worker.Dispatch(ctx, newFnTask(e.svc, req, fr)) {
-		serviceName, fnName := req.Fn()
+	if !e.rt.worker.Dispatch(ctx, newFnTask(e.svc, e.rt.barrier, r, fr, e.handleTimeout)) {
+		serviceName, fnName := r.Fn()
 		if ctx.Err() != nil {
 			fr.Failed(errors.Timeout("fns: workers handle timeout").WithMeta("fns", "timeout").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		} else {
@@ -302,8 +284,12 @@ func (e *endpoint) Request(ctx context.Context, req Request) (result Result) {
 		}
 	}
 	result = fr
-
 	tryReportTracer(ctx)
-	cancel()
+	return
+}
+
+func (e *endpoint) RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError) {
+	fr := e.Request(ctx, r)
+	result, has, err = fr.Value(ctx)
 	return
 }

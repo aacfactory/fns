@@ -44,7 +44,7 @@ func (f *fnTask) Execute(ctx context.Context) {
 	serviceName, fnName := f.request.Fn()
 
 	t, hasTracer := GetTracer(ctx)
-	var sp Span = nil
+	var sp *Span = nil
 	if hasTracer {
 		sp = t.StartSpan(f.svc.Name(), fnName)
 	}

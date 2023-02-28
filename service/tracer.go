@@ -18,10 +18,7 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
-	"github.com/aacfactory/json"
 	"sync"
 	"time"
 )
@@ -39,17 +36,12 @@ func GetTracer(ctx context.Context) (t Tracer, has bool) {
 	return
 }
 
-func withTracer(ctx context.Context) context.Context {
+func withTracer(ctx context.Context, id string) context.Context {
 	_, has := GetTracer(ctx)
 	if has {
 		return ctx
 	}
-	r, hasRequest := GetRequest(ctx)
-	if !hasRequest || r == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: get not set tracer into context cause no request found in context")))
-		return ctx
-	}
-	ctx = context.WithValue(ctx, contextTracerKey, NewTracer(r.Id()))
+	ctx = context.WithValue(ctx, contextTracerKey, NewTracer(id))
 	return ctx
 }
 
@@ -106,9 +98,9 @@ func (task *reportTracerTask) Execute(ctx context.Context) {
 
 type Tracer interface {
 	Id() (id string)
-	StartSpan(service string, fn string) (span Span)
-	Span() (span Span)
-	RootSpan() (span Span)
+	StartSpan(service string, fn string) (span *Span)
+	Span() (span *Span)
+	RootSpan() (span *Span)
 }
 
 func NewTracer(id string) Tracer {
@@ -122,9 +114,9 @@ func NewTracer(id string) Tracer {
 
 type tracer struct {
 	Id_     string `json:"id"`
-	Root    *span  `json:"span"`
+	Root    *Span  `json:"Span"`
 	lock    sync.Mutex
-	current Span
+	current *Span
 }
 
 func (t *tracer) Id() (id string) {
@@ -132,7 +124,7 @@ func (t *tracer) Id() (id string) {
 	return
 }
 
-func (t *tracer) StartSpan(service string, fn string) (span Span) {
+func (t *tracer) StartSpan(service string, fn string) (span *Span) {
 	t.lock.Lock()
 	if t.current == nil {
 		t.Root = newSpan(t.Id_, service, fn, nil)
@@ -159,43 +151,18 @@ func (t *tracer) StartSpan(service string, fn string) (span Span) {
 	return
 }
 
-func (t *tracer) Span() (span Span) {
+func (t *tracer) Span() (span *Span) {
 	span = t.current
 	return
 }
 
-func (t *tracer) RootSpan() (span Span) {
+func (t *tracer) RootSpan() (span *Span) {
 	span = t.Root
 	return
 }
 
-type Span interface {
-	Id() (v string)
-	TracerId() (v string)
-	Finish()
-	AddTag(key string, value string)
-	Tags() (v map[string]string)
-	StartAT() (v time.Time)
-	FinishedAT() (v time.Time)
-	Latency() (v time.Duration)
-	Parent() (v Span)
-	Children() (v []Span)
-	AppendChild(children ...Span)
-}
-
-func DecodeSpan(p []byte) (v Span, err errors.CodeError) {
-	s := &span{}
-	decodeErr := json.Unmarshal(p, s)
-	if decodeErr != nil {
-		err = errors.Warning("fns: decode span failed").WithCause(decodeErr)
-		return
-	}
-	v = s
-	return
-}
-
-func newSpan(traceId string, service string, fn string, parent Span) *span {
-	s := &span{
+func newSpan(traceId string, service string, fn string, parent *Span) *Span {
+	s := &Span{
 		Id_:         uid.UID(),
 		Service_:    service,
 		Fn_:         fn,
@@ -203,7 +170,7 @@ func newSpan(traceId string, service string, fn string, parent Span) *span {
 		StartAT_:    time.Now(),
 		FinishedAT_: time.Time{},
 		parent:      parent,
-		Children_:   make([]Span, 0, 1),
+		Children_:   make([]*Span, 0, 1),
 		Tags_:       make(map[string]string),
 	}
 	if parent != nil {
@@ -212,67 +179,67 @@ func newSpan(traceId string, service string, fn string, parent Span) *span {
 	return s
 }
 
-type span struct {
+type Span struct {
 	Id_         string    `json:"id"`
 	Service_    string    `json:"service"`
 	Fn_         string    `json:"fn"`
 	TracerId_   string    `json:"tracerId"`
 	StartAT_    time.Time `json:"startAt"`
 	FinishedAT_ time.Time `json:"finishedAt"`
-	parent      Span
-	Children_   []Span            `json:"children"`
+	parent      *Span
+	Children_   []*Span           `json:"children"`
 	Tags_       map[string]string `json:"tags"`
 }
 
-func (s *span) Id() (v string) {
+func (s *Span) Id() (v string) {
 	v = s.Id_
 	return
 }
 
-func (s *span) TracerId() (v string) {
+func (s *Span) TracerId() (v string) {
 	v = s.TracerId_
 	return
 }
 
-func (s *span) Finish() {
+func (s *Span) Finish() {
 	s.FinishedAT_ = time.Now()
 }
 
-func (s *span) AddTag(key string, value string) {
+func (s *Span) AddTag(key string, value string) {
 	s.Tags_[key] = value
 }
 
-func (s *span) Tags() (v map[string]string) {
+func (s *Span) Tags() (v map[string]string) {
 	v = s.Tags_
 	return
 }
 
-func (s *span) StartAT() (v time.Time) {
+func (s *Span) StartAT() (v time.Time) {
 	v = s.StartAT_
 	return
 }
 
-func (s *span) FinishedAT() (v time.Time) {
+func (s *Span) FinishedAT() (v time.Time) {
 	v = s.FinishedAT_
 	return
 }
 
-func (s *span) Latency() (v time.Duration) {
+func (s *Span) Latency() (v time.Duration) {
 	v = s.FinishedAT_.Sub(s.StartAT_)
 	return
 }
 
-func (s *span) Parent() (v Span) {
+func (s *Span) Parent() (v *Span) {
 	v = s.parent
 	return
 }
 
-func (s *span) Children() (v []Span) {
+func (s *Span) Children() (v []*Span) {
 	v = s.Children_
 	return
 }
 
-func (s *span) AppendChild(children ...Span) {
+func (s *Span) AppendChild(children ...*Span) {
 	s.Children_ = append(s.Children_, children...)
 	return
 }

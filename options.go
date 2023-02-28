@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/server"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
 	"os"
@@ -41,8 +40,8 @@ var (
 		autoMaxProcsMin:       0,
 		autoMaxProcsMax:       0,
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
-		server:                &server.FastHttp{},
-		serverHandlers:        make([]server.Handler, 0, 1),
+		httpEngine:            &service.FastHttp{},
+		httpHandlers:          make([]service.HttpHandler, 0, 1),
 		services:              make([]service.Service, 0, 1),
 		shutdownTimeout:       60 * time.Second,
 	}
@@ -56,8 +55,8 @@ type Options struct {
 	autoMaxProcsMin       int
 	autoMaxProcsMax       int
 	configRetrieverOption configures.RetrieverOption
-	server                server.Http
-	serverHandlers        []server.Handler
+	httpEngine            service.Http
+	httpHandlers          []service.HttpHandler
 	services              []service.Service
 	shutdownTimeout       time.Duration
 }
@@ -169,22 +168,25 @@ func ShutdownTimeout(timeout time.Duration) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func Server(server server.Http) Option {
+func Server(engine service.Http) Option {
 	return func(options *Options) error {
-		if server == nil {
-			return fmt.Errorf("customize http failed for server is nil")
+		if engine == nil {
+			return fmt.Errorf("customize http failed for engine is nil")
 		}
-		options.server = server
+		if engine.Name() == "" {
+			return fmt.Errorf("customize http failed for engine name is nil")
+		}
+		options.httpEngine = engine
 		return nil
 	}
 }
 
-func Handlers(handlers ...server.Handler) Option {
+func Handlers(handlers ...service.HttpHandler) Option {
 	return func(options *Options) error {
 		if handlers == nil || len(handlers) == 0 {
 			return nil
 		}
-		options.serverHandlers = append(options.serverHandlers, handlers...)
+		options.httpHandlers = append(options.httpHandlers, handlers...)
 		return nil
 	}
 }

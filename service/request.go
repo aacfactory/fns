@@ -242,6 +242,7 @@ type RequestTrunk interface {
 	Get(key string) (value []byte, has bool)
 	Put(key string, value []byte)
 	ForEach(fn func(key string, value []byte) (next bool))
+	ReadFrom(o RequestTrunk)
 	Remove(key string)
 }
 
@@ -267,6 +268,16 @@ func (trunk *requestTrunk) UnmarshalJSON(p []byte) (err error) {
 		return
 	}
 	trunk.values = values
+	return
+}
+
+func (trunk *requestTrunk) ReadFrom(o RequestTrunk) {
+	trunk.values = make(map[string][]byte)
+	o.ForEach(func(key string, value []byte) (next bool) {
+		trunk.values[key] = value
+		next = true
+		return
+	})
 	return
 }
 
@@ -519,14 +530,28 @@ func GetRequestUser(ctx context.Context) (user RequestUser, authenticated bool) 
 	return
 }
 
-type internalRequest struct {
+type internalRequestImpl struct {
 	User  *requestUser    `json:"user"`
 	Trunk *requestTrunk   `json:"trunk"`
 	Body  json.RawMessage `json:"body"`
 }
 
+type internalRequest struct {
+	User  RequestUser     `json:"user"`
+	Trunk RequestTrunk    `json:"trunk"`
+	Body  json.RawMessage `json:"body"`
+}
+
+type internalResponseImpl struct {
+	User  *requestUser    `json:"user"`
+	Trunk *requestTrunk   `json:"trunk"`
+	Span  *Span           `json:"Span"`
+	Body  json.RawMessage `json:"body"`
+}
+
 type internalResponse struct {
-	Trunk  *requestUser    `json:"trunk"`
-	Tracer *tracer         `json:"tracer"`
-	Body   json.RawMessage `json:"body"`
+	User  RequestUser     `json:"user"`
+	Trunk RequestTrunk    `json:"trunk"`
+	Span  *Span           `json:"Span"`
+	Body  json.RawMessage `json:"body"`
 }

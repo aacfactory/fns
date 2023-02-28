@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-func tryReportStats(ctx context.Context, service string, fn string, err errors.CodeError, span Span) {
+func tryReportStats(ctx context.Context, service string, fn string, err errors.CodeError, span *Span) {
 	ts, hasService := GetEndpoint(ctx, "stats")
 	if !hasService {
 		return

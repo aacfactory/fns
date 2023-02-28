@@ -39,15 +39,30 @@ type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
 	// Nodes 记得塞deviceId（appId） 和 签名
-	Nodes(ctx context.Context) (nodes []Node, err error)
+	Nodes(ctx context.Context) (nodes Nodes, err error)
 	Shared() (shared Shared)
 }
 
 type Node struct {
-	Id      string `json:"id"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Address string `json:"address"`
+	Id      string           `json:"id"`
+	Name    string           `json:"name"`
+	Version versions.Version `json:"version"`
+	Address string           `json:"address"`
+}
+
+type Nodes []Node
+
+func (nodes Nodes) Len() int {
+	return len(nodes)
+}
+
+func (nodes Nodes) Less(i, j int) bool {
+	return nodes[i].Id < nodes[j].Id
+}
+
+func (nodes Nodes) Swap(i, j int) {
+	nodes[i], nodes[j] = nodes[j], nodes[i]
+	return
 }
 
 type Shared interface {

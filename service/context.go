@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
+	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 	"os"
@@ -108,20 +109,13 @@ func getRuntime(ctx context.Context) (v *runtimes) {
 	return
 }
 
-func GetApplicationId(ctx context.Context) (appId string) {
+func GetApplication(ctx context.Context) (appId string, appName string, appVersion versions.Version) {
 	rt := getRuntime(ctx)
 	if rt == nil {
 		return
 	}
 	appId = rt.appId
-	return
-}
-
-func GetApplicationVersion(ctx context.Context) (appVersion versions.Version) {
-	rt := getRuntime(ctx)
-	if rt == nil {
-		return
-	}
+	appName = rt.appName
 	appVersion = rt.appVersion
 	return
 }
@@ -133,6 +127,16 @@ func GetBarrier(ctx context.Context) (barrier Barrier) {
 		return
 	}
 	barrier = rt.barrier
+	return
+}
+
+func GetSigner(ctx context.Context) (signer *secret.Signer) {
+	rt := getRuntime(ctx)
+	if rt == nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: signer was not found")))
+		return
+	}
+	signer = rt.signer
 	return
 }
 
@@ -191,6 +195,7 @@ func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {
 
 type runtimes struct {
 	appId         string
+	appName       string
 	appVersion    versions.Version
 	running       *flags.Flag
 	log           logs.Logger
@@ -199,4 +204,5 @@ type runtimes struct {
 	barrier       Barrier
 	sharedLockers shared.Lockers
 	sharedStore   shared.Store
+	signer        *secret.Signer
 }

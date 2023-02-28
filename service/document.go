@@ -46,7 +46,7 @@ type ElementDocument interface {
 	Schema() (schema *oas.Schema)
 }
 
-func encodeDocuments(appId string, appName string, appVersion versions.Version, eps map[string]Endpoint) (p []byte, err error) {
+func encodeDocuments(appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (p []byte, err error) {
 	documents := make(map[string]Document)
 	for name, ep := range eps {
 		document := ep.Document()
@@ -58,7 +58,7 @@ func encodeDocuments(appId string, appName string, appVersion versions.Version, 
 	obj := json.NewObject()
 	_ = obj.Put("id", appId)
 	_ = obj.Put("name", appName)
-	_ = obj.Put("version", appVersion.String())
+	_ = obj.Put("version", appVersion)
 	err = obj.Put("services", documents)
 	if err != nil {
 		err = errors.Warning("fns: encode services document failed").WithCause(err)
@@ -68,7 +68,7 @@ func encodeDocuments(appId string, appName string, appVersion versions.Version, 
 	return
 }
 
-func encodeOpenapi(appId string, appName string, appVersion versions.Version, eps map[string]Endpoint) (p []byte, err error) {
+func encodeOpenapi(appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (p []byte, err error) {
 	// oas
 	api := &oas.API{
 		Openapi: "3.0.3",

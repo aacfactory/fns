@@ -22,6 +22,8 @@ import (
 	"encoding/base64"
 )
 
+const DefaultSignerKey = "+-fns"
+
 func NewSigner(key []byte) *Signer {
 	return &Signer{
 		key: key,

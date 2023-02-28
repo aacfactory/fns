@@ -33,6 +33,14 @@ func New(major int, minor int, patch int) (v Version) {
 	return
 }
 
+func Min() Version {
+	return Version{
+		Major: 0,
+		Minor: 0,
+		Patch: 0,
+	}
+}
+
 func Max() Version {
 	return Version{
 		Major: math.MaxInt,
@@ -42,9 +50,9 @@ func Max() Version {
 }
 
 type Version struct {
-	Major int
-	Minor int
-	Patch int
+	Major int `json:"major"`
+	Minor int `json:"minor"`
+	Patch int `json:"patch"`
 }
 
 func (ver Version) Between(left Version, right Version) (ok bool) {

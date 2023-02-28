@@ -201,7 +201,7 @@ func (handlers *HttpHandlers) handleApplication(writer http.ResponseWriter, requ
 	}
 	if request.Method == http.MethodGet && request.URL.Path == "/application/handlers" {
 		const (
-			handlersKey = "stats"
+			handlersKey = "handlers"
 		)
 		v, _, _ := handlers.group.Do(handlersKey, func() (v interface{}, err error) {
 			v, _ = json.Marshal(handlers.HandlerNames())
@@ -352,6 +352,7 @@ type HttpClientDialer interface {
 }
 
 type Http interface {
+	Name() (name string)
 	Build(options HttpOptions) (err error)
 	HttpClientDialer
 	ListenAndServe() (err error)
@@ -489,6 +490,12 @@ type FastHttp struct {
 	ln     net.Listener
 	client *fasthttp.Client
 	srv    *fasthttp.Server
+}
+
+func (srv *FastHttp) Name() (name string) {
+	const srvName = "fasthttp"
+	name = srvName
+	return
 }
 
 func (srv *FastHttp) Build(options HttpOptions) (err error) {

@@ -35,7 +35,7 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newServiceHandler(appId string, appName string, appVersion versions.Version, log logs.Logger, signer *secret.Signer, endpoints map[string]Endpoint) (handler HttpHandler) {
+func newServiceHandler(appId string, appName string, appVersion versions.Version, log logs.Logger, internalRequestEnabled bool, signer *secret.Signer, endpoints map[string]Endpoint) (handler HttpHandler) {
 	names := make([]string, 0, 1)
 	namesWithInternal := make([]string, 0, 1)
 	for name, ep := range endpoints {
@@ -62,27 +62,29 @@ func newServiceHandler(appId string, appName string, appVersion versions.Version
 		dp = []byte("{}")
 	}
 	handler = &servicesHandler{
-		log:               log.With("handler", "services"),
-		names:             np,
-		namesWithInternal: nip,
-		documents:         dp,
-		openapi:           op,
-		appVersion:        appVersion,
-		signer:            signer,
-		endpoints:         endpoints,
+		log:                    log.With("handler", "services"),
+		names:                  np,
+		namesWithInternal:      nip,
+		documents:              dp,
+		openapi:                op,
+		appVersion:             appVersion,
+		signer:                 signer,
+		internalRequestEnabled: internalRequestEnabled,
+		endpoints:              endpoints,
 	}
 	return
 }
 
 type servicesHandler struct {
-	log               logs.Logger
-	names             []byte
-	namesWithInternal []byte
-	documents         []byte
-	openapi           []byte
-	appVersion        versions.Version
-	signer            *secret.Signer
-	endpoints         map[string]Endpoint
+	log                    logs.Logger
+	names                  []byte
+	namesWithInternal      []byte
+	documents              []byte
+	openapi                []byte
+	appVersion             versions.Version
+	signer                 *secret.Signer
+	internalRequestEnabled bool
+	endpoints              map[string]Endpoint
 }
 
 func (handler *servicesHandler) Name() (name string) {
@@ -150,15 +152,28 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		handler.failed(writer, "", 0, errors.BadRequest("fns: read body failed").WithCause(readBodyErr))
 		return
 	}
-	// internal
-	internal := false
+
+	// sign
+	signed := false
 	sign := r.Header.Get(httpRequestSignatureHeader)
 	if sign != "" {
 		if !handler.signer.Verify(body, bytex.FromString(sign)) {
 			handler.failed(writer, "", 0, errors.NotAcceptable("fns: signature is invalid"))
 			return
 		}
-		internal = true
+		signed = true
+	}
+
+	// internal
+	internal := false
+	if r.Header.Get(httpRequestInternalHeader) != "" {
+		if !handler.internalRequestEnabled {
+			handler.failed(writer, "", 0, errors.NotAcceptable("fns: cluster mode is disabled"))
+			return
+		}
+		if signed {
+			internal = true
+		}
 	}
 
 	// version

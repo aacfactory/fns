@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 )
@@ -27,8 +28,7 @@ type ClusterBuilderOptions struct {
 	Log        logs.Logger
 	AppId      string
 	AppName    string
-	AppVersion string
-	Address    string
+	AppVersion versions.Version
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
@@ -38,7 +38,16 @@ type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err er
 type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
+	// Nodes 记得塞deviceId（appId） 和 签名
+	Nodes(ctx context.Context) (nodes []Node, err error)
 	Shared() (shared Shared)
+}
+
+type Node struct {
+	Id      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Address string `json:"address"`
 }
 
 type Shared interface {

@@ -25,6 +25,7 @@ require (
 )
 
 require (
+	github.com/aacfactory/rings v1.1.2 // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.14.1 // indirect

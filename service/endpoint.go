@@ -23,10 +23,13 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
+	"github.com/aacfactory/fns/service/internal/logger"
+	"github.com/aacfactory/fns/service/internal/procs"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -34,64 +37,123 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type EndpointsOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Config     *Config
+	AppId           string
+	AppName         string
+	AppVersion      versions.Version
+	AutoMaxProcsMin int
+	AutoMaxProcsMax int
+	Http            Http
+	Config          *Config
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
-	// config
-
 	// log >>>
-
-	// log <<<
-	// workers >>>
-	config := options.Config
-	if config == nil {
-		config = &configure.Runtime{}
+	logOptions := logger.LogOptions{
+		Name: options.AppName,
 	}
-	maxWorkers := config.MaxWorkers
+	if options.Config.Log != nil {
+		logOptions.Color = options.Config.Log.Color
+		logOptions.Formatter = options.Config.Log.Formatter
+		logOptions.Level = options.Config.Log.Level
+	}
+	log, logErr := logger.NewLog(logOptions)
+	if logErr != nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(logErr)
+		return
+	}
+	// log <<<
+	// procs
+	goprocs := procs.New(procs.Options{
+		Log: log,
+		Min: options.AutoMaxProcsMin,
+		Max: options.AutoMaxProcsMax,
+	})
+	// workers >>>
+	rtConfig := options.Config.Runtime
+	if rtConfig == nil {
+		rtConfig = &RuntimeConfig{}
+	}
+	maxWorkers := rtConfig.MaxWorkers
 	if maxWorkers < 1 {
 		maxWorkers = 256 * 1024
 	}
-	maxIdleWorkerSeconds := config.WorkerMaxIdleSeconds
+	maxIdleWorkerSeconds := rtConfig.WorkerMaxIdleSeconds
 	if maxIdleWorkerSeconds < 1 {
 		maxIdleWorkerSeconds = 60
 	}
 	worker := workers.New(workers.MaxWorkers(maxWorkers), workers.MaxIdleWorkerDuration(time.Duration(maxIdleWorkerSeconds)*time.Second))
 	// workers <<<
-	// shared store >>>
-	sharedMemSizeStr := strings.TrimSpace(config.LocalSharedMemSize)
-	if sharedMemSizeStr == "" {
-		sharedMemSizeStr = "64M"
-	}
-	sharedMemSize, sharedMemSizeErr := bytex.ToBytes(sharedMemSizeStr)
-	if sharedMemSizeErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
-		return
-	}
-	sharedStore, createSharedStoreErr := shareds.NewLocalStore(int64(sharedMemSize))
-	if createSharedStoreErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(createSharedStoreErr)
-		return
-	}
-	// shared store <<<
-
-	// shared lockers >>>
-	// shared lockers <<<
-
-	// barrier >>>
-	// barrier <<<
-
-	// cluster >>>
-	// cluster <<<
 
 	// http >>>
+	if options.Http == nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("http is required"))
+		return
+	}
 	// http <<<
 
+	// cluster
+	var cluster Cluster
+	var sharedStore shared.Store
+	var sharedLockers shared.Lockers
+	var barrier Barrier
+	var registrations *Registrations
+	if options.Config.Cluster != nil {
+		// cluster >>>
+		kind := strings.TrimSpace(options.Config.Cluster.Kind)
+		builder, hasBuilder := getClusterBuilder(kind)
+		if !hasBuilder {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
+			return
+		}
+		cluster, err = builder(ClusterBuilderOptions{
+			Config:     options.Config.Cluster,
+			Log:        log.With("cluster", kind),
+			AppId:      options.AppId,
+			AppName:    options.AppName,
+			AppVersion: options.AppVersion,
+		})
+		if err != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
+			return
+		}
+		// cluster <<<
+		sharedStore = cluster.Shared().Store()
+		sharedLockers = cluster.Shared().Lockers()
+		barrier = &sharedBarrier{
+			store: sharedStore,
+		}
+		// registrations
+		registrations = &Registrations{
+			id:     options.AppId,
+			locker: sync.Mutex{},
+			values: sync.Map{},
+		}
+	} else {
+		// shared store >>>
+		sharedMemSizeStr := strings.TrimSpace(rtConfig.LocalSharedStoreCacheSize)
+		if sharedMemSizeStr == "" {
+			sharedMemSizeStr = "64M"
+		}
+		sharedMemSize, sharedMemSizeErr := bytex.ToBytes(sharedMemSizeStr)
+		if sharedMemSizeErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
+			return
+		}
+		sharedStore, err = shared.NewLocalStore(int64(sharedMemSize))
+		if err != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(err)
+			return
+		}
+		// shared store <<<
+		// shared lockers >>>
+		sharedLockers = shared.NewLocalLockers()
+		// shared lockers <<<
+		// barrier >>>
+		barrier = defaultBarrier()
+		// barrier <<<
+	}
 	// timeout
-	handleTimeoutSeconds := options.Config.HandleTimeoutSeconds
+	handleTimeoutSeconds := options.Config.Runtime.HandleTimeoutSeconds
 	if handleTimeoutSeconds < 1 {
 		handleTimeoutSeconds = 10
 	}
@@ -99,24 +161,21 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		rt: &runtimes{
 			appId:         options.AppId,
 			running:       flags.New(false),
-			log:           options.Log,
+			log:           log,
 			worker:        worker,
 			discovery:     nil,
-			barrier:       nil,
-			sharedLockers: nil,
-			sharedStore:   nil,
+			barrier:       barrier,
+			sharedLockers: sharedLockers,
+			sharedStore:   sharedStore,
 		},
-		log:           options.Log,
-		appId:         options.AppId,
-		appVersion:    options.AppVersion,
-		running:       options.Running,
-		barrier:       defaultBarrier(),
-		worker:        worker,
-		sharedLockers: shareds.NewLocalLockers(),
-		sharedStore:   sharedStore,
+		autoMaxProcs:  goprocs,
+		log:           log,
 		handleTimeout: time.Duration(handleTimeoutSeconds) * time.Second,
-		discovery:     nil,
 		deployed:      make(map[string]*endpoint),
+		registrations: registrations,
+		http:          options.Http,
+		httpConfig:    options.Config.Http,
+		cluster:       cluster,
 	}
 
 	v.rt.discovery = v
@@ -124,28 +183,15 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 }
 
 type Endpoints struct {
-	rt            *runtimes
 	log           logs.Logger
-	appId         string
-	appVersion    versions.Version
-	running       *flags.Flag
-	worker        Workers
+	rt            *runtimes
+	autoMaxProcs  *procs.AutoMaxProcs
 	handleTimeout time.Duration
-	barrier       Barrier
-	sharedLockers shared.Lockers
-	sharedStore   shared.Store
-	discovery     EndpointDiscovery
 	deployed      map[string]*endpoint
-}
-
-func (e *Endpoints) Upgrade(barrier Barrier, store shared.Store, lockers shared.Lockers, discovery EndpointDiscovery) {
-	e.barrier = barrier
-	if e.sharedStore != nil {
-		e.sharedStore.Close()
-	}
-	e.sharedStore = store
-	e.sharedLockers = lockers
-	e.discovery = discovery
+	registrations *Registrations
+	http          Http
+	httpConfig    *HttpConfig
+	cluster       Cluster
 }
 
 func (e *Endpoints) Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool) {
@@ -164,23 +210,43 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 	}
 	versionMatched := true
 	if len(opt.versionRange) > 0 {
-		versionMatched = e.appVersion.Between(opt.versionRange[0], opt.versionRange[1])
+		versionMatched = e.rt.appVersion.Between(opt.versionRange[0], opt.versionRange[1])
 	}
 	if opt.id != "" {
-		if opt.id == e.appId && versionMatched {
+		if opt.id == e.rt.appId && versionMatched {
 			endpoint, has = e.deployed[service]
 			return
 		}
-		if e.discovery != nil && CanAccessInternal(ctx) && !opt.native {
-			endpoint, has = e.discovery.Get(ctx, service, options...)
+		if e.registrations != nil && CanAccessInternal(ctx) && !opt.native {
+			registration, fetched := e.registrations.Get(opt.id, service)
+			if !fetched {
+				return
+			}
+			versionMatched = registration.version.Between(opt.versionRange[0], opt.versionRange[1])
+			if !versionMatched {
+				return
+			}
+			endpoint = registration
+			has = true
+			return
 		}
 	} else {
 		endpoint, has = e.deployed[service]
 		if has && versionMatched {
 			return
 		}
-		if e.discovery != nil && CanAccessInternal(ctx) && !opt.native {
-			endpoint, has = e.discovery.Get(ctx, service, options...)
+		if e.registrations != nil && CanAccessInternal(ctx) && !opt.native {
+			registration, fetched := e.registrations.Get("", service)
+			if !fetched {
+				return
+			}
+			versionMatched = registration.version.Between(opt.versionRange[0], opt.versionRange[1])
+			if !versionMatched {
+				return
+			}
+			endpoint = registration
+			has = true
+			return
 		}
 	}
 	return
@@ -195,7 +261,18 @@ func (e *Endpoints) Mount(svc Service) {
 }
 
 func (e *Endpoints) Listen() (err error) {
-	// todo listen http
+	e.autoMaxProcs.Enable()
+	// todo cluster join
+
+	// todo listen registrations
+
+	// todo create http and listen
+
+	// handlers
+
+	// http
+
+	// listen endpoint after cluster cause the endpoint may use cluster
 	errCh := make(chan error, 8)
 	lns := 0
 	closed := int64(0)
@@ -216,28 +293,34 @@ func (e *Endpoints) Listen() (err error) {
 			}
 		}(ctx, ln, errCh)
 	}
-	if lns == 0 {
+	if lns > 0 {
+		select {
+		case lnErr := <-errCh:
+			atomic.AddInt64(&closed, 1)
+			err = errors.Warning("fns: endpoints listen failed").WithCause(lnErr)
+			break
+		case <-time.After(time.Duration(lns*3) * time.Second):
+			break
+		}
 		close(errCh)
-		return
 	}
-	select {
-	case lnErr := <-errCh:
-		atomic.AddInt64(&closed, 1)
-		err = errors.Warning("fns: endpoints listen failed").WithCause(lnErr)
-		break
-	case <-time.After(time.Duration(lns*3) * time.Second):
-		break
-	}
-	close(errCh)
+	e.rt.running.On()
+	return
+}
+
+func (e *Endpoints) Running() (ok bool) {
+	ok = e.rt.running.IsOn()
 	return
 }
 
 func (e *Endpoints) Close() {
+	e.rt.running.Off()
 	// todo close http
 	// todo close http handler
 	for _, ep := range e.deployed {
 		ep.svc.Close()
 	}
+	e.autoMaxProcs.Reset()
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

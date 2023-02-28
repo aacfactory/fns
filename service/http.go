@@ -52,6 +52,7 @@ const (
 	httpAppVersionHeader       = "X-Fns-Version"
 	httpRequestIdHeader        = "X-Fns-Request-Id"
 	httpRequestSignatureHeader = "X-Fns-Request-Signature"
+	httpRequestInternalHeader  = "X-Fns-Request-Internal"
 	httpRequestTimeoutHeader   = "X-Fns-Request-Timeout"
 	httpRequestVersionsHeader  = "X-Fns-Request-Version"
 	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
@@ -343,6 +344,7 @@ type HttpOptions struct {
 type HttpClient interface {
 	Get(ctx context.Context, path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error)
 	Post(ctx context.Context, path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
+	Close()
 }
 
 type HttpClientDialer interface {
@@ -453,6 +455,10 @@ func (client *FastHttpClient) Post(ctx context.Context, path string, header http
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 	return
+}
+
+func (client *FastHttpClient) Close() {
+	client.tr.CloseIdleConnections()
 }
 
 func (client *FastHttpClient) prepareRequest(method []byte, path string, header http.Header) (req *fasthttp.Request) {
@@ -628,32 +634,4 @@ func fastHttpErrorHandler(ctx *fasthttp.RequestCtx, err error) {
 	ctx.SetStatusCode(555)
 	ctx.SetContentType(httpContentTypeJson)
 	ctx.SetBody([]byte(fmt.Sprintf("{\"error\": \"%s\"}", err.Error())))
-}
-
-func newFastHttp(handler http.Handler, log logs.Logger, config *HttpConfig) (v Http, err error) {
-	var serverTLS *tls.Config
-	var clientTLS *tls.Config
-	if config.TLS != nil {
-		serverTLS, clientTLS, err = config.TLS.Config()
-		if err != nil {
-			err = errors.Warning("fns: create http failed").WithCause(err)
-			return
-		}
-	}
-	f := &FastHttp{}
-	cors := newCorsHandler(config.Cors)
-
-	buildErr := f.Build(HttpOptions{
-		Port:      config.Port,
-		ServerTLS: serverTLS,
-		ClientTLS: clientTLS,
-		Handler:   cors.Handler(handler),
-		Log:       log.With("http", "fasthttp"),
-		Options:   config.Options,
-	})
-	if buildErr != nil {
-		err = errors.Warning("fns: create http failed").WithCause(buildErr)
-		return
-	}
-	return
 }

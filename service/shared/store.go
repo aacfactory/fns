@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/container/smap"
+	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/dgraph-io/ristretto"
 	"time"
 )
@@ -46,19 +48,20 @@ func NewLocalStore(memSize int64) (store Store, err error) {
 		return
 	}
 	store = &LocalStore{
-		cache: cache,
+		cache:  cache,
+		values: smap.New(),
 	}
 	return
 }
 
-// todo cache and spanmap
 type LocalStore struct {
-	cache *ristretto.Cache
+	cache  *ristretto.Cache
+	values *smap.Map
 }
 
 func (store *LocalStore) Set(key []byte, value []byte) (err errors.CodeError) {
 	store.cache.Set(key, value, int64(len(value)))
-	// todo use span map
+	store.values.Set(mmhash.MemHash(key), value)
 	return
 }
 
@@ -70,6 +73,10 @@ func (store *LocalStore) SetWithTTL(key []byte, value []byte, timeout time.Durat
 func (store *LocalStore) Get(key []byte) (value []byte, err errors.CodeError) {
 	v, has := store.cache.Get(key)
 	if !has {
+		vv, got := store.values.Get(mmhash.MemHash(key))
+		if got {
+			v, has = vv.([]byte)
+		}
 		return
 	}
 	value, has = v.([]byte)
@@ -82,6 +89,7 @@ func (store *LocalStore) Get(key []byte) (value []byte, err errors.CodeError) {
 
 func (store *LocalStore) Remove(key []byte) (err errors.CodeError) {
 	store.cache.Del(key)
+	store.values.Delete(mmhash.MemHash(key))
 	return
 }
 

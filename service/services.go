@@ -216,8 +216,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: invalid request url path"))
 		return
 	}
-	devId := r.Header.Get(httpDeviceIdHeader)
-	if devId == "" {
+	if r.Header.Get(httpDeviceIdHeader) == "" {
 		handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: X-Fns-Device-Id is required"))
 		return
 	}
@@ -273,7 +272,6 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	}
 	result, hasResult, requestErr := ep.RequestSync(withTracer(ctx, id), NewRequest(
 		ctx,
-		devId,
 		serviceName,
 		fnName,
 		NewArgument(body),
@@ -344,9 +342,6 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	if !handler.matchRequestVersion(writer, r) {
 		return
 	}
-	// device
-	devId := r.Header.Get(httpDeviceIdHeader)
-	devIp := handler.getDeviceIp(r)
 	// internal request
 	iReq := &internalRequestImpl{}
 	decodeErr := json.Unmarshal(body, iReq)
@@ -380,12 +375,10 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	// request
 	req := NewRequest(
 		ctx,
-		devId,
 		serviceName,
 		fnName,
 		NewArgument(iReq.Body),
 		WithHttpRequestHeader(r.Header),
-		WithDeviceIp(devIp),
 		WithRequestId(id),
 		WithInternalRequest(),
 		WithRequestTrunk(iReq.Trunk),

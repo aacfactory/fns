@@ -40,8 +40,6 @@ type Options struct {
 	Config configures.Config
 }
 
-// Service
-// 管理 Fn 的服务
 type Service interface {
 	Build(options Options) (err error)
 	Name() (name string)
@@ -135,5 +133,19 @@ func (svc *Abstract) Close() {
 
 func (svc *Abstract) Log() (log logs.Logger) {
 	log = svc.log
+	return
+}
+
+func (svc *Abstract) Barrier(ctx context.Context, name string, arg Argument, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
+	barrier := GetBarrier(ctx)
+	if barrier == nil {
+		if svc.log.WarnEnabled() {
+			svc.log.Warn().With("fn", name).Message("fns: execute fn as shared failed, barrier is not found")
+		}
+		result, err = fn()
+		return
+	}
+	key := fmt.Sprintf("%s:%s:%d", svc.name, name, arg.HashCode())
+	result, err = barrier.Do(ctx, key, fn)
 	return
 }

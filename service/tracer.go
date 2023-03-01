@@ -86,14 +86,7 @@ func (task *reportTracerTask) Name() (name string) {
 }
 
 func (task *reportTracerTask) Execute(ctx context.Context) {
-	devId := ""
-	req, has := GetRequest(ctx)
-	if has {
-		devId = req.Header().DeviceId()
-	} else {
-		devId = uid.UID()
-	}
-	_ = task.endpoint.Request(ctx, NewRequest(ctx, devId, "tracings", "report", NewArgument(task.t)))
+	_ = task.endpoint.Request(ctx, NewRequest(ctx, "tracings", "report", NewArgument(task.t)))
 }
 
 type Tracer interface {

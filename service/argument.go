@@ -21,12 +21,14 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service/internal/commons/objects"
 	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
 )
 
 type Argument interface {
 	json.Marshaler
 	json.Unmarshaler
 	As(v interface{}) (err errors.CodeError)
+	HashCode() (code uint64)
 }
 
 func EmptyArgument() (arg Argument) {
@@ -118,5 +120,27 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 			return
 		}
 	}
+	return
+}
+
+func (arg *argument) HashCode() (code uint64) {
+	if arg.value == nil {
+		return
+	}
+	var p []byte
+	switch arg.value.(type) {
+	case *Empty, struct{}:
+		break
+	case []byte:
+		p = arg.value.([]byte)
+		break
+	case json.RawMessage:
+		p = arg.value.(json.RawMessage)
+		break
+	default:
+		p, _ = json.Marshal(arg.value)
+		break
+	}
+	code = xxhash.Sum64(p)
 	return
 }

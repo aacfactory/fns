@@ -336,6 +336,12 @@ func WithHttpRequestHeader(header http.Header) RequestOption {
 	}
 }
 
+func WithDeviceId(id string) RequestOption {
+	return func(options *RequestOptions) {
+		options.deviceId = id
+	}
+}
+
 func WithDeviceIp(ip string) RequestOption {
 	return func(options *RequestOptions) {
 		options.deviceIp = ip
@@ -363,16 +369,18 @@ func WithRequestTrunk(trunk RequestTrunk) RequestOption {
 type RequestOptions struct {
 	id       string
 	header   RequestHeader
+	deviceId string
 	deviceIp string
 	internal bool
 	user     RequestUser
 	trunk    RequestTrunk
 }
 
-func NewRequest(ctx context.Context, deviceId string, service string, fn string, argument Argument, options ...RequestOption) (v Request) {
+func NewRequest(ctx context.Context, service string, fn string, argument Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		id:       "",
 		header:   newRequestHeader(),
+		deviceId: "",
 		deviceIp: "",
 		user:     nil,
 		internal: false,
@@ -383,7 +391,6 @@ func NewRequest(ctx context.Context, deviceId string, service string, fn string,
 			option(opt)
 		}
 	}
-	opt.header.Add(httpDeviceIdHeader, deviceId)
 	if opt.deviceIp != "" {
 		opt.header.Add(httpDeviceIpHeader, opt.deviceIp)
 	}
@@ -436,6 +443,9 @@ func NewRequest(ctx context.Context, deviceId string, service string, fn string,
 				next = true
 				return
 			})
+		}
+		if opt.deviceId != "" {
+			header.Add(httpDeviceIdHeader, opt.deviceId)
 		}
 		user := opt.user
 		if user == nil {

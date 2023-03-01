@@ -19,7 +19,6 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/uid"
 	"time"
 )
 
@@ -62,14 +61,7 @@ func (task *reportStatsTask) Name() (name string) {
 }
 
 func (task *reportStatsTask) Execute(ctx context.Context) {
-	devId := ""
-	req, has := GetRequest(ctx)
-	if has {
-		devId = req.Header().DeviceId()
-	} else {
-		devId = uid.UID()
-	}
-	_ = task.endpoint.Request(ctx, NewRequest(ctx, devId, "stats", "report", NewArgument(task.s)))
+	_ = task.endpoint.Request(ctx, NewRequest(ctx, "stats", "report", NewArgument(task.s)))
 }
 
 type Metric struct {

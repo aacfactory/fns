@@ -103,6 +103,7 @@ type ClusterDevMode struct {
 }
 
 type SharedConfig struct {
+	BarrierDisabled        bool   `json:"barrierDisabled"`
 	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds"`
 }
 

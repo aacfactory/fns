@@ -17,10 +17,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/shared"
+	"github.com/aacfactory/json"
 	"golang.org/x/sync/singleflight"
+	"time"
 )
 
 type Barrier interface {
@@ -30,45 +35,90 @@ type Barrier interface {
 
 func defaultBarrier() Barrier {
 	return &sfgBarrier{
-		v: &singleflight.Group{},
+		group: singleflight.Group{},
 	}
 }
 
 type sfgBarrier struct {
-	v *singleflight.Group
+	group singleflight.Group
 }
 
-func (b *sfgBarrier) Do(_ context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
+func (barrier *sfgBarrier) Do(_ context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
 	var doErr error
-	result, doErr, _ = b.v.Do(key, func() (interface{}, error) {
+	result, doErr, _ = barrier.group.Do(key, func() (interface{}, error) {
 		return fn()
 	})
 	if doErr != nil {
-		err = doErr.(errors.CodeError)
+		err = errors.Map(doErr)
 	}
 	return
 }
 
-func (b *sfgBarrier) Forget(_ context.Context, key string) {
-	b.v.Forget(key)
+func (barrier *sfgBarrier) Forget(_ context.Context, key string) {
+	barrier.group.Forget(key)
 }
 
-func clusterBarrier(store shared.Store) Barrier {
+func clusterBarrier(store shared.Store, lockers shared.Lockers, resultTTL time.Duration) Barrier {
 	return &sharedBarrier{
-		store: store,
+		group:     singleflight.Group{},
+		lockers:   lockers,
+		store:     store,
+		resultTTL: resultTTL,
 	}
 }
 
 type sharedBarrier struct {
-	store shared.Store
+	group     singleflight.Group
+	lockers   shared.Lockers
+	store     shared.Store
+	resultTTL time.Duration
 }
 
 func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
-	//TODO implement me
-	panic("implement me")
+	var doErr error
+	result, doErr, _ = barrier.group.Do(key, func() (v interface{}, err error) {
+		barrierKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s", key))
+		locker, lockErr := barrier.lockers.Lock(ctx, barrierKey, 2*time.Second)
+		if lockErr != nil {
+			err = errors.Warning("fns: shared barrier execute failed").WithCause(lockErr)
+			return
+		}
+		defer locker.Unlock()
+		resultKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s/result", key))
+		cached, has, getErr := barrier.store.Get(ctx, resultKey)
+		if getErr != nil {
+			err = errors.Warning("fns: shared barrier execute failed").WithCause(getErr)
+			return
+		}
+		if has {
+			if cached[0] == '1' {
+				v = json.RawMessage(cached[1:])
+			} else {
+				err = errors.Decode(cached[1:])
+			}
+			return
+		}
+		v, err = fn()
+		if err != nil {
+			p, _ := json.Marshal(err)
+			cached = bytes.Join([][]byte{{'0'}, p}, []byte{})
+		} else {
+			p, _ := json.Marshal(v)
+			cached = bytes.Join([][]byte{{'1'}, p}, []byte{})
+		}
+		_ = barrier.store.SetWithTTL(ctx, resultKey, cached, barrier.resultTTL)
+		return
+	})
+	if doErr != nil {
+		err = errors.Map(doErr)
+	}
+	return
 }
 
 func (barrier *sharedBarrier) Forget(ctx context.Context, key string) {
-	//TODO implement me
-	panic("implement me")
+	barrier.group.Forget(key)
+	barrierKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s", key))
+	_ = barrier.store.Remove(ctx, barrierKey)
+	resultKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s/result", key))
+	_ = barrier.store.Remove(ctx, resultKey)
 }

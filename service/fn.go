@@ -58,9 +58,8 @@ func (f *fnTask) Execute(ctx context.Context) {
 			_, _ = buf.Write(p)
 		}
 	}
-	lbk := fmt.Sprintf("%d", xxhash.Sum64(buf.Bytes()))
 	_, _ = buf.Write(bytex.FromString(f.request.Header().DeviceId()))
-	hbk := fmt.Sprintf("%d", xxhash.Sum64(buf.Bytes()))
+	barrierKey := fmt.Sprintf("%d", xxhash.Sum64(buf.Bytes()))
 	bytebufferpool.Put(buf)
 
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
@@ -70,11 +69,8 @@ func (f *fnTask) Execute(ctx context.Context) {
 	ctx = withLog(ctx, fnLog)
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, f.handleTimeout)
-	v, err := f.barrier.Do(ctx, hbk, func() (result interface{}, err errors.CodeError) {
-		result, err = f.barrier.Do(ctx, lbk, func() (result interface{}, err errors.CodeError) {
-			result, err = f.svc.Handle(ctx, fnName, f.request.Argument())
-			return
-		})
+	v, err := f.barrier.Do(ctx, barrierKey, func() (result interface{}, err errors.CodeError) {
+		result, err = f.svc.Handle(ctx, fnName, f.request.Argument())
 		return
 	})
 	cancel()

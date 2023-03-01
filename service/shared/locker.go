@@ -19,12 +19,28 @@ package shared
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"sync"
 	"time"
 )
 
+type Locker interface {
+	Unlock()
+}
+
 type Lockers interface {
-	Get(ctx context.Context, key []byte, timeout time.Duration) (locker sync.Locker, err errors.CodeError)
+	Lock(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err errors.CodeError)
+}
+
+type LocalSharedLocker struct {
+	lockers *LocalLockers
+	key     []byte
+	mutex   sync.Locker
+}
+
+func (locker *LocalSharedLocker) Unlock() {
+	locker.mutex.Unlock()
+	locker.lockers.release(locker.key)
 }
 
 func NewLocalLockers() *LocalLockers {
@@ -39,15 +55,29 @@ type LocalLockers struct {
 	lockers map[string]sync.Locker
 }
 
-func (lockers *LocalLockers) Get(_ context.Context, key []byte, _ time.Duration) (locker sync.Locker, err errors.CodeError) {
+func (lockers *LocalLockers) Lock(_ context.Context, key []byte, _ time.Duration) (locker Locker, err errors.CodeError) {
 	lockers.mutex.Lock()
 	defer lockers.mutex.Unlock()
-	mKey := string(key)
-	has := false
-	locker, has = lockers.lockers[mKey]
-	if has {
-		locker = &sync.Mutex{}
-		lockers.lockers[mKey] = locker
+	mKey := bytex.ToString(key)
+	mutex, exist := lockers.lockers[mKey]
+	if exist {
+		lockers.lockers[mKey] = mutex
+	} else {
+		mutex = &sync.Mutex{}
+		lockers.lockers[mKey] = mutex
+	}
+	mutex.Lock()
+	locker = &LocalSharedLocker{
+		lockers: lockers,
+		key:     key,
+		mutex:   mutex,
 	}
 	return
+}
+
+func (lockers *LocalLockers) release(key []byte) {
+	lockers.mutex.Lock()
+	defer lockers.mutex.Unlock()
+	mKey := bytex.ToString(key)
+	delete(lockers.lockers, mKey)
 }

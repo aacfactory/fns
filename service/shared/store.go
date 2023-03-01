@@ -17,20 +17,24 @@
 package shared
 
 import (
-	"fmt"
+	"context"
+	"encoding/binary"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/container/smap"
 	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/dgraph-io/ristretto"
+	"sync"
 	"time"
 )
 
 type Store interface {
-	Set(key []byte, value []byte) (err errors.CodeError)
-	SetWithTTL(key []byte, value []byte, timeout time.Duration) (err errors.CodeError)
-	Get(key []byte) (value []byte, err errors.CodeError)
-	Remove(key []byte) (err errors.CodeError)
+	Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError)
+	Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError)
+	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError)
+	Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError)
+	ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError)
+	Remove(ctx context.Context, key []byte) (err errors.CodeError)
 	Close()
 }
 
@@ -48,6 +52,7 @@ func NewLocalStore(memSize int64) (store Store, err error) {
 		return
 	}
 	store = &LocalStore{
+		lock:   sync.RWMutex{},
 		cache:  cache,
 		values: smap.New(),
 	}
@@ -55,23 +60,65 @@ func NewLocalStore(memSize int64) (store Store, err error) {
 }
 
 type LocalStore struct {
+	lock   sync.RWMutex
 	cache  *ristretto.Cache
 	values *smap.Map
 }
 
-func (store *LocalStore) Set(key []byte, value []byte) (err errors.CodeError) {
+func (store *LocalStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {
+	store.lock.Lock()
+	store.lock.Unlock()
 	store.cache.Set(key, value, int64(len(value)))
 	store.values.Set(mmhash.MemHash(key), value)
 	return
 }
 
-func (store *LocalStore) SetWithTTL(key []byte, value []byte, timeout time.Duration) (err errors.CodeError) {
-	store.cache.SetWithTTL(key, value, int64(len(value)), timeout)
+func (store *LocalStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
+	store.lock.Lock()
+	store.lock.Unlock()
+	store.cache.SetWithTTL(key, value, int64(len(value)), ttl)
 	return
 }
 
-func (store *LocalStore) Get(key []byte) (value []byte, err errors.CodeError) {
+func (store *LocalStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError) {
+	store.lock.Lock()
+	store.lock.Unlock()
 	v, has := store.cache.Get(key)
+	if !has {
+		return
+	}
+	vv := v.([]byte)
+	store.cache.SetWithTTL(key, v, int64(len(vv)), ttl)
+	return
+}
+
+func (store *LocalStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError) {
+	store.lock.Lock()
+	store.lock.Unlock()
+	value, has := store.get(ctx, key)
+	if has {
+		n, _ := binary.Varint(value)
+		v = n + delta
+	} else {
+		v = delta
+	}
+	p := make([]byte, 10)
+	binary.PutVarint(p, v)
+	store.cache.Set(key, p, int64(len(p)))
+	store.values.Set(mmhash.MemHash(key), p)
+	return
+}
+
+func (store *LocalStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError) {
+	store.lock.RLock()
+	defer store.lock.RUnlock()
+	value, has = store.get(ctx, key)
+	return
+}
+
+func (store *LocalStore) get(ctx context.Context, key []byte) (value []byte, has bool) {
+	var v interface{}
+	v, has = store.cache.Get(key)
 	if !has {
 		vv, got := store.values.Get(mmhash.MemHash(key))
 		if got {
@@ -81,13 +128,15 @@ func (store *LocalStore) Get(key []byte) (value []byte, err errors.CodeError) {
 	}
 	value, has = v.([]byte)
 	if !has {
-		err = errors.Warning("fns: shared store get failed").WithMeta("key", string(key)).WithCause(fmt.Errorf("value type is not matched"))
+		_ = store.Remove(ctx, key)
 		return
 	}
 	return
 }
 
-func (store *LocalStore) Remove(key []byte) (err errors.CodeError) {
+func (store *LocalStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
+	store.lock.Lock()
+	store.lock.Unlock()
 	store.cache.Del(key)
 	store.values.Delete(mmhash.MemHash(key))
 	return

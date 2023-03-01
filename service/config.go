@@ -93,12 +93,17 @@ type CorsConfig struct {
 type ClusterConfig struct {
 	Kind    string          `json:"kind"`
 	DevMode *ClusterDevMode `json:"devMode"`
+	Shared  *SharedConfig   `json:"shared"`
 	Options json.RawMessage `json:"options"`
 }
 
 type ClusterDevMode struct {
 	ProxyAddress string     `json:"proxyAddress"`
 	TLS          *TLSConfig `json:"tls"`
+}
+
+type SharedConfig struct {
+	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds"`
 }
 
 const (

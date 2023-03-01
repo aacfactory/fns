@@ -135,9 +135,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		// cluster <<<
 		sharedStore = cluster.Shared().Store()
 		sharedLockers = cluster.Shared().Lockers()
-		barrier = &sharedBarrier{
-			store: sharedStore,
+		barrierTTL := 100 * time.Millisecond
+		if config.Cluster.Shared != nil && config.Cluster.Shared.BarrierTTLMilliseconds > 0 {
+			barrierTTL = time.Duration(config.Cluster.Shared.BarrierTTLMilliseconds) * time.Millisecond
 		}
+		barrier = clusterBarrier(sharedStore, sharedLockers, barrierTTL)
 	} else {
 		// shared store >>>
 		sharedMemSizeStr := strings.TrimSpace(runtimeConfig.LocalSharedStoreCacheSize)

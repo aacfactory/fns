@@ -82,7 +82,7 @@ docker run -d --rm --name swagger-ui \
 ```
 ### Send request to fn
 ```shell
-curl -H "Content-Type: application/json" -X POST -d '{}' http://ip:port/service/fn
+curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{}' http://ip:port/service/fn
 ```
 
 ## Environmental configuration

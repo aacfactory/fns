@@ -84,7 +84,7 @@ docker run -d --rm --name swagger-ui \
 
 ### 发送请求
 ```shell
-curl -H "Content-Type: application/json" -X POST -d '{}' http://ip:port/service/fn
+curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{}' http://ip:port/service/fn
 ```
 
 ## 环境化配置

@@ -234,7 +234,8 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 	if opt.internal {
 		requestOptions = append(requestOptions, service.WithInternalRequest())
 	}
-	result := endpoint.Request(ctx, service.NewRequest(ctx, app.id, serviceName, fn, service.NewArgument(argument), requestOptions...))
+	requestOptions = append(requestOptions, service.WithDeviceId(app.id))
+	result := endpoint.Request(ctx, service.NewRequest(ctx, serviceName, fn, service.NewArgument(argument), requestOptions...))
 	v, _, err = result.Value(ctx)
 	if err != nil {
 		err = errors.Warning("fns: execute failed").WithCause(err).WithMeta("service", serviceName)

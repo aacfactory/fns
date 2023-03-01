@@ -24,6 +24,6 @@ func FromString(s string) []byte {
 
 //goland:noinspection ALL
 func ToString(p []byte) string {
-	return unsafe.String(unsafe.SliceData(p), len(p))
-	//return *(*string)(unsafe.Pointer(&p))
+	//return unsafe.String(unsafe.SliceData(p), len(p))
+	return *(*string)(unsafe.Pointer(&p))
 }

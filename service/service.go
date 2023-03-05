@@ -21,12 +21,16 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/logs"
 )
 
 type ComponentOptions struct {
-	Log    logs.Logger
-	Config configures.Config
+	AppId      string
+	AppName    string
+	AppVersion versions.Version
+	Log        logs.Logger
+	Config     configures.Config
 }
 
 type Component interface {
@@ -36,8 +40,11 @@ type Component interface {
 }
 
 type Options struct {
-	Log    logs.Logger
-	Config configures.Config
+	AppId      string
+	AppName    string
+	AppVersion versions.Version
+	Log        logs.Logger
+	Config     configures.Config
 }
 
 type Service interface {
@@ -74,6 +81,9 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 }
 
 type Abstract struct {
+	appId      string
+	appName    string
+	appVersion versions.Version
 	name       string
 	internal   bool
 	log        logs.Logger
@@ -89,8 +99,11 @@ func (svc *Abstract) Build(options Options) (err error) {
 				componentConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
 			}
 			componentBuildErr := component.Build(ComponentOptions{
-				Log:    svc.log.With("component", component.Name()),
-				Config: componentConfig,
+				AppId:      svc.appId,
+				AppName:    svc.appName,
+				AppVersion: svc.appVersion,
+				Log:        svc.log.With("component", component.Name()),
+				Config:     componentConfig,
 			})
 			if componentBuildErr != nil {
 				if svc.log.ErrorEnabled() {
@@ -101,6 +114,21 @@ func (svc *Abstract) Build(options Options) (err error) {
 			return
 		}
 	}
+	return
+}
+
+func (svc *Abstract) AppId() (id string) {
+	id = svc.appId
+	return
+}
+
+func (svc *Abstract) AppName() (name string) {
+	name = svc.appName
+	return
+}
+
+func (svc *Abstract) AppVersion() (version versions.Version) {
+	version = svc.appVersion
 	return
 }
 

@@ -350,8 +350,11 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 		serviceConfig, _ = configures.NewJsonConfig([]byte("{}"))
 	}
 	buildErr := svc.Build(Options{
-		Log:    e.log.With("fns", "service").With("service", name),
-		Config: serviceConfig,
+		AppId:      e.rt.appId,
+		AppName:    e.rt.appName,
+		AppVersion: e.rt.appVersion,
+		Log:        e.log.With("fns", "service").With("service", name),
+		Config:     serviceConfig,
 	})
 	if buildErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithCause(buildErr)

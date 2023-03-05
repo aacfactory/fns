@@ -71,6 +71,9 @@ func (f *fnTask) Execute(ctx context.Context) {
 	ctx, cancel = context.WithTimeout(ctx, f.handleTimeout)
 	v, err := f.barrier.Do(ctx, barrierKey, func() (result interface{}, err errors.CodeError) {
 		result, err = f.svc.Handle(ctx, fnName, f.request.Argument())
+		if err != nil {
+			err = err.WithMeta("service", serviceName).WithMeta("fn", fnName)
+		}
 		return
 	})
 	cancel()

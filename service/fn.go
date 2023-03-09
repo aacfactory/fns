@@ -27,8 +27,8 @@ import (
 	"time"
 )
 
-func newFnTask(svc Service, barrier Barrier, request Request, result ResultWriter, handleTimeout time.Duration) *fnTask {
-	return &fnTask{svc: svc, barrier: barrier, request: request, result: result, handleTimeout: handleTimeout}
+func newFnTask(svc Service, barrier Barrier, handleTimeout time.Duration, hook func(task *fnTask)) *fnTask {
+	return &fnTask{svc: svc, barrier: barrier, handleTimeout: handleTimeout, hook: hook}
 }
 
 type fnTask struct {
@@ -37,6 +37,17 @@ type fnTask struct {
 	request       Request
 	result        ResultWriter
 	handleTimeout time.Duration
+	hook          func(task *fnTask)
+}
+
+func (f *fnTask) begin(r Request, w ResultWriter) {
+	f.request = r
+	f.result = w
+}
+
+func (f *fnTask) end() {
+	f.request = nil
+	f.result = nil
 }
 
 func (f *fnTask) Execute(ctx context.Context) {
@@ -104,4 +115,5 @@ func (f *fnTask) Execute(ctx context.Context) {
 		}
 		fnLog.Debug().Caller().With("latency", latency).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", serviceName, fnName, handled, latency))
 	}
+	f.hook(f)
 }

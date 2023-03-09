@@ -360,11 +360,19 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithCause(buildErr)
 		return
 	}
-	e.deployed[svc.Name()] = &endpoint{
+	ep := &endpoint{
 		rt:            e.rt,
 		handleTimeout: e.handleTimeout,
 		svc:           svc,
+		pool:          sync.Pool{},
 	}
+	ep.pool.New = func() any {
+		return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
+			ep.release(task)
+		})
+	}
+	e.deployed[svc.Name()] = ep
+
 	return
 }
 
@@ -545,6 +553,7 @@ type endpoint struct {
 	handleTimeout time.Duration
 	svc           Service
 	rt            *runtimes
+	pool          sync.Pool
 }
 
 func (e *endpoint) Name() (name string) {
@@ -567,13 +576,16 @@ func (e *endpoint) Request(ctx context.Context, r Request) (result Result) {
 	ctx = withTracer(ctx, r.Id())
 	ctx = withRequest(ctx, r)
 	fr := NewResult()
-	if !e.rt.worker.Dispatch(ctx, newFnTask(e.svc, e.rt.barrier, r, fr, e.handleTimeout)) {
+	task := e.acquire()
+	task.begin(r, fr)
+	if !e.rt.worker.Dispatch(ctx, task) {
 		serviceName, fnName := r.Fn()
 		if ctx.Err() != nil {
 			fr.Failed(errors.Timeout("fns: workers handle timeout").WithMeta("fns", "timeout").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		} else {
 			fr.Failed(errors.NotAcceptable("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		}
+		e.release(task)
 	}
 	result = fr
 	tryReportTracer(ctx)
@@ -583,5 +595,23 @@ func (e *endpoint) Request(ctx context.Context, r Request) (result Result) {
 func (e *endpoint) RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError) {
 	fr := e.Request(ctx, r)
 	result, has, err = fr.Value(ctx)
+	return
+}
+
+func (e *endpoint) acquire() (task *fnTask) {
+	v := e.pool.Get()
+	if v != nil {
+		task = v.(*fnTask)
+		return
+	}
+	task = newFnTask(e.svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
+		e.release(task)
+	})
+	return
+}
+
+func (e *endpoint) release(task *fnTask) {
+	task.end()
+	e.pool.Put(task)
 	return
 }

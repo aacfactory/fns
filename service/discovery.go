@@ -67,14 +67,43 @@ type EndpointDiscovery interface {
 	Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool)
 }
 
+func newRegistrationTask(registration *Registration, handleTimeout time.Duration, hook func(task *registrationTask)) *registrationTask {
+	return &registrationTask{
+		registration: registration,
+		r:            nil,
+		result:       nil,
+		timeout:      handleTimeout,
+		hook:         hook,
+	}
+}
+
 type registrationTask struct {
 	registration *Registration
 	r            Request
 	result       ResultWriter
 	timeout      time.Duration
+	hook         func(task *registrationTask)
+}
+
+func (task *registrationTask) begin(r Request, w ResultWriter) {
+	task.r = r
+	task.result = w
+}
+
+func (task *registrationTask) end() {
+	task.r = nil
+	task.result = nil
 }
 
 func (task *registrationTask) Execute(ctx context.Context) {
+	defer task.hook(task)
+
+	timeout := task.timeout
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		timeout = deadline.Sub(time.Now())
+	}
+
 	registration := task.registration
 	r := task.r
 	future := task.result
@@ -90,6 +119,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	} else {
 		body = []byte{'{', '}'}
 	}
+
 	requestBody, encodeErr := json.Marshal(internalRequest{
 		User:  r.User(),
 		Trunk: r.Trunk(),
@@ -104,7 +134,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	header.Add(httpRequestInternalHeader, "true")
 	header.Add(httpRequestIdHeader, r.Id())
 	header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
-	header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(task.timeout/time.Millisecond)))
+	header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
 	serviceName, fn := r.Fn()
 	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), header, requestBody)
 	if postErr != nil {
@@ -117,6 +147,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		future.Failed(errors.Warning("fns: registration request failed").WithCause(decodeErr))
 		return
 	}
+
 	// Span
 	trace, hasTracer := GetTracer(ctx)
 	if hasTracer && ir.Span != nil {
@@ -154,6 +185,7 @@ type Registration struct {
 	signer  *secret.Signer
 	worker  Workers
 	timeout time.Duration
+	pool    sync.Pool
 }
 
 func (registration *Registration) Key() (key string) {
@@ -177,18 +209,11 @@ func (registration *Registration) Document() (document Document) {
 
 func (registration *Registration) Request(ctx context.Context, r Request) (result Result) {
 	future := NewResult()
-	timeout := registration.timeout
-	deadline, hasDeadline := ctx.Deadline()
-	if hasDeadline {
-		timeout = deadline.Sub(time.Now())
-	}
-	if !registration.worker.Dispatch(ctx, &registrationTask{
-		registration: registration,
-		r:            r,
-		result:       future,
-		timeout:      timeout,
-	}) {
+	task := registration.acquire()
+	task.begin(r, future)
+	if !registration.worker.Dispatch(ctx, task) {
 		future.Failed(errors.Timeout("fns: endpoint execute timeout"))
+		registration.release(task)
 	}
 	result = future
 	return
@@ -197,6 +222,24 @@ func (registration *Registration) Request(ctx context.Context, r Request) (resul
 func (registration *Registration) RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError) {
 	future := registration.Request(ctx, r)
 	result, has, err = future.Value(ctx)
+	return
+}
+
+func (registration *Registration) acquire() (task *registrationTask) {
+	v := registration.pool.Get()
+	if v != nil {
+		task = v.(*registrationTask)
+		return
+	}
+	task = newRegistrationTask(registration, registration.timeout, func(task *registrationTask) {
+		registration.release(task)
+	})
+	return
+}
+
+func (registration *Registration) release(task *registrationTask) {
+	task.end()
+	registration.pool.Put(task)
 	return
 }
 
@@ -358,7 +401,7 @@ func (r *Registrations) AddNode(node Node) (err error) {
 		return
 	}
 	for _, name := range names {
-		r.Add(&Registration{
+		registration := &Registration{
 			hostId:  r.id,
 			id:      node.Name,
 			version: node.Version,
@@ -368,7 +411,14 @@ func (r *Registrations) AddNode(node Node) (err error) {
 			signer:  r.signer,
 			worker:  r.worker,
 			timeout: r.timeout,
-		})
+			pool:    sync.Pool{},
+		}
+		registration.pool.New = func() any {
+			return newRegistrationTask(registration, registration.timeout, func(task *registrationTask) {
+				registration.release(task)
+			})
+		}
+		r.Add(registration)
 	}
 	return
 }

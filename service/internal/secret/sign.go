@@ -48,6 +48,7 @@ func (s *Signer) acquire() (h hash.Hash) {
 	v := s.pool.Get()
 	if v != nil {
 		h = v.(hash.Hash)
+		return
 	}
 	h = hmac.New(func() hash.Hash {
 		return xxhash.New()

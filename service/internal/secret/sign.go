@@ -18,35 +18,69 @@ package secret
 
 import (
 	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
+	"encoding/hex"
+	"github.com/cespare/xxhash/v2"
+	"hash"
+	"sync"
 )
 
 const DefaultSignerKey = "+-fns"
 
-func NewSigner(key []byte) *Signer {
-	return &Signer{
-		key: key,
+func NewSigner(key []byte) (s *Signer) {
+	s = &Signer{
+		key:  key,
+		pool: sync.Pool{},
 	}
+	s.pool.New = func() any {
+		return hmac.New(func() hash.Hash {
+			return xxhash.New()
+		}, s.key)
+	}
+	return
 }
 
 type Signer struct {
-	key []byte
+	key  []byte
+	pool sync.Pool
+}
+
+func (s *Signer) acquire() (h hash.Hash) {
+	v := s.pool.Get()
+	if v != nil {
+		h = v.(hash.Hash)
+	}
+	h = hmac.New(func() hash.Hash {
+		return xxhash.New()
+	}, s.key)
+	return
+}
+
+func (s *Signer) release(h hash.Hash) {
+	h.Reset()
+	s.pool.Put(h)
+	return
 }
 
 func (s *Signer) Sign(target []byte) (signature []byte) {
-	h := hmac.New(sha256.New, s.key)
-	signature = []byte(base64.URLEncoding.EncodeToString(h.Sum(target)))
+	h := s.acquire()
+	h.Write(target)
+	p := h.Sum(nil)
+	s.release(h)
+	signature = make([]byte, hex.EncodedLen(len(p)))
+	hex.Encode(signature, p)
 	return
 }
 
 func (s *Signer) Verify(target []byte, signature []byte) (ok bool) {
-	hashed, hashedErr := base64.URLEncoding.DecodeString(string(signature))
-	if hashedErr != nil {
+	n, err := hex.Decode(signature, signature)
+	if err != nil {
 		return
 	}
-	h := hmac.New(sha256.New, s.key)
-	tmp := h.Sum(target)
-	ok = hmac.Equal(tmp, hashed)
+	signature = signature[0:n]
+	h := s.acquire()
+	h.Write(target)
+	p := h.Sum(nil)
+	s.release(h)
+	ok = hmac.Equal(p, signature)
 	return
 }

@@ -76,16 +76,13 @@ func New(options ...Option) (app Application) {
 
 	// endpoints
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
-		SecretKey:       opt.secretKey,
-		OpenApiVersion:  opt.openApiVersion,
-		AppId:           appId,
-		AppName:         appName,
-		AppVersion:      appVersion,
-		AutoMaxProcsMin: opt.autoMaxProcsMin,
-		AutoMaxProcsMax: opt.autoMaxProcsMax,
-		Http:            opt.httpEngine,
-		HttpHandlers:    opt.httpHandlers,
-		Config:          config,
+		OpenApiVersion: opt.openApiVersion,
+		AppId:          appId,
+		AppName:        appName,
+		AppVersion:     appVersion,
+		Http:           opt.httpEngine,
+		HttpHandlers:   opt.httpHandlers,
+		Config:         config,
 	})
 	if endpointsErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(endpointsErr))))

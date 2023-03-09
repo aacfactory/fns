@@ -42,10 +42,17 @@ type LogConfig struct {
 }
 
 type RuntimeConfig struct {
-	MaxWorkers                int    `json:"maxWorkers"`
-	WorkerMaxIdleSeconds      int    `json:"workerMaxIdleSeconds"`
-	HandleTimeoutSeconds      int    `json:"handleTimeoutSeconds"`
-	LocalSharedStoreCacheSize string `json:"localSharedStoreCacheSize"`
+	MaxWorkers                int                `json:"maxWorkers"`
+	WorkerMaxIdleSeconds      int                `json:"workerMaxIdleSeconds"`
+	HandleTimeoutSeconds      int                `json:"handleTimeoutSeconds"`
+	LocalSharedStoreCacheSize string             `json:"localSharedStoreCacheSize"`
+	AutoMaxProcs              AutoMaxProcsConfig `json:"autoMaxProcs"`
+	SecretKey                 string             `json:"secretKey"`
+}
+
+type AutoMaxProcsConfig struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
 }
 
 type HttpConfig struct {

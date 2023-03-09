@@ -36,9 +36,6 @@ var (
 		id:                    "",
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
-		secretKey:             []byte("Fns-SK"),
-		autoMaxProcsMin:       0,
-		autoMaxProcsMax:       0,
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		httpEngine:            &service.FastHttp{},
 		httpHandlers:          make([]service.HttpHandler, 0, 1),
@@ -52,9 +49,6 @@ type Options struct {
 	id                    string
 	name                  string
 	version               versions.Version
-	secretKey             []byte
-	autoMaxProcsMin       int
-	autoMaxProcsMax       int
 	configRetrieverOption configures.RetrieverOption
 	httpEngine            service.Http
 	httpHandlers          []service.HttpHandler
@@ -133,19 +127,6 @@ func Version(version string) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func SecretKey(key string) Option {
-	return func(options *Options) error {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			return fmt.Errorf("set secret key failed for empty data")
-		}
-		options.secretKey = []byte(key)
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 func RegisterValidator(register validators.ValidateRegister) Option {
 	return func(options *Options) error {
 		if register == nil {
@@ -155,6 +136,8 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 		return nil
 	}
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 func OpenApiVersion(version string) Option {
 	return func(options *Options) error {
@@ -221,22 +204,6 @@ func Services(services ...service.Service) Option {
 			}
 			options.services = append(options.services, s)
 		}
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func MAXPROCS(min int, max int) Option {
-	return func(options *Options) error {
-		if min < 1 {
-			min = 1
-		}
-		if max < 1 {
-			max = 0
-		}
-		options.autoMaxProcsMin = min
-		options.autoMaxProcsMax = max
 		return nil
 	}
 }

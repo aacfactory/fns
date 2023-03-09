@@ -42,16 +42,13 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type EndpointsOptions struct {
-	SecretKey       []byte
-	OpenApiVersion  string
-	AppId           string
-	AppName         string
-	AppVersion      versions.Version
-	AutoMaxProcsMin int
-	AutoMaxProcsMax int
-	Http            Http
-	HttpHandlers    []HttpHandler
-	Config          configures.Config
+	OpenApiVersion string
+	AppId          string
+	AppName        string
+	AppVersion     versions.Version
+	Http           Http
+	HttpHandlers   []HttpHandler
+	Config         configures.Config
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
@@ -66,10 +63,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("http is required"))
 		return
 	}
-	// secret key
-	if options.SecretKey == nil && len(options.SecretKey) == 0 {
-		options.SecretKey = bytex.FromString(secret.DefaultSignerKey)
-	}
+
 	// log >>>
 	logConfig := config.Log
 	logOptions := logger.LogOptions{
@@ -87,17 +81,25 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	log = log.With("app", options.AppName).With("appId", options.AppId)
 	// log <<<
-	// procs
-	goprocs := procs.New(procs.Options{
-		Log: log,
-		Min: options.AutoMaxProcsMin,
-		Max: options.AutoMaxProcsMax,
-	})
-	// workers >>>
+
 	runtimeConfig := config.Runtime
 	if runtimeConfig == nil {
 		runtimeConfig = &RuntimeConfig{}
 	}
+	// secret key
+	secretKey := strings.TrimSpace(runtimeConfig.SecretKey)
+	if secretKey == "" {
+		secretKey = secret.DefaultSignerKey
+	}
+
+	// procs
+	goprocs := procs.New(procs.Options{
+		Log: log,
+		Min: runtimeConfig.AutoMaxProcs.Min,
+		Max: runtimeConfig.AutoMaxProcs.Max,
+	})
+	// workers >>>
+
 	maxWorkers := runtimeConfig.MaxWorkers
 	if maxWorkers < 1 {
 		maxWorkers = 256 * 1024
@@ -189,7 +191,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			barrier:       barrier,
 			sharedLockers: sharedLockers,
 			sharedStore:   sharedStore,
-			signer:        secret.NewSigner(options.SecretKey),
+			signer:        secret.NewSigner(bytex.FromString(secretKey)),
 		},
 		config:        options.Config,
 		autoMaxProcs:  goprocs,
@@ -238,7 +240,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	v.httpHandlers = handlers
-	appendHandlerErr := handlers.Append(newServiceHandler(options.SecretKey, v.cluster != nil, v.deployedCh, options.OpenApiVersion))
+	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCh, options.OpenApiVersion))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return

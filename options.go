@@ -42,6 +42,7 @@ var (
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		httpEngine:            &service.FastHttp{},
 		httpHandlers:          make([]service.HttpHandler, 0, 1),
+		openApiVersion:        "3.0.3",
 		services:              make([]service.Service, 0, 1),
 		shutdownTimeout:       60 * time.Second,
 	}
@@ -57,6 +58,7 @@ type Options struct {
 	configRetrieverOption configures.RetrieverOption
 	httpEngine            service.Http
 	httpHandlers          []service.HttpHandler
+	openApiVersion        string
 	services              []service.Service
 	shutdownTimeout       time.Duration
 }
@@ -150,6 +152,17 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 			return fmt.Errorf("customize validator failed for nil")
 		}
 		validators.AddValidateRegister(register)
+		return nil
+	}
+}
+
+func OpenApiVersion(version string) Option {
+	return func(options *Options) error {
+		version = strings.TrimSpace(version)
+		if version == "" {
+			return fmt.Errorf("set openapi version failed for empty")
+		}
+		options.openApiVersion = version
 		return nil
 	}
 }

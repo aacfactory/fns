@@ -16,6 +16,11 @@
 
 package oas
 
+import (
+	"github.com/aacfactory/json"
+	"sort"
+)
+
 type API struct {
 	Openapi    string           `json:"openapi,omitempty"`
 	Info       *Info            `json:"info,omitempty"`
@@ -23,6 +28,123 @@ type API struct {
 	Paths      map[string]*Path `json:"paths,omitempty"`
 	Components *Components      `json:"components,omitempty"`
 	Tags       []*Tag           `json:"tags,omitempty"`
+}
+
+func (api *API) Encode() (p []byte, err error) {
+	obj := json.NewObject()
+	_ = obj.Put("openapi", api.Openapi)
+	if api.Info != nil {
+		_ = obj.Put("info", api.Info)
+	}
+	if api.Servers != nil && len(api.Servers) > 0 {
+		array := json.NewArray()
+		for _, server := range api.Servers {
+			if server != nil {
+				_ = array.Add(server)
+			}
+		}
+		if array.Len() > 0 {
+			_ = obj.PutRaw("servers", array.Raw())
+		}
+	}
+	if api.Paths != nil && len(api.Paths) > 0 {
+		keys := make([]string, 0, 1)
+		for key := range api.Paths {
+			keys = append(keys, key)
+		}
+		if len(keys) > 0 {
+			sort.Strings(keys)
+			paths := json.NewObject()
+			for _, key := range keys {
+				path, has := api.Paths[key]
+				if !has {
+					continue
+				}
+				_ = paths.Put(key, path)
+			}
+			if !paths.Empty() {
+				_ = obj.PutRaw("paths", paths.Raw())
+			}
+		}
+	}
+	if api.Components != nil {
+		components := json.NewObject()
+		schemas := api.Components.Schemas
+		if schemas != nil && len(schemas) > 0 {
+			keys := make([]string, 0, 1)
+			for key := range schemas {
+				keys = append(keys, key)
+			}
+			if len(keys) > 0 {
+				sort.Strings(keys)
+				schemasObj := json.NewObject()
+				for _, key := range keys {
+					schema, has := schemas[key]
+					if !has {
+						continue
+					}
+					_ = schemasObj.Put(key, schema)
+				}
+				if !schemasObj.Empty() {
+					_ = components.PutRaw("schemas", schemasObj.Raw())
+				}
+			}
+		}
+		responses := api.Components.Responses
+		if responses != nil && len(responses) > 0 {
+			keys := make([]string, 0, 1)
+			for key := range responses {
+				keys = append(keys, key)
+			}
+			if len(keys) > 0 {
+				sort.Strings(keys)
+				responsesObj := json.NewObject()
+				for _, key := range keys {
+					response, has := responses[key]
+					if !has {
+						continue
+					}
+					_ = responsesObj.Put(key, response)
+				}
+				if !responsesObj.Empty() {
+					_ = components.PutRaw("responses", responsesObj.Raw())
+				}
+			}
+		}
+		if !components.Empty() {
+			_ = obj.PutRaw("components", components.Raw())
+		}
+	}
+	if api.Tags != nil && len(api.Tags) > 0 {
+		keys := make([]string, 0, 1)
+		for _, tag := range api.Tags {
+			if tag != nil {
+				keys = append(keys, tag.Name)
+			}
+		}
+		if len(keys) > 0 {
+			sort.Strings(keys)
+			tags := json.NewArray()
+			for _, key := range keys {
+				if key == "builtin" {
+					continue
+				}
+				for _, tag := range api.Tags {
+					if tag.Name == key {
+						_ = tags.Add(tag)
+						break
+					}
+				}
+			}
+			_ = tags.Add(&Tag{
+				Name:        "builtin",
+				Description: "fns builtins",
+			})
+			_ = obj.PutRaw("tags", tags.Raw())
+		}
+	}
+	p, err = obj.MarshalJSON()
+	return
 }
 
 type Info struct {

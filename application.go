@@ -77,6 +77,7 @@ func New(options ...Option) (app Application) {
 	// endpoints
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
 		SecretKey:       opt.secretKey,
+		OpenApiVersion:  opt.openApiVersion,
 		AppId:           appId,
 		AppName:         appName,
 		AppVersion:      appVersion,

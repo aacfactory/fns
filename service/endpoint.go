@@ -43,6 +43,7 @@ import (
 
 type EndpointsOptions struct {
 	SecretKey       []byte
+	OpenApiVersion  string
 	AppId           string
 	AppName         string
 	AppVersion      versions.Version
@@ -237,7 +238,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	v.httpHandlers = handlers
-	appendHandlerErr := handlers.Append(newServiceHandler(options.SecretKey, v.cluster != nil, v.deployedCh))
+	appendHandlerErr := handlers.Append(newServiceHandler(options.SecretKey, v.cluster != nil, v.deployedCh, options.OpenApiVersion))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return

@@ -68,10 +68,10 @@ func encodeDocuments(appId string, appName string, appVersion versions.Version, 
 	return
 }
 
-func encodeOpenapi(appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (p []byte, err error) {
+func encodeOpenapi(openApiVersion string, appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (p []byte, err error) {
 	// oas
 	api := &oas.API{
-		Openapi: "3.0.3",
+		Openapi: openApiVersion,
 		Info: &oas.Info{
 			Title:          appName,
 			Description:    fmt.Sprintf("%s(%s) @%s", appName, appId, appVersion.String()),
@@ -183,7 +183,7 @@ func encodeOpenapi(appId string, appName string, appVersion versions.Version, ep
 			}
 		}
 	}
-	p, err = json.Marshal(api)
+	p, err = api.Encode()
 	if err != nil {
 		err = errors.Warning("fns: encode services openapi failed").WithCause(err)
 		return

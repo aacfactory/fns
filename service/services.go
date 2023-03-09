@@ -35,7 +35,7 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh chan map[string]*endpoint) (handler HttpHandler) {
+func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh chan map[string]*endpoint, openApiVersion string) (handler HttpHandler) {
 	sh := &servicesHandler{
 		log:                    nil,
 		names:                  []byte{'[', ']'},
@@ -49,7 +49,7 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 		signer:                 secret.NewSigner(secretKey),
 		discovery:              nil,
 	}
-	go func(handler *servicesHandler, deployedCh chan map[string]*endpoint) {
+	go func(handler *servicesHandler, deployedCh chan map[string]*endpoint, openApiVersion string) {
 		eps, ok := <-deployedCh
 		if !ok {
 			return
@@ -82,11 +82,11 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 		if documentErr == nil {
 			handler.documents = document
 		}
-		openapi, openapiErr := encodeOpenapi(handler.appId, handler.appName, handler.appVersion, eps)
+		openapi, openapiErr := encodeOpenapi(openApiVersion, handler.appId, handler.appName, handler.appVersion, eps)
 		if openapiErr == nil {
 			handler.openapi = openapi
 		}
-	}(sh, deployedCh)
+	}(sh, deployedCh, openApiVersion)
 	handler = sh
 	return
 }

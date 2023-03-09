@@ -164,7 +164,7 @@ type RequestUser interface {
 	SetAttributes(attributes *json.Object)
 }
 
-func newRequestUser(id RequestUserId, attributes *json.Object) (u RequestUser) {
+func NewRequestUser(id RequestUserId, attributes *json.Object) (u RequestUser) {
 	if attributes == nil {
 		attributes = json.NewObject()
 	}
@@ -356,7 +356,7 @@ func WithInternalRequest() RequestOption {
 
 func WithRequestUser(id RequestUserId, attributes *json.Object) RequestOption {
 	return func(options *RequestOptions) {
-		options.user = newRequestUser(id, attributes)
+		options.user = NewRequestUser(id, attributes)
 	}
 }
 
@@ -449,7 +449,7 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 		}
 		user := opt.user
 		if user == nil {
-			user = newRequestUser("", nil)
+			user = NewRequestUser("", nil)
 		}
 		v = &request{
 			id:       id,

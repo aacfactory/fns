@@ -72,7 +72,7 @@ func Date() *Element {
 }
 
 func DateTime() *Element {
-	return NewElement("builtin", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "Datetime").SetExample("2022-01-10T19:13:07+08:00")
+	return NewElement("builtin", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
 }
 
 func Struct(pkg string, name string, title string, description string) *Element {

@@ -108,7 +108,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	r := task.r
 	future := task.result
 
-	var body []byte
+	var body json.RawMessage
 	if r.Argument() != nil {
 		var bodyErr error
 		body, bodyErr = json.Marshal(r.Argument())
@@ -116,8 +116,6 @@ func (task *registrationTask) Execute(ctx context.Context) {
 			future.Failed(errors.Warning("fns: registration request failed").WithCause(bodyErr))
 			return
 		}
-	} else {
-		body = []byte{'{', '}'}
 	}
 
 	requestBody, encodeErr := json.Marshal(internalRequest{

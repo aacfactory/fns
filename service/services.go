@@ -230,8 +230,10 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	fnName := pathItems[2]
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: read body failed").WithCause(readBodyErr))
-		return
+		if readBodyErr != io.EOF {
+			handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: read body failed").WithCause(readBodyErr))
+			return
+		}
 	}
 
 	if !handler.matchRequestVersion(writer, r) {
@@ -517,10 +519,6 @@ func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, l
 		writer.Header().Set(httpHandleLatencyHeader, latency.String())
 	}
 	writer.WriteHeader(http.StatusOK)
-	if result == nil {
-		_, _ = writer.Write([]byte{'{', '}'})
-		return
-	}
 	body, encodeErr := json.Marshal(result)
 	if encodeErr != nil {
 		cause := errors.ServiceError("encode result failed").WithCause(encodeErr)

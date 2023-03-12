@@ -247,7 +247,7 @@ func emptyOpenapiSchema() *oas.Schema {
 	return &oas.Schema{
 		Key:         "github.com.aacfactory.fns.service@Empty",
 		Title:       "Empty",
-		Description: "Empty object",
+		Description: "Empty Object",
 		Type:        "object",
 	}
 }

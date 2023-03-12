@@ -84,14 +84,14 @@ func RefStruct(pkg string, name string) *Element {
 }
 
 func JsonRaw() *Element {
-	v := NewElement("fns", "JsonRawMessage", "object", "", "Json Raw", "Json Raw Message")
+	v := NewElement("github.com.aacfactory.json", "RawMessage", "object", "", "JsonRawMessage", "Json Raw Message")
 	v.Additional = true
 	v.AddProperty("", Empty())
 	return v
 }
 
 func Empty() *Element {
-	return NewElement("fns", "Empty", "object", "", "Empty", "Empty Value")
+	return NewElement("github.com.aacfactory.fns.service", "Empty", "object", "", "Empty", "Empty Object")
 }
 
 func Array(name string, title string, description string, item *Element) *Element {
@@ -262,7 +262,7 @@ func (element *Element) getItem() (v *Element) {
 }
 
 func (element *Element) Key() (v string) {
-	v = fmt.Sprintf("%s_%s", strings.ReplaceAll(element.Package, "/", "."), element.Name)
+	v = fmt.Sprintf("%s@%s", strings.ReplaceAll(element.Package, "/", "."), element.Name)
 	return
 }
 

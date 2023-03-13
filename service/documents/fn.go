@@ -18,7 +18,7 @@ package documents
 
 import "github.com/aacfactory/fns/service"
 
-func newFn(name string, title string, description string, authorization bool, deprecated bool, arg *Element, result *Element) *Fn {
+func newFn(name string, title string, description string, authorization bool, deprecated bool, arg *Element, result *Element, errs []FnError) *Fn {
 	return &Fn{
 		Name_:          name,
 		Title_:         title,
@@ -31,13 +31,14 @@ func newFn(name string, title string, description string, authorization bool, de
 }
 
 type Fn struct {
-	Name_          string   `json:"name,omitempty"`
-	Title_         string   `json:"title,omitempty"`
-	Description_   string   `json:"description,omitempty"`
-	Authorization_ bool     `json:"authorization,omitempty"`
-	Argument_      *Element `json:"argument,omitempty"`
-	Result_        *Element `json:"result,omitempty"`
-	Deprecated_    bool     `json:"deprecated,omitempty"`
+	Name_          string    `json:"name,omitempty"`
+	Title_         string    `json:"title,omitempty"`
+	Description_   string    `json:"description,omitempty"`
+	Authorization_ bool      `json:"authorization,omitempty"`
+	Argument_      *Element  `json:"argument,omitempty"`
+	Result_        *Element  `json:"result,omitempty"`
+	Deprecated_    bool      `json:"deprecated,omitempty"`
+	Errors_        []FnError `json:"errors,omitempty"`
 }
 
 func (fn *Fn) Name() (name string) {
@@ -73,4 +74,25 @@ func (fn *Fn) Argument() (argument service.ElementDocument) {
 func (fn *Fn) Result() (result service.ElementDocument) {
 	result = fn.Result_
 	return
+}
+
+func (fn *Fn) Errors() (errs []service.FnErrorDocument) {
+	errs = make([]service.FnErrorDocument, 0, 1)
+	for _, fnError := range fn.Errors_ {
+		errs = append(errs, fnError)
+	}
+	return
+}
+
+type FnError struct {
+	Name_         string
+	Descriptions_ map[string]string
+}
+
+func (e FnError) Name() string {
+	return e.Name_
+}
+
+func (e FnError) Descriptions() map[string]string {
+	return e.Descriptions_
 }

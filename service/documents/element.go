@@ -61,6 +61,18 @@ func Int64() *Element {
 	return NewElement("_", "int64", "integer", "int64", "Int64", "Int64")
 }
 
+func Uint() *Element {
+	return Uint64()
+}
+
+func Uint32() *Element {
+	return NewElement("_", "uint32", "integer", "int32", "Uint32", "Uint32")
+}
+
+func Uint64() *Element {
+	return NewElement("_", "uint64", "integer", "int64", "Uint64", "Uint64")
+}
+
 func Float32() *Element {
 	return NewElement("_", "float32", "number", "float", "Float", "Float")
 }

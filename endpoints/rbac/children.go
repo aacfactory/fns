@@ -28,7 +28,7 @@ func Children(ctx context.Context, parent string, withChildren bool) (v []*Role,
 	parent = strings.TrimSpace(parent)
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("rbac endpoint was not found, please deploy rbac service")
+		err = errors.Warning("rbac: endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.ChildrenFn, service.NewArgument(rbac.ChildrenArgument{

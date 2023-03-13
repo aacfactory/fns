@@ -210,7 +210,7 @@ func (registration *Registration) Request(ctx context.Context, r Request) (resul
 	task := registration.acquire()
 	task.begin(r, future)
 	if !registration.worker.Dispatch(ctx, task) {
-		future.Failed(errors.Timeout("fns: endpoint execute timeout"))
+		future.Failed(errors.Warning("fns: service is overload"))
 		registration.release(task)
 	}
 	result = future

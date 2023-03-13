@@ -586,7 +586,7 @@ func (e *endpoint) Request(ctx context.Context, r Request) (result Result) {
 		if ctx.Err() != nil {
 			fr.Failed(errors.Timeout("fns: workers handle timeout").WithMeta("fns", "timeout").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		} else {
-			fr.Failed(errors.NotAcceptable("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", serviceName).WithMeta("fn", fnName))
+			fr.Failed(errors.Warning("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		}
 		e.release(task)
 	}

@@ -156,7 +156,7 @@ func (handlers *HttpHandlers) ServeHTTP(writer http.ResponseWriter, request *htt
 		writer.Header().Set(httpConnectionHeader, httpCloseHeader)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
 		writer.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = writer.Write(json.UnsafeMarshal(errors.Unavailable("fns: service is unavailable").WithMeta("fns", "handlers")))
+		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: service is not serving").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
 		return
@@ -177,7 +177,7 @@ func (handlers *HttpHandlers) ServeHTTP(writer http.ResponseWriter, request *htt
 	if !handled {
 		writer.Header().Set(httpContentType, httpContentTypeJson)
 		writer.WriteHeader(http.StatusNotAcceptable)
-		_, _ = writer.Write(json.UnsafeMarshal(errors.NotAcceptable("fns: request is not accepted").WithMeta("fns", "handlers")))
+		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: request is not accepted").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
 		return

@@ -31,17 +31,17 @@ type RoleArgument struct {
 func role(ctx context.Context, argument RoleArgument) (v *Role, err errors.CodeError) {
 	code := strings.TrimSpace(argument.Code)
 	if code == "" {
-		err = errors.ServiceError("rbac get role failed").WithCause(fmt.Errorf("code is nil"))
+		err = errors.Warning("rbac: get role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	store := getStore(ctx)
 	record, getErr := store.Role(ctx, code)
 	if getErr != nil {
-		err = errors.ServiceError("rbac get role failed").WithCause(getErr)
+		err = errors.Warning("rbac: get role failed").WithCause(getErr)
 		return
 	}
 	if record == nil {
-		err = errors.ServiceError("rbac get role failed").WithCause(fmt.Errorf("not found"))
+		err = errors.Warning("rbac: get role failed").WithCause(fmt.Errorf("not found"))
 		return
 	}
 
@@ -52,7 +52,7 @@ func role(ctx context.Context, argument RoleArgument) (v *Role, err errors.CodeE
 			LoadChildren: true,
 		})
 		if childrenErr != nil {
-			err = errors.ServiceError("rbac get role failed").WithCause(childrenErr)
+			err = errors.Warning("rbac: get role failed").WithCause(childrenErr)
 			return
 		}
 		v.Children = children

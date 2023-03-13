@@ -34,7 +34,7 @@ type SaveArgument struct {
 func save(ctx context.Context, argument SaveArgument) (err errors.CodeError) {
 	code := strings.TrimSpace(argument.Code)
 	if code == "" {
-		err = errors.ServiceError("rbac save role failed").WithCause(fmt.Errorf("code is nil"))
+		err = errors.Warning("rbac: save role failed").WithCause(fmt.Errorf("code is nil"))
 		return
 	}
 	var policies []*PolicyRecord = nil
@@ -67,7 +67,7 @@ func save(ctx context.Context, argument SaveArgument) (err errors.CodeError) {
 	})
 
 	if saveErr != nil {
-		err = errors.ServiceError("rbac save role failed").WithCause(saveErr)
+		err = errors.Warning("rbac: save role failed").WithCause(saveErr)
 		return
 	}
 

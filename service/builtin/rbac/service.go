@@ -114,7 +114,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := RoleArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		v, err = role(ctx, fnArgument)
@@ -127,7 +127,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := RolesArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		v, err = roles(ctx, fnArgument)
@@ -140,7 +140,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := ChildrenArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		v, err = children(ctx, fnArgument)
@@ -153,7 +153,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := SaveArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		err = save(ctx, fnArgument)
@@ -166,7 +166,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := RemoveArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		err = remove(ctx, fnArgument)
@@ -179,7 +179,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := BoundsArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		v, err = bounds(ctx, fnArgument)
@@ -192,7 +192,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := BindArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		err = bind(ctx, fnArgument)
@@ -205,7 +205,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := UnbindArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		err = unbind(ctx, fnArgument)
@@ -218,7 +218,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		fnArgument := EnforceArgument{}
 		argumentErr := argument.As(&fnArgument)
 		if argumentErr != nil {
-			err = errors.BadRequest("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
+			err = errors.Warning("rbac: invalid request argument").WithCause(argumentErr).WithMeta("service", "rbac").WithMeta("fn", fn)
 			return
 		}
 		v, err = enforce(ctx, fnArgument)
@@ -228,7 +228,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		}
 		break
 	default:
-		err = errors.NotFound("rbac: fn was not found").WithMeta("service", "rbac").WithMeta("fn", fn)
+		err = errors.Warning("rbac: fn was not found").WithMeta("service", "rbac").WithMeta("fn", fn)
 		break
 	}
 	return

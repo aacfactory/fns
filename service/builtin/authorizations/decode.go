@@ -47,7 +47,7 @@ func decode(ctx context.Context, param DecodeParam) (result *DecodeResult, err e
 	}
 	token, decodeErr := encoder.Decode([]byte(param.Token))
 	if decodeErr != nil {
-		err = errors.Unauthorized("fns: decode failed").WithCause(decodeErr)
+		err = errors.Warning("fns: decode failed").WithCause(decodeErr)
 		return
 	}
 	if token.NotAfter().Before(time.Now()) {

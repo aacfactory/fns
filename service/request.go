@@ -112,7 +112,7 @@ func (header *requestHeader) VersionRange() (left versions.Version, right versio
 	if leftVersionValue != "" {
 		left, err = versions.Parse(leftVersionValue)
 		if err != nil {
-			err = errors.BadRequest("fns: read request version failed").WithCause(err)
+			err = errors.Warning("fns: read request version failed").WithCause(err)
 			return
 		}
 	}
@@ -121,7 +121,7 @@ func (header *requestHeader) VersionRange() (left versions.Version, right versio
 		if rightVersionValue != "" {
 			right, err = versions.Parse(rightVersionValue)
 			if err != nil {
-				err = errors.BadRequest("fns: read request version failed").WithCause(err)
+				err = errors.Warning("fns: read request version failed").WithCause(err)
 				return
 			}
 		}

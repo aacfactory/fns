@@ -28,22 +28,22 @@ import (
 func Enforce(ctx context.Context, subject string, object string, action string) (ok bool, err errors.CodeError) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		err = errors.ServiceError("permissions enforce failed").WithCause(fmt.Errorf("subject is nil"))
+		err = errors.Warning("rbac: enforce failed").WithCause(fmt.Errorf("subject is nil"))
 		return
 	}
 	object = strings.TrimSpace(object)
 	if object == "" {
-		err = errors.ServiceError("permissions enforce failed").WithCause(fmt.Errorf("object is nil"))
+		err = errors.Warning("rbac: enforce failed").WithCause(fmt.Errorf("object is nil"))
 		return
 	}
 	action = strings.TrimSpace(action)
 	if action == "" {
-		err = errors.ServiceError("rbac endpoint enforce failed").WithCause(fmt.Errorf("action is nil"))
+		err = errors.Warning("rbac: endpoint enforce failed").WithCause(fmt.Errorf("action is nil"))
 		return
 	}
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
 	if !hasEndpoint {
-		err = errors.Warning("rbac endpoint endpoint was not found, please deploy rbac service")
+		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
 	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.EnforceFn, service.NewArgument(rbac.EnforceArgument{
@@ -68,7 +68,7 @@ func Enforce(ctx context.Context, subject string, object string, action string) 
 func EnforceRequest(ctx context.Context, object string, action string) (ok bool, err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
-		err = errors.ServiceError("rbac endpoint enforce request failed").WithCause(fmt.Errorf("there is no request in context"))
+		err = errors.Warning("rbac: endpoint enforce request failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
 	}
 
@@ -83,12 +83,12 @@ func EnforceRequest(ctx context.Context, object string, action string) (ok bool,
 func BatchEnforceRequest(ctx context.Context, objectAndActions ...string) (ok bool, err errors.CodeError) {
 	objectAndActionsLen := len(objectAndActions)
 	if objectAndActionsLen == 0 || objectAndActionsLen%2 != 0 {
-		err = errors.ServiceError("rbac endpoint enforce request failed").WithCause(fmt.Errorf("objects and actions are invalid"))
+		err = errors.Warning("rbac: endpoint enforce request failed").WithCause(fmt.Errorf("objects and actions are invalid"))
 		return
 	}
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
-		err = errors.ServiceError("rbac endpoint enforce request failed").WithCause(fmt.Errorf("there is no request in context"))
+		err = errors.Warning("rbac: endpoint enforce request failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
 	}
 

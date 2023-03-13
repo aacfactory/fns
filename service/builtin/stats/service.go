@@ -41,7 +41,7 @@ func Service(components ...service.Component) (v service.Service) {
 		}
 	}
 	if reporter == nil {
-		panic(errors.Warning("fns: create stats service failed").WithCause(fmt.Errorf("reporter is nil")))
+		panic(fmt.Sprintf("%+v", errors.Warning("stats: create stats service failed").WithCause(fmt.Errorf("reporter is nil"))))
 	}
 	v = &statsService{
 		components: map[string]service.Component{"reporter": reporter},
@@ -68,7 +68,7 @@ func (svc *statsService) Build(options service.Options) (err error) {
 				Config: componentCfg,
 			})
 			if err != nil {
-				err = errors.Warning("fns: build stats service failed").WithCause(err)
+				err = errors.Warning("stats: build stats service failed").WithCause(err)
 				return
 			}
 		}
@@ -99,7 +99,7 @@ func (svc *statsService) Handle(context context.Context, fn string, argument ser
 		metric := &Metric{}
 		asErr := argument.As(metric)
 		if asErr != nil {
-			err = errors.BadRequest("fns: decode argument failed").WithCause(asErr).WithMeta("service", name).WithMeta("fn", fn)
+			err = errors.Warning("stats: decode argument failed").WithCause(asErr).WithMeta("service", name).WithMeta("fn", fn)
 			break
 		}
 		validErr := validators.Validate(metric)
@@ -113,7 +113,7 @@ func (svc *statsService) Handle(context context.Context, fn string, argument ser
 		}
 		break
 	default:
-		err = errors.NotFound("fns: fn was not found").WithMeta("service", name).WithMeta("fn", fn)
+		err = errors.Warning("stats: fn was not found").WithMeta("service", name).WithMeta("fn", fn)
 		break
 	}
 	return

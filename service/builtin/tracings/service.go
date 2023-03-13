@@ -41,7 +41,7 @@ func Service(components ...service.Component) (v service.Service) {
 		}
 	}
 	if reporter == nil {
-		panic(errors.Warning("fns: create tracings service failed").WithCause(fmt.Errorf("reporter is nil")))
+		panic(fmt.Sprintf("%+v", errors.Warning("tracings: create tracings service failed").WithCause(fmt.Errorf("reporter is nil"))))
 	}
 	v = &tracing{
 		components: map[string]service.Component{"reporter": reporter},
@@ -68,7 +68,7 @@ func (svc *tracing) Build(options service.Options) (err error) {
 				Config: componentCfg,
 			})
 			if err != nil {
-				err = errors.Warning("fns: build tracings service failed").WithCause(err)
+				err = errors.Warning("tracings: build tracings service failed").WithCause(err)
 				return
 			}
 		}
@@ -99,7 +99,7 @@ func (svc *tracing) Handle(context context.Context, fn string, argument service.
 		tracer := &Tracer{}
 		asErr := argument.As(tracer)
 		if asErr != nil {
-			err = errors.BadRequest("fns: decode argument failed").WithCause(asErr).WithMeta("service", name).WithMeta("fn", fn)
+			err = errors.Warning("tracings: decode argument failed").WithCause(asErr).WithMeta("service", name).WithMeta("fn", fn)
 			break
 		}
 		validErr := validators.Validate(tracer)
@@ -113,7 +113,7 @@ func (svc *tracing) Handle(context context.Context, fn string, argument service.
 		}
 		break
 	default:
-		err = errors.NotFound("fns: fn was not found").WithMeta("fn", fn)
+		err = errors.Warning("tracings: fn was not found").WithMeta("fn", fn)
 		break
 	}
 	return

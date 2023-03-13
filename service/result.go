@@ -79,7 +79,7 @@ func (r *futureResult) Value(ctx context.Context) (value interface{}, has bool, 
 		return
 	case data, ok := <-r.ch:
 		if !ok {
-			err = errors.Timeout("fns: future was closed").WithMeta("fns", "result")
+			err = errors.Warning("fns: future was closed").WithMeta("fns", "result")
 			return
 		}
 		if data == nil {

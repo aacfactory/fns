@@ -46,7 +46,7 @@ func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err e
 	}
 	token, encodeErr := encoder.Encode(param.Id, param.Attributes)
 	if encodeErr != nil {
-		err = errors.ServiceError("fns: encode failed").WithCause(encodeErr)
+		err = errors.Warning("fns: encode failed").WithCause(encodeErr)
 		return
 	}
 	storeComponent, hasStoreComponent := service.GetComponent(ctx, "store")
@@ -61,7 +61,7 @@ func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err e
 	}
 	saveErr := st.Save(ctx, token)
 	if saveErr != nil {
-		err = errors.ServiceError("fns: encode failed").WithCause(saveErr)
+		err = errors.Warning("fns: encode failed").WithCause(saveErr)
 		return
 	}
 	result = &EncodeResult{

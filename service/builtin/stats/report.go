@@ -25,7 +25,7 @@ func report(ctx context.Context, metric *Metric) (err errors.CodeError) {
 	reporter := getReporter(ctx)
 	reportErr := reporter.Report(ctx, metric)
 	if reportErr != nil {
-		err = errors.ServiceError("fns: report metric failed").WithCause(reportErr)
+		err = errors.Warning("stats: report metric failed").WithCause(reportErr)
 		return
 	}
 	return

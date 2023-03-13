@@ -25,7 +25,7 @@ func report(ctx context.Context, tracer *Tracer) (err errors.CodeError) {
 	reporter := getReporter(ctx)
 	reportErr := reporter.Report(ctx, tracer)
 	if reportErr != nil {
-		err = errors.ServiceError("fns: report tracer failed").WithCause(reportErr)
+		err = errors.Warning("tracings: report tracer failed").WithCause(reportErr)
 		return
 	}
 	return

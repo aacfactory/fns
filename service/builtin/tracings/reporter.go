@@ -38,7 +38,7 @@ type Reporter interface {
 
 func NewReporterComponent(reporter Reporter) (component service.Component) {
 	if reporter == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: new tracings components failed").WithCause(fmt.Errorf("reporter is nil"))))
+		panic(fmt.Sprintf("%+v", errors.Warning("tracings: new tracings components failed").WithCause(fmt.Errorf("reporter is nil"))))
 	}
 	component = &reporterComponent{
 		reporter: reporter,
@@ -58,7 +58,7 @@ func (component *reporterComponent) Name() (name string) {
 func (component *reporterComponent) Build(options service.ComponentOptions) (err error) {
 	config, hasConfig := options.Config.Node("reporter")
 	if !hasConfig {
-		err = errors.Warning("fns: build tracer reporter failed").WithCause(fmt.Errorf("there is no reporter node in tracer config node"))
+		err = errors.Warning("tracings: build tracer reporter failed").WithCause(fmt.Errorf("there is no reporter node in tracer config node"))
 		return
 	}
 	err = component.reporter.Build(ReporterOptions{
@@ -66,7 +66,7 @@ func (component *reporterComponent) Build(options service.ComponentOptions) (err
 		Config: config,
 	})
 	if err != nil {
-		err = errors.Warning("fns: build tracer reporter failed").WithCause(err)
+		err = errors.Warning("tracings: build tracer reporter failed").WithCause(err)
 		return
 	}
 	return
@@ -79,7 +79,7 @@ func (component *reporterComponent) Close() {
 func getReporter(ctx context.Context) (v Reporter) {
 	vv, has := service.GetComponent(ctx, "reporter")
 	if !has {
-		panic(errors.Warning("fns: get tracer reporter failed").WithCause(fmt.Errorf("reporter was not found in context")))
+		panic(fmt.Sprintf("%+v", errors.Warning("tracings: get tracer reporter failed").WithCause(fmt.Errorf("reporter was not found in context"))))
 	}
 	v = vv.(*reporterComponent).reporter
 	return

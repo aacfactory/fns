@@ -168,7 +168,7 @@ func (handler *servicesHandler) matchRequestVersion(writer http.ResponseWriter, 
 		if leftVersionValue != "" {
 			leftVersion, parseVersionErr = versions.Parse(leftVersionValue)
 			if parseVersionErr != nil {
-				handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: read request version failed").WithCause(parseVersionErr))
+				handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: read request version failed").WithCause(parseVersionErr))
 				return
 			}
 		}
@@ -177,13 +177,13 @@ func (handler *servicesHandler) matchRequestVersion(writer http.ResponseWriter, 
 			if rightVersionValue != "" {
 				rightVersion, parseVersionErr = versions.Parse(rightVersionValue)
 				if parseVersionErr != nil {
-					handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: read request version failed").WithCause(parseVersionErr))
+					handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: read request version failed").WithCause(parseVersionErr))
 					return
 				}
 			}
 		}
 		if !handler.appVersion.Between(leftVersion, rightVersion) {
-			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: request version is not acceptable").WithMeta("version", handler.appVersion.String()))
+			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: request version is not acceptable").WithMeta("version", handler.appVersion.String()))
 			return
 		}
 	}
@@ -213,11 +213,11 @@ func (handler *servicesHandler) getDeviceIp(r *http.Request) (devIp string) {
 func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *http.Request) {
 	pathItems := strings.Split(r.URL.Path, "/")
 	if len(pathItems) != 3 {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: invalid request url path"))
+		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: invalid request url path"))
 		return
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: X-Fns-Device-Id is required"))
+		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: X-Fns-Device-Id is required"))
 		return
 	}
 
@@ -231,7 +231,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
 		if readBodyErr != io.EOF {
-			handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: read body failed").WithCause(readBodyErr))
+			handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: read body failed").WithCause(readBodyErr))
 			return
 		}
 	}
@@ -251,7 +251,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
-			handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
 			return
 		}
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
@@ -262,7 +262,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		if cancel != nil {
 			cancel()
 		}
-		handler.failed(writer, "", 0, http.StatusNotFound, errors.NotFound("fns: service was not found").WithMeta("service", serviceName))
+		handler.failed(writer, "", 0, http.StatusNotFound, errors.Warning("fns: service was not found").WithMeta("service", serviceName))
 		return
 	}
 
@@ -319,13 +319,13 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 
 func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter, r *http.Request) {
 	if !handler.internalRequestEnabled {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: cluster mode is disabled"))
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: cluster mode is disabled"))
 		return
 	}
 	// id
 	id := r.Header.Get(httpRequestIdHeader)
 	if id == "" {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: no X-Fns-Request-Id in header"))
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: no X-Fns-Request-Id in header"))
 		return
 	}
 	pathItems := strings.Split(r.URL.Path, "/")
@@ -333,12 +333,12 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	fnName := pathItems[2]
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.BadRequest("fns: read body failed").WithCause(readBodyErr))
+		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: read body failed").WithCause(readBodyErr))
 		return
 	}
 	// verify signature
 	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: signature is invalid"))
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: signature is invalid"))
 		return
 	}
 	if !handler.matchRequestVersion(writer, r) {
@@ -348,7 +348,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	iReq := &internalRequestImpl{}
 	decodeErr := json.Unmarshal(body, iReq)
 	if decodeErr != nil {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.NotAcceptable("fns: decode body failed").WithCause(decodeErr))
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: decode body failed").WithCause(decodeErr))
 		return
 	}
 	// timeout
@@ -358,7 +358,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
-			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.BadRequest("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
 			return
 		}
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
@@ -370,7 +370,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		if cancel != nil {
 			cancel()
 		}
-		handler.failed(writer, "", 0, http.StatusNotFound, errors.NotFound("fns: service was not found").WithMeta("service", serviceName))
+		handler.failed(writer, "", 0, http.StatusNotFound, errors.Warning("fns: service was not found").WithMeta("service", serviceName))
 		return
 	}
 
@@ -521,7 +521,7 @@ func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, l
 	writer.WriteHeader(http.StatusOK)
 	body, encodeErr := json.Marshal(result)
 	if encodeErr != nil {
-		cause := errors.ServiceError("encode result failed").WithCause(encodeErr)
+		cause := errors.Warning("encode result failed").WithCause(encodeErr)
 		handler.failed(writer, id, latency, cause.Code(), cause)
 		return
 	}

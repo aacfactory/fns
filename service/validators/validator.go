@@ -32,8 +32,13 @@ func AddValidateRegister(register ValidateRegister) {
 
 var _validator *validate = nil
 
+func ValidateWithErrorTitle(value interface{}, title string) (err errors.CodeError) {
+	err = _validator.Validate(value, title)
+	return
+}
+
 func Validate(value interface{}) (err errors.CodeError) {
-	err = _validator.Validate(value)
+	err = ValidateWithErrorTitle(value, "invalid")
 	return
 }
 
@@ -45,7 +50,7 @@ type validate struct {
 	validate *validator.Validate
 }
 
-func (v *validate) Validate(value interface{}) (err errors.CodeError) {
+func (v *validate) Validate(value interface{}, title string) (err errors.CodeError) {
 	validateErr := v.validate.Struct(value)
 	if validateErr == nil {
 		return
@@ -55,7 +60,7 @@ func (v *validate) Validate(value interface{}) (err errors.CodeError) {
 		err = errors.Warning(fmt.Sprintf("fns: validate value failed")).WithCause(validateErr)
 		return
 	}
-	err = errors.ServiceError("fns: value is invalid")
+	err = errors.BadRequest(title)
 	for _, validationError := range validationErrors {
 		sf := validationError.Namespace()
 		idx := strings.Index(sf, ".")

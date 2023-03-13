@@ -113,7 +113,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		param := EncodeParam{}
 		asErr := argument.As(&param)
 		if asErr != nil {
-			err = errors.BadRequest("fns: encode argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
+			err = errors.Warning("fns: encode argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
 			break
 		}
 		v, err = encode(ctx, param)
@@ -126,7 +126,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		param := DecodeParam{}
 		asErr := argument.As(&param)
 		if asErr != nil {
-			err = errors.BadRequest("fns: decode argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
+			err = errors.Warning("fns: decode argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
 			break
 		}
 		v, err = decode(ctx, param)
@@ -139,7 +139,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		param := RevokeParam{}
 		asErr := argument.As(&param)
 		if asErr != nil {
-			err = errors.BadRequest("fns: revoke argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
+			err = errors.Warning("fns: revoke argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
 			break
 		}
 		v, err = revoke(ctx, param)
@@ -149,7 +149,7 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		}
 		break
 	default:
-		err = errors.NotFound("fns: fn was not found").WithMeta("service", "authorizations").WithMeta("fn", fn)
+		err = errors.Warning("fns: fn was not found").WithMeta("service", "authorizations").WithMeta("fn", fn)
 		break
 	}
 	return

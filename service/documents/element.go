@@ -69,6 +69,10 @@ func Uint() *Element {
 	return Uint64()
 }
 
+func Uint8() *Element {
+	return NewElement("_", "uint8", "integer", "int32", "Uint8", "Uint8")
+}
+
 func Uint32() *Element {
 	return NewElement("_", "uint32", "integer", "int32", "Uint32", "Uint32")
 }

@@ -45,6 +45,10 @@ func String() *Element {
 	return NewElement("_", "string", "string", "", "String", "String")
 }
 
+func Bytes() *Element {
+	return NewElement("_", "bytes", "string", "byte", "Bytes", "Bytes")
+}
+
 func Bool() *Element {
 	return NewElement("_", "bool", "boolean", "", "Bool", "Bool")
 }

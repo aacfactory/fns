@@ -108,6 +108,9 @@ func validateFieldMessage(_type reflect.Type, exp string) (key string, msg strin
 		return
 	}
 	key = xk
-	msg = field.Tag.Get("message")
+	msg, has = field.Tag.Lookup("validate-message")
+	if !has {
+		msg = field.Tag.Get("message")
+	}
 	return
 }

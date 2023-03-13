@@ -109,19 +109,19 @@ func DateTime() *Element {
 	return NewElement("_", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
 }
 
-func Struct(path string, name string, title string, description string) *Element {
-	return NewElement(path, name, "object", "", title, description)
+func Struct(path string, name string) *Element {
+	return NewElement(path, name, "object", "", "", "")
 }
 
-func Ident(path string, name string, title string, description string, target *Element) *Element {
+func Ident(path string, name string, target *Element) *Element {
 	rs := reflect.Indirect(reflect.ValueOf(target))
 	rv := reflect.New(rs.Type())
 	rv.Elem().Set(rs)
 	v := rv.Interface().(*Element)
 	v.Path = path
 	v.Name = name
-	v.Title = title
-	v.Description = description
+	v.Title = ""
+	v.Description = ""
 	return v
 }
 
@@ -140,16 +140,16 @@ func Empty() *Element {
 	return NewElement("github.com/aacfactory/fns/service", "Empty", "object", "", "Empty", "Empty Object")
 }
 
-func Array(path string, name string, title string, description string, item *Element) *Element {
-	v := NewElement(path, name, "array", "", title, description)
+func Array(item *Element) *Element {
+	v := NewElement("", "", "array", "", "", "")
 	v.AddProperty("", item)
 	return v
 }
 
-func Map(path string, name string, title string, description string, item *Element) *Element {
-	v := NewElement(path, name, "object", "", title, description)
+func Map(value *Element) *Element {
+	v := NewElement("", "", "object", "", "", "")
 	v.Additional = true
-	v.AddProperty("", item)
+	v.AddProperty("", value)
 	return v
 }
 

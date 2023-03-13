@@ -39,7 +39,7 @@ var (
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		httpEngine:            &service.FastHttp{},
 		httpHandlers:          make([]service.HttpHandler, 0, 1),
-		openApiVersion:        "3.0.3",
+		openApiVersion:        "3.1.0",
 		services:              make([]service.Service, 0, 1),
 		shutdownTimeout:       60 * time.Second,
 	}

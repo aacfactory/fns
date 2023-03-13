@@ -22,9 +22,9 @@ import (
 	"strings"
 )
 
-func NewElement(pkg string, name string, typ string, format string, title string, description string) *Element {
+func NewElement(path string, name string, typ string, format string, title string, description string) *Element {
 	return &Element{
-		Package:     pkg,
+		Path:        strings.ReplaceAll(path, "/", "."),
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -75,40 +75,40 @@ func DateTime() *Element {
 	return NewElement("builtin", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
 }
 
-func Struct(pkg string, name string, title string, description string) *Element {
-	return NewElement(pkg, name, "object", "", title, description)
+func Struct(path string, name string, title string, description string) *Element {
+	return NewElement(path, name, "object", "", title, description)
 }
 
-func RefStruct(pkg string, name string) *Element {
-	return NewElement(pkg, name, "ref", "", "", "")
+func RefStruct(path string, name string) *Element {
+	return NewElement(path, name, "ref", "", "", "")
 }
 
 func JsonRaw() *Element {
-	v := NewElement("github.com.aacfactory.json", "RawMessage", "object", "", "JsonRawMessage", "Json Raw Message")
+	v := NewElement("github.com/aacfactory/json", "RawMessage", "object", "", "JsonRawMessage", "Json Raw Message")
 	v.Additional = true
 	v.AddProperty("", Empty())
 	return v
 }
 
 func Empty() *Element {
-	return NewElement("github.com.aacfactory.fns.service", "Empty", "object", "", "Empty", "Empty Object")
+	return NewElement("github.com/aacfactory/fns/service", "Empty", "object", "", "Empty", "Empty Object")
 }
 
-func Array(name string, title string, description string, item *Element) *Element {
-	v := NewElement(item.Package, name, "array", "", title, description)
+func Array(path string, name string, title string, description string, item *Element) *Element {
+	v := NewElement(path, name, "array", "", title, description)
 	v.AddProperty("", item)
 	return v
 }
 
-func Map(name string, title string, description string, item *Element) *Element {
-	v := NewElement(item.Package, name, "object", "", title, description)
+func Map(path string, name string, title string, description string, item *Element) *Element {
+	v := NewElement(path, name, "object", "", title, description)
 	v.Additional = true
 	v.AddProperty("", item)
 	return v
 }
 
 type Element struct {
-	Package     string              `json:"package,omitempty"`
+	Path        string              `json:"path,omitempty"`
 	Name        string              `json:"name,omitempty"`
 	Title       string              `json:"title,omitempty"`
 	Description string              `json:"description,omitempty"`
@@ -174,11 +174,6 @@ func (element *Element) isBuiltin() (ok bool) {
 	return
 }
 
-func (element *Element) isFns() (ok bool) {
-	ok = element.Type == "fns"
-	return
-}
-
 func (element *Element) isObject() (ok bool) {
 	ok = element.Type == "object"
 	return
@@ -207,14 +202,16 @@ func (element *Element) AddProperty(name string, prop *Element) *Element {
 }
 
 func (element *Element) mapToRef() (ref *Element) {
-	if element.isBuiltin() {
-		ref = element
-	} else if element.isFns() {
+	if element.isBuiltin() || element.isRef() {
 		ref = element
 	} else if element.isEmpty() || element.isObject() {
-		ref = NewElement(element.Package, element.Name, "ref", "", "", "")
+		ref = NewElement(element.Path, element.Name, "ref", "", "", "")
 	} else if element.isAdditional() || element.isArray() {
-		ref = element.getItem().mapToRef()
+		if element.Path != "" {
+			ref = NewElement(element.Path, element.Name, "ref", "", "", "")
+		} else {
+			ref = element.getItem().mapToRef()
+		}
 	} else {
 		ref = element
 	}
@@ -223,10 +220,13 @@ func (element *Element) mapToRef() (ref *Element) {
 
 func (element *Element) objects() (v map[string]*Element) {
 	v = make(map[string]*Element)
-	if element.isBuiltin() || element.isRef() || element.isFns() {
+	if element.isBuiltin() || element.isRef() {
 		return
 	}
 	if element.isArray() || element.isAdditional() {
+		if element.Path != "" {
+			v[element.Key()] = element
+		}
 		deps := element.getItem().objects()
 		if deps != nil && len(deps) > 0 {
 			for depKey, dep := range deps {
@@ -262,13 +262,13 @@ func (element *Element) getItem() (v *Element) {
 }
 
 func (element *Element) Key() (v string) {
-	v = fmt.Sprintf("%s@%s", strings.ReplaceAll(element.Package, "/", "."), element.Name)
+	v = fmt.Sprintf("%s@%s", element.Path, element.Name)
 	return
 }
 
 func (element *Element) Schema() (v *oas.Schema) {
 	// fns
-	if element.isFns() || element.isRef() {
+	if element.isRef() {
 		v = oas.RefSchema(element.Key())
 		return
 	}

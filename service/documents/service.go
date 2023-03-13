@@ -16,7 +16,10 @@
 
 package documents
 
-import "github.com/aacfactory/fns/service"
+import (
+	"github.com/aacfactory/fns/service"
+	"sort"
+)
 
 func NewService(name string, description string) *Service {
 	return &Service{
@@ -60,10 +63,10 @@ func (svc *Service) Elements() (elements map[string]service.ElementDocument) {
 	return
 }
 
-func (svc *Service) AddFn(name string, title string, description string, hasAuthorization bool, deprecated bool, arg *Element, result *Element) {
+func (svc *Service) AddFn(name string, title string, description string, hasAuthorization bool, deprecated bool, arg *Element, result *Element, errs []FnError) {
 	argRef := svc.addElement(arg)
 	resultRef := svc.addElement(result)
-	svc.Fns_ = append(svc.Fns_, newFn(name, title, description, hasAuthorization, deprecated, argRef, resultRef))
+	svc.Fns_ = append(svc.Fns_, newFn(name, title, description, hasAuthorization, deprecated, argRef, resultRef, errs))
 }
 
 func (svc *Service) addElement(element *Element) (ref *Element) {
@@ -75,8 +78,13 @@ func (svc *Service) addElement(element *Element) (ref *Element) {
 	if objects == nil || len(objects) == 0 {
 		return
 	}
-	for key, obj := range objects {
-		if _, has := svc.Elements_[key]; !has {
+	keys := make([]string, 0, 1)
+	for key := range objects {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if obj, has := svc.Elements_[key]; !has {
 			svc.Elements_[key] = obj
 		}
 	}

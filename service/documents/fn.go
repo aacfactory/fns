@@ -27,6 +27,7 @@ func newFn(name string, title string, description string, authorization bool, de
 		Argument_:      arg,
 		Result_:        result,
 		Deprecated_:    deprecated,
+		Errors_:        errs,
 	}
 }
 

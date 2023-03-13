@@ -19,6 +19,8 @@ package documents
 import (
 	"fmt"
 	"github.com/aacfactory/fns/service/internal/oas"
+	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -32,7 +34,7 @@ func NewElement(path string, name string, typ string, format string, title strin
 		Format:      format,
 		Enum:        make([]interface{}, 0, 1),
 		Required:    false,
-		Validation:  "",
+		Validation:  nil,
 		Properties:  make(map[string]*Element),
 		Additional:  false,
 		Deprecated:  false,
@@ -40,11 +42,11 @@ func NewElement(path string, name string, typ string, format string, title strin
 }
 
 func String() *Element {
-	return NewElement("builtin", "string", "string", "", "String", "String")
+	return NewElement("_", "string", "string", "", "String", "String")
 }
 
 func Bool() *Element {
-	return NewElement("builtin", "bool", "boolean", "", "Bool", "Bool")
+	return NewElement("_", "bool", "boolean", "", "Bool", "Bool")
 }
 
 func Int() *Element {
@@ -52,34 +54,50 @@ func Int() *Element {
 }
 
 func Int32() *Element {
-	return NewElement("builtin", "int32", "integer", "int32", "Int32", "Int32")
+	return NewElement("_", "int32", "integer", "int32", "Int32", "Int32")
 }
 
 func Int64() *Element {
-	return NewElement("builtin", "int64", "integer", "int64", "Int64", "Int64")
+	return NewElement("_", "int64", "integer", "int64", "Int64", "Int64")
 }
 
 func Float32() *Element {
-	return NewElement("builtin", "float32", "number", "float", "Float", "Float")
+	return NewElement("_", "float32", "number", "float", "Float", "Float")
 }
 
 func Float64() *Element {
-	return NewElement("builtin", "float64", "number", "double", "Double", "Double")
+	return NewElement("_", "float64", "number", "double", "Double", "Double")
 }
 
 func Date() *Element {
-	return NewElement("builtin", "date", "string", "date", "Date", "Date")
+	return NewElement("_", "date", "string", "date", "Date", "Date")
+}
+
+func Time() *Element {
+	return NewElement("_", "time", "string", "15:04:05", "Time", "Time value").SetExample("19:13:07")
 }
 
 func DateTime() *Element {
-	return NewElement("builtin", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
+	return NewElement("_", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
 }
 
 func Struct(path string, name string, title string, description string) *Element {
 	return NewElement(path, name, "object", "", title, description)
 }
 
-func RefStruct(path string, name string) *Element {
+func Ident(path string, name string, title string, description string, target *Element) *Element {
+	rs := reflect.Indirect(reflect.ValueOf(target))
+	rv := reflect.New(rs.Type())
+	rv.Elem().Set(rs)
+	v := rv.Interface().(*Element)
+	v.Path = path
+	v.Name = name
+	v.Title = title
+	v.Description = description
+	return v
+}
+
+func Ref(path string, name string) *Element {
 	return NewElement(path, name, "ref", "", "", "")
 }
 
@@ -107,6 +125,11 @@ func Map(path string, name string, title string, description string, item *Eleme
 	return v
 }
 
+type ElementValidation struct {
+	Name string            `json:"name,omitempty"`
+	I18n map[string]string `json:"i18n,omitempty"`
+}
+
 type Element struct {
 	Path        string              `json:"path,omitempty"`
 	Name        string              `json:"name,omitempty"`
@@ -116,14 +139,14 @@ type Element struct {
 	Format      string              `json:"format,omitempty"`
 	Enum        []interface{}       `json:"enum,omitempty"`
 	Required    bool                `json:"required,omitempty"`
-	Validation  string              `json:"validation,omitempty"`
+	Validation  *ElementValidation  `json:"validation,omitempty"`
 	Properties  map[string]*Element `json:"properties,omitempty"`
 	Additional  bool                `json:"additional,omitempty"`
 	Deprecated  bool                `json:"deprecated,omitempty"`
 	Example     interface{}         `json:"example,omitempty"`
 }
 
-func (element *Element) AsRequired(validation string) *Element {
+func (element *Element) AsRequired(validation *ElementValidation) *Element {
 	element.Required = true
 	element.Validation = validation
 	return element
@@ -134,7 +157,7 @@ func (element *Element) AsDeprecated() *Element {
 	return element
 }
 
-func (element *Element) SetValidation(validation string) *Element {
+func (element *Element) SetValidation(validation *ElementValidation) *Element {
 	element.Validation = validation
 	return element
 }
@@ -170,7 +193,7 @@ func (element *Element) isEmpty() (ok bool) {
 }
 
 func (element *Element) isBuiltin() (ok bool) {
-	ok = element.Type == "builtin"
+	ok = element.Path == "_"
 	return
 }
 
@@ -201,57 +224,43 @@ func (element *Element) AddProperty(name string, prop *Element) *Element {
 	return element
 }
 
-func (element *Element) mapToRef() (ref *Element) {
+func (element *Element) unpack() (elements Elements) {
+	elements = make([]*Element, 0, 1)
 	if element.isBuiltin() || element.isRef() {
-		ref = element
-	} else if element.isEmpty() || element.isObject() {
-		ref = NewElement(element.Path, element.Name, "ref", "", "", "")
-	} else if element.isAdditional() || element.isArray() {
-		if element.Path != "" {
-			ref = NewElement(element.Path, element.Name, "ref", "", "", "")
-		} else {
-			ref = element.getItem().mapToRef()
-		}
-	} else {
-		ref = element
-	}
-	return
-}
-
-func (element *Element) objects() (v map[string]*Element) {
-	v = make(map[string]*Element)
-	if element.isBuiltin() || element.isRef() {
-		return
-	}
-	if element.isArray() || element.isAdditional() {
-		if element.Path != "" {
-			v[element.Key()] = element
-		}
-		deps := element.getItem().objects()
-		if deps != nil && len(deps) > 0 {
-			for depKey, dep := range deps {
-				if _, hasDep := v[depKey]; !hasDep {
-					v[depKey] = dep
-				}
-			}
-		}
+		elements = append(elements, element)
 		return
 	}
 	if element.isObject() {
-		key := element.Key()
-		if _, has := v[key]; !has {
-			v[key] = element
-			for _, property := range element.Properties {
-				deps := property.objects()
-				if deps != nil && len(deps) > 0 {
-					for depKey, dep := range deps {
-						if _, hasDep := v[depKey]; !hasDep {
-							v[depKey] = dep
-						}
-					}
-				}
+		if element.isAdditional() {
+			unpacks := element.getItem().unpack()
+			element.Properties[""] = unpacks[0]
+			elements = append(elements, element)
+			if len(unpacks) > 1 {
+				elements = append(elements, unpacks[1:]...)
+			}
+			return
+		}
+		elements = append(elements, Ref(element.Path, element.Name))
+		for name, property := range element.Properties {
+			unpacks := property.unpack()
+			element.Properties[name] = unpacks[0]
+			if len(unpacks) > 1 {
+				elements = append(elements, unpacks[1:]...)
 			}
 		}
+		return
+	}
+	if element.isArray() {
+		if element.Path != "" {
+			elements = append(elements, Ref(element.Path, element.Name))
+		}
+		unpacks := element.getItem().unpack()
+		element.Properties[""] = unpacks[0]
+		elements = append(elements, element)
+		if len(unpacks) > 1 {
+			elements = append(elements, unpacks[1:]...)
+		}
+		return
 	}
 	return
 }
@@ -290,9 +299,20 @@ func (element *Element) Schema() (v *oas.Schema) {
 	// Description
 	description := "### Description" + "\n"
 	description = description + element.Description + " "
-	if element.Validation != "" {
+	if element.Validation != nil {
 		description = description + "\n\n***Validation***" + " "
-		description = description + "`" + element.Validation + "`" + " "
+		description = description + "`" + element.Validation.Name + "`" + " "
+		if element.Validation.I18n != nil && len(element.Validation.I18n) > 0 {
+			description = description + "\n"
+			i18nKeys := make([]string, 0, 1)
+			for i18nKey := range element.Validation.I18n {
+				i18nKeys = append(i18nKeys, i18nKey)
+			}
+			sort.Strings(i18nKeys)
+			for _, i18nKey := range i18nKeys {
+				description = description + "  " + i18nKey + ": " + element.Validation.I18n[i18nKey] + "\n"
+			}
+		}
 	}
 	if element.Enum != nil && len(element.Enum) > 0 {
 		description = description + "\n\n***Enum***" + " "
@@ -326,5 +346,20 @@ func (element *Element) Schema() (v *oas.Schema) {
 		v.AdditionalProperties = element.getItem().Schema()
 		return
 	}
+	return
+}
+
+type Elements []*Element
+
+func (elements Elements) Len() int {
+	return len(elements)
+}
+
+func (elements Elements) Less(i, j int) bool {
+	return elements[i].Key() < elements[j].Key()
+}
+
+func (elements Elements) Swap(i, j int) {
+	elements[i], elements[j] = elements[j], elements[i]
 	return
 }

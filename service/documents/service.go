@@ -73,20 +73,22 @@ func (svc *Service) addElement(element *Element) (ref *Element) {
 	if element == nil {
 		return
 	}
-	ref = element.mapToRef()
-	objects := element.objects()
-	if objects == nil || len(objects) == 0 {
+	unpacks := element.unpack()
+	ref = unpacks[0]
+	if len(unpacks) <= 1 {
 		return
 	}
-	keys := make([]string, 0, 1)
-	for key := range objects {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if obj, has := svc.Elements_[key]; !has {
-			svc.Elements_[key] = obj
+	remains := unpacks[1:]
+	sort.Sort(remains)
+	for _, remain := range remains {
+		if remain.isBuiltin() || remain.isRef() || remain.Path == "" {
+			continue
 		}
+		key := remain.Key()
+		if _, has := svc.Elements_[key]; !has {
+			svc.Elements_[key] = remain
+		}
+
 	}
 	return
 }

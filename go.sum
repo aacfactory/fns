@@ -6,8 +6,8 @@ github.com/aacfactory/copier v1.1.0 h1:7bdVGV/HrGOMmUpvuLU27YEob4HIAct7sohmApFAU
 github.com/aacfactory/copier v1.1.0/go.mod h1:E8z/tTEuclAnCvzOnIZdVAqMyVWemSjkxs/SYZZ8JuU=
 github.com/aacfactory/errors v1.13.4 h1:VwIvgfhr3izBtMei+dYWQdN4EIXFbwapW7SLgaQeL+A=
 github.com/aacfactory/errors v1.13.4/go.mod h1:WUwbURzkHAraSqTIy6QGhq/W7TL+piTYHzdi/bbpk5s=
-github.com/aacfactory/json v1.13.0 h1:xfDL4wxNHGwGC9+ALQ87BEbSgnnvCk2zfMKXLJ+eu5U=
-github.com/aacfactory/json v1.13.0/go.mod h1:oZGqyovXYyra6EZPzkdNg2txE5iB8vBunpCTEXwuCpI=
+github.com/aacfactory/json v1.13.1 h1:+uI7QmZfat7GHVsLi4r5SQXDMensQwrENG+OJrYrDoA=
+github.com/aacfactory/json v1.13.1/go.mod h1:oZGqyovXYyra6EZPzkdNg2txE5iB8vBunpCTEXwuCpI=
 github.com/aacfactory/logs v1.13.0 h1:7FOV8ne311Z6X1Acr63Bcp4S/ywxLb/qZmANJV17zj8=
 github.com/aacfactory/logs v1.13.0/go.mod h1:IZu/iTIKjtvskfek3Vp0/of8dHd1sT57aRgd7vgooOU=
 github.com/aacfactory/rings v1.1.2 h1:aOEOf8cYSkBYU8JnwmmXq8OAQiILdID+N0RM0LKzxSE=

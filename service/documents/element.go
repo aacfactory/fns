@@ -69,6 +69,14 @@ func Float64() *Element {
 	return NewElement("_", "float64", "number", "double", "Double", "Double")
 }
 
+func Complex64() *Element {
+	return NewElement("_", "complex64", "string", "", "Complex64", "Complex64").SetExample("15+3i")
+}
+
+func Complex128() *Element {
+	return NewElement("_", "complex128", "string", "", "Complex128", "Complex128").SetExample("15+3i")
+}
+
 func Date() *Element {
 	return NewElement("_", "date", "string", "date", "Date", "Date")
 }

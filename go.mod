@@ -7,7 +7,7 @@ require (
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/copier v1.1.0
 	github.com/aacfactory/errors v1.13.4
-	github.com/aacfactory/json v1.13.0
+	github.com/aacfactory/json v1.13.1
 	github.com/aacfactory/logs v1.13.0
 	github.com/aacfactory/rings v1.1.2
 	github.com/aacfactory/systems v0.2.0

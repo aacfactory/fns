@@ -36,32 +36,32 @@ type EncodeResult struct {
 func encode(ctx context.Context, param EncodeParam) (result *EncodeResult, err errors.CodeError) {
 	encodingComponent, hasEncodingComponent := service.GetComponent(ctx, "encoding")
 	if !hasEncodingComponent {
-		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
+		err = errors.Warning("authorizations: encode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
 		return
 	}
 	encoder, encodingOk := encodingComponent.(TokenEncodingComponent)
 	if !encodingOk {
-		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
+		err = errors.Warning("authorizations: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
 		return
 	}
 	token, encodeErr := encoder.Encode(param.Id, param.Attributes)
 	if encodeErr != nil {
-		err = errors.Warning("fns: encode failed").WithCause(encodeErr)
+		err = errors.Warning("authorizations: encode failed").WithCause(encodeErr)
 		return
 	}
 	storeComponent, hasStoreComponent := service.GetComponent(ctx, "store")
 	if !hasStoreComponent {
-		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("there is no store component in context"))
+		err = errors.Warning("authorizations: encode failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
 	st, storeOk := storeComponent.(TokenStoreComponent)
 	if !storeOk {
-		err = errors.Warning("fns: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
+		err = errors.Warning("authorizations: encode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
 	saveErr := st.Save(ctx, token)
 	if saveErr != nil {
-		err = errors.Warning("fns: encode failed").WithCause(saveErr)
+		err = errors.Warning("authorizations: encode failed").WithCause(saveErr)
 		return
 	}
 	result = &EncodeResult{

@@ -29,7 +29,7 @@ type revokeParam struct {
 	UserId  string `json:"userId"`
 }
 
-func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
+func Revoke(ctx context.Context, userId string, tokenId string) (err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
 	if !hasEndpoint {
 		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
@@ -40,6 +40,7 @@ func Revoke(ctx context.Context, tokenId string) (err errors.CodeError) {
 		return
 	}
 	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
+		UserId:  userId,
 		TokenId: tokenId,
 	})))
 	result := &service.Empty{}

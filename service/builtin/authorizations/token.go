@@ -95,7 +95,7 @@ func (component *defaultTokenEncodingComponent) Build(options service.ComponentO
 	expireMinutes := 0
 	_, expireMinutesGetErr := options.Config.Get("expireMinutes", &expireMinutes)
 	if expireMinutesGetErr != nil {
-		err = errors.Warning("fns: default token encoding build failed").WithCause(expireMinutesGetErr).WithMeta("component", "DefaultTokenEncoding")
+		err = errors.Warning("authorizations: default token encoding build failed").WithCause(expireMinutesGetErr).WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	if expireMinutes < 1 {
@@ -119,7 +119,7 @@ func (component *defaultTokenEncodingComponent) Encode(id string, attributes *js
 	}
 	p, encodeErr := json.Marshal(v)
 	if encodeErr != nil {
-		err = errors.Warning("fns: default token encoding failed").WithCause(encodeErr).WithMeta("component", "DefaultTokenEncoding")
+		err = errors.Warning("authorizations: default token encoding failed").WithCause(encodeErr).WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	num := rand.Uint64()
@@ -133,27 +133,27 @@ func (component *defaultTokenEncodingComponent) Encode(id string, attributes *js
 
 func (component *defaultTokenEncodingComponent) Decode(authorization []byte) (token Token, err error) {
 	if authorization == nil || len(authorization) < 6 || bytes.Index(authorization, []byte("Fns ")) != 0 {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	raw := authorization[4:]
 	items := bytes.Split(raw, []byte{'.'})
 	if len(items) != 2 {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	if len(items[1]) != 16 {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	if xxhash.Sum64(bytes.Join([][]byte{items[0], items[1][0:8]}, []byte{})) != binary.LittleEndian.Uint64(items[1][8:16]) {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
 		return
 	}
 	v := &defaultToken{}
 	decodeErr := json.Unmarshal(items[0], v)
 	if decodeErr != nil {
-		err = errors.Warning("fns: invalid authorization").WithMeta("component", "DefaultTokenEncoding").WithCause(decodeErr)
+		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding").WithCause(decodeErr)
 		return
 	}
 	v.p = raw

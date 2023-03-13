@@ -37,35 +37,41 @@ type DecodeResult struct {
 func decode(ctx context.Context, param DecodeParam) (result *DecodeResult, err errors.CodeError) {
 	encodingComponent, hasEncodingComponent := service.GetComponent(ctx, "encoding")
 	if !hasEncodingComponent {
-		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
+		err = errors.Warning("authorizations: decode failed").WithCause(fmt.Errorf("there is no encoding component in context"))
 		return
 	}
 	encoder, encodingOk := encodingComponent.(TokenEncodingComponent)
 	if !encodingOk {
-		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
+		err = errors.Warning("authorizations: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenEncodingComponent"))
 		return
 	}
 	token, decodeErr := encoder.Decode([]byte(param.Token))
 	if decodeErr != nil {
-		err = errors.Warning("fns: decode failed").WithCause(decodeErr)
+		err = errors.Warning("authorizations: decode failed").WithCause(decodeErr)
 		return
 	}
 	if token.NotAfter().Before(time.Now()) {
-		err = errors.Unauthorized("fns: decode failed").WithCause(fmt.Errorf("token is expired"))
+		err = errors.Unauthorized("authorizations: decode failed").WithCause(fmt.Errorf("token is expired"))
 		return
 	}
 	storeComponent, hasStoreComponent := service.GetComponent(ctx, "store")
 	if !hasStoreComponent {
-		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("there is no store component in context"))
+		err = errors.Warning("authorizations: decode failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
 	st, storeOk := storeComponent.(TokenStoreComponent)
 	if !storeOk {
-		err = errors.Warning("fns: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
+		err = errors.Warning("authorizations: decode failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
-	if !st.Exist(ctx, token.Id()) {
-		err = errors.Unauthorized("fns: decode failed").WithCause(fmt.Errorf("token maybe revoked"))
+	userId, _ := token.User()
+	exist, existErr := st.Exist(ctx, userId, token.Id())
+	if existErr != nil {
+		err = errors.Warning("authorizations: check token exist failed").WithCause(existErr)
+		return
+	}
+	if !exist {
+		err = errors.Unauthorized("authorizations: decode failed").WithCause(fmt.Errorf("token maybe revoked"))
 		return
 	}
 	id, attr := token.User()

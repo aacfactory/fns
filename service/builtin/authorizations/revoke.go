@@ -31,25 +31,25 @@ type RevokeParam struct {
 func revoke(ctx context.Context, param RevokeParam) (result *service.Empty, err errors.CodeError) {
 	storeComponent, hasStoreComponent := service.GetComponent(ctx, "store")
 	if !hasStoreComponent {
-		err = errors.Warning("fns: revoke failed").WithCause(fmt.Errorf("there is no store component in context"))
+		err = errors.Warning("authorizations: revoke failed").WithCause(fmt.Errorf("there is no store component in context"))
 		return
 	}
 	store, storeOk := storeComponent.(TokenStoreComponent)
 	if !storeOk {
-		err = errors.Warning("fns: revoke failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
+		err = errors.Warning("authorizations: revoke failed").WithCause(fmt.Errorf("the encoding component in context is not *tokenStoreComponent"))
 		return
 	}
 	if param.TokenId != "" {
-		rmErr := store.Remove(ctx, param.TokenId)
+		rmErr := store.Remove(ctx, param.UserId, param.TokenId)
 		if rmErr != nil {
-			err = errors.Warning("fns: revoke failed").WithCause(rmErr)
+			err = errors.Warning("authorizations: revoke failed").WithCause(rmErr)
 			return
 		}
 	}
 	if param.UserId != "" {
 		rmErr := store.RemoveUserTokens(ctx, param.UserId)
 		if rmErr != nil {
-			err = errors.Warning("fns: revoke failed").WithCause(rmErr)
+			err = errors.Warning("authorizations: revoke failed").WithCause(rmErr)
 			return
 		}
 	}

@@ -28,7 +28,7 @@ import (
 
 type TokenStoreComponent interface {
 	service.Component
-	Exist(ctx context.Context, tokenId string) (ok bool, err error)
+	Exist(ctx context.Context, userId string, tokenId string) (ok bool, err error)
 	Save(ctx context.Context, token Token) (err error)
 	Remove(ctx context.Context, userId string, tokenId string) (err error)
 	RemoveUserTokens(ctx context.Context, userId string) (err error)
@@ -54,9 +54,9 @@ func (component *defaultTokenStoreComponent) Close() {
 	return
 }
 
-func (component *defaultTokenStoreComponent) Exist(ctx context.Context, tokenId string) (ok bool, err error) {
+func (component *defaultTokenStoreComponent) Exist(ctx context.Context, userId string, tokenId string) (ok bool, err error) {
 	store := service.SharedStore(ctx)
-	_, ok, err = store.Get(ctx, bytex.FromString(fmt.Sprintf("authorizations/tokens/%s", tokenId)))
+	_, ok, err = store.Get(ctx, bytex.FromString(fmt.Sprintf("authorizations/users/%s/%s", userId, tokenId)))
 	if err != nil {
 		err = errors.Warning("authorizations: check token exist failed").WithCause(err)
 		return
@@ -93,7 +93,7 @@ func (component *defaultTokenStoreComponent) Save(ctx context.Context, token Tok
 	}
 
 	ttl := token.NotAfter().Sub(time.Now())
-	setTokenErr := store.SetWithTTL(ctx, bytex.FromString(fmt.Sprintf("authorizations/tokens/%s/%s", userId, token.Id())), token.Bytes(), ttl)
+	setTokenErr := store.SetWithTTL(ctx, bytex.FromString(fmt.Sprintf("authorizations/users/%s/%s", userId, token.Id())), token.Bytes(), ttl)
 	if setTokenErr != nil {
 		err = errors.Warning("authorizations: save token failed").WithCause(setTokenErr)
 		return
@@ -108,7 +108,7 @@ func (component *defaultTokenStoreComponent) Save(ctx context.Context, token Tok
 
 func (component *defaultTokenStoreComponent) Remove(ctx context.Context, userId string, tokenId string) (err error) {
 	store := service.SharedStore(ctx)
-	rmErr := store.Remove(ctx, bytex.FromString(fmt.Sprintf("authorizations/tokens/%s/%s", userId, tokenId)))
+	rmErr := store.Remove(ctx, bytex.FromString(fmt.Sprintf("authorizations/users/%s/%s", userId, tokenId)))
 	if rmErr != nil {
 		err = errors.Warning("authorizations: remove token failed").WithCause(rmErr)
 		return
@@ -164,7 +164,7 @@ func (component *defaultTokenStoreComponent) RemoveUserTokens(ctx context.Contex
 		return
 	}
 	for _, id := range tokenIds {
-		rmErr := store.Remove(ctx, bytex.FromString(fmt.Sprintf("authorizations/tokens/%s/%s", userId, id)))
+		rmErr := store.Remove(ctx, bytex.FromString(fmt.Sprintf("authorizations/users/%s/%s", userId, id)))
 		if rmErr != nil {
 			err = errors.Warning("authorizations: remove user tokens failed").WithCause(rmErr)
 			return

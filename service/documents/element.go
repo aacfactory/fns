@@ -174,6 +174,16 @@ type Element struct {
 	Example     interface{}         `json:"example,omitempty"`
 }
 
+func (element *Element) SetPath(path string) *Element {
+	element.Path = path
+	return element
+}
+
+func (element *Element) SetName(name string) *Element {
+	element.Name = name
+	return element
+}
+
 func (element *Element) AsRequired(validation *ElementValidation) *Element {
 	element.Required = true
 	element.Validation = validation

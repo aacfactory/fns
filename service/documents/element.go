@@ -153,6 +153,23 @@ func Map(value *Element) *Element {
 	return v
 }
 
+func NewElementValidation(name string, i18ns ...string) (v *ElementValidation) {
+	v = &ElementValidation{
+		Name: name,
+		I18n: make(map[string]string),
+	}
+	if i18ns == nil || len(i18ns) == 0 || len(i18ns)%2 != 0 {
+		return
+	}
+	for i := 0; i < len(i18ns); i++ {
+		key := i18ns[i]
+		val := i18ns[i+1]
+		v.I18n[key] = val
+		i++
+	}
+	return
+}
+
 type ElementValidation struct {
 	Name string            `json:"name,omitempty"`
 	I18n map[string]string `json:"i18n,omitempty"`

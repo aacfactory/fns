@@ -184,9 +184,8 @@ func (element *Element) SetName(name string) *Element {
 	return element
 }
 
-func (element *Element) AsRequired(validation *ElementValidation) *Element {
+func (element *Element) AsRequired() *Element {
 	element.Required = true
-	element.Validation = validation
 	return element
 }
 

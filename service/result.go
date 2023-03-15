@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
@@ -112,7 +113,24 @@ type futureResult struct {
 }
 
 func (fr *futureResult) Exist() (ok bool) {
-	ok = fr.data != nil
+	if fr.data == nil {
+		ok = false
+		return
+	}
+	switch fr.data.(type) {
+	case []byte:
+		p := fr.data.([]byte)
+		ok = !bytes.Equal(p, []byte{'n', 'u', 'l', 'l'})
+	case json.RawMessage:
+		p := fr.data.(json.RawMessage)
+		ok = !bytes.Equal(p, []byte{'n', 'u', 'l', 'l'})
+	case stdjson.RawMessage:
+		p := fr.data.(stdjson.RawMessage)
+		ok = !bytes.Equal(p, []byte{'n', 'u', 'l', 'l'})
+	default:
+		ok = true
+		break
+	}
 	return
 }
 

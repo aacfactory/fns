@@ -109,6 +109,10 @@ func DateTime() *Element {
 	return NewElement("_", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
 }
 
+func Any() *Element {
+	return NewElement("_", "any", "object", "", "Any", "Any kind object")
+}
+
 func Struct(path string, name string) *Element {
 	return NewElement(path, name, "object", "", "", "")
 }

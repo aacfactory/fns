@@ -53,16 +53,24 @@ func Verify(ctx context.Context) (err errors.CodeError) {
 		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "decode", service.NewArgument(&decodeParam{
+	result, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, authorizations.Name, "decode", service.NewArgument(&decodeParam{
 		Token: token,
 	})))
-	result := &decodeResult{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
+	if requestErr != nil {
+		err = requestErr
 		return
 	}
-	request.User().SetId(service.RequestUserId(result.Id))
-	request.User().SetAttributes(result.Attr)
+	if result.Exist() {
+		r := decodeResult{}
+		scanErr := result.Scan(&r)
+		if scanErr != nil {
+			err = errors.Warning("authorizations: scan future result failed").
+				WithMeta("service", authorizations.Name).WithMeta("fn", "decode").
+				WithCause(scanErr)
+			return
+		}
+		request.User().SetId(service.RequestUserId(r.Id))
+		request.User().SetAttributes(r.Attr)
+	}
 	return
 }

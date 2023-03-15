@@ -80,12 +80,12 @@ func newRegistrationTask(registration *Registration, handleTimeout time.Duration
 type registrationTask struct {
 	registration *Registration
 	r            Request
-	result       ResultWriter
+	result       Promise
 	timeout      time.Duration
 	hook         func(task *registrationTask)
 }
 
-func (task *registrationTask) begin(r Request, w ResultWriter) {
+func (task *registrationTask) begin(r Request, w Promise) {
 	task.r = r
 	task.result = w
 }
@@ -106,14 +106,14 @@ func (task *registrationTask) Execute(ctx context.Context) {
 
 	registration := task.registration
 	r := task.r
-	future := task.result
+	fr := task.result
 
 	var body json.RawMessage
 	if r.Argument() != nil {
 		var bodyErr error
 		body, bodyErr = json.Marshal(r.Argument())
 		if bodyErr != nil {
-			future.Failed(errors.Warning("fns: registration request failed").WithCause(bodyErr))
+			fr.Failed(errors.Warning("fns: registration request failed").WithCause(bodyErr))
 			return
 		}
 	}
@@ -124,7 +124,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		Body:  body,
 	})
 	if encodeErr != nil {
-		future.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
+		fr.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
 		return
 	}
 	header := r.Header().MapToHttpHeader()
@@ -136,13 +136,13 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	serviceName, fn := r.Fn()
 	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), header, requestBody)
 	if postErr != nil {
-		future.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
+		fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
 		return
 	}
 	ir := &internalResponseImpl{}
 	decodeErr := json.Unmarshal(responseBody, ir)
 	if decodeErr != nil {
-		future.Failed(errors.Warning("fns: registration request failed").WithCause(decodeErr))
+		fr.Failed(errors.Warning("fns: registration request failed").WithCause(decodeErr))
 		return
 	}
 
@@ -166,9 +166,9 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	}
 	// body
 	if status == http.StatusOK {
-		future.Succeed(ir.Body)
+		fr.Succeed(ir.Body)
 	} else {
-		future.Failed(errors.Decode(ir.Body))
+		fr.Failed(errors.Decode(ir.Body))
 	}
 	return
 }
@@ -205,21 +205,21 @@ func (registration *Registration) Document() (document Document) {
 	return
 }
 
-func (registration *Registration) Request(ctx context.Context, r Request) (result Result) {
-	future := NewResult()
+func (registration *Registration) Request(ctx context.Context, r Request) (future Future) {
+	promise, fr := NewFuture()
 	task := registration.acquire()
-	task.begin(r, future)
+	task.begin(r, promise)
 	if !registration.worker.Dispatch(ctx, task) {
-		future.Failed(errors.Warning("fns: service is overload"))
+		promise.Failed(errors.Warning("fns: service is overload"))
 		registration.release(task)
 	}
-	result = future
+	future = fr
 	return
 }
 
-func (registration *Registration) RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError) {
-	future := registration.Request(ctx, r)
-	result, has, err = future.Value(ctx)
+func (registration *Registration) RequestSync(ctx context.Context, r Request) (result FutureResult, err errors.CodeError) {
+	fr := registration.Request(ctx, r)
+	result, err = fr.Get(ctx)
 	return
 }
 

@@ -24,105 +24,116 @@ import (
 	"github.com/aacfactory/json"
 )
 
-type ResultWriter interface {
+type Promise interface {
 	Succeed(v interface{})
 	Failed(err errors.CodeError)
 	Close()
 }
 
-type Result interface {
-	Get(ctx context.Context, v interface{}) (has bool, err errors.CodeError)
-	Value(ctx context.Context) (value interface{}, has bool, err errors.CodeError)
-}
-
 type FutureResult interface {
-	ResultWriter
-	Result
+	json.Marshaler
+	Exist() (ok bool)
+	Scan(v interface{}) (err errors.CodeError)
 }
 
-func NewResult() (f FutureResult) {
-	return newFutureResult()
+type Future interface {
+	Get(ctx context.Context) (result FutureResult, err errors.CodeError)
 }
 
-func newFutureResult() (fr *futureResult) {
-	fr = &futureResult{
+func NewFuture() (p Promise, f Future) {
+	fp := newFuture()
+	p = fp
+	f = fp
+	return
+}
+
+func newFuture() (fp *futurePipe) {
+	fp = &futurePipe{
 		ch: make(chan interface{}, 1),
 	}
 	return
 }
 
-type futureResult struct {
+type futurePipe struct {
 	ch chan interface{}
 }
 
-func (r *futureResult) Close() {
-	close(r.ch)
+func (fp *futurePipe) Close() {
+	close(fp.ch)
 }
 
-func (r *futureResult) Succeed(v interface{}) {
-	r.ch <- v
-	close(r.ch)
+func (fp *futurePipe) Succeed(v interface{}) {
+	fp.ch <- v
+	close(fp.ch)
 }
 
-func (r *futureResult) Failed(err errors.CodeError) {
+func (fp *futurePipe) Failed(err errors.CodeError) {
 	if err == nil {
-		err = errors.Warning("fns: empty failed result").WithMeta("fns", "result")
+		err = errors.Warning("fns: empty failed result").WithMeta("fns", "future")
 	}
-	r.ch <- err
-	close(r.ch)
+	fp.ch <- err
+	close(fp.ch)
 }
 
-func (r *futureResult) Value(ctx context.Context) (value interface{}, has bool, err errors.CodeError) {
+func (fp *futurePipe) Get(ctx context.Context) (result FutureResult, err errors.CodeError) {
 	select {
 	case <-ctx.Done():
-		err = errors.Timeout("fns: get result value timeout").WithMeta("fns", "result")
+		err = errors.Timeout("fns: get result value timeout").WithMeta("fns", "future")
 		return
-	case data, ok := <-r.ch:
+	case data, ok := <-fp.ch:
 		if !ok {
-			err = errors.Warning("fns: future was closed").WithMeta("fns", "result")
+			err = errors.Warning("fns: future was closed").WithMeta("fns", "future")
 			return
 		}
 		if data == nil {
+			result = &futureResult{
+				data: nil,
+			}
 			return
 		}
 		switch data.(type) {
 		case errors.CodeError:
 			err = data.(errors.CodeError)
-			break
+			return
 		case error:
 			err = errors.Map(data.(error))
-			break
+			return
 		default:
-			value = data
-			has = true
+			result = &futureResult{
+				data: data,
+			}
 		}
 		return
 	}
 }
 
-func (r *futureResult) Get(ctx context.Context, v interface{}) (has bool, err errors.CodeError) {
-	var data interface{}
-	data, has, err = r.Value(ctx)
-	if err != nil {
+type futureResult struct {
+	data interface{}
+}
+
+func (fr *futureResult) Exist() (ok bool) {
+	ok = fr.data != nil
+	return
+}
+
+func (fr *futureResult) Scan(v interface{}) (err errors.CodeError) {
+	if fr.data == nil {
 		return
 	}
-	if !has {
-		return
-	}
-	switch data.(type) {
-	case *Empty:
+	switch fr.data.(type) {
+	case *Empty, Empty:
 		return
 	case []byte, json.RawMessage, stdjson.RawMessage:
 		var value []byte
-		switch data.(type) {
+		switch fr.data.(type) {
 		case []byte:
-			value = data.([]byte)
+			value = fr.data.([]byte)
 			break
 		case json.RawMessage:
-			value = data.(json.RawMessage)
+			value = fr.data.(json.RawMessage)
 			break
 		case stdjson.RawMessage:
-			value = data.(stdjson.RawMessage)
+			value = fr.data.(stdjson.RawMessage)
 			break
 		}
 		if len(value) == 0 {
@@ -138,49 +149,52 @@ func (r *futureResult) Get(ctx context.Context, v interface{}) (has bool, err er
 		default:
 			decodeErr := json.Unmarshal(value, v)
 			if decodeErr != nil {
-				err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(decodeErr)
+				err = errors.Warning("fns: future result scan failed").WithMeta("fns", "future").WithCause(decodeErr)
 				return
 			}
 		}
-		has = true
 		return
 	default:
 		switch v.(type) {
 		case *json.RawMessage:
-			value, encodeErr := json.Marshal(data)
+			value, encodeErr := json.Marshal(fr.data)
 			if encodeErr != nil {
-				err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(encodeErr)
+				err = errors.Warning("fns: future result scan failed").WithMeta("fns", "future").WithCause(encodeErr)
 				return
 			}
 			vv := v.(*json.RawMessage)
 			*vv = append(*vv, value...)
 			break
 		case *stdjson.RawMessage:
-			value, encodeErr := json.Marshal(data)
+			value, encodeErr := json.Marshal(fr.data)
 			if encodeErr != nil {
-				err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(encodeErr)
+				err = errors.Warning("fns: future result scan failed").WithMeta("fns", "future").WithCause(encodeErr)
 				return
 			}
 			vv := v.(*stdjson.RawMessage)
 			*vv = append(*vv, value...)
 			break
 		case *[]byte:
-			value, encodeErr := json.Marshal(data)
+			value, encodeErr := json.Marshal(fr.data)
 			if encodeErr != nil {
-				err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(encodeErr)
+				err = errors.Warning("fns: future result scan failed").WithMeta("fns", "future").WithCause(encodeErr)
 				return
 			}
 			vv := v.(*[]byte)
 			*vv = append(*vv, value...)
 			break
 		default:
-			cpErr := objects.CopyInterface(v, data)
+			cpErr := objects.CopyInterface(v, fr.data)
 			if cpErr != nil {
-				err = errors.Warning("fns: get result failed").WithMeta("fns", "result").WithCause(cpErr)
+				err = errors.Warning("fns: future result scan failed").WithMeta("fns", "future").WithCause(cpErr)
 				return
 			}
 		}
-		has = true
 	}
+	return
+}
+
+func (fr *futureResult) MarshalJSON() (p []byte, err error) {
+	p, err = json.Marshal(fr.data)
 	return
 }

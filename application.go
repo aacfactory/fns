@@ -36,7 +36,7 @@ type Application interface {
 	Deploy(service ...service.Service) (err error)
 	Run(ctx context.Context) (err error)
 	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
-	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result interface{}, err errors.CodeError)
+	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result service.FutureResult, err errors.CodeError)
 	Log() (log logs.Logger)
 	Sync() (err error)
 	Quit()
@@ -207,7 +207,7 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 	return
 }
 
-func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (v interface{}, err errors.CodeError) {
+func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result service.FutureResult, err errors.CodeError) {
 	if serviceName == "" || fn == "" {
 		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service name or fn is invalid"))
 		return
@@ -233,8 +233,7 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 		requestOptions = append(requestOptions, service.WithInternalRequest())
 	}
 	requestOptions = append(requestOptions, service.WithDeviceId(app.id))
-	result := endpoint.Request(ctx, service.NewRequest(ctx, serviceName, fn, service.NewArgument(argument), requestOptions...))
-	v, _, err = result.Value(ctx)
+	result, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, serviceName, fn, service.NewArgument(argument), requestOptions...))
 	if err != nil {
 		err = errors.Warning("fns: execute failed").WithCause(err).WithMeta("service", serviceName)
 	}

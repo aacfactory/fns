@@ -18,7 +18,6 @@ package service
 
 import (
 	"context"
-	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
@@ -272,7 +271,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	result, hasResult, requestErr := ep.RequestSync(withTracer(ctx, id), NewRequest(
+	result, requestErr := ep.RequestSync(withTracer(ctx, id), NewRequest(
 		ctx,
 		serviceName,
 		fnName,
@@ -290,29 +289,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if requestErr != nil {
 		handler.failed(writer, id, latency, requestErr.Code(), requestErr)
 	} else {
-		if hasResult {
-			switch result.(type) {
-			case []byte:
-				handler.succeed(writer, id, latency, result.([]byte))
-				break
-			case json.RawMessage:
-				handler.succeed(writer, id, latency, result.(json.RawMessage))
-				break
-			case stdjson.RawMessage:
-				handler.succeed(writer, id, latency, result.(stdjson.RawMessage))
-				break
-			default:
-				p, encodeErr := json.Marshal(result)
-				if encodeErr != nil {
-					handler.failed(writer, id, latency, 555, errors.Warning("fns: encoding result failed").WithCause(encodeErr))
-				} else {
-					handler.succeed(writer, id, latency, p)
-				}
-				break
-			}
-		} else {
-			handler.succeed(writer, id, latency, []byte{'{', '}'})
-		}
+		handler.succeed(writer, id, latency, result)
 	}
 	return
 }
@@ -387,7 +364,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		WithRequestUser(iReq.User.Id(), iReq.User.Attributes()),
 	)
 
-	result, hasResult, requestErr := ep.RequestSync(withTracer(ctx, id), req)
+	result, requestErr := ep.RequestSync(withTracer(ctx, id), req)
 	if cancel != nil {
 		cancel()
 	}
@@ -414,50 +391,15 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		iResp.Body = requestErrBytes
 		handler.failed(writer, id, 0, requestErr.Code(), iResp)
 	} else {
-		if hasResult {
-			switch result.(type) {
-			case []byte:
-				resultBytes := result.([]byte)
-				if json.Validate(resultBytes) {
-					iResp.Body = resultBytes
-				} else {
-					resultJsonBytes, encodeErr := json.Marshal(result)
-					if encodeErr != nil {
-						if handler.log.WarnEnabled() {
-							handler.log.Warn().Cause(encodeErr).Message("fns: service handle encode request error failed")
-						}
-						resultJsonBytes, _ = json.Marshal(errors.Warning("fns: service handler encode internal result failed").WithCause(encodeErr))
-						iResp.Body = resultJsonBytes
-						handler.failed(writer, id, 0, 555, iResp)
-						return
-					}
-					iResp.Body = resultJsonBytes
-				}
-				break
-			case json.RawMessage:
-				iResp.Body = result.(json.RawMessage)
-				break
-			case stdjson.RawMessage:
-				iResp.Body = json.RawMessage(result.(stdjson.RawMessage))
-				break
-			default:
-				resultJsonBytes, encodeErr := json.Marshal(result)
-				if encodeErr != nil {
-					if handler.log.WarnEnabled() {
-						handler.log.Warn().Cause(encodeErr).Message("fns: service handle encode request error failed")
-					}
-					resultJsonBytes, _ = json.Marshal(errors.Warning("fns: service handler encode internal result failed").WithCause(encodeErr))
-					iResp.Body = resultJsonBytes
-					handler.failed(writer, id, 0, 555, iResp)
-					return
-				}
-				iResp.Body = resultJsonBytes
-				break
-			}
+		resultJsonBytes, encodeErr := json.Marshal(result)
+		if encodeErr != nil {
+			resultJsonBytes, _ = json.Marshal(errors.Warning("fns: service handler encode internal result failed").WithCause(encodeErr))
+			iResp.Body = resultJsonBytes
+			handler.failed(writer, id, 0, 555, iResp)
 		} else {
-			iResp.Body = []byte{'{', '}'}
+			iResp.Body = resultJsonBytes
+			handler.succeed(writer, id, 0, iResp)
 		}
-		handler.succeed(writer, id, 0, iResp)
 	}
 
 	return

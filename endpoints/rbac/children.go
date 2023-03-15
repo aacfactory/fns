@@ -31,23 +31,27 @@ func Children(ctx context.Context, parent string, withChildren bool) (v []*Role,
 		err = errors.Warning("rbac: endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.ChildrenFn, service.NewArgument(rbac.ChildrenArgument{
+	result, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.ChildrenFn, service.NewArgument(rbac.ChildrenArgument{
 		Parent:       parent,
 		LoadChildren: withChildren,
 	})))
-
-	result := make([]*rbac.Role, 0, 1)
-	has, getResultErr := fr.Get(ctx, &result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
-	if !has {
+	if requestErr != nil {
+		err = requestErr
 		return
 	}
 	v = make([]*Role, 0, 1)
-	for _, role := range result {
-		v = append(v, newRole(role))
+	if result.Exist() {
+		roles := make([]*rbac.Role, 0, 1)
+		scanErr := result.Scan(&roles)
+		if scanErr != nil {
+			err = errors.Warning("rbac: scan future result failed").
+				WithMeta("service", rbac.Name).WithMeta("fn", rbac.ChildrenFn).
+				WithCause(scanErr)
+			return
+		}
+		for _, role := range roles {
+			v = append(v, newRole(role))
+		}
 	}
 	return
 }

@@ -47,19 +47,12 @@ func Save(ctx context.Context, code string, name string, description string, par
 		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.SaveFn, service.NewArgument(rbac.SaveArgument{
+	_, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.SaveFn, service.NewArgument(rbac.SaveArgument{
 		Code:        code,
 		Name:        name,
 		Description: description,
 		Parent:      parent,
 		Policies:    rolePolicies,
 	})))
-
-	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
 	return
 }

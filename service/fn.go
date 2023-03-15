@@ -35,19 +35,19 @@ type fnTask struct {
 	svc           Service
 	barrier       Barrier
 	request       Request
-	result        ResultWriter
+	promise       Promise
 	handleTimeout time.Duration
 	hook          func(task *fnTask)
 }
 
-func (f *fnTask) begin(r Request, w ResultWriter) {
+func (f *fnTask) begin(r Request, p Promise) {
 	f.request = r
-	f.result = w
+	f.promise = p
 }
 
 func (f *fnTask) end() {
 	f.request = nil
-	f.result = nil
+	f.promise = nil
 }
 
 func (f *fnTask) Execute(ctx context.Context) {
@@ -99,9 +99,9 @@ func (f *fnTask) Execute(ctx context.Context) {
 		}
 	}
 	if err != nil {
-		f.result.Failed(err)
+		f.promise.Failed(err)
 	} else {
-		f.result.Succeed(v)
+		f.promise.Succeed(v)
 	}
 	tryReportStats(ctx, serviceName, fnName, err, sp)
 	if fnLog.DebugEnabled() {

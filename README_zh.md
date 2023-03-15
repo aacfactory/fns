@@ -78,7 +78,7 @@ fnc create
 ```shell
 docker run -d --rm --name swagger-ui \
  -p 80:8080 \
- -e SWAGGER_JSON_URL=http://ip:port/documents/oas \ 
+ -e SWAGGER_JSON_URL=http://ip:port/services/openapi \ 
  swaggerapi/swagger-ui 
 ```
 

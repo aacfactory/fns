@@ -36,23 +36,27 @@ func Bounds(ctx context.Context, subject string, flat bool) (v []*Role, err erro
 		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.BoundsFn, service.NewArgument(rbac.BoundsArgument{
+	result, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.BoundsFn, service.NewArgument(rbac.BoundsArgument{
 		Subject: subject,
 		Flat:    flat,
 	})))
-
-	result := make([]*rbac.Role, 0, 1)
-	has, getResultErr := fr.Get(ctx, &result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
-	if !has {
+	if requestErr != nil {
+		err = requestErr
 		return
 	}
 	v = make([]*Role, 0, 1)
-	for _, role := range result {
-		v = append(v, newRole(role))
+	if result.Exist() {
+		roles := make([]*rbac.Role, 0, 1)
+		scanErr := result.Scan(&roles)
+		if scanErr != nil {
+			err = errors.Warning("rbac: scan future result failed").
+				WithMeta("service", rbac.Name).WithMeta("fn", rbac.BoundsFn).
+				WithCause(scanErr)
+			return
+		}
+		for _, role := range roles {
+			v = append(v, newRole(role))
+		}
 	}
 	return
 }

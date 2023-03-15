@@ -36,15 +36,8 @@ func Remove(ctx context.Context, code string) (err errors.CodeError) {
 		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.RemoveFn, service.NewArgument(rbac.RemoveArgument{
+	_, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.RemoveFn, service.NewArgument(rbac.RemoveArgument{
 		Code: code,
 	})))
-
-	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
 	return
 }

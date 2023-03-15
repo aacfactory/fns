@@ -43,7 +43,7 @@ type RequestHeader interface {
 }
 
 func newRequestHeader() RequestHeader {
-	return &requestHeader{value: http.Header(make(map[string][]string))}
+	return &requestHeader{value: make(map[string][]string)}
 }
 
 type requestHeader struct {

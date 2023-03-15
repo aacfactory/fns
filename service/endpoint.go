@@ -548,8 +548,8 @@ type Endpoint interface {
 	Name() (name string)
 	Internal() (ok bool)
 	Document() (document Document)
-	Request(ctx context.Context, r Request) (result Result)
-	RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError)
+	Request(ctx context.Context, r Request) (future Future)
+	RequestSync(ctx context.Context, r Request) (result FutureResult, err errors.CodeError)
 }
 
 type endpoint struct {
@@ -574,30 +574,30 @@ func (e *endpoint) Document() (document Document) {
 	return
 }
 
-func (e *endpoint) Request(ctx context.Context, r Request) (result Result) {
+func (e *endpoint) Request(ctx context.Context, r Request) (future Future) {
 	ctx = withRuntime(ctx, e.rt)
 	ctx = withTracer(ctx, r.Id())
 	ctx = withRequest(ctx, r)
-	fr := NewResult()
+	promise, fr := NewFuture()
 	task := e.acquire()
-	task.begin(r, fr)
+	task.begin(r, promise)
 	if !e.rt.worker.Dispatch(ctx, task) {
 		serviceName, fnName := r.Fn()
 		if ctx.Err() != nil {
-			fr.Failed(errors.Timeout("fns: workers handle timeout").WithMeta("fns", "timeout").WithMeta("service", serviceName).WithMeta("fn", fnName))
+			promise.Failed(errors.Timeout("fns: workers handle timeout").WithMeta("fns", "timeout").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		} else {
-			fr.Failed(errors.Warning("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", serviceName).WithMeta("fn", fnName))
+			promise.Failed(errors.Warning("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		}
 		e.release(task)
 	}
-	result = fr
+	future = fr
 	tryReportTracer(ctx)
 	return
 }
 
-func (e *endpoint) RequestSync(ctx context.Context, r Request) (result interface{}, has bool, err errors.CodeError) {
-	fr := e.Request(ctx, r)
-	result, has, err = fr.Value(ctx)
+func (e *endpoint) RequestSync(ctx context.Context, r Request) (result FutureResult, err errors.CodeError) {
+	future := e.Request(ctx, r)
+	result, err = future.Get(ctx)
 	return
 }
 

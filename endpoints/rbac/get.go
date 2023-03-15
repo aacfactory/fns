@@ -36,20 +36,26 @@ func GetRole(ctx context.Context, code string, withChildren bool) (v *Role, err 
 		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{
+	result, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.RoleFn, service.NewArgument(rbac.RoleArgument{
 		Code:         code,
 		LoadChildren: withChildren,
 	})))
+	if requestErr != nil {
+		err = requestErr
+		return
+	}
+	if !result.Exist() {
+		return
+	}
 
-	result := &rbac.Role{}
-	has, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
+	role := rbac.Role{}
+	scanErr := result.Scan(&role)
+	if scanErr != nil {
+		err = errors.Warning("rbac: scan future result failed").
+			WithMeta("service", rbac.Name).WithMeta("fn", rbac.RoleFn).
+			WithCause(scanErr)
 		return
 	}
-	if !has {
-		return
-	}
-	v = newRole(result)
+	v = newRole(&role)
 	return
 }

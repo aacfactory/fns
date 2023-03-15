@@ -48,16 +48,25 @@ func Encode(ctx context.Context, userId string, userAttributes *json.Object) (to
 		userAttributes = json.NewObject()
 	}
 
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "encode", service.NewArgument(&encodeParam{
+	result, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, authorizations.Name, "encode", service.NewArgument(&encodeParam{
 		Id:         userId,
 		Attributes: userAttributes,
 	})))
-	result := &encodeResult{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
+	if requestErr != nil {
+		err = requestErr
 		return
 	}
-	token = result.Token
+	if !result.Exist() {
+		return
+	}
+	er := encodeResult{}
+	scanErr := result.Scan(&er)
+	if scanErr != nil {
+		err = errors.Warning("authorizations: scan future result failed").
+			WithMeta("service", authorizations.Name).WithMeta("fn", "encode").
+			WithCause(scanErr)
+		return
+	}
+	token = er.Token
 	return
 }

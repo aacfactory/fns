@@ -39,16 +39,10 @@ func Revoke(ctx context.Context, userId string, tokenId string) (err errors.Code
 		err = errors.Warning("authorizations: revoke token failed").WithCause(fmt.Errorf("tokenId is empty"))
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
+	_, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
 		UserId:  userId,
 		TokenId: tokenId,
 	})))
-	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
 	return
 }
 
@@ -62,14 +56,8 @@ func RevokeUserTokens(ctx context.Context, userId string) (err errors.CodeError)
 		err = errors.Warning("authorizations: revoke user tokens failed").WithCause(fmt.Errorf("userId is empty"))
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
+	_, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, authorizations.Name, "revoke", service.NewArgument(&revokeParam{
 		UserId: userId,
 	})))
-	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
 	return
 }

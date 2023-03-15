@@ -40,16 +40,9 @@ func Bind(ctx context.Context, subject string, roles ...string) (err errors.Code
 		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
 		return
 	}
-	fr := endpoint.Request(ctx, service.NewRequest(ctx, rbac.Name, rbac.BindFn, service.NewArgument(rbac.BindArgument{
+	_, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.BindFn, service.NewArgument(rbac.BindArgument{
 		Subject: subject,
 		Roles:   roles,
 	})))
-
-	result := &service.Empty{}
-	_, getResultErr := fr.Get(ctx, result)
-	if getResultErr != nil {
-		err = getResultErr
-		return
-	}
 	return
 }

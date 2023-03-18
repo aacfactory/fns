@@ -183,7 +183,7 @@ func encodeOpenapi(openApiVersion string, appId string, appName string, appVersi
 							"200": {
 								Content: func() (c map[string]*oas.MediaType) {
 									if fn.Result() == nil {
-										c = oas.ApplicationJsonContent(oas.RefSchema("github.com.aacfactory.fns.service@Empty"))
+										c = oas.ApplicationJsonContent(oas.RefSchema("github.com/aacfactory/fns/service.Empty"))
 										return
 									}
 									c = oas.ApplicationJsonContent(fn.Result().Schema())
@@ -217,7 +217,7 @@ func encodeOpenapi(openApiVersion string, appId string, appName string, appVersi
 
 func codeErrOpenapiSchema() *oas.Schema {
 	return &oas.Schema{
-		Key:         "github.com.aacfactory.errors@CodeError",
+		Key:         "github.com/aacfactory/errors.CodeError",
 		Title:       "CodeError",
 		Description: "Fns Code Error",
 		Type:        "object",
@@ -253,14 +253,14 @@ func codeErrOpenapiSchema() *oas.Schema {
 					"line": {Type: "string"},
 				},
 			},
-			"cause": oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+			"cause": oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 		},
 	}
 }
 
 func jsonRawMessageOpenapiSchema() *oas.Schema {
 	return &oas.Schema{
-		Key:         "github.com.aacfactory.json@RawMessage",
+		Key:         "github.com/aacfactory/json.RawMessage",
 		Title:       "JsonRawMessage",
 		Description: "Json Raw Message",
 		Type:        "object",
@@ -269,7 +269,7 @@ func jsonRawMessageOpenapiSchema() *oas.Schema {
 
 func emptyOpenapiSchema() *oas.Schema {
 	return &oas.Schema{
-		Key:         "github.com.aacfactory.fns.service@Empty",
+		Key:         "github.com/aacfactory/fns/service.Empty",
 		Title:       "Empty",
 		Description: "Empty Object",
 		Type:        "object",
@@ -370,7 +370,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -379,7 +379,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -388,7 +388,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -397,7 +397,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -406,7 +406,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -415,7 +415,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -424,7 +424,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -433,7 +433,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -442,7 +442,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -451,7 +451,7 @@ func responseStatusOpenapi() map[string]*oas.Response {
 			Header:      responseHeadersOpenapi(),
 			Content: map[string]*oas.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com.aacfactory.errors@CodeError"),
+					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
@@ -473,7 +473,7 @@ func healthPath() (uri string, path *oas.Path) {
 				"200": {
 					Content: func() (c map[string]*oas.MediaType) {
 						schema := &oas.Schema{
-							Key:         "github.com.aacfactory.fns.service@ApplicationHealth",
+							Key:         "github.com/aacfactory/fns/service.ApplicationHealth",
 							Title:       "Check Health Result",
 							Description: "",
 							Type:        "object",

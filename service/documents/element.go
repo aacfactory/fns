@@ -21,12 +21,11 @@ import (
 	"github.com/aacfactory/fns/service/internal/oas"
 	"reflect"
 	"sort"
-	"strings"
 )
 
 func NewElement(path string, name string, typ string, format string, title string, description string) *Element {
 	return &Element{
-		Path:        strings.ReplaceAll(path, "/", "."),
+		Path:        path,
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -329,7 +328,7 @@ func (element *Element) getItem() (v *Element) {
 }
 
 func (element *Element) Key() (v string) {
-	v = fmt.Sprintf("%s@%s", element.Path, element.Name)
+	v = fmt.Sprintf("%s.%s", element.Path, element.Name)
 	return
 }
 

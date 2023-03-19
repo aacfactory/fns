@@ -119,9 +119,9 @@ const (
 )
 
 func DefaultConfigRetrieverOption() (option configures.RetrieverOption) {
-	path, pathErr := filepath.Abs("./config")
+	path, pathErr := filepath.Abs("./configs")
 	if pathErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: create default config retriever failed, cant not get absolute representation of './config'").WithCause(pathErr)))
+		panic(fmt.Errorf("%+v", errors.Warning("fns: create default config retriever failed, cant not get absolute representation of './configs'").WithCause(pathErr)))
 		return
 	}
 	active, _ := os.LookupEnv(activeSystemEnvKey)

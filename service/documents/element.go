@@ -101,7 +101,11 @@ func Date() *Element {
 }
 
 func Time() *Element {
-	return NewElement("_", "time", "string", "15:04:05", "Time", "Time value").SetExample("19:13:07")
+	return NewElement("_", "time", "string", "", "Time", "Time value").SetExample("15:04:05")
+}
+
+func Duration() *Element {
+	return NewElement("_", "duration", "integer", "int64", "Duration", "Nanosecond value").SetExample("1000")
 }
 
 func DateTime() *Element {

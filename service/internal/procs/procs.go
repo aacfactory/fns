@@ -54,7 +54,19 @@ type AutoMaxProcs struct {
 
 func (p *AutoMaxProcs) Enable() {
 	if p.min > 0 {
-		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(logs.MapToLogger(p.log, logs.DebugLevel, false).Printf))
+		var log func(string, ...interface{})
+		if p.log.DebugEnabled() {
+			log = logs.MapToLogger(p.log, logs.DebugLevel, true).Printf
+		} else if p.log.InfoEnabled() {
+			log = logs.MapToLogger(p.log, logs.InfoLevel, false).Printf
+		} else if p.log.WarnEnabled() {
+			log = logs.MapToLogger(p.log, logs.WarnLevel, false).Printf
+		} else if p.log.ErrorEnabled() {
+			log = logs.MapToLogger(p.log, logs.ErrorLevel, false).Printf
+		} else {
+			log = logs.MapToLogger(p.log, logs.InfoLevel, false).Printf
+		}
+		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(log))
 		if setErr != nil {
 			if p.log.DebugEnabled() {
 				p.log.Debug().Message("fns: set automaxprocs failed, use runtime.GOMAXPROCS(0) insteadof")

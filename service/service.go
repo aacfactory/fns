@@ -91,6 +91,9 @@ type Abstract struct {
 }
 
 func (svc *Abstract) Build(options Options) (err error) {
+	svc.appId = options.AppId
+	svc.appName = options.AppName
+	svc.appVersion = options.AppVersion
 	svc.log = options.Log
 	if svc.components != nil {
 		for _, component := range svc.components {

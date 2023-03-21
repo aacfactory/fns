@@ -77,6 +77,11 @@ type HttpHandler interface {
 	Close()
 }
 
+type HttpHandlerWithServices interface {
+	HttpHandler
+	Services() (services []Service)
+}
+
 type HandlersOptions struct {
 	AppId      string
 	AppName    string

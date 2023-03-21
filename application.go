@@ -117,6 +117,23 @@ func New(options ...Option) (app Application) {
 			}
 		}
 	}
+	if opt.httpHandlers != nil && len(opt.httpHandlers) > 0 {
+		for _, handler := range opt.httpHandlers {
+			handlerWithServices, isHandlerWithServices := handler.(service.HttpHandlerWithServices)
+			if isHandlerWithServices {
+				handlerServices := handlerWithServices.Services()
+				if handlerServices != nil && len(handlerServices) > 0 {
+					for _, handlerService := range handlerServices {
+						deployErr := app.Deploy(handlerService)
+						if deployErr != nil {
+							panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, deploy service failed").WithCause(errors.Map(deployErr))))
+							return
+						}
+					}
+				}
+			}
+		}
+	}
 	return
 }
 

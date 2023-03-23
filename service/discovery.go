@@ -177,6 +177,39 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	return
 }
 
+type RegistrationList []*Registration
+
+func (list RegistrationList) Len() int {
+	return len(list)
+}
+
+func (list RegistrationList) Less(i, j int) bool {
+	return list[i].version.LessThan(list[j].version)
+}
+
+func (list RegistrationList) Swap(i, j int) {
+	list[i], list[j] = list[j], list[i]
+	return
+}
+
+func (list RegistrationList) MinVersion() (r *Registration) {
+	size := len(list)
+	if size == 0 {
+		return
+	}
+	r = list[0]
+	return
+}
+
+func (list RegistrationList) MaxVersion() (r *Registration) {
+	size := len(list)
+	if size == 0 {
+		return
+	}
+	r = list[size-1]
+	return
+}
+
 type Registration struct {
 	hostId  string
 	id      string
@@ -361,6 +394,40 @@ func (r *Registrations) Ids() (ids []string) {
 		return true
 	})
 	sort.Strings(ids)
+	return
+}
+
+func (r *Registrations) List() (values map[string]RegistrationList) {
+	values = make(map[string]RegistrationList)
+	r.values.Range(func(key, value any) bool {
+		name := key.(string)
+		group, has := values[name]
+		if !has {
+			group = make([]*Registration, 0, 1)
+			values[name] = group
+		}
+		ring, _ := value.(*rings.Ring[*Registration])
+		size := ring.Len()
+		for i := 0; i < size; i++ {
+			registration := ring.Next()
+			if registration == nil {
+				continue
+			}
+			group = append(group, registration)
+		}
+		return true
+	})
+	empties := make([]string, 0, 1)
+	for name, list := range values {
+		if len(list) == 0 {
+			empties = append(empties, name)
+			continue
+		}
+		sort.Sort(list)
+	}
+	for _, empty := range empties {
+		delete(values, empty)
+	}
 	return
 }
 

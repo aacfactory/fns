@@ -279,7 +279,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	v.httpHandlers = handlers
-	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCh, options.OpenApiVersion))
+	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCh, options.OpenApiVersion, options.ProxyMode))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return

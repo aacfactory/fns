@@ -22,30 +22,41 @@ const (
 	proxyHandlerName = "proxy"
 )
 
-type ProxyHandler struct {
+func newProxyHandler(devMode bool) (handler *proxyHandler) {
+
+	return
 }
 
-func (proxy *ProxyHandler) Name() (name string) {
+type proxyHandler struct {
+}
+
+func (proxy *proxyHandler) Name() (name string) {
 	name = proxyHandlerName
 	return
 }
 
-func (proxy *ProxyHandler) Build(options *HttpHandlerOptions) (err error) {
+func (proxy *proxyHandler) Build(options *HttpHandlerOptions) (err error) {
 
 	return
 }
 
-func (proxy *ProxyHandler) Accept(request *http.Request) (ok bool) {
+func (proxy *proxyHandler) Accept(request *http.Request) (ok bool) {
+	// todo:
+	// handle dispatch (when devMode enabled, support internal request, else not support)
+	// handle /services/names (only devMode enabled, and get nodeId from httpProxyTargetNodeId)
+	// handle /services/documents
+	// handle /services/openapi
+	// handle /cluster/nodes (only devMode enabled, return nodes, so cluster devMode should be {ClusterProxy}, and use it to get nodes)
+	// -- or Cluster is ClusterProxy, no DevMode, use DevMode to create ClusterProxy, use ClusterProxy to get nodes
+	return
+}
+
+func (proxy *proxyHandler) Close() {
 
 	return
 }
 
-func (proxy *ProxyHandler) Close() {
-
-	return
-}
-
-func (proxy *ProxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+func (proxy *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
 
 	return
 }

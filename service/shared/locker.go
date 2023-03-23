@@ -18,66 +18,139 @@ package shared
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
+var (
+	ErrLockTimeout = fmt.Errorf("lockers: lock timeout")
+)
+
 type Locker interface {
-	Unlock()
+	Lock(ctx context.Context) (err error)
+	Unlock(ctx context.Context) (err error)
 }
 
 type Lockers interface {
-	Lock(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err errors.CodeError)
+	Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err error)
 }
 
-type LocalSharedLocker struct {
-	lockers *LocalLockers
-	key     []byte
-	mutex   sync.Locker
+type localLocker struct {
+	key       []byte
+	ttl       time.Duration
+	mutex     sync.Locker
+	releaseCh chan<- []byte
+	done      chan struct{}
+	locked    int64
 }
 
-func (locker *LocalSharedLocker) Unlock() {
-	locker.mutex.Unlock()
-	locker.lockers.release(locker.key)
-}
-
-func NewLocalLockers() *LocalLockers {
-	return &LocalLockers{
-		mutex:   new(sync.Mutex),
-		lockers: make(map[string]sync.Locker),
+func (locker *localLocker) Lock(ctx context.Context) (err error) {
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline && deadline.Before(time.Now().Add(locker.ttl)) {
+		locker.ttl = deadline.Sub(time.Now())
 	}
-}
-
-type LocalLockers struct {
-	mutex   *sync.Mutex
-	lockers map[string]sync.Locker
-}
-
-func (lockers *LocalLockers) Lock(_ context.Context, key []byte, _ time.Duration) (locker Locker, err errors.CodeError) {
-	lockers.mutex.Lock()
-	defer lockers.mutex.Unlock()
-	mKey := bytex.ToString(key)
-	mutex, exist := lockers.lockers[mKey]
-	if exist {
-		lockers.lockers[mKey] = mutex
-	} else {
-		mutex = &sync.Mutex{}
-		lockers.lockers[mKey] = mutex
+	if locker.ttl == 0 {
+		atomic.StoreInt64(&locker.locked, 1)
+		locker.mutex.Lock()
+		return
 	}
-	mutex.Lock()
-	locker = &LocalSharedLocker{
-		lockers: lockers,
-		key:     key,
-		mutex:   mutex,
+	go func(ctx context.Context, locker *localLocker) {
+		atomic.StoreInt64(&locker.locked, 1)
+		locker.mutex.Lock()
+		locker.done <- struct{}{}
+		close(locker.done)
+	}(ctx, locker)
+	select {
+	case <-locker.done:
+		break
+	case <-time.After(locker.ttl):
+		err = ErrLockTimeout
+		break
+	}
+	if err != nil {
+		_ = locker.Unlock(ctx)
 	}
 	return
 }
 
-func (lockers *LocalLockers) release(key []byte) {
+func (locker *localLocker) Unlock(_ context.Context) (err error) {
+	if atomic.LoadInt64(&locker.locked) > 0 {
+		locker.mutex.Unlock()
+		atomic.StoreInt64(&locker.locked, 0)
+	}
+	locker.releaseCh <- locker.key
+	return
+}
+
+func LocalLockers() Lockers {
+	v := &localLockers{
+		mutex:     &sync.Mutex{},
+		lockers:   make(map[string]*reuseLocker),
+		releaseCh: make(chan []byte, 10240),
+	}
+	go v.listenRelease()
+	return v
+}
+
+type localLockers struct {
+	mutex     *sync.Mutex
+	lockers   map[string]*reuseLocker
+	releaseCh chan []byte
+}
+
+func (lockers *localLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err error) {
+	if key == nil || len(key) == 0 {
+		err = fmt.Errorf("%+v", errors.Warning("lockers: acquire failed").WithCause(errors.Warning("key is required")))
+		return
+	}
 	lockers.mutex.Lock()
-	defer lockers.mutex.Unlock()
-	mKey := bytex.ToString(key)
-	delete(lockers.lockers, mKey)
+	rl, has := lockers.lockers[bytex.ToString(key)]
+	if !has {
+		rl = &reuseLocker{
+			mutex: &sync.Mutex{},
+			times: 0,
+		}
+		lockers.lockers[bytex.ToString(key)] = rl
+	}
+	rl.times++
+	locker = &localLocker{
+		key:       key,
+		ttl:       ttl,
+		mutex:     rl.mutex,
+		releaseCh: lockers.releaseCh,
+		done:      make(chan struct{}, 1),
+		locked:    0,
+	}
+	lockers.mutex.Unlock()
+	return
+}
+
+func (lockers *localLockers) listenRelease() {
+	for {
+		key, ok := <-lockers.releaseCh
+		if !ok {
+			break
+		}
+		lockers.mutex.Lock()
+		v, has := lockers.lockers[bytex.ToString(key)]
+		if !has {
+			lockers.mutex.Unlock()
+			continue
+		}
+		v.times--
+		if v.times < 1 {
+			delete(lockers.lockers, bytex.ToString(key))
+		}
+		lockers.mutex.Unlock()
+	}
+	return
+}
+
+type reuseLocker struct {
+	mutex sync.Locker
+	times int64
 }

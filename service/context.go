@@ -155,9 +155,10 @@ func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shar
 		panic(fmt.Errorf("%+v", errors.Warning("fns: shared lockers was not found")))
 		return
 	}
-	locker, err = rt.sharedLockers.Lock(ctx, key, ttl)
-	if err != nil {
-		err = errors.ServiceError("fns: get shared locker failed").WithCause(err)
+	var acquireErr error
+	locker, acquireErr = rt.sharedLockers.Acquire(ctx, key, ttl)
+	if acquireErr != nil {
+		err = errors.ServiceError("fns: get shared locker failed").WithCause(acquireErr)
 		return
 	}
 	return

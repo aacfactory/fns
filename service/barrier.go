@@ -17,13 +17,14 @@
 package service
 
 import (
-	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/json"
+	"github.com/valyala/bytebufferpool"
 	"golang.org/x/sync/singleflight"
 	"time"
 )
@@ -77,36 +78,67 @@ type sharedBarrier struct {
 func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
 	var doErr error
 	result, doErr, _ = barrier.group.Do(key, func() (v interface{}, err error) {
-		barrierKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s", key))
-		locker, lockErr := barrier.lockers.Lock(ctx, barrierKey, 2*time.Second)
+		barrierKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s", key))
+		locker, getLockerErr := barrier.lockers.Acquire(ctx, barrierKey, 2*time.Second)
+		if getLockerErr != nil {
+			err = errors.Warning("fns: shared barrier execute failed").WithCause(getLockerErr)
+			return
+		}
+		lockErr := locker.Lock(ctx)
 		if lockErr != nil {
 			err = errors.Warning("fns: shared barrier execute failed").WithCause(lockErr)
 			return
 		}
-		defer locker.Unlock()
-		resultKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s/result", key))
+		resultKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s/result", key))
 		cached, has, getErr := barrier.store.Get(ctx, resultKey)
 		if getErr != nil {
+			_ = locker.Unlock(ctx)
 			err = errors.Warning("fns: shared barrier execute failed").WithCause(getErr)
 			return
 		}
 		if has {
-			if cached[0] == '1' {
-				v = json.RawMessage(cached[1:])
-			} else {
-				err = errors.Decode(cached[1:])
+			if len(cached) < 2 {
+				_ = locker.Unlock(ctx)
+				err = errors.Warning("fns: shared barrier execute failed").WithCause(errors.Warning("cached value is out of control"))
+				return
 			}
+			if binary.BigEndian.Uint16(cached[0:2]) == 1 {
+				v = json.RawMessage(cached[1:])
+			} else if binary.BigEndian.Uint16(cached[0:2]) == 2 {
+				err = errors.Decode(cached[1:])
+			} else {
+				err = errors.Warning("fns: shared barrier execute failed").WithCause(errors.Warning("cached value is out of control"))
+			}
+			_ = locker.Unlock(ctx)
 			return
 		}
+		rb := bytebufferpool.Get()
 		v, err = fn()
 		if err != nil {
 			p, _ := json.Marshal(err)
-			cached = bytes.Join([][]byte{{'0'}, p}, []byte{})
+			head := make([]byte, 2)
+			binary.BigEndian.PutUint16(head, 2)
+			_, _ = rb.Write(head)
+			_, _ = rb.Write(p)
 		} else {
-			p, _ := json.Marshal(v)
-			cached = bytes.Join([][]byte{{'1'}, p}, []byte{})
+			p, encodeErr := json.Marshal(v)
+			if encodeErr != nil {
+				p, _ = json.Marshal(errors.Warning("fns: encode result failed").WithCause(encodeErr))
+				head := make([]byte, 2)
+				binary.BigEndian.PutUint16(head, 2)
+				_, _ = rb.Write(head)
+				_, _ = rb.Write(p)
+			} else {
+				head := make([]byte, 2)
+				binary.BigEndian.PutUint16(head, 1)
+				_, _ = rb.Write(head)
+				_, _ = rb.Write(p)
+			}
 		}
+		cached = rb.Bytes()
+		bytebufferpool.Put(rb)
 		_ = barrier.store.SetWithTTL(ctx, resultKey, cached, barrier.resultTTL)
+		_ = locker.Unlock(ctx)
 		return
 	})
 	if doErr != nil {
@@ -117,8 +149,8 @@ func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (res
 
 func (barrier *sharedBarrier) Forget(ctx context.Context, key string) {
 	barrier.group.Forget(key)
-	barrierKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s", key))
+	barrierKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s", key))
 	_ = barrier.store.Remove(ctx, barrierKey)
-	resultKey := bytex.FromString(fmt.Sprintf("fns_barrier/%s/result", key))
+	resultKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s/result", key))
 	_ = barrier.store.Remove(ctx, resultKey)
 }

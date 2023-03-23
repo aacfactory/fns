@@ -160,14 +160,14 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
 			return
 		}
-		sharedStore, err = shared.NewLocalStore(int64(sharedMemSize))
+		sharedStore, err = shared.LocalStore(int64(sharedMemSize))
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err)
 			return
 		}
 		// shared store <<<
 		// shared lockers >>>
-		sharedLockers = shared.NewLocalLockers()
+		sharedLockers = shared.LocalLockers()
 		// shared lockers <<<
 		// barrier >>>
 		barrier = defaultBarrier()

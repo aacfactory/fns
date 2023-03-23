@@ -38,7 +38,7 @@ type Store interface {
 	Close()
 }
 
-func NewLocalStore(memSize int64) (store Store, err error) {
+func LocalStore(memSize int64) (store Store, err error) {
 	if memSize < 1 {
 		memSize = 64 * bytex.MEGABYTE
 	}
@@ -51,7 +51,7 @@ func NewLocalStore(memSize int64) (store Store, err error) {
 		err = errors.Warning("create local cache failed").WithCause(cacheErr)
 		return
 	}
-	store = &LocalStore{
+	store = &localStore{
 		lock:   sync.RWMutex{},
 		cache:  cache,
 		values: smap.New(),
@@ -59,13 +59,13 @@ func NewLocalStore(memSize int64) (store Store, err error) {
 	return
 }
 
-type LocalStore struct {
+type localStore struct {
 	lock   sync.RWMutex
 	cache  *ristretto.Cache
 	values *smap.Map
 }
 
-func (store *LocalStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {
+func (store *localStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
 	store.cache.Set(key, value, int64(len(value)))
@@ -73,14 +73,14 @@ func (store *LocalStore) Set(ctx context.Context, key []byte, value []byte) (err
 	return
 }
 
-func (store *LocalStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
+func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
 	store.cache.SetWithTTL(key, value, int64(len(value)), ttl)
 	return
 }
 
-func (store *LocalStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError) {
+func (store *localStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
 	v, has := store.cache.Get(key)
@@ -92,7 +92,7 @@ func (store *LocalStore) ExpireKey(ctx context.Context, key []byte, ttl time.Dur
 	return
 }
 
-func (store *LocalStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError) {
+func (store *localStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
 	value, has := store.get(ctx, key)
@@ -109,14 +109,14 @@ func (store *LocalStore) Incr(ctx context.Context, key []byte, delta int64) (v i
 	return
 }
 
-func (store *LocalStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError) {
+func (store *localStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError) {
 	store.lock.RLock()
 	defer store.lock.RUnlock()
 	value, has = store.get(ctx, key)
 	return
 }
 
-func (store *LocalStore) get(ctx context.Context, key []byte) (value []byte, has bool) {
+func (store *localStore) get(ctx context.Context, key []byte) (value []byte, has bool) {
 	var v interface{}
 	v, has = store.cache.Get(key)
 	if !has {
@@ -134,7 +134,7 @@ func (store *LocalStore) get(ctx context.Context, key []byte) (value []byte, has
 	return
 }
 
-func (store *LocalStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
+func (store *localStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
 	store.cache.Del(key)
@@ -142,6 +142,6 @@ func (store *LocalStore) Remove(ctx context.Context, key []byte) (err errors.Cod
 	return
 }
 
-func (store *LocalStore) Close() {
+func (store *localStore) Close() {
 	store.cache.Close()
 }

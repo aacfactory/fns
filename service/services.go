@@ -34,7 +34,7 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh chan map[string]*endpoint, openApiVersion string, proxyMode bool) (handler HttpHandler) {
+func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh <-chan map[string]*endpoint, openApiVersion string, proxyMode bool) (handler HttpHandler) {
 	sh := &servicesHandler{
 		log:                    nil,
 		proxyMode:              proxyMode,
@@ -49,7 +49,7 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 		signer:                 secret.NewSigner(secretKey),
 		discovery:              nil,
 	}
-	go func(handler *servicesHandler, deployedCh chan map[string]*endpoint, openApiVersion string) {
+	go func(handler *servicesHandler, deployedCh <-chan map[string]*endpoint, openApiVersion string) {
 		eps, ok := <-deployedCh
 		if !ok {
 			return
@@ -121,11 +121,11 @@ func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
 }
 
 func (handler *servicesHandler) Accept(r *http.Request) (ok bool) {
+	ok = r.Method == http.MethodGet && r.URL.Path == "/services/names"
+	if ok {
+		return
+	}
 	if !handler.proxyMode {
-		ok = r.Method == http.MethodGet && r.URL.Path == "/services/names"
-		if ok {
-			return
-		}
 		ok = r.Method == http.MethodGet && r.URL.Path == "/services/documents"
 		if ok {
 			return
@@ -140,11 +140,11 @@ func (handler *servicesHandler) Accept(r *http.Request) (ok bool) {
 }
 
 func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
+		handler.handleNames(writer, r)
+		return
+	}
 	if !handler.proxyMode {
-		if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
-			handler.handleNames(writer, r)
-			return
-		}
 		if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
 			handler.handleDocuments(writer)
 			return

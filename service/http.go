@@ -58,6 +58,7 @@ const (
 	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
 	httpDeviceIdHeader         = "X-Fns-Device-Id"
 	httpDeviceIpHeader         = "X-Fns-Device-Ip"
+	httpProxyTargetNodeId      = "X-Fns-Proxy-Node"
 )
 
 type HttpHandlerOptions struct {

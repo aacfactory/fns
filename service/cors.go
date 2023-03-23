@@ -67,6 +67,9 @@ func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
 		if sort.SearchStrings(config.AllowedHeaders, httpRequestVersionsHeader) < 0 {
 			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestVersionsHeader)
 		}
+		if sort.SearchStrings(config.AllowedHeaders, httpProxyTargetNodeId) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpProxyTargetNodeId)
+		}
 	}
 	if config.ExposedHeaders == nil {
 		config.ExposedHeaders = make([]string, 0, 1)

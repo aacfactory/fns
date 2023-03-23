@@ -133,6 +133,10 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	header.Add(httpRequestIdHeader, r.Id())
 	header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
 	header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
+	// devMode
+	if task.registration.devMode {
+		header.Add(httpProxyTargetNodeId, task.registration.id)
+	}
 	serviceName, fn := r.Fn()
 	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), header, requestBody)
 	if postErr != nil {
@@ -177,6 +181,7 @@ type Registration struct {
 	hostId  string
 	id      string
 	version versions.Version
+	devMode bool
 	address string
 	name    string
 	client  HttpClient
@@ -242,19 +247,20 @@ func (registration *Registration) release(task *registrationTask) {
 }
 
 type Registrations struct {
-	id      string
-	locker  sync.Mutex
-	values  sync.Map
-	signer  *secret.Signer
-	dialer  HttpClientDialer
-	worker  Workers
-	timeout time.Duration
+	id              string
+	locker          sync.Mutex
+	values          sync.Map
+	signer          *secret.Signer
+	dialer          HttpClientDialer
+	worker          Workers
+	timeout         time.Duration
+	devProxyAddress string
 }
 
 func (r *Registrations) Add(registration *Registration) {
 	var ring *rings.Ring[*Registration]
 	v, loaded := r.values.Load(registration.name)
-	if !loaded {
+	if !loaded || v == nil {
 		v = rings.New[*Registration](registration.name)
 		r.values.Store(registration.name, v)
 	}
@@ -266,22 +272,29 @@ func (r *Registrations) Add(registration *Registration) {
 }
 
 func (r *Registrations) Remove(id string) {
+	empties := make([]string, 0, 1)
 	r.values.Range(func(key, value any) bool {
 		ring, _ := value.(*rings.Ring[*Registration])
 		_, has := ring.Get(id)
 		if has {
 			r.locker.Lock()
 			ring.Remove(id)
+			if ring.Len() == 0 {
+				empties = append(empties, key.(string))
+			}
 			r.locker.Unlock()
 		}
 		return true
 	})
+	for _, empty := range empties {
+		r.values.Delete(empty)
+	}
 	return
 }
 
 func (r *Registrations) GetExact(name string, id string) (registration *Registration, has bool) {
 	v, loaded := r.values.Load(name)
-	if !loaded {
+	if !loaded || v == nil {
 		return
 	}
 	ring, _ := v.(*rings.Ring[*Registration])
@@ -294,7 +307,7 @@ func (r *Registrations) GetExact(name string, id string) (registration *Registra
 
 func (r *Registrations) Get(name string, vrb versions.Version, vre versions.Version) (registration *Registration, has bool) {
 	v, loaded := r.values.Load(name)
-	if !loaded {
+	if !loaded || v == nil {
 		return
 	}
 	ring, _ := v.(*rings.Ring[*Registration])
@@ -305,7 +318,7 @@ func (r *Registrations) Get(name string, vrb versions.Version, vre versions.Vers
 	for i := 0; i < size; i++ {
 		registration = ring.Next()
 		if registration == nil {
-			return
+			continue
 		}
 		if registration.version.Between(vrb, vre) {
 			has = true
@@ -336,7 +349,6 @@ func (r *Registrations) Ids() (ids []string) {
 	ids = make([]string, 0, 1)
 	r.values.Range(func(key, value any) bool {
 		ring, _ := value.(*rings.Ring[*Registration])
-		r.locker.Lock()
 		size := ring.Len()
 		for i := 0; i < size; i++ {
 			registration := ring.Next()
@@ -344,19 +356,11 @@ func (r *Registrations) Ids() (ids []string) {
 				continue
 			}
 			id := registration.id
-			if len(ids) == 0 {
-				ids = append(ids, id)
-				continue
-			}
-			if sort.SearchStrings(ids, id) < len(ids) {
-				continue
-			}
 			ids = append(ids, id)
-			sort.Strings(ids)
 		}
-		r.locker.Unlock()
 		return true
 	})
+	sort.Strings(ids)
 	return
 }
 
@@ -365,24 +369,40 @@ func (r *Registrations) AddNode(node Node) (err error) {
 	if address == "" {
 		return
 	}
+	devMode := false
+	if r.devProxyAddress != "" {
+		devMode = true
+		address = r.devProxyAddress
+	}
 	client, dialErr := r.dialer.Dial(address)
 	if dialErr != nil {
-		err = errors.Warning("fns: registrations dial node failed").WithCause(dialErr).WithMeta("address", address)
+		err = errors.Warning("fns: registrations dial node failed").WithCause(dialErr).
+			WithMeta("address", address).
+			WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
 	defer cancel()
 	header := http.Header{}
+	if devMode {
+		header.Add(httpProxyTargetNodeId, node.Id)
+	}
 	header.Add(httpDeviceIdHeader, r.id)
 	header.Add(httpRequestSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
 	status, _, responseBody, getErr := client.Get(ctx, "/services/names", header)
 	if getErr != nil {
-		err = errors.Warning("fns: registrations get service names from node failed").WithCause(dialErr).WithMeta("address", address)
+		err = errors.Warning("fns: registrations get service names from node failed").
+			WithCause(dialErr).
+			WithMeta("address", address).
+			WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
 		return
 	}
 	if status != http.StatusOK {
 		if len(responseBody) == 0 {
-			err = errors.Warning("fns: registrations get service names from node failed").WithMeta("address", address).WithMeta("status", strconv.Itoa(status))
+			err = errors.Warning("fns: registrations get service names from node failed").
+				WithMeta("address", address).
+				WithMeta("status", strconv.Itoa(status)).
+				WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
 			return
 		}
 		err = errors.Decode(responseBody)
@@ -391,7 +411,9 @@ func (r *Registrations) AddNode(node Node) (err error) {
 	names := make([]string, 0, 1)
 	decodeErr := json.Unmarshal(responseBody, &names)
 	if decodeErr != nil {
-		err = errors.Warning("fns: registrations get service names from node failed").WithMeta("address", address).WithCause(decodeErr)
+		err = errors.Warning("fns: registrations get service names from node failed").
+			WithMeta("address", address).WithCause(decodeErr).
+			WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
 		return
 	}
 	if len(names) == 0 {
@@ -405,6 +427,7 @@ func (r *Registrations) AddNode(node Node) (err error) {
 			version: node.Version,
 			address: address,
 			name:    name,
+			devMode: devMode,
 			client:  client,
 			signer:  r.signer,
 			worker:  r.worker,
@@ -417,6 +440,53 @@ func (r *Registrations) AddNode(node Node) (err error) {
 			})
 		}
 		r.Add(registration)
+	}
+	return
+}
+
+func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
+	existIds := r.Ids()
+	if nodes == nil || len(nodes) == 0 {
+		for _, id := range existIds {
+			r.Remove(id)
+		}
+		return
+	}
+	sort.Sort(nodes)
+	nodesLen := nodes.Len()
+	existIdsLen := len(existIds)
+	newNodes := make([]Node, 0, 1)
+	diffNodeIds := make([]string, 0, 1)
+	for _, node := range nodes {
+		if existIdsLen != 0 && sort.SearchStrings(existIds, node.Id) < existIdsLen {
+			continue
+		}
+		newNodes = append(newNodes, node)
+	}
+	if existIdsLen > 0 {
+		for _, id := range existIds {
+			exist := sort.Search(nodesLen, func(i int) bool {
+				return nodes[i].Id == id
+			}) < nodesLen
+			if exist {
+				continue
+			}
+			diffNodeIds = append(diffNodeIds, id)
+		}
+	}
+	if len(diffNodeIds) > 0 {
+		for _, id := range diffNodeIds {
+			r.Remove(id)
+		}
+	}
+	if len(newNodes) > 0 {
+		for _, node := range newNodes {
+			addErr := r.AddNode(node)
+			if addErr != nil {
+				err = errors.Warning("fns: cluster registrations merge nodes failed").WithCause(addErr)
+				return
+			}
+		}
 	}
 	return
 }

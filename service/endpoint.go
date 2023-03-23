@@ -32,7 +32,6 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -116,25 +115,61 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	var sharedStore shared.Store
 	var sharedLockers shared.Lockers
 	var barrier Barrier
+	clusterFetchMembersInterval := time.Duration(0)
+	clusterDevMode := false
+	clusterProxyAddress := ""
+	var clusterProxyTLSConfig *tls.Config
 	if config.Cluster != nil {
 		// cluster >>>
+		if config.Cluster.FetchMembersInterval != "" {
+			clusterFetchMembersInterval, err = time.ParseDuration(strings.TrimSpace(config.Cluster.FetchMembersInterval))
+			if err != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("fetchMembersInterval must be time.Duration format")).WithCause(err)
+				return
+			}
+		}
+		if clusterFetchMembersInterval < 1*time.Second {
+			clusterFetchMembersInterval = 10 * time.Second
+		}
 		kind := strings.TrimSpace(config.Cluster.Kind)
 		builder, hasBuilder := getClusterBuilder(kind)
 		if !hasBuilder {
 			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
 			return
 		}
+		if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
+			config.Cluster.Options = []byte{'{', '}'}
+		}
+		clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
+		if clusterOptionConfigErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
+			return
+		}
+		if config.Cluster.DevMode != nil {
+			clusterDevMode = true
+			clusterProxyAddress = config.Cluster.DevMode.ProxyAddress
+			if config.Cluster.DevMode.TLS != nil {
+				_, clusterProxyTLSConfig, err = config.Cluster.DevMode.TLS.Config()
+				if err != nil {
+					err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build dev client tls config failed")).WithCause(err)
+					return
+				}
+			}
+		}
 		cluster, err = builder(ClusterBuilderOptions{
-			Config:     config.Cluster,
+			Config:     clusterOptionConfig,
 			Log:        log.With("cluster", kind),
 			AppId:      options.AppId,
 			AppName:    options.AppName,
 			AppVersion: options.AppVersion,
+			DevMode:    clusterDevMode,
 		})
+
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
 			return
 		}
+
 		// cluster <<<
 		sharedStore = cluster.Shared().Store()
 		sharedLockers = cluster.Shared().Lockers()
@@ -193,17 +228,20 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			sharedStore:   sharedStore,
 			signer:        secret.NewSigner(bytex.FromString(secretKey)),
 		},
-		config:        options.Config,
-		autoMaxProcs:  goprocs,
-		log:           log,
-		handleTimeout: time.Duration(handleTimeoutSeconds) * time.Second,
-		deployed:      make(map[string]*endpoint),
-		deployedCh:    make(chan map[string]*endpoint, 1),
-		registrations: nil,
-		http:          options.Http,
-		httpHandlers:  nil,
-		cluster:       cluster,
-		closeCh:       make(chan struct{}, 1),
+		config:                   options.Config,
+		autoMaxProcs:             goprocs,
+		log:                      log,
+		handleTimeout:            time.Duration(handleTimeoutSeconds) * time.Second,
+		deployed:                 make(map[string]*endpoint),
+		deployedCh:               make(chan map[string]*endpoint, 1),
+		registrations:            nil,
+		http:                     options.Http,
+		httpHandlers:             nil,
+		cluster:                  cluster,
+		clusterNodeFetchInterval: clusterFetchMembersInterval,
+		clusterDevMode:           clusterDevMode,
+		clusterProxyAddress:      clusterProxyAddress,
+		closeCh:                  make(chan struct{}, 1),
 	}
 	v.rt.discovery = v
 	// http >>>
@@ -270,6 +308,9 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			return
 		}
 	}
+	if clusterProxyTLSConfig != nil {
+		clientTLS = clusterProxyTLSConfig
+	}
 	if httpConfig.Options == nil || len(httpConfig.Options) < 2 {
 		httpConfig.Options = []byte{'{', '}'}
 	}
@@ -290,18 +331,21 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 }
 
 type Endpoints struct {
-	log           logs.Logger
-	rt            *runtimes
-	autoMaxProcs  *procs.AutoMaxProcs
-	handleTimeout time.Duration
-	config        configures.Config
-	deployed      map[string]*endpoint
-	deployedCh    chan map[string]*endpoint
-	registrations *Registrations
-	http          Http
-	httpHandlers  *HttpHandlers
-	cluster       Cluster
-	closeCh       chan struct{}
+	log                      logs.Logger
+	rt                       *runtimes
+	autoMaxProcs             *procs.AutoMaxProcs
+	handleTimeout            time.Duration
+	config                   configures.Config
+	deployed                 map[string]*endpoint
+	deployedCh               chan map[string]*endpoint
+	registrations            *Registrations
+	http                     Http
+	httpHandlers             *HttpHandlers
+	cluster                  Cluster
+	clusterNodeFetchInterval time.Duration
+	clusterDevMode           bool
+	clusterProxyAddress      string
+	closeCh                  chan struct{}
 }
 
 func (e *Endpoints) Log() (log logs.Logger) {
@@ -385,20 +429,33 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	close(e.deployedCh)
 	// cluster join
 	if e.cluster != nil {
-		joinErr := e.cluster.Join(ctx)
-		if joinErr != nil {
-			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
+		if !e.clusterDevMode {
+			joinErr := e.cluster.Join(ctx)
+			if joinErr != nil {
+				err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
+				return
+			}
+		}
+		nodes, nodesErr := e.cluster.Nodes(ctx)
+		if nodesErr != nil {
+			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints get nodes from cluster failed")).WithCause(nodesErr)
 			return
 		}
 		// registrations
 		e.registrations = &Registrations{
-			id:      e.rt.appId,
-			locker:  sync.Mutex{},
-			values:  sync.Map{},
-			dialer:  e.http,
-			signer:  e.rt.signer,
-			worker:  e.rt.worker,
-			timeout: e.handleTimeout,
+			id:              e.rt.appId,
+			locker:          sync.Mutex{},
+			values:          sync.Map{},
+			dialer:          e.http,
+			signer:          e.rt.signer,
+			worker:          e.rt.worker,
+			timeout:         e.handleTimeout,
+			devProxyAddress: e.clusterProxyAddress,
+		}
+		mergeErr := e.registrations.MergeNodes(nodes)
+		if mergeErr != nil {
+			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
+			return
 		}
 		e.fetchRegistrations()
 	}
@@ -462,7 +519,9 @@ func (e *Endpoints) Close(ctx context.Context) {
 	close(e.closeCh)
 	e.rt.running.Off()
 	if e.cluster != nil {
-		_ = e.cluster.Leave(ctx)
+		if !e.clusterDevMode {
+			_ = e.cluster.Leave(ctx)
+		}
 	}
 	if e.registrations != nil {
 		e.registrations.Close()
@@ -477,67 +536,36 @@ func (e *Endpoints) Close(ctx context.Context) {
 
 func (e *Endpoints) fetchRegistrations() {
 	go func(e *Endpoints) {
+		timer := time.NewTimer(e.clusterNodeFetchInterval)
 		for {
 			stop := false
 			select {
 			case <-e.closeCh:
 				stop = true
 				break
-			case <-time.After(1 * time.Second):
+			case <-timer.C:
 				nodes, nodesErr := e.cluster.Nodes(context.TODO())
 				if nodesErr != nil {
 					if e.log.WarnEnabled() {
-						e.log.Warn().Cause(nodesErr).Message("fns: cluster get nodes failed")
+						e.log.Warn().Cause(nodesErr).Message("fns: endpoints get nodes from cluster failed")
 					}
 					break
 				}
-				if nodes == nil || len(nodes) == 0 {
-					break
-				}
-				sort.Sort(nodes)
-				nodesLen := nodes.Len()
-				existIds := e.registrations.Ids()
-				existIdsLen := len(existIds)
-				newNodes := make([]Node, 0, 1)
-				diffNodeIds := make([]string, 0, 1)
-				for _, node := range nodes {
-					if existIdsLen != 0 && sort.SearchStrings(existIds, node.Id) < existIdsLen {
-						continue
-					}
-					newNodes = append(newNodes, node)
-				}
-				if existIdsLen > 0 {
-					for _, id := range existIds {
-						exist := sort.Search(nodesLen, func(i int) bool {
-							return nodes[i].Id == id
-						}) < nodesLen
-						if exist {
-							continue
-						}
-						diffNodeIds = append(diffNodeIds, id)
-					}
-				}
-				if len(diffNodeIds) > 0 {
-					for _, id := range diffNodeIds {
-						e.registrations.Remove(id)
-					}
-				}
-				if len(newNodes) > 0 {
-					for _, node := range newNodes {
-						fetchErr := e.registrations.AddNode(node)
-						if fetchErr != nil {
-							if e.log.WarnEnabled() {
-								e.log.Warn().Cause(fetchErr).With("node_name", node.Name).With("node_id", node.Id).Message("fns: cluster fetch registration from node failed")
-							}
-						}
+				mergeErr := e.registrations.MergeNodes(nodes)
+				if mergeErr != nil {
+					if e.log.WarnEnabled() {
+						e.log.Warn().Cause(mergeErr).Message("fns: endpoints merge nodes failed")
 					}
 				}
 				break
 			}
 			if stop {
-				return
+				timer.Stop()
+				break
 			}
+			timer.Reset(e.clusterNodeFetchInterval)
 		}
+		timer.Stop()
 	}(e)
 	return
 }

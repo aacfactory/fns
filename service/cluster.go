@@ -18,23 +18,25 @@ package service
 
 import (
 	"context"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 )
 
 type ClusterBuilderOptions struct {
-	Config     *ClusterConfig
+	Config     configures.Config
 	Log        logs.Logger
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
+	DevMode    bool
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
 
 // Cluster 只给address，然后service通过register的ch获得address（新增和删除），调用/services/stats获取列表，
-// 判断是否有websocket的方式为用address，调用get /applications/handlers 获取，判断有没有，一般是services，websockets，mqtt，
+// 判断是否有websocket的方式为用address，调用get /applications/handlers 获取，判断有没有，一般是services，websockets
 type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)

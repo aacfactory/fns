@@ -45,6 +45,7 @@ type EndpointsOptions struct {
 	AppId          string
 	AppName        string
 	AppVersion     versions.Version
+	ProxyMode      bool
 	Http           Http
 	HttpHandlers   []HttpHandler
 	Config         configures.Config

@@ -80,6 +80,7 @@ func New(options ...Option) (app Application) {
 		AppId:          appId,
 		AppName:        appName,
 		AppVersion:     appVersion,
+		ProxyMode:      opt.proxyMode,
 		Http:           opt.httpEngine,
 		HttpHandlers:   opt.httpHandlers,
 		Config:         config,

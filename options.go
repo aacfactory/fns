@@ -36,6 +36,7 @@ var (
 		id:                    "",
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
+		proxyMode:             false,
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		httpEngine:            &service.FastHttp{},
 		httpHandlers:          make([]service.HttpHandler, 0, 1),
@@ -49,6 +50,7 @@ type Options struct {
 	id                    string
 	name                  string
 	version               versions.Version
+	proxyMode             bool
 	configRetrieverOption configures.RetrieverOption
 	httpEngine            service.Http
 	httpHandlers          []service.HttpHandler
@@ -121,6 +123,13 @@ func Version(version string) Option {
 			return parseErr
 		}
 		options.version = ver
+		return nil
+	}
+}
+
+func ProxyMode() Option {
+	return func(options *Options) error {
+		options.proxyMode = true
 		return nil
 	}
 }

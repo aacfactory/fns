@@ -366,41 +366,33 @@ type Http interface {
 }
 
 type FastHttpOptions struct {
-	ReadTimeoutSeconds   int                    `json:"readTimeoutSeconds"`
-	MaxWorkerIdleSeconds int                    `json:"maxWorkerIdleSeconds"`
-	MaxRequestBodySize   string                 `json:"maxRequestBodySize"`
-	ReduceMemoryUsage    bool                   `json:"reduceMemoryUsage"`
-	Client               *FastHttpClientOptions `json:"client"`
+	ReadBufferSize        string                `json:"readBufferSize"`
+	ReadTimeout           string                `json:"readTimeout"`
+	WriteBufferSize       string                `json:"writeBufferSize"`
+	WriteTimeout          string                `json:"writeTimeout"`
+	MaxIdleWorkerDuration string                `json:"maxIdleWorkerDuration"`
+	TCPKeepalive          bool                  `json:"tcpKeepalive"`
+	TCPKeepalivePeriod    string                `json:"tcpKeepalivePeriod"`
+	MaxRequestBodySize    string                `json:"maxRequestBodySize"`
+	ReduceMemoryUsage     bool                  `json:"reduceMemoryUsage"`
+	MaxRequestsPerConn    int                   `json:"maxRequestsPerConn"`
+	KeepHijackedConns     bool                  `json:"keepHijackedConns"`
+	StreamRequestBody     bool                  `json:"streamRequestBody"`
+	Client                FastHttpClientOptions `json:"client"`
 }
 
 type FastHttpClientOptions struct {
 	DialDualStack             bool   `json:"dialDualStack"`
 	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
-	MaxIdleConnSeconds        int    `json:"maxIdleConnSeconds"`
-	MaxConnSeconds            int    `json:"maxConnSeconds"`
+	MaxIdleConnDuration       string `json:"maxIdleConnDuration"`
+	MaxConnDuration           string `json:"maxConnDuration"`
 	MaxIdemponentCallAttempts int    `json:"maxIdemponentCallAttempts"`
 	ReadBufferSize            string `json:"readBufferSize"`
+	ReadTimeout               string `json:"readTimeout"`
 	WriteBufferSize           string `json:"writeBufferSize"`
-	ReadTimeoutSeconds        int    `json:"readTimeoutSeconds"`
-	WriteTimeoutSeconds       int    `json:"writeTimeoutSeconds"`
+	WriteTimeout              string `json:"writeTimeout"`
 	MaxResponseBodySize       string `json:"maxResponseBodySize"`
-	MaxConnWaitTimeoutSeconds int    `json:"maxConnWaitTimeoutSeconds"`
-}
-
-func defaultFastHttpClientOptions() *FastHttpClientOptions {
-	return &FastHttpClientOptions{
-		DialDualStack:             false,
-		MaxConnsPerHost:           0,
-		MaxIdleConnSeconds:        0,
-		MaxConnSeconds:            0,
-		MaxIdemponentCallAttempts: 0,
-		ReadBufferSize:            "4MB",
-		WriteBufferSize:           "4MB",
-		ReadTimeoutSeconds:        0,
-		WriteTimeoutSeconds:       0,
-		MaxResponseBodySize:       "4MB",
-		MaxConnWaitTimeoutSeconds: 0,
-	}
+	MaxConnWaitTimeout        string `json:"maxConnWaitTimeout"`
 }
 
 type FastHttpClient struct {
@@ -491,11 +483,12 @@ func (client *FastHttpClient) prepareRequest(method []byte, path string, header 
 }
 
 type FastHttp struct {
-	log    logs.Logger
-	ssl    bool
-	ln     net.Listener
-	client *fasthttp.Client
-	srv    *fasthttp.Server
+	log     logs.Logger
+	ssl     bool
+	address string
+	ln      net.Listener
+	client  *fasthttp.Client
+	srv     *fasthttp.Server
 }
 
 func (srv *FastHttp) Name() (name string) {
@@ -506,19 +499,8 @@ func (srv *FastHttp) Name() (name string) {
 
 func (srv *FastHttp) Build(options HttpOptions) (err error) {
 	srv.log = options.Log
-	var ln net.Listener
-	if options.ServerTLS == nil {
-		ln, err = net.Listen("tcp", fmt.Sprintf(":%d", options.Port))
-	} else {
-		ln, err = tls.Listen("tcp", fmt.Sprintf(":%d", options.Port), options.ServerTLS)
-		srv.ssl = true
-	}
-	if err != nil {
-		err = errors.Warning("fns: build server failed").WithCause(err).WithMeta("fns", "http")
-		return
-	}
-
-	srv.ln = ln
+	srv.address = fmt.Sprintf(":%d", options.Port)
+	srv.ssl = options.ServerTLS != nil
 
 	opt := &FastHttpOptions{}
 	optErr := json.Unmarshal(options.Options, opt)
@@ -526,93 +508,190 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("fns", "http")
 		return
 	}
-	if opt.ReadTimeoutSeconds < 1 {
-		opt.ReadTimeoutSeconds = 2
+	readBufferSize := uint64(0)
+	if opt.ReadBufferSize != "" {
+		readBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.ReadBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-	if opt.MaxWorkerIdleSeconds < 1 {
-		opt.MaxWorkerIdleSeconds = 10
+	readTimeout := 10 * time.Second
+	if opt.ReadTimeout != "" {
+		readTimeout, err = time.ParseDuration(strings.TrimSpace(opt.ReadTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readTimeout must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-	maxRequestBody := strings.ToUpper(strings.TrimSpace(opt.MaxRequestBodySize))
-	if maxRequestBody == "" {
-		maxRequestBody = "4MB"
+	writeBufferSize := uint64(0)
+	if opt.WriteBufferSize != "" {
+		writeBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.WriteBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-	maxRequestBodySize, maxRequestBodySizeErr := bytex.ToBytes(maxRequestBody)
-	if maxRequestBodySizeErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(maxRequestBodySizeErr).WithMeta("fns", "http")
-		return
+	writeTimeout := 10 * time.Second
+	if opt.WriteTimeout != "" {
+		writeTimeout, err = time.ParseDuration(strings.TrimSpace(opt.WriteTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeTimeout must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
+	maxIdleWorkerDuration := time.Duration(0)
+	if opt.MaxIdleWorkerDuration != "" {
+		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxIdleWorkerDuration))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxIdleWorkerDuration must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
+	}
+	tcpKeepalivePeriod := time.Duration(0)
+	if opt.TCPKeepalivePeriod != "" {
+		tcpKeepalivePeriod, err = time.ParseDuration(strings.TrimSpace(opt.TCPKeepalivePeriod))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("tcpKeepalivePeriod must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
+	}
+
+	maxRequestBodySize := uint64(4 * bytex.MEGABYTE)
+	if opt.MaxRequestBodySize != "" {
+		maxRequestBodySize, err = bytex.ToBytes(strings.TrimSpace(opt.MaxRequestBodySize))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxRequestBodySize must be bytes format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
+	}
+
 	reduceMemoryUsage := opt.ReduceMemoryUsage
 
 	srv.srv = &fasthttp.Server{
 		Handler:                            fasthttpadaptor.NewFastHTTPHandler(options.Handler),
 		ErrorHandler:                       fastHttpErrorHandler,
-		ReadTimeout:                        time.Duration(opt.ReadTimeoutSeconds) * time.Second,
-		MaxIdleWorkerDuration:              time.Duration(opt.MaxWorkerIdleSeconds) * time.Second,
+		Name:                               "",
+		Concurrency:                        0,
+		ReadBufferSize:                     int(readBufferSize),
+		WriteBufferSize:                    int(writeBufferSize),
+		ReadTimeout:                        readTimeout,
+		WriteTimeout:                       writeTimeout,
+		MaxRequestsPerConn:                 opt.MaxRequestsPerConn,
+		MaxIdleWorkerDuration:              maxIdleWorkerDuration,
+		TCPKeepalivePeriod:                 tcpKeepalivePeriod,
 		MaxRequestBodySize:                 int(maxRequestBodySize),
+		DisableKeepalive:                   false,
+		TCPKeepalive:                       opt.TCPKeepalive,
 		ReduceMemoryUsage:                  reduceMemoryUsage,
+		GetOnly:                            false,
 		DisablePreParseMultipartForm:       true,
+		LogAllErrors:                       false,
+		SecureErrorLogMessage:              false,
+		DisableHeaderNamesNormalizing:      false,
 		SleepWhenConcurrencyLimitsExceeded: 10 * time.Second,
 		NoDefaultServerHeader:              true,
 		NoDefaultDate:                      false,
 		NoDefaultContentType:               false,
+		KeepHijackedConns:                  opt.KeepHijackedConns,
 		CloseOnShutdown:                    true,
+		StreamRequestBody:                  opt.StreamRequestBody,
+		ConnState:                          nil,
 		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
+		TLSConfig:                          options.ServerTLS,
+		FormValueFunc:                      nil,
 	}
-
 	// client
-	var clientOpt *FastHttpClientOptions
-	if opt.Client != nil {
-		clientOpt = opt.Client
-	} else {
-		clientOpt = defaultFastHttpClientOptions()
-	}
+	err = srv.buildClient(opt.Client, options.ClientTLS)
+	return
+}
 
-	readBufferSize := strings.ToUpper(strings.TrimSpace(clientOpt.ReadBufferSize))
-	if readBufferSize == "" {
-		readBufferSize = "4MB"
+func (srv *FastHttp) buildClient(opt FastHttpClientOptions, cliConfig *tls.Config) (err error) {
+	maxIdleWorkerDuration := time.Duration(0)
+	if opt.MaxIdleConnDuration != "" {
+		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxIdleConnDuration))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxIdleWorkerDuration must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-	readBuffer, readBufferErr := bytex.ToBytes(readBufferSize)
-	if readBufferErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(readBufferErr).WithMeta("fns", "http")
-		return
+	maxConnDuration := time.Duration(0)
+	if opt.MaxConnDuration != "" {
+		maxConnDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxConnDuration))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxConnDuration must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-
-	writeBufferSize := strings.ToUpper(strings.TrimSpace(clientOpt.WriteBufferSize))
-	if writeBufferSize == "" {
-		writeBufferSize = "4MB"
+	readBufferSize := uint64(0)
+	if opt.ReadBufferSize != "" {
+		readBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.ReadBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-	writeBuffer, writeBufferErr := bytex.ToBytes(writeBufferSize)
-	if writeBufferErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(writeBufferErr).WithMeta("fns", "http")
-		return
+	readTimeout := 10 * time.Second
+	if opt.ReadTimeout != "" {
+		readTimeout, err = time.ParseDuration(strings.TrimSpace(opt.ReadTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readTimeout must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-
-	maxResponseBodySize := strings.ToUpper(strings.TrimSpace(clientOpt.MaxResponseBodySize))
-	if maxResponseBodySize == "" {
-		maxResponseBodySize = "4MB"
+	writeBufferSize := uint64(0)
+	if opt.WriteBufferSize != "" {
+		writeBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.WriteBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-	maxResponseBody, maxResponseBodyErr := bytex.ToBytes(maxResponseBodySize)
-	if maxResponseBodyErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(maxResponseBodyErr).WithMeta("fns", "http")
-		return
+	writeTimeout := 10 * time.Second
+	if opt.WriteTimeout != "" {
+		writeTimeout, err = time.ParseDuration(strings.TrimSpace(opt.WriteTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeTimeout must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
 	}
-
+	maxResponseBodySize := uint64(4 * bytex.MEGABYTE)
+	if opt.MaxResponseBodySize != "" {
+		maxResponseBodySize, err = bytex.ToBytes(strings.TrimSpace(opt.MaxResponseBodySize))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxResponseBodySize must be bytes format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
+	}
+	maxConnWaitTimeout := time.Duration(0)
+	if opt.MaxConnWaitTimeout != "" {
+		maxConnWaitTimeout, err = time.ParseDuration(strings.TrimSpace(opt.MaxConnWaitTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxConnWaitTimeout must be time.Duration format")).WithCause(err).WithMeta("fns", "http")
+			return
+		}
+	}
 	srv.client = &fasthttp.Client{
+		Name:                          "",
 		NoDefaultUserAgentHeader:      true,
+		Dial:                          nil,
 		DialDualStack:                 false,
-		TLSConfig:                     options.ClientTLS,
-		MaxConnsPerHost:               clientOpt.MaxConnsPerHost,
-		MaxIdleConnDuration:           time.Duration(clientOpt.MaxIdleConnSeconds) * time.Second,
-		MaxConnDuration:               time.Duration(clientOpt.MaxConnSeconds) * time.Second,
-		MaxIdemponentCallAttempts:     clientOpt.MaxIdemponentCallAttempts,
-		ReadBufferSize:                int(readBuffer),
-		WriteBufferSize:               int(writeBuffer),
-		ReadTimeout:                   time.Duration(clientOpt.ReadTimeoutSeconds) * time.Second,
-		WriteTimeout:                  time.Duration(clientOpt.WriteTimeoutSeconds) * time.Second,
-		MaxResponseBodySize:           int(maxResponseBody),
+		TLSConfig:                     cliConfig,
+		MaxConnsPerHost:               opt.MaxConnsPerHost,
+		MaxIdleConnDuration:           maxIdleWorkerDuration,
+		MaxConnDuration:               maxConnDuration,
+		MaxIdemponentCallAttempts:     opt.MaxIdemponentCallAttempts,
+		ReadBufferSize:                int(readBufferSize),
+		WriteBufferSize:               int(writeBufferSize),
+		ReadTimeout:                   readTimeout,
+		WriteTimeout:                  writeTimeout,
+		MaxResponseBodySize:           int(maxResponseBodySize),
 		DisableHeaderNamesNormalizing: false,
 		DisablePathNormalizing:        false,
-		MaxConnWaitTimeout:            time.Duration(clientOpt.MaxConnWaitTimeoutSeconds) * time.Second,
+		MaxConnWaitTimeout:            maxConnWaitTimeout,
+		RetryIf:                       nil,
+		ConnPoolStrategy:              0,
+		ConfigureClient:               nil,
 	}
 	return
 }
@@ -627,7 +706,11 @@ func (srv *FastHttp) Dial(address string) (client HttpClient, err error) {
 }
 
 func (srv *FastHttp) ListenAndServe() (err error) {
-	err = srv.srv.Serve(srv.ln)
+	if srv.ssl {
+		err = srv.srv.ListenAndServeTLS(srv.address, "", "")
+	} else {
+		err = srv.srv.ListenAndServe(srv.address)
+	}
 	if err != nil {
 		err = errors.Warning("fns: server listen and serve failed").WithCause(err).WithMeta("fns", "http")
 		return

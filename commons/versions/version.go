@@ -71,6 +71,22 @@ func (ver Version) Between(left Version, right Version) (ok bool) {
 	return
 }
 
+func (ver Version) LessThan(o Version) (ok bool) {
+	if ver.Major < o.Major {
+		ok = true
+		return
+	}
+	if ver.Minor < o.Minor {
+		ok = true
+		return
+	}
+	if ver.Patch < o.Patch {
+		ok = true
+		return
+	}
+	return
+}
+
 func (ver Version) IsZero() (ok bool) {
 	ok = ver.Major == 0 && ver.Minor == 0 && ver.Patch == 0
 	return

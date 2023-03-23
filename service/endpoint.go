@@ -234,7 +234,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		log:                      log,
 		handleTimeout:            time.Duration(handleTimeoutSeconds) * time.Second,
 		deployed:                 make(map[string]*endpoint),
-		deployedCh:               make(chan map[string]*endpoint, 1),
+		deployedCHS:              newDeployed(),
 		registrations:            nil,
 		http:                     options.Http,
 		httpHandlers:             nil,
@@ -279,7 +279,18 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	v.httpHandlers = handlers
-	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCh, options.OpenApiVersion, options.ProxyMode))
+	if options.ProxyMode {
+		if cluster == nil || v.registrations == nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("fns: proxy mode require cluster"))
+			return
+		}
+		appendHandlerErr := handlers.Append(newProxyHandler(v.registrations, v.deployedCHS.acquire(), v.http, options.OpenApiVersion, clusterDevMode))
+		if appendHandlerErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
+			return
+		}
+	}
+	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCHS.acquire(), options.OpenApiVersion, options.ProxyMode))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return
@@ -338,7 +349,7 @@ type Endpoints struct {
 	handleTimeout            time.Duration
 	config                   configures.Config
 	deployed                 map[string]*endpoint
-	deployedCh               chan map[string]*endpoint
+	deployedCHS              *deployed
 	registrations            *Registrations
 	http                     Http
 	httpHandlers             *HttpHandlers
@@ -426,8 +437,7 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 
 func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	e.autoMaxProcs.Enable()
-	e.deployedCh <- e.deployed
-	close(e.deployedCh)
+	e.deployedCHS.publish(e.deployed)
 	// cluster join
 	if e.cluster != nil {
 		if !e.clusterDevMode {

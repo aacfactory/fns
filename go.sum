@@ -14,8 +14,8 @@ github.com/aacfactory/rings v1.1.2 h1:aOEOf8cYSkBYU8JnwmmXq8OAQiILdID+N0RM0LKzxS
 github.com/aacfactory/rings v1.1.2/go.mod h1:CFeFssxL0lvArISNUmkuxFxqrKHg/05rwobDdcg2DLA=
 github.com/aacfactory/systems v0.2.0 h1:eMlfhGlKcCcK7Zy563lwJch6VuQ5VHlYw5+x/hhb75A=
 github.com/aacfactory/systems v0.2.0/go.mod h1:Ift6kqgQvDvMdfx+0J3JJ6EP5MM3Ty4sairZObe1AQ4=
-github.com/aacfactory/workers v1.6.0 h1:D9yAp7X7oX7Alzlw2Go+xKMzWfVMzBEjXx/hLZdC2dk=
-github.com/aacfactory/workers v1.6.0/go.mod h1:XIh+7pvZjUROblbnu6xVOosB9Eu793Duv9KOgN7xHb4=
+github.com/aacfactory/workers v1.8.1 h1:Do1oqJsaXVr4Gxb5J1A2jAA1uXfk3spfEWpjYLe9uXw=
+github.com/aacfactory/workers v1.8.1/go.mod h1:XIh+7pvZjUROblbnu6xVOosB9Eu793Duv9KOgN7xHb4=
 github.com/andybalholm/brotli v1.0.5 h1:8uQZIdzKmjc/iuPu7O2ioW48L81FgatrcpfFmiq/cCs=
 github.com/andybalholm/brotli v1.0.5/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=

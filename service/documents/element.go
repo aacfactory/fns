@@ -45,7 +45,7 @@ func String() *Element {
 }
 
 func Password() *Element {
-	return NewElement("_", "string", "string", "password", "Password", "Bcrypt hash type")
+	return NewElement("_", "password", "string", "password", "Password", "Bcrypt hash type")
 }
 
 func Bytes() *Element {
@@ -219,6 +219,11 @@ func (element *Element) AsRequired() *Element {
 
 func (element *Element) AsDeprecated() *Element {
 	element.Deprecated = true
+	return element
+}
+
+func (element *Element) AsPassword() *Element {
+	element.Format = "password"
 	return element
 }
 

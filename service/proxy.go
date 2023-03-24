@@ -433,7 +433,7 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 	}
 	// verify signature
 	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("proxy: signature is invalid"))
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("proxy: X-Fns-Request-Signature is invalid"))
 		return
 	}
 	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)

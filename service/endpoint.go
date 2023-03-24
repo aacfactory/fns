@@ -347,7 +347,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	// http <<<
 	// dev >>
 	if clusterDevMode {
-		v.cluster = newDevProxyCluster(v.cluster, v.clusterProxyAddress, v.http, bytex.FromString(secretKey))
+		v.cluster = newDevProxyCluster(v.rt.appId, v.cluster, v.clusterProxyAddress, v.http, bytex.FromString(secretKey))
 	}
 	// dev <<<
 	return

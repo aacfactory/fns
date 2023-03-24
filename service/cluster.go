@@ -22,11 +22,13 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/internal/lru"
 	"github.com/aacfactory/fns/service/internal/oas"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"golang.org/x/sync/singleflight"
 	"net/http"
 	"sort"
 	"time"
@@ -202,8 +204,9 @@ func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
 	return
 }
 
-func newDevProxyCluster(cluster Cluster, proxyAddress string, dialer HttpClientDialer, secretKey []byte) Cluster {
+func newDevProxyCluster(appId string, cluster Cluster, proxyAddress string, dialer HttpClientDialer, secretKey []byte) Cluster {
 	return &clusterDevProxy{
+		appId:        appId,
 		proxyAddress: proxyAddress,
 		dialer:       dialer,
 		proxy:        cluster,
@@ -212,6 +215,7 @@ func newDevProxyCluster(cluster Cluster, proxyAddress string, dialer HttpClientD
 }
 
 type clusterDevProxy struct {
+	appId        string
 	proxyAddress string
 	dialer       HttpClientDialer
 	proxy        Cluster
@@ -227,7 +231,32 @@ func (cluster *clusterDevProxy) Leave(ctx context.Context) (err error) {
 }
 
 func (cluster *clusterDevProxy) Nodes(ctx context.Context) (nodes Nodes, err error) {
-	// todo call /cluster/nodes
+	client, clientErr := cluster.dialer.Dial(cluster.proxyAddress)
+	if clientErr != nil {
+		err = errors.Warning("proxy: dialer proxy failed").WithCause(clientErr).WithMeta("proxy", cluster.proxyAddress)
+		return
+	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	header := http.Header{}
+	header.Add(httpDeviceIdHeader, cluster.appId)
+	header.Add(httpRequestSignatureHeader, bytex.ToString(cluster.signer.Sign(bytex.FromString(cluster.appId))))
+	status, _, respBody, postErr := client.Post(ctx, "/cluster/nodes", header, []byte{'{', '}'})
+	if postErr != nil {
+		err = errors.Warning("proxy: get nodes from proxy failed").WithCause(postErr).WithMeta("proxy", cluster.proxyAddress)
+		return
+	}
+	if status == http.StatusOK {
+		nodes = make([]Node, 0, 1)
+		decodeErr := json.Unmarshal(respBody, nodes)
+		if decodeErr != nil {
+			err = errors.Warning("proxy: get nodes from proxy failed").WithCause(decodeErr).WithMeta("proxy", cluster.proxyAddress)
+			return
+		}
+	} else {
+		err = errors.Warning("proxy: get nodes from proxy failed").WithCause(errors.Decode(respBody)).WithMeta("proxy", cluster.proxyAddress)
+	}
 	return
 }
 
@@ -242,15 +271,23 @@ const (
 
 func newClusterProxyHandler(cluster Cluster, secretKey []byte) *clusterProxyHandler {
 	return &clusterProxyHandler{
+		log:     nil,
 		cluster: cluster,
 		signer:  secret.NewSigner(secretKey),
+		cache:   lru.New[string, json.RawMessage](8),
+		group:   &singleflight.Group{},
 	}
 }
 
 type clusterProxyHandler struct {
-	log     logs.Logger
-	cluster Cluster
-	signer  *secret.Signer
+	appId      string
+	appName    string
+	appVersion versions.Version
+	log        logs.Logger
+	cluster    Cluster
+	signer     *secret.Signer
+	cache      *lru.LRU[string, json.RawMessage]
+	group      *singleflight.Group
 }
 
 func (handler *clusterProxyHandler) Name() (name string) {
@@ -260,11 +297,14 @@ func (handler *clusterProxyHandler) Name() (name string) {
 
 func (handler *clusterProxyHandler) Build(options *HttpHandlerOptions) (err error) {
 	handler.log = options.Log
+	handler.appId = options.AppId
+	handler.appName = options.AppName
+	handler.appVersion = options.AppVersion
 	return
 }
 
 func (handler *clusterProxyHandler) Accept(r *http.Request) (ok bool) {
-	ok = r.Method == http.MethodGet && r.URL.Path == "/cluster/nodes"
+	ok = r.Method == http.MethodPost && r.URL.Path == "/cluster/nodes"
 	if ok {
 		return
 	}
@@ -276,6 +316,76 @@ func (handler *clusterProxyHandler) Close() {
 }
 
 func (handler *clusterProxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+	const (
+		nodesKey        = "nodes"
+		refreshGroupKey = "nodes_refresh"
+	)
+	devId := r.Header.Get(httpDeviceIdHeader)
+	if devId == "" {
+		handler.failed(writer, 555, errors.Warning("proxy: X-Fns-Device-Id is required"))
+		return
+	}
+	if !handler.signer.Verify(bytex.FromString(devId), bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
+		handler.failed(writer, 555, errors.Warning("proxy: X-Fns-Request-Signature is invalid"))
+		return
+	}
+	groupKey := nodesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	}
+	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
+		if r.URL.Query().Get("refresh") != "true" {
+			cached, has := handler.cache.Get(nodesKey)
+			if has {
+				v = cached
+				return
+			}
+		}
+		nodes, getNodesErr := listMembers(r.Context(), handler.cluster, handler.appId, handler.appName, handler.appVersion)
+		if getNodesErr != nil {
+			err = errors.Warning("proxy: handle cluster nodes request failed").WithCause(getNodesErr)
+			return
+		}
+		p, encodeErr := json.Marshal(nodes)
+		if encodeErr != nil {
+			err = errors.Warning("proxy: handle cluster nodes request failed").WithCause(encodeErr)
+			return
+		}
+		handler.cache.Add(nodesKey, p, 60*time.Second)
+		v = json.RawMessage(p)
+		return
+	})
+	if err != nil {
+		handler.failed(writer, 555, errors.Map(err))
+		return
+	}
+	body := v.(json.RawMessage)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(http.StatusOK)
+	n := 0
+	bodyLen := len(body)
+	for n < bodyLen {
+		nn, writeErr := writer.Write(body[n:])
+		if writeErr != nil {
+			return
+		}
+		n += nn
+	}
+	return
+}
 
+func (handler *clusterProxyHandler) failed(writer http.ResponseWriter, status int, cause interface{}) {
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	writer.WriteHeader(status)
+	body, _ := json.Marshal(cause)
+	n := 0
+	bodyLen := len(body)
+	for n < bodyLen {
+		nn, writeErr := writer.Write(body[n:])
+		if writeErr != nil {
+			return
+		}
+		n += nn
+	}
 	return
 }

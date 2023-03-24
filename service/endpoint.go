@@ -281,7 +281,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		if config.Proxy != nil {
 			proxyDevMode = config.Proxy.EnableDevMode
 		}
-		appendProxyHandlerErr := handlers.Append(newProxyHandler(v.registrations, v.deployedCHS.acquire(), v.http, options.OpenApiVersion, proxyDevMode, bytex.FromString(secretKey)))
+		appendProxyHandlerErr := handlers.Append(newProxyHandler(cluster, v.registrations, v.deployedCHS.acquire(), v.http, options.OpenApiVersion, proxyDevMode, bytex.FromString(secretKey)))
 		if appendProxyHandlerErr != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(appendProxyHandlerErr)
 			return
@@ -327,13 +327,18 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	if httpConfig.Options == nil || len(httpConfig.Options) < 2 {
 		httpConfig.Options = []byte{'{', '}'}
 	}
+	httpConfigOptions, httpConfigOptionsErr := configures.NewJsonConfig(httpConfig.Options)
+	if httpConfigOptionsErr != nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(httpConfigOptionsErr)
+		return
+	}
 	buildErr := v.http.Build(HttpOptions{
 		Port:      httpConfig.Port,
 		ServerTLS: serverTLS,
 		ClientTLS: clientTLS,
 		Handler:   httpHandler,
 		Log:       v.rt.log.With("http", v.http.Name()),
-		Options:   httpConfig.Options,
+		Options:   httpConfigOptions,
 	})
 	if buildErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(buildErr)
@@ -450,7 +455,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
 			return
 		}
-		nodes, nodesErr := e.cluster.Nodes(ctx)
+		nodes, nodesErr := listMembers(ctx, e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
 		if nodesErr != nil {
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints get nodes from cluster failed")).WithCause(nodesErr)
 			return
@@ -556,7 +561,7 @@ func (e *Endpoints) fetchRegistrations() {
 				stop = true
 				break
 			case <-timer.C:
-				nodes, nodesErr := e.cluster.Nodes(context.TODO())
+				nodes, nodesErr := listMembers(context.TODO(), e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
 				if nodesErr != nil {
 					if e.log.WarnEnabled() {
 						e.log.Warn().Cause(nodesErr).Message("fns: endpoints get nodes from cluster failed")

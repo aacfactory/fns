@@ -19,11 +19,17 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/internal/oas"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/shared"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
+	"sort"
+	"time"
 )
 
 type ClusterBuilderOptions struct {
@@ -71,6 +77,116 @@ func (nodes Nodes) Swap(i, j int) {
 type Shared interface {
 	Lockers() (lockers shared.Lockers)
 	Store() (store shared.Store)
+}
+
+func listMembers(ctx context.Context, cluster Cluster, currentId string, currentName string, currentVersion versions.Version) (members Nodes, err error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	nodes, getNodesErr := cluster.Nodes(ctx)
+	if getNodesErr != nil {
+		err = errors.Warning("cluster: list members failed").WithCause(getNodesErr)
+		return
+	}
+	members = make([]Node, 0, 1)
+	if nodes == nil || len(nodes) == 0 {
+		return
+	}
+	for _, node := range nodes {
+		if node.Id == currentId {
+			continue
+		}
+		if node.Name == currentName && node.Version.String() == currentVersion.String() {
+			continue
+		}
+		members = append(members, node)
+	}
+	sort.Sort(members)
+	return
+}
+
+func listMemberServiceNames(ctx context.Context, node Node, dialer HttpClientDialer, currentId string, signer *secret.Signer) (names []string, err error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	client, clientErr := dialer.Dial(node.Address)
+	if clientErr != nil {
+		err = errors.Warning("cluster: list node service names failed").WithCause(clientErr)
+		return
+	}
+	header := http.Header{}
+	header.Add(httpDeviceIdHeader, currentId)
+	header.Add(httpRequestSignatureHeader, bytex.ToString(signer.Sign(bytex.FromString(currentId))))
+	status, _, body, getErr := client.Get(ctx, "/services/names?native=true", header)
+	if getErr != nil {
+		err = errors.Warning("cluster: list node service names failed").WithCause(getErr)
+		return
+	}
+	if status == http.StatusOK {
+		names = make([]string, 0, 1)
+		decodeErr := json.Unmarshal(body, &names)
+		if decodeErr != nil {
+			err = errors.Warning("cluster: list node service names failed").WithCause(decodeErr)
+			return
+		}
+	} else {
+		err = errors.Warning("cluster: list node service names failed").WithCause(errors.Decode(body))
+	}
+	return
+}
+
+func getMemberDocument(ctx context.Context, node Node, dialer HttpClientDialer) (doc Documents, err error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	client, clientErr := dialer.Dial(node.Address)
+	if clientErr != nil {
+		err = errors.Warning("cluster: get node document failed").WithCause(clientErr)
+		return
+	}
+	status, _, body, getErr := client.Get(ctx, "/services/documents?native=true", http.Header{})
+	if getErr != nil {
+		err = errors.Warning("cluster: get node document failed").WithCause(getErr)
+		return
+	}
+	if status == http.StatusOK {
+		doc = make(map[string]VersionedDocuments)
+		decodeErr := json.Unmarshal(body, &doc)
+		if decodeErr != nil {
+			err = errors.Warning("cluster: get node document failed").WithCause(decodeErr)
+			return
+		}
+	} else {
+		err = errors.Warning("cluster: get node document failed").WithCause(errors.Decode(body))
+	}
+	return
+}
+
+func getMemberOpenapi(ctx context.Context, node Node, dialer HttpClientDialer) (v *oas.API, err error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	client, clientErr := dialer.Dial(node.Address)
+	if clientErr != nil {
+		err = errors.Warning("cluster: get node openapi failed").WithCause(clientErr)
+		return
+	}
+	status, _, body, getErr := client.Get(ctx, "/services/openapi?native=true", http.Header{})
+	if getErr != nil {
+		err = errors.Warning("cluster: get node openapi failed").WithCause(getErr)
+		return
+	}
+	if status == http.StatusOK {
+		v = &oas.API{}
+		decodeErr := json.Unmarshal(body, v)
+		if decodeErr != nil {
+			err = errors.Warning("cluster: get node openapi failed").WithCause(decodeErr)
+			return
+		}
+	} else {
+		err = errors.Warning("cluster: get node openapi failed").WithCause(errors.Decode(body))
+	}
+	return
 }
 
 var (

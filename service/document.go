@@ -53,31 +53,121 @@ type ElementDocument interface {
 	Schema() (schema *oas.Schema)
 }
 
-func encodeDocuments(appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (p []byte, err error) {
-	documents := make(map[string]Document)
+type Documents map[string]VersionedDocuments
+
+func (documents Documents) Merge(o Documents) Documents {
+	if o == nil || len(o) == 0 {
+		return documents
+	}
+	for name, versionedDocuments := range o {
+		if versionedDocuments == nil || len(versionedDocuments) == 0 {
+			continue
+		}
+		doc, has := documents[name]
+		if !has {
+			documents[name] = doc
+			continue
+		}
+		merged := doc.Merge(versionedDocuments)
+		documents[name] = merged
+	}
+	return documents
+}
+
+type VersionedDocuments []*VersionedDocument
+
+func (documents VersionedDocuments) Merge(o VersionedDocuments) VersionedDocuments {
+	if o == nil || len(o) == 0 {
+		return documents
+	}
+	deltas := make([]int, 0, 1)
+	for i, document := range o {
+		pos := sort.Search(len(documents), func(i int) bool {
+			return documents[i].Version == document.Version
+		})
+		if pos == len(documents) {
+			deltas = append(deltas, i)
+		}
+	}
+	if len(deltas) == 0 {
+		return documents
+	}
+	merged := VersionedDocuments(make([]*VersionedDocument, 0, 1))
+	for _, document := range documents {
+		merged = append(merged, document)
+	}
+	for _, delta := range deltas {
+		merged = append(merged, o[delta])
+	}
+	sort.Sort(merged)
+	return merged
+}
+
+func (documents VersionedDocuments) Len() int {
+	return len(documents)
+}
+
+func (documents VersionedDocuments) Less(i, j int) bool {
+	return documents[i].Version.LessThan(documents[j].Version)
+}
+
+func (documents VersionedDocuments) Swap(i, j int) {
+	documents[i], documents[j] = documents[j], documents[i]
+	return
+}
+
+type VersionedDocument struct {
+	Name        string           `json:"name"`
+	Version     versions.Version `json:"version"`
+	Description string           `json:"description"`
+	Fns         json.RawMessage  `json:"fns"`
+	Elements    json.RawMessage  `json:"elements"`
+}
+
+func newDocuments(eps map[string]*endpoint, appVersion versions.Version) (v Documents, err error) {
+	v = make(map[string]VersionedDocuments)
 	for name, ep := range eps {
 		document := ep.Document()
 		if document == nil {
 			continue
 		}
-		documents[name] = document
+		if document.Fns() == nil || len(document.Fns()) == 0 {
+			continue
+		}
+		fnsDoc, fnsDocErr := json.Marshal(document.Fns())
+		if fnsDocErr != nil {
+			err = errors.Warning("fns: create documents failed").WithCause(fnsDocErr).WithMeta("service", name)
+			return
+		}
+		elementsDoc := make([]byte, 0, 1)
+		if document.Elements() != nil && len(document.Elements()) > 0 {
+			elementsDoc, err = json.Marshal(document.Elements())
+			if err != nil {
+				err = errors.Warning("fns: create documents failed").WithCause(err).WithMeta("service", name)
+				return
+			}
+		} else {
+			elementsDoc = append(elementsDoc, '{', '}')
+		}
+		docs, has := v[name]
+		if !has {
+			docs = make([]*VersionedDocument, 0, 1)
+		}
+		docs = append(docs, &VersionedDocument{
+			Name:        name,
+			Version:     appVersion,
+			Description: document.Description(),
+			Fns:         fnsDoc,
+			Elements:    elementsDoc,
+		})
+		v[name] = docs
 	}
-	obj := json.NewObject()
-	_ = obj.Put("id", appId)
-	_ = obj.Put("name", appName)
-	_ = obj.Put("version", appVersion)
-	err = obj.Put("services", documents)
-	if err != nil {
-		err = errors.Warning("fns: encode services document failed").WithCause(err)
-		return
-	}
-	p = obj.Raw()
 	return
 }
 
-func encodeOpenapi(openApiVersion string, appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (p []byte, err error) {
+func newOpenapi(openApiVersion string, appId string, appName string, appVersion versions.Version, eps map[string]*endpoint) (api *oas.API) {
 	// oas
-	api := &oas.API{
+	api = &oas.API{
 		Openapi: openApiVersion,
 		Info: &oas.Info{
 			Title:          appName,
@@ -206,11 +296,6 @@ func encodeOpenapi(openApiVersion string, appId string, appName string, appVersi
 				api.Paths[fmt.Sprintf("/%s/%s", document.Name(), fn.Name())] = path
 			}
 		}
-	}
-	p, err = api.Encode()
-	if err != nil {
-		err = errors.Warning("fns: encode services openapi failed").WithCause(err)
-		return
 	}
 	return
 }

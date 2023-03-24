@@ -18,12 +18,14 @@ package service
 
 import (
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/lru"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -130,7 +132,7 @@ func (handler *proxyHandler) Close() {
 
 func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
 	if !handler.ready {
-		handler.failed(writer, "", 0, http.StatusTooEarly, errors.Warning("fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		handler.failed(writer, "", 0, http.StatusTooEarly, errors.Warning("proxy: handler is not ready, try later again").WithMeta("handler", handler.Name()))
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
@@ -344,18 +346,62 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Request) {
 	pathItems := strings.Split(r.URL.Path, "/")
 	if len(pathItems) != 3 {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: invalid request url path"))
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: invalid request url path"))
 		return
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: X-Fns-Device-Id is required"))
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: X-Fns-Device-Id is required"))
 		return
 	}
 	if r.Header.Get(httpProxyTargetNodeId) != "" {
 		handler.handleDevProxy(writer, r)
 		return
 	}
-	// todo
+	leftVersion, rightVersion, parseErr := versions.ParseRange(r.Header.Get(httpRequestVersionsHeader))
+	if parseErr != nil {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: X-Fns-Request-Version is invalid").WithCause(parseErr))
+		return
+	}
+	serviceName := pathItems[1]
+	registration, has := handler.registrations.Get(serviceName, leftVersion, rightVersion)
+	if !has {
+		handler.failed(writer, "", 0, 404, errors.Warning("proxy: service was not found").WithMeta("service", serviceName))
+		return
+	}
+	client, clientErr := handler.dialer.Dial(registration.address)
+	if clientErr != nil {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithCause(clientErr))
+		return
+	}
+	body, readBodyErr := io.ReadAll(r.Body)
+	if readBodyErr != nil {
+		if readBodyErr != io.EOF {
+			handler.failed(writer, "", 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+			return
+		}
+	}
+	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)
+	if postErr != nil {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithCause(postErr))
+		return
+	}
+	writer.WriteHeader(status)
+	if header != nil && len(header) > 0 {
+		for k, vv := range header {
+			for _, v := range vv {
+				writer.Header().Add(k, v)
+			}
+		}
+	}
+	n := 0
+	bodyLen := len(respBody)
+	for n < bodyLen {
+		nn, writeErr := writer.Write(respBody[n:])
+		if writeErr != nil {
+			return
+		}
+		n += nn
+	}
 	return
 }
 
@@ -364,7 +410,54 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 		handler.failed(writer, "", 0, 555, errors.Warning("proxy: dev mode is not enabled"))
 		return
 	}
-	// todo verify signature
+	nodeId := r.Header.Get(httpProxyTargetNodeId)
+	pathItems := strings.Split(r.URL.Path, "/")
+	serviceName := pathItems[1]
+	registration, has := handler.registrations.GetExact(serviceName, nodeId)
+	if !has {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: host was not found").WithMeta("service", serviceName).WithMeta("id", nodeId))
+		return
+	}
+	client, clientErr := handler.dialer.Dial(registration.address)
+	if clientErr != nil {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(clientErr))
+		return
+	}
+
+	body, readBodyErr := io.ReadAll(r.Body)
+	if readBodyErr != nil {
+		if readBodyErr != io.EOF {
+			handler.failed(writer, "", 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+			return
+		}
+	}
+	// verify signature
+	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("proxy: signature is invalid"))
+		return
+	}
+	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)
+	if postErr != nil {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(postErr))
+		return
+	}
+	writer.WriteHeader(status)
+	if header != nil && len(header) > 0 {
+		for k, vv := range header {
+			for _, v := range vv {
+				writer.Header().Add(k, v)
+			}
+		}
+	}
+	n := 0
+	bodyLen := len(respBody)
+	for n < bodyLen {
+		nn, writeErr := writer.Write(respBody[n:])
+		if writeErr != nil {
+			return
+		}
+		n += nn
+	}
 	return
 }
 

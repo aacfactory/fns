@@ -44,6 +44,10 @@ func String() *Element {
 	return NewElement("_", "string", "string", "", "String", "String")
 }
 
+func Password() *Element {
+	return NewElement("_", "string", "string", "password", "Password", "Bcrypt hash type")
+}
+
 func Bytes() *Element {
 	return NewElement("_", "bytes", "string", "byte", "Bytes", "Bytes")
 }

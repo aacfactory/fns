@@ -334,7 +334,11 @@ func NewHttpOptions(config *HttpConfig, log logs.Logger, handler http.Handler) (
 	if config.Options == nil {
 		config.Options = []byte("{}")
 	}
-	opt.Options = config.Options
+	opt.Options, err = configures.NewJsonConfig(config.Options)
+	if err != nil {
+		err = errors.Warning("new http options failed").WithCause(fmt.Errorf("options is invalid")).WithCause(err)
+		return
+	}
 	return
 }
 
@@ -344,7 +348,7 @@ type HttpOptions struct {
 	ClientTLS *tls.Config
 	Handler   http.Handler
 	Log       logs.Logger
-	Options   json.RawMessage
+	Options   configures.Config
 }
 
 type HttpClient interface {
@@ -503,7 +507,7 @@ func (srv *FastHttp) Build(options HttpOptions) (err error) {
 	srv.ssl = options.ServerTLS != nil
 
 	opt := &FastHttpOptions{}
-	optErr := json.Unmarshal(options.Options, opt)
+	optErr := options.Options.As(opt)
 	if optErr != nil {
 		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("fns", "http")
 		return

@@ -38,7 +38,6 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 	sh := &servicesHandler{
 		log:                    nil,
 		names:                  []byte{'[', ']'},
-		namesWithInternal:      []byte{'[', ']'},
 		documents:              []byte{'{', '}'},
 		openapi:                []byte{'{', '}'},
 		appId:                  "",
@@ -50,6 +49,7 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 	}
 	go func(handler *servicesHandler, deployedCh <-chan map[string]*endpoint, openApiVersion string) {
 		eps, ok := <-deployedCh
+		handler.ready = true
 		if !ok {
 			return
 		}
@@ -57,12 +57,10 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 			return
 		}
 		names := make([]string, 0, 1)
-		namesWithInternal := make([]string, 0, 1)
 		documents := make(map[string]Document)
 		for name, ep := range eps {
-			namesWithInternal = append(namesWithInternal, name)
+			names = append(names, name)
 			if !ep.Internal() {
-				names = append(names, name)
 				document := ep.Document()
 				if document != nil {
 					documents[name] = document
@@ -73,17 +71,29 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 		if namesErr == nil {
 			handler.names = namesBytes
 		}
-		namesWithInternalBytes, namesWithInternalErr := json.Marshal(namesWithInternal)
-		if namesWithInternalErr == nil {
-			handler.namesWithInternal = namesWithInternalBytes
+		document, documentErr := newDocuments(eps, handler.appVersion)
+		if documentErr != nil {
+			if handler.log != nil && handler.log.ErrorEnabled() {
+				handler.log.Error().Cause(documentErr).With("handler", "service").Message("fns: create documents failed")
+			}
+		} else {
+			p, encodeErr := json.Marshal(document)
+			if encodeErr != nil {
+				if handler.log != nil && handler.log.ErrorEnabled() {
+					handler.log.Error().Cause(encodeErr).With("handler", "service").Message("fns: create documents failed")
+				}
+			} else {
+				handler.documents = p
+			}
 		}
-		document, documentErr := encodeDocuments(handler.appId, handler.appName, handler.appVersion, eps)
-		if documentErr == nil {
-			handler.documents = document
-		}
-		openapi, openapiErr := encodeOpenapi(openApiVersion, handler.appId, handler.appName, handler.appVersion, eps)
-		if openapiErr == nil {
-			handler.openapi = openapi
+		openapi := newOpenapi(openApiVersion, handler.appId, handler.appName, handler.appVersion, eps)
+		openapiBytes, encodeApiErr := openapi.Encode()
+		if encodeApiErr != nil {
+			if handler.log != nil && handler.log.ErrorEnabled() {
+				handler.log.Error().Cause(encodeApiErr).With("handler", "service").Message("fns: create openapi failed")
+			}
+		} else {
+			handler.openapi = openapiBytes
 		}
 	}(sh, deployedCh, openApiVersion)
 	handler = sh
@@ -92,8 +102,8 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 
 type servicesHandler struct {
 	log                    logs.Logger
+	ready                  bool
 	names                  []byte
-	namesWithInternal      []byte
 	documents              []byte
 	openapi                []byte
 	appId                  string
@@ -136,6 +146,10 @@ func (handler *servicesHandler) Accept(r *http.Request) (ok bool) {
 }
 
 func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+	if !handler.ready {
+		handler.failed(writer, "", 0, http.StatusTooEarly, errors.Warning("fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		return
+	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
 		handler.handleNames(writer, r)
 		return
@@ -436,19 +450,13 @@ func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
 }
 
 func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.Request) {
+	deviceId := r.Header.Get(httpDeviceIdHeader)
 	signature := r.Header.Get(httpRequestSignatureHeader)
-	withInternal := false
-	if signature != "" {
-		deviceId := r.Header.Get(httpDeviceIdHeader)
-		if deviceId != "" {
-			withInternal = handler.signer.Verify([]byte(deviceId), []byte(signature))
-		}
+	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
+		handler.failed(writer, "", 0, 555, errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
+		return
 	}
-	if withInternal {
-		handler.succeed(writer, "", 0, handler.namesWithInternal)
-	} else {
-		handler.succeed(writer, "", 0, handler.names)
-	}
+	handler.succeed(writer, "", 0, handler.names)
 	return
 }
 

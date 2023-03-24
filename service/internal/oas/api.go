@@ -30,6 +30,70 @@ type API struct {
 	Tags       []*Tag           `json:"tags,omitempty"`
 }
 
+func (api *API) Merge(o *API) {
+	if o.Paths == nil || len(o.Paths) == 0 {
+		return
+	}
+	if api.Paths == nil {
+		api.Paths = make(map[string]*Path)
+	}
+	if api.Components == nil {
+		api.Components = &Components{}
+	}
+	if api.Components.Schemas == nil {
+		api.Components.Schemas = make(map[string]*Schema)
+	}
+	if api.Components.Responses == nil {
+		api.Components.Responses = make(map[string]*Response)
+	}
+	if api.Tags == nil {
+		api.Tags = make([]*Tag, 0, 1)
+	}
+	for name, path := range o.Paths {
+		_, has := api.Paths[name]
+		if has {
+			continue
+		}
+		api.Paths[name] = path
+	}
+	if o.Components != nil {
+		if o.Components.Schemas != nil {
+			for name, schema := range o.Components.Schemas {
+				_, has := api.Components.Schemas[name]
+				if has {
+					continue
+				}
+				api.Components.Schemas[name] = schema
+			}
+		}
+		if o.Components.Responses != nil {
+			for name, responses := range o.Components.Responses {
+				_, has := api.Components.Responses[name]
+				if has {
+					continue
+				}
+				api.Components.Responses[name] = responses
+			}
+		}
+	}
+	if o.Tags != nil && len(o.Tags) > 0 {
+		deltas := make([]int, 0, 1)
+		for i, tag := range o.Tags {
+			pos := sort.Search(len(api.Tags), func(i int) bool {
+				return api.Tags[i].Name == tag.Name
+			})
+			if pos == len(api.Tags) {
+				deltas = append(deltas, i)
+			}
+		}
+		if len(deltas) > 0 {
+			for _, delta := range deltas {
+				api.Tags = append(api.Tags, o.Tags[delta])
+			}
+		}
+	}
+}
+
 func (api *API) Encode() (p []byte, err error) {
 	obj := json.NewObject()
 	_ = obj.Put("openapi", api.Openapi)

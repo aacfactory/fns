@@ -34,10 +34,9 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh <-chan map[string]*endpoint, openApiVersion string, proxyMode bool) (handler HttpHandler) {
+func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh <-chan map[string]*endpoint, openApiVersion string) (handler HttpHandler) {
 	sh := &servicesHandler{
 		log:                    nil,
-		proxyMode:              proxyMode,
 		names:                  []byte{'[', ']'},
 		namesWithInternal:      []byte{'[', ']'},
 		documents:              []byte{'{', '}'},
@@ -93,7 +92,6 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 
 type servicesHandler struct {
 	log                    logs.Logger
-	proxyMode              bool
 	names                  []byte
 	namesWithInternal      []byte
 	documents              []byte
@@ -121,19 +119,17 @@ func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
 }
 
 func (handler *servicesHandler) Accept(r *http.Request) (ok bool) {
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/names"
+	ok = r.Method == http.MethodGet && r.URL.Path == "/services/documents"
 	if ok {
 		return
 	}
-	if !handler.proxyMode {
-		ok = r.Method == http.MethodGet && r.URL.Path == "/services/documents"
-		if ok {
-			return
-		}
-		ok = r.Method == http.MethodGet && r.URL.Path == "/services/openapi"
-		if ok {
-			return
-		}
+	ok = r.Method == http.MethodGet && r.URL.Path == "/services/openapi"
+	if ok {
+		return
+	}
+	ok = r.Method == http.MethodGet && r.URL.Path == "/services/names"
+	if ok {
+		return
 	}
 	ok = r.Method == http.MethodPost && r.Header.Get(httpContentType) == httpContentTypeJson && len(strings.Split(r.URL.Path, "/")) == 3
 	return
@@ -144,15 +140,13 @@ func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Re
 		handler.handleNames(writer, r)
 		return
 	}
-	if !handler.proxyMode {
-		if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-			handler.handleDocuments(writer)
-			return
-		}
-		if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-			handler.handleOpenapi(writer)
-			return
-		}
+	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
+		handler.handleDocuments(writer)
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
+		handler.handleOpenapi(writer)
+		return
 	}
 	handler.handleRequest(writer, r)
 	return

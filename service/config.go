@@ -33,12 +33,17 @@ type Config struct {
 	Log     *LogConfig     `json:"log"`
 	Http    *HttpConfig    `json:"http"`
 	Cluster *ClusterConfig `json:"cluster"`
+	Proxy   *ProxyConfig   `json:"proxy"`
 }
 
 type LogConfig struct {
 	Level     string `json:"level"`
 	Formatter string `json:"formatter"`
 	Color     bool   `json:"color"`
+}
+
+type ProxyConfig struct {
+	EnableDevMode bool `json:"enableDevMode"`
 }
 
 type RuntimeConfig struct {
@@ -106,8 +111,7 @@ type ClusterConfig struct {
 }
 
 type ClusterDevMode struct {
-	ProxyAddress string     `json:"proxyAddress"`
-	TLS          *TLSConfig `json:"tls"`
+	ProxyAddress string `json:"proxyAddress"`
 }
 
 type SharedConfig struct {

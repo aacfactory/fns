@@ -74,7 +74,7 @@ type HttpHandler interface {
 	http.Handler
 	Name() (name string)
 	Build(options *HttpHandlerOptions) (err error)
-	Accept(request *http.Request) (ok bool)
+	Accept(r *http.Request) (ok bool)
 	Close()
 }
 

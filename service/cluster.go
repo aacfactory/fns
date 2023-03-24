@@ -20,8 +20,10 @@ import (
 	"context"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
+	"net/http"
 )
 
 type ClusterBuilderOptions struct {
@@ -30,7 +32,6 @@ type ClusterBuilderOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
-	DevMode    bool
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
@@ -82,5 +83,83 @@ func RegisterClusterBuilder(name string, builder ClusterBuilder) {
 
 func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
 	builder, has = builders[name]
+	return
+}
+
+func newDevProxyCluster(cluster Cluster, proxyAddress string, dialer HttpClientDialer, secretKey []byte) Cluster {
+	return &clusterDevProxy{
+		proxyAddress: proxyAddress,
+		dialer:       dialer,
+		proxy:        cluster,
+		signer:       secret.NewSigner(secretKey),
+	}
+}
+
+type clusterDevProxy struct {
+	proxyAddress string
+	dialer       HttpClientDialer
+	proxy        Cluster
+	signer       *secret.Signer
+}
+
+func (cluster *clusterDevProxy) Join(ctx context.Context) (err error) {
+	return
+}
+
+func (cluster *clusterDevProxy) Leave(ctx context.Context) (err error) {
+	return
+}
+
+func (cluster *clusterDevProxy) Nodes(ctx context.Context) (nodes Nodes, err error) {
+	// todo call /cluster/nodes
+	return
+}
+
+func (cluster *clusterDevProxy) Shared() (shared Shared) {
+	shared = cluster.proxy.Shared()
+	return
+}
+
+const (
+	clusterProxyName = "cluster_proxy"
+)
+
+func newClusterProxyHandler(cluster Cluster, secretKey []byte) *clusterProxyHandler {
+	return &clusterProxyHandler{
+		cluster: cluster,
+		signer:  secret.NewSigner(secretKey),
+	}
+}
+
+type clusterProxyHandler struct {
+	log     logs.Logger
+	cluster Cluster
+	signer  *secret.Signer
+}
+
+func (handler *clusterProxyHandler) Name() (name string) {
+	name = clusterProxyName
+	return
+}
+
+func (handler *clusterProxyHandler) Build(options *HttpHandlerOptions) (err error) {
+	handler.log = options.Log
+	return
+}
+
+func (handler *clusterProxyHandler) Accept(r *http.Request) (ok bool) {
+	ok = r.Method == http.MethodGet && r.URL.Path == "/cluster/nodes"
+	if ok {
+		return
+	}
+	return
+}
+
+func (handler *clusterProxyHandler) Close() {
+	return
+}
+
+func (handler *clusterProxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+
 	return
 }

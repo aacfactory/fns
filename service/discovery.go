@@ -450,13 +450,14 @@ func (r *Registrations) AddNode(node Node) (err error) {
 	}
 	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
 	defer cancel()
+
 	header := http.Header{}
 	if devMode {
 		header.Add(httpProxyTargetNodeId, node.Id)
 	}
 	header.Add(httpDeviceIdHeader, r.id)
 	header.Add(httpRequestSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
-	status, _, responseBody, getErr := client.Get(ctx, "/services/names", header)
+	status, _, responseBody, getErr := client.Get(ctx, "/services/names?native=true", header)
 	if getErr != nil {
 		err = errors.Warning("fns: registrations get service names from node failed").
 			WithCause(dialErr).

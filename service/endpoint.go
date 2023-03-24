@@ -119,7 +119,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	clusterFetchMembersInterval := time.Duration(0)
 	clusterDevMode := false
 	clusterProxyAddress := ""
-	var clusterProxyTLSConfig *tls.Config
 	if config.Cluster != nil {
 		// cluster >>>
 		if config.Cluster.FetchMembersInterval != "" {
@@ -149,13 +148,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		if config.Cluster.DevMode != nil {
 			clusterDevMode = true
 			clusterProxyAddress = config.Cluster.DevMode.ProxyAddress
-			if config.Cluster.DevMode.TLS != nil {
-				_, clusterProxyTLSConfig, err = config.Cluster.DevMode.TLS.Config()
-				if err != nil {
-					err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build dev client tls config failed")).WithCause(err)
-					return
-				}
-			}
 		}
 		cluster, err = builder(ClusterBuilderOptions{
 			Config:     clusterOptionConfig,
@@ -163,14 +155,12 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			AppId:      options.AppId,
 			AppName:    options.AppName,
 			AppVersion: options.AppVersion,
-			DevMode:    clusterDevMode,
 		})
 
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
 			return
 		}
-
 		// cluster <<<
 		sharedStore = cluster.Shared().Store()
 		sharedLockers = cluster.Shared().Lockers()
@@ -240,7 +230,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		httpHandlers:             nil,
 		cluster:                  cluster,
 		clusterNodeFetchInterval: clusterFetchMembersInterval,
-		clusterDevMode:           clusterDevMode,
 		clusterProxyAddress:      clusterProxyAddress,
 		closeCh:                  make(chan struct{}, 1),
 	}
@@ -284,13 +273,28 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("fns: proxy mode require cluster"))
 			return
 		}
-		appendHandlerErr := handlers.Append(newProxyHandler(v.registrations, v.deployedCHS.acquire(), v.http, options.OpenApiVersion, clusterDevMode))
-		if appendHandlerErr != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
+		if clusterDevMode {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("fns: proxy mode require no dev kind cluster"))
 			return
 		}
+		proxyDevMode := false
+		if config.Proxy != nil {
+			proxyDevMode = config.Proxy.EnableDevMode
+		}
+		appendProxyHandlerErr := handlers.Append(newProxyHandler(v.registrations, v.deployedCHS.acquire(), v.http, options.OpenApiVersion, proxyDevMode, bytex.FromString(secretKey)))
+		if appendProxyHandlerErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(appendProxyHandlerErr)
+			return
+		}
+		if proxyDevMode {
+			appendClusterHandlerErr := handlers.Append(newClusterProxyHandler(cluster, bytex.FromString(secretKey)))
+			if appendClusterHandlerErr != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(appendClusterHandlerErr)
+				return
+			}
+		}
 	}
-	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCHS.acquire(), options.OpenApiVersion, options.ProxyMode))
+	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCHS.acquire(), options.OpenApiVersion))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return
@@ -320,9 +324,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			return
 		}
 	}
-	if clusterProxyTLSConfig != nil {
-		clientTLS = clusterProxyTLSConfig
-	}
 	if httpConfig.Options == nil || len(httpConfig.Options) < 2 {
 		httpConfig.Options = []byte{'{', '}'}
 	}
@@ -339,6 +340,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	// http <<<
+	// dev >>
+	if clusterDevMode {
+		v.cluster = newDevProxyCluster(v.cluster, v.clusterProxyAddress, v.http, bytex.FromString(secretKey))
+	}
+	// dev <<<
 	return
 }
 
@@ -355,7 +361,6 @@ type Endpoints struct {
 	httpHandlers             *HttpHandlers
 	cluster                  Cluster
 	clusterNodeFetchInterval time.Duration
-	clusterDevMode           bool
 	clusterProxyAddress      string
 	closeCh                  chan struct{}
 }
@@ -440,12 +445,10 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	e.deployedCHS.publish(e.deployed)
 	// cluster join
 	if e.cluster != nil {
-		if !e.clusterDevMode {
-			joinErr := e.cluster.Join(ctx)
-			if joinErr != nil {
-				err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
-				return
-			}
+		joinErr := e.cluster.Join(ctx)
+		if joinErr != nil {
+			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
+			return
 		}
 		nodes, nodesErr := e.cluster.Nodes(ctx)
 		if nodesErr != nil {
@@ -530,9 +533,7 @@ func (e *Endpoints) Close(ctx context.Context) {
 	close(e.closeCh)
 	e.rt.running.Off()
 	if e.cluster != nil {
-		if !e.clusterDevMode {
-			_ = e.cluster.Leave(ctx)
-		}
+		_ = e.cluster.Leave(ctx)
 	}
 	if e.registrations != nil {
 		e.registrations.Close()

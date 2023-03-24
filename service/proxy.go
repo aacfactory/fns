@@ -19,9 +19,11 @@ package service
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/internal/lru"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"golang.org/x/sync/singleflight"
 	"net/http"
 	"strings"
 	"time"
@@ -31,21 +33,27 @@ const (
 	proxyHandlerName = "proxy"
 )
 
-func newProxyHandler(registrations *Registrations, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer, openApiVersion string, devMode bool, secretKey []byte) (handler *proxyHandler) {
-	ph := &proxyHandler{
-		appId:         "",
-		appName:       "",
-		appVersion:    versions.Version{},
-		log:           nil,
-		devMode:       devMode,
-		endpoints:     nil,
-		registrations: registrations,
-		dialer:        nil,
-		discovery:     nil,
-		signer:        secret.NewSigner(secretKey),
+func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer, openApiVersion string, devMode bool, secretKey []byte) (handler *proxyHandler) {
+	handler = &proxyHandler{
+		appId:          "",
+		appName:        "",
+		appVersion:     versions.Version{},
+		openApiVersion: openApiVersion,
+		log:            nil,
+		ready:          false,
+		devMode:        devMode,
+		cluster:        cluster,
+		endpoints:      make(map[string]*endpoint),
+		registrations:  registrations,
+		dialer:         dialer,
+		discovery:      nil,
+		signer:         secret.NewSigner(secretKey),
+		cache:          lru.New[string, json.RawMessage](8),
+		group:          &singleflight.Group{},
 	}
-	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint, openApiVersion string, dialer HttpClientDialer) {
+	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer) {
 		eps, ok := <-deployedCh
+		handler.ready = true
 		if !ok {
 			return
 		}
@@ -53,22 +61,26 @@ func newProxyHandler(registrations *Registrations, deployedCh <-chan map[string]
 			return
 		}
 		handler.endpoints = eps
-	}(ph, deployedCh, openApiVersion, dialer)
-	handler = ph
+	}(handler, deployedCh, dialer)
 	return
 }
 
 type proxyHandler struct {
-	appId         string
-	appName       string
-	appVersion    versions.Version
-	log           logs.Logger
-	devMode       bool
-	endpoints     map[string]*endpoint
-	registrations *Registrations
-	dialer        HttpClientDialer
-	discovery     EndpointDiscovery
-	signer        *secret.Signer
+	appId          string
+	appName        string
+	appVersion     versions.Version
+	openApiVersion string
+	log            logs.Logger
+	ready          bool
+	devMode        bool
+	cluster        Cluster
+	endpoints      map[string]*endpoint
+	registrations  *Registrations
+	dialer         HttpClientDialer
+	discovery      EndpointDiscovery
+	signer         *secret.Signer
+	cache          *lru.LRU[string, json.RawMessage]
+	group          *singleflight.Group
 }
 
 func (handler *proxyHandler) Name() (name string) {
@@ -117,23 +129,215 @@ func (handler *proxyHandler) Close() {
 }
 
 func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
-
-	// handle /services/names (when devMode enabled, then try to get nodeId from httpProxyTargetNodeId)
+	if !handler.ready {
+		handler.failed(writer, "", 0, http.StatusTooEarly, errors.Warning("fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
+		handler.handleNames(writer, r)
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
+		handler.handleOpenapi(writer, r)
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
+		handler.handleDocuments(writer, r)
+		return
+	}
+	handler.handleProxy(writer, r)
 	return
 }
 
 func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Request) {
-
+	const (
+		namesKey        = "names"
+		refreshGroupKey = "names_refresh"
+	)
+	handleBegAT := time.Time{}
+	latency := time.Duration(0)
+	if handler.log.DebugEnabled() {
+		handleBegAT = time.Now()
+	}
+	if handler.log.DebugEnabled() {
+		handleBegAT = time.Now()
+	}
+	groupKey := namesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	}
+	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
+		if r.URL.Query().Get("refresh") != "true" {
+			cached, has := handler.cache.Get(namesKey)
+			if has {
+				v = cached
+				return
+			}
+		}
+		nodes, getNodesErr := listMembers(r.Context(), handler.cluster, handler.appId, handler.appName, handler.appVersion)
+		if getNodesErr != nil {
+			err = errors.Warning("proxy: handle names request failed").WithCause(getNodesErr)
+			return
+		}
+		names := make([]string, 0, 1)
+		for name := range handler.endpoints {
+			names = append(names, name)
+		}
+		memberNodeNames := make(map[string]int)
+		for _, node := range nodes {
+			nodeNames, nodeNamesErr := listMemberServiceNames(r.Context(), node, handler.dialer, handler.appId, handler.signer)
+			if nodeNamesErr != nil {
+				err = errors.Warning("proxy: handle names request failed").WithCause(nodeNamesErr)
+				return
+			}
+			if nodeNames != nil && len(nodeNames) > 0 {
+				for _, name := range nodeNames {
+					memberNodeNames[name] = 1
+				}
+			}
+		}
+		for name := range memberNodeNames {
+			names = append(names, name)
+		}
+		p, encodeErr := json.Marshal(names)
+		if encodeErr != nil {
+			err = errors.Warning("proxy: handle names request failed").WithCause(encodeErr)
+			return
+		}
+		handler.cache.Add(namesKey, p, 60*time.Second)
+		v = json.RawMessage(p)
+		return
+	})
+	if handler.log.DebugEnabled() {
+		latency = time.Now().Sub(handleBegAT)
+	}
+	if err != nil {
+		handler.failed(writer, "", latency, 555, errors.Map(err))
+		return
+	}
+	handler.succeed(writer, "", latency, v)
 	return
 }
 
 func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.Request) {
-	// use ?native=true to fetch
+	const (
+		namesKey        = "openapi"
+		refreshGroupKey = "openapi_refresh"
+	)
+	handleBegAT := time.Time{}
+	latency := time.Duration(0)
+	if handler.log.DebugEnabled() {
+		handleBegAT = time.Now()
+	}
+	if handler.log.DebugEnabled() {
+		handleBegAT = time.Now()
+	}
+	groupKey := namesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	}
+	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
+		if r.URL.Query().Get("refresh") != "true" {
+			cached, has := handler.cache.Get(namesKey)
+			if has {
+				v = cached
+				return
+			}
+		}
+		openapi := newOpenapi(handler.openApiVersion, handler.appId, handler.appName, handler.appVersion, handler.endpoints)
+		nodes, getNodesErr := listMembers(r.Context(), handler.cluster, handler.appId, handler.appName, handler.appVersion)
+		if getNodesErr != nil {
+			err = errors.Warning("proxy: handle openapi request failed").WithCause(getNodesErr)
+			return
+		}
+		for _, node := range nodes {
+			memberOpenapi, memberOpenapiErr := getMemberOpenapi(r.Context(), node, handler.dialer)
+			if memberOpenapiErr != nil {
+				err = errors.Warning("proxy: handle openapi request failed").WithCause(memberOpenapiErr)
+				return
+			}
+			openapi.Merge(memberOpenapi)
+		}
+		p, encodeErr := json.Marshal(openapi)
+		if encodeErr != nil {
+			err = errors.Warning("proxy: handle openapi request failed").WithCause(encodeErr)
+			return
+		}
+		handler.cache.Add(namesKey, p, 60*time.Second)
+		v = json.RawMessage(p)
+		return
+	})
+	if handler.log.DebugEnabled() {
+		latency = time.Now().Sub(handleBegAT)
+	}
+	if err != nil {
+		handler.failed(writer, "", latency, 555, errors.Map(err))
+		return
+	}
+	handler.succeed(writer, "", latency, v)
 	return
 }
 
 func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http.Request) {
-	// use ?native=true to fetch
+	const (
+		namesKey        = "documents"
+		refreshGroupKey = "documents_refresh"
+	)
+	handleBegAT := time.Time{}
+	latency := time.Duration(0)
+	if handler.log.DebugEnabled() {
+		handleBegAT = time.Now()
+	}
+	if handler.log.DebugEnabled() {
+		handleBegAT = time.Now()
+	}
+	groupKey := namesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	}
+	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
+		if r.URL.Query().Get("refresh") != "true" {
+			cached, has := handler.cache.Get(namesKey)
+			if has {
+				v = cached
+				return
+			}
+		}
+		documents, documentsErr := newDocuments(handler.endpoints, handler.appVersion)
+		if documentsErr == nil {
+			err = errors.Warning("proxy: handle documents request failed").WithCause(documentsErr)
+			return
+		}
+		nodes, getNodesErr := listMembers(r.Context(), handler.cluster, handler.appId, handler.appName, handler.appVersion)
+		if getNodesErr != nil {
+			err = errors.Warning("proxy: handle documents request failed").WithCause(getNodesErr)
+			return
+		}
+		for _, node := range nodes {
+			memberDocuments, memberDocumentsErr := getMemberDocument(r.Context(), node, handler.dialer)
+			if memberDocumentsErr != nil {
+				err = errors.Warning("proxy: handle documents request failed").WithCause(memberDocumentsErr)
+				return
+			}
+			documents = documents.Merge(memberDocuments)
+		}
+		p, encodeErr := json.Marshal(documents)
+		if encodeErr != nil {
+			err = errors.Warning("proxy: handle documents request failed").WithCause(encodeErr)
+			return
+		}
+		handler.cache.Add(namesKey, p, 60*time.Second)
+		v = json.RawMessage(p)
+		return
+	})
+	if handler.log.DebugEnabled() {
+		latency = time.Now().Sub(handleBegAT)
+	}
+	if err != nil {
+		handler.failed(writer, "", latency, 555, errors.Map(err))
+		return
+	}
+	handler.succeed(writer, "", latency, v)
 	return
 }
 
@@ -156,6 +360,10 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 }
 
 func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.Request) {
+	if !handler.devMode {
+		handler.failed(writer, "", 0, 555, errors.Warning("proxy: dev mode is not enabled"))
+		return
+	}
 	// todo verify signature
 	return
 }

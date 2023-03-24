@@ -173,27 +173,10 @@ func (handler *servicesHandler) Close() {
 func (handler *servicesHandler) matchRequestVersion(writer http.ResponseWriter, r *http.Request) (ok bool) {
 	version := r.Header.Get(httpRequestVersionsHeader)
 	if version != "" {
-		leftVersion := versions.Version{}
-		rightVersion := versions.Version{}
-		var parseVersionErr error
-		versionRange := strings.Split(version, ",")
-		leftVersionValue := strings.TrimSpace(versionRange[0])
-		if leftVersionValue != "" {
-			leftVersion, parseVersionErr = versions.Parse(leftVersionValue)
-			if parseVersionErr != nil {
-				handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: read request version failed").WithCause(parseVersionErr))
-				return
-			}
-		}
-		if len(versionRange) > 1 {
-			rightVersionValue := strings.TrimSpace(versionRange[1])
-			if rightVersionValue != "" {
-				rightVersion, parseVersionErr = versions.Parse(rightVersionValue)
-				if parseVersionErr != nil {
-					handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: read request version failed").WithCause(parseVersionErr))
-					return
-				}
-			}
+		leftVersion, rightVersion, parseErr := versions.ParseRange(version)
+		if parseErr != nil {
+			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: read request version failed").WithCause(parseErr))
+			return
 		}
 		if !handler.appVersion.Between(leftVersion, rightVersion) {
 			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: request version is not acceptable").WithMeta("version", handler.appVersion.String()))
@@ -230,7 +213,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		return
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: X-Fns-Device-Id is required"))
+		handler.failed(writer, "", 0, 555, errors.Warning("fns: X-Fns-Device-Id is required"))
 		return
 	}
 
@@ -244,7 +227,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
 		if readBodyErr != io.EOF {
-			handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: read body failed").WithCause(readBodyErr))
+			handler.failed(writer, "", 0, 555, errors.Warning("fns: read body failed").WithCause(readBodyErr))
 			return
 		}
 	}
@@ -264,7 +247,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
-			handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			handler.failed(writer, "", 0, 555, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
 			return
 		}
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)

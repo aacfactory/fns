@@ -122,7 +122,7 @@ func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam)
 	p = append(p, bytex.FromString(payload)...)
 	s := tokens.signer.Sign(p)
 	p = append(p, s...)
-	token = Token(base64.URLEncoding.EncodeToString(p))
+	token = Token(fmt.Sprintf("Fns %s", base64.URLEncoding.EncodeToString(p)))
 	return
 }
 
@@ -131,7 +131,12 @@ func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result Par
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is required"))
 		return
 	}
-	p, decodeErr := base64.URLEncoding.DecodeString(string(token))
+	remains, cut := strings.CutPrefix(string(token), "Fns ")
+	if !cut {
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is required"))
+		return
+	}
+	p, decodeErr := base64.URLEncoding.DecodeString(remains)
 	if decodeErr != nil {
 		err = errors.Warning("authorizations: parse token failed").WithCause(decodeErr)
 		return

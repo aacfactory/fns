@@ -14,30 +14,21 @@
  * limitations under the License.
  */
 
-package rbac
+package permissions
 
 import (
 	"context"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/rbac"
-	"strings"
 )
 
-func Remove(ctx context.Context, code string) (err errors.CodeError) {
-	code = strings.TrimSpace(code)
-	if code == "" {
-		err = errors.Warning("rbac: endpoint remove role failed").WithCause(fmt.Errorf("code is nil"))
-		return
-	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, rbac.Name)
-	if !hasEndpoint {
-		err = errors.Warning("rbac: endpoint endpoint was not found, please deploy rbac service")
-		return
-	}
-	_, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, rbac.Name, rbac.RemoveFn, service.NewArgument(rbac.RemoveArgument{
-		Code: code,
-	})))
-	return
+type EnforceParam struct {
+	UserId  service.RequestUserId `json:"userId"`
+	Service string                `json:"service"`
+	Fn      string                `json:"fn"`
+}
+
+type Enforcer interface {
+	service.Component
+	Enforce(ctx context.Context, param EnforceParam) (ok bool, err errors.CodeError)
 }

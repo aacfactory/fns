@@ -1,0 +1,6 @@
+目标：authorizations 是通用的，不受实例影响
+* [ ] components 单走一个token component（such as jwt），其它的诸如revoke和list由component自己维护
+* * [ ] create: 创建token，返回token+error
+* * [ ] verify: 校验token，返回bool+error
+
+

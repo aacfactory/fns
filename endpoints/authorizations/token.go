@@ -19,7 +19,7 @@ package authorizations
 const (
 	name     = "authorizations"
 	createFn = "create"
-	verifyFn = "verify"
+	parseFn  = "parse"
 )
 
 type Token string

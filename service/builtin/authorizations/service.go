@@ -25,7 +25,7 @@ import (
 
 const (
 	createFn = "create"
-	verifyFn = "verify"
+	parseFn  = "parse"
 )
 
 func Service(tokens Tokens) (v service.Service) {
@@ -75,14 +75,14 @@ func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Ar
 		}
 		v, err = svc.tokens.Create(ctx, param)
 		break
-	case verifyFn:
+	case parseFn:
 		param := Token("")
 		paramErr := argument.As(&param)
 		if paramErr != nil {
-			err = errors.Warning("authorizations: verify token failed").WithCause(paramErr)
+			err = errors.Warning("authorizations: parse token failed").WithCause(paramErr)
 			break
 		}
-		v, err = svc.tokens.Verify(ctx, param)
+		v, err = svc.tokens.Parse(ctx, param)
 		break
 	default:
 		err = errors.Warning("authorizations: fn was not found")

@@ -37,8 +37,8 @@ type CreateTokenParam struct {
 	Options *json.Object          `json:"options"`
 }
 
-type VerifyResult struct {
-	Succeed    bool
+type ParseResult struct {
+	Valid      bool                  `json:"valid"`
 	UserId     service.RequestUserId `json:"userId"`
 	Attributes *json.Object          `json:"attributes"`
 }
@@ -46,7 +46,7 @@ type VerifyResult struct {
 type Tokens interface {
 	service.Component
 	Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError)
-	Verify(ctx context.Context, token Token) (result VerifyResult, err errors.CodeError)
+	Parse(ctx context.Context, token Token) (result ParseResult, err errors.CodeError)
 }
 
 type defaultTokensConfig struct {
@@ -114,21 +114,21 @@ func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam)
 	return
 }
 
-func (tokens *defaultTokens) Verify(ctx context.Context, token Token) (result VerifyResult, err errors.CodeError) {
+func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result ParseResult, err errors.CodeError) {
 	if token == "" {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is required"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is required"))
 		return
 	}
 	p := bytex.FromString(string(token))
 	pLen := uint16(len(p))
 	if pLen < 5 {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	userIdLen := binary.BigEndian.Uint16(p[0:2])
 	deadlineLen := binary.BigEndian.Uint16(p[2:4])
 	if userIdLen == 0 || deadlineLen == 0 {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	ub := 4
@@ -136,33 +136,33 @@ func (tokens *defaultTokens) Verify(ctx context.Context, token Token) (result Ve
 	db := ue
 	de := db + deadlineLen
 	if pLen <= de {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	signature := p[de:]
 	if !tokens.signer.Verify(p[0:de], signature) {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	userIdBytes := p[ub:ue]
 	if len(userIdBytes) == 0 {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	userId := service.RequestUserId(bytex.ToString(userIdBytes))
 	deadlineBytes := p[db:de]
 	if len(deadlineBytes) == 0 {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	deadlineSec, deadlineSecErr := strconv.ParseInt(bytex.ToString(deadlineBytes), 10, 64)
 	if deadlineSecErr != nil {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid").WithCause(deadlineSecErr))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid").WithCause(deadlineSecErr))
 		return
 	}
 	deadline := time.Unix(deadlineSec, 0)
-	result = VerifyResult{
-		Succeed:    deadline.After(time.Now()),
+	result = ParseResult{
+		Valid:      deadline.After(time.Now()),
 		UserId:     userId,
 		Attributes: nil,
 	}

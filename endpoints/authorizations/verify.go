@@ -21,23 +21,13 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/authorizations"
 	"github.com/aacfactory/json"
 )
 
-type decodeParam struct {
-	Token string `json:"token"`
-}
-
-type decodeResult struct {
-	Id   string       `json:"id"`
-	Attr *json.Object `json:"attr"`
-}
-
-func Verify(ctx context.Context) (err errors.CodeError) {
+func VerifyContext(ctx context.Context) (err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
-		err = errors.Warning("authorizations: verify user authorizations failed").WithCause(fmt.Errorf("there is no request in context"))
+		err = errors.Warning("authorizations: verify token failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
 	}
 	if request.User().Authenticated() {
@@ -45,32 +35,50 @@ func Verify(ctx context.Context) (err errors.CodeError) {
 	}
 	token, hasToken := request.Header().Authorization()
 	if !hasToken {
-		err = errors.Unauthorized("authorizations: verify user authorizations failed").WithCause(fmt.Errorf("there is no authorization in request"))
+		err = errors.Unauthorized("authorizations: verify token failed").WithCause(fmt.Errorf("there is no authorization in request"))
 		return
 	}
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, "authorizations")
+	result, verifyErr := Verify(ctx, Token(token))
+	if verifyErr != nil {
+		err = verifyErr
+		return
+	}
+	if !result.Succeed {
+		err = errors.Unauthorized("authorizations: verify token failed")
+		return
+	}
+	if !result.UserId.Exist() {
+		err = errors.Warning("authorizations: verify token failed").WithCause(fmt.Errorf("there is no user id in result"))
+		return
+	}
+	request.User().SetId(result.UserId)
+	if result.Attributes != nil {
+		request.User().SetAttributes(result.Attributes)
+	}
+	return
+}
+
+type VerifyResult struct {
+	Succeed    bool
+	UserId     service.RequestUserId `json:"userId"`
+	Attributes *json.Object          `json:"attributes"`
+}
+
+func Verify(ctx context.Context, param Token) (result VerifyResult, err errors.CodeError) {
+	endpoint, hasEndpoint := service.GetEndpoint(ctx, name)
 	if !hasEndpoint {
-		err = errors.Warning("authorizations: there is no authorizations in context, please deploy authorizations service")
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
 		return
 	}
-	result, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, authorizations.Name, "decode", service.NewArgument(&decodeParam{
-		Token: token,
-	})))
+	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, verifyFn, service.NewArgument(param), service.WithInternalRequest()))
 	if requestErr != nil {
 		err = requestErr
 		return
 	}
-	if result.Exist() {
-		r := decodeResult{}
-		scanErr := result.Scan(&r)
-		if scanErr != nil {
-			err = errors.Warning("authorizations: scan future result failed").
-				WithMeta("service", authorizations.Name).WithMeta("fn", "decode").
-				WithCause(scanErr)
-			return
-		}
-		request.User().SetId(service.RequestUserId(r.Id))
-		request.User().SetAttributes(r.Attr)
+	scanErr := future.Scan(&result)
+	if scanErr != nil {
+		err = errors.Warning("authorizations: verify token failed").WithCause(scanErr)
+		return
 	}
 	return
 }

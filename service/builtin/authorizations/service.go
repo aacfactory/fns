@@ -18,88 +18,49 @@ package authorizations
 
 import (
 	"context"
-	"github.com/aacfactory/configures"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/logs"
 )
 
 const (
-	Name = "authorizations"
+	createFn = "create"
+	verifyFn = "verify"
 )
 
-func Service(components ...service.Component) (v service.Service) {
-	var store service.Component
-	var encoding service.Component
-	for _, component := range components {
-		if component.Name() == "store" {
-			store = component
-			continue
-		}
-		if component.Name() == "encoding" {
-			encoding = component
-			continue
-		}
-		if store != nil && encoding != nil {
-			break
-		}
-	}
-	if store == nil {
-		store = DefaultTokenStoreComponent()
-	}
-	if encoding == nil {
-		encoding = DefaultTokenEncodingComponent()
+func Service(tokens Tokens) (v service.Service) {
+	if tokens == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("authorizations: service requires tokens component")))
+		return
 	}
 	v = &_service_{
-		components: map[string]service.Component{
-			"store":    store,
-			"encoding": encoding,
-		},
+		Abstract: service.NewAbstract("authorizations", true, tokens),
 	}
 	return
 }
 
 type _service_ struct {
-	log        logs.Logger
-	components map[string]service.Component
-}
-
-func (svc *_service_) Name() (name string) {
-	name = Name
-	return
-}
-
-func (svc *_service_) Internal() (internal bool) {
-	internal = true
-	return
+	service.Abstract
+	tokens Tokens
 }
 
 func (svc *_service_) Build(options service.Options) (err error) {
-	svc.log = options.Log
-	if svc.components != nil {
-		for cn, component := range svc.components {
-			if component == nil {
-				continue
-			}
-			componentCfg, hasConfig := options.Config.Node(cn)
-			if !hasConfig {
-				componentCfg, _ = configures.NewJsonConfig([]byte("{}"))
-			}
-			err = component.Build(service.ComponentOptions{
-				Log:    options.Log.With("component", cn),
-				Config: componentCfg,
-			})
-			if err != nil {
-				err = errors.Warning("authorizations: build authorizations service failed").WithCause(err)
-				return
-			}
-		}
+	err = svc.Abstract.Build(options)
+	if err != nil {
+		return
 	}
-	return
-}
-
-func (svc *_service_) Components() (components map[string]service.Component) {
-	components = svc.components
+	if svc.Components() == nil || len(svc.Components()) != 1 {
+		err = errors.Warning("authorizations: build failed").WithCause(errors.Warning("authorizations: tokens is required"))
+		return
+	}
+	for _, component := range svc.Components() {
+		tokens, ok := component.(Tokens)
+		if !ok {
+			err = errors.Warning("authorizations: build failed").WithCause(errors.Warning("authorizations: tokens is required"))
+			return
+		}
+		svc.tokens = tokens
+	}
 	return
 }
 
@@ -109,59 +70,27 @@ func (svc *_service_) Document() (doc service.Document) {
 
 func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
-	case "encode":
-		param := EncodeParam{}
-		asErr := argument.As(&param)
-		if asErr != nil {
-			err = errors.Warning("authorizations: encode argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
+	case createFn:
+		param := CreateTokenParam{}
+		paramErr := argument.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("authorizations: create token failed").WithCause(paramErr)
 			break
 		}
-		v, err = encode(ctx, param)
-		if err != nil {
-			err = err.WithMeta("service", "authorizations").WithMeta("fn", fn)
-			break
-		}
+		v, err = svc.tokens.Create(ctx, param)
 		break
-	case "decode":
-		param := DecodeParam{}
-		asErr := argument.As(&param)
-		if asErr != nil {
-			err = errors.Warning("authorizations: decode argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
+	case verifyFn:
+		param := Token("")
+		paramErr := argument.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("authorizations: verify token failed").WithCause(paramErr)
 			break
 		}
-		v, err = decode(ctx, param)
-		if err != nil {
-			err = err.WithMeta("service", "authorizations").WithMeta("fn", fn)
-			break
-		}
-		break
-	case "revoke":
-		param := RevokeParam{}
-		asErr := argument.As(&param)
-		if asErr != nil {
-			err = errors.Warning("authorizations: revoke argument failed").WithCause(asErr).WithMeta("service", "authorizations").WithMeta("fn", fn)
-			break
-		}
-		v, err = revoke(ctx, param)
-		if err != nil {
-			err = err.WithMeta("service", "authorizations").WithMeta("fn", fn)
-			break
-		}
+		v, err = svc.tokens.Verify(ctx, param)
 		break
 	default:
-		err = errors.Warning("authorizations: fn was not found").WithMeta("service", "authorizations").WithMeta("fn", fn)
+		err = errors.Warning("authorizations: fn was not found")
 		break
 	}
 	return
-}
-
-func (svc *_service_) Close() {
-	if svc.components != nil && len(svc.components) > 0 {
-		for _, component := range svc.components {
-			component.Close()
-		}
-	}
-	if svc.log.DebugEnabled() {
-		svc.log.Debug().Message("authorizations: closed")
-	}
 }

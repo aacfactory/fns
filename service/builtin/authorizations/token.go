@@ -17,146 +17,154 @@
 package authorizations
 
 import (
-	"bytes"
-	"encoding/base64"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
-	"github.com/cespare/xxhash/v2"
-	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 )
 
-type Token interface {
-	Id() (id string)
-	NotBefore() (date time.Time)
-	NotAfter() (date time.Time)
-	User() (id string, attr *json.Object)
-	Bytes() (p []byte)
+type Token string
+
+type CreateTokenParam struct {
+	UserId  service.RequestUserId `json:"userId"`
+	Options *json.Object          `json:"options"`
 }
 
-type TokenEncodingComponent interface {
+type VerifyResult struct {
+	Succeed    bool
+	UserId     service.RequestUserId `json:"userId"`
+	Attributes *json.Object          `json:"attributes"`
+}
+
+type Tokens interface {
 	service.Component
-	Encode(id string, attributes *json.Object) (token Token, err error)
-	Decode(authorization []byte) (token Token, err error)
+	Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError)
+	Verify(ctx context.Context, token Token) (result VerifyResult, err errors.CodeError)
 }
 
-type defaultToken struct {
-	Id_        string          `json:"id"`
-	NotBefore_ time.Time       `json:"notBefore"`
-	NotAfter_  time.Time       `json:"notAfter"`
-	Uid        string          `json:"uid"`
-	Attributes json.RawMessage `json:"attributes"`
-	p          []byte
+type defaultTokensConfig struct {
+	Key    string
+	Expire string
 }
 
-func (t *defaultToken) Id() (id string) {
-	id = t.Id_
-	return
+func DefaultTokens() Tokens {
+	return &defaultTokens{}
 }
 
-func (t *defaultToken) NotBefore() (date time.Time) {
-	date = t.NotBefore_
-	return
+type defaultTokens struct {
+	signer *secret.Signer
+	expire time.Duration
 }
 
-func (t *defaultToken) NotAfter() (date time.Time) {
-	date = t.NotAfter_
-	return
+func (tokens *defaultTokens) Name() (name string) {
+	return "default"
 }
 
-func (t *defaultToken) User() (id string, attr *json.Object) {
-	id, attr = t.Uid, json.NewObjectFromBytes(t.Attributes)
-	return
-}
-
-func (t *defaultToken) Bytes() (p []byte) {
-	p = t.p
-	return
-}
-
-func DefaultTokenEncodingComponent() TokenEncodingComponent {
-	return &defaultTokenEncodingComponent{}
-}
-
-type defaultTokenEncodingComponent struct {
-	expires time.Duration
-}
-
-func (component *defaultTokenEncodingComponent) Name() (name string) {
-	name = "encoding"
-	return
-}
-
-func (component *defaultTokenEncodingComponent) Build(options service.ComponentOptions) (err error) {
-	expireMinutes := 0
-	_, expireMinutesGetErr := options.Config.Get("expireMinutes", &expireMinutes)
-	if expireMinutesGetErr != nil {
-		err = errors.Warning("authorizations: default token encoding build failed").WithCause(expireMinutesGetErr).WithMeta("component", "DefaultTokenEncoding")
+func (tokens *defaultTokens) Build(options service.ComponentOptions) (err error) {
+	config := defaultTokensConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("authorizations: build default tokens failed").WithCause(configErr)
 		return
 	}
-	if expireMinutes < 1 {
-		expireMinutes = 24 * 60
+	key := strings.TrimSpace(config.Key)
+	if key == "" {
+		err = errors.Warning("authorizations: build default tokens failed").WithCause(errors.Warning("key is require"))
+		return
 	}
-	component.expires = time.Duration(expireMinutes) * time.Minute
+	tokens.signer = secret.NewSigner([]byte(key))
+	expire := 13 * 24 * time.Hour
+	if config.Expire != "" {
+		expire, err = time.ParseDuration(strings.TrimSpace(config.Expire))
+		if err != nil {
+			err = errors.Warning("authorizations: build default tokens failed").WithCause(errors.Warning("expire must be time.Duration format").WithCause(err))
+			return
+		}
+	}
+	tokens.expire = expire
 	return
 }
 
-func (component *defaultTokenEncodingComponent) Close() {
+func (tokens *defaultTokens) Close() {
 	return
 }
 
-func (component *defaultTokenEncodingComponent) Encode(id string, attributes *json.Object) (token Token, err error) {
-	v := &defaultToken{
-		Id_:        uid.UID(),
-		NotBefore_: time.Now(),
-		NotAfter_:  time.Now().Add(component.expires),
-		Uid:        id,
-		Attributes: attributes.Raw(),
-	}
-	p, encodeErr := json.Marshal(v)
-	if encodeErr != nil {
-		err = errors.Warning("authorizations: default token encoding failed").WithCause(encodeErr).WithMeta("component", "DefaultTokenEncoding")
+func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError) {
+	if !param.UserId.Exist() {
+		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("user id is not exist"))
 		return
 	}
-	num := rand.Uint64()
-	signature := make([]byte, 16)
-	binary.BigEndian.PutUint64(signature[0:8], num)
-	binary.LittleEndian.PutUint64(signature[8:16], xxhash.Sum64(bytes.Join([][]byte{p, p[0:8]}, []byte{})))
-	v.p = []byte(fmt.Sprintf("%s.%s", base64.StdEncoding.EncodeToString(p), base64.StdEncoding.EncodeToString(signature)))
-	token = v
+	userId := param.UserId.String()
+	deadline := fmt.Sprintf(fmt.Sprintf("%d", time.Now().Add(tokens.expire).Unix()))
+	p := make([]byte, 4, 8)
+	binary.BigEndian.PutUint16(p[0:2], uint16(len(userId)))
+	binary.BigEndian.PutUint16(p[2:4], uint16(len(deadline)))
+	p = append(p, bytex.FromString(userId)...)
+	p = append(p, bytex.FromString(deadline)...)
+	s := tokens.signer.Sign(p)
+	p = append(p, s...)
+	token = Token(bytex.ToString(p))
 	return
 }
 
-func (component *defaultTokenEncodingComponent) Decode(authorization []byte) (token Token, err error) {
-	if authorization == nil || len(authorization) < 6 || bytes.Index(authorization, []byte("Fns ")) != 0 {
-		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+func (tokens *defaultTokens) Verify(ctx context.Context, token Token) (result VerifyResult, err errors.CodeError) {
+	if token == "" {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is required"))
 		return
 	}
-	raw := authorization[4:]
-	items := bytes.Split(raw, []byte{'.'})
-	if len(items) != 2 {
-		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+	p := bytex.FromString(string(token))
+	pLen := uint16(len(p))
+	if pLen < 5 {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	if len(items[1]) != 16 {
-		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+	userIdLen := binary.BigEndian.Uint16(p[0:2])
+	deadlineLen := binary.BigEndian.Uint16(p[2:4])
+	if userIdLen == 0 || deadlineLen == 0 {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	if xxhash.Sum64(bytes.Join([][]byte{items[0], items[1][0:8]}, []byte{})) != binary.LittleEndian.Uint64(items[1][8:16]) {
-		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding")
+	ub := 4
+	ue := 4 + userIdLen
+	db := ue
+	de := db + deadlineLen
+	if pLen <= de {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	v := &defaultToken{}
-	decodeErr := json.Unmarshal(items[0], v)
-	if decodeErr != nil {
-		err = errors.Warning("authorizations: invalid authorization").WithMeta("component", "DefaultTokenEncoding").WithCause(decodeErr)
+	signature := p[de:]
+	if !tokens.signer.Verify(p[0:de], signature) {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	v.p = raw
-	token = v
+	userIdBytes := p[ub:ue]
+	if len(userIdBytes) == 0 {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		return
+	}
+	userId := service.RequestUserId(bytex.ToString(userIdBytes))
+	deadlineBytes := p[db:de]
+	if len(deadlineBytes) == 0 {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid"))
+		return
+	}
+	deadlineSec, deadlineSecErr := strconv.ParseInt(bytex.ToString(deadlineBytes), 10, 64)
+	if deadlineSecErr != nil {
+		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("token is invalid").WithCause(deadlineSecErr))
+		return
+	}
+	deadline := time.Unix(deadlineSec, 0)
+	result = VerifyResult{
+		Succeed:    deadline.After(time.Now()),
+		UserId:     userId,
+		Attributes: nil,
+	}
 	return
 }

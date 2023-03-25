@@ -24,10 +24,10 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func VerifyContext(ctx context.Context) (err errors.CodeError) {
+func ParseContext(ctx context.Context) (err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
-		err = errors.Warning("authorizations: verify token failed").WithCause(fmt.Errorf("there is no request in context"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
 	}
 	if request.User().Authenticated() {
@@ -35,20 +35,20 @@ func VerifyContext(ctx context.Context) (err errors.CodeError) {
 	}
 	token, hasToken := request.Header().Authorization()
 	if !hasToken {
-		err = errors.Unauthorized("authorizations: verify token failed").WithCause(fmt.Errorf("there is no authorization in request"))
+		err = errors.Unauthorized("authorizations: parse token failed").WithCause(fmt.Errorf("there is no authorization in request"))
 		return
 	}
-	result, verifyErr := Verify(ctx, Token(token))
+	result, verifyErr := Parse(ctx, Token(token))
 	if verifyErr != nil {
 		err = verifyErr
 		return
 	}
-	if !result.Succeed {
-		err = errors.Unauthorized("authorizations: verify token failed")
+	if !result.Valid {
+		err = errors.Unauthorized("authorizations: token is invalid")
 		return
 	}
 	if !result.UserId.Exist() {
-		err = errors.Warning("authorizations: verify token failed").WithCause(fmt.Errorf("there is no user id in result"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(fmt.Errorf("there is no user id in result"))
 		return
 	}
 	request.User().SetId(result.UserId)
@@ -58,26 +58,26 @@ func VerifyContext(ctx context.Context) (err errors.CodeError) {
 	return
 }
 
-type VerifyResult struct {
-	Succeed    bool
+type ParseResult struct {
+	Valid      bool                  `json:"valid"`
 	UserId     service.RequestUserId `json:"userId"`
 	Attributes *json.Object          `json:"attributes"`
 }
 
-func Verify(ctx context.Context, param Token) (result VerifyResult, err errors.CodeError) {
+func Parse(ctx context.Context, param Token) (result ParseResult, err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, name)
 	if !hasEndpoint {
-		err = errors.Warning("authorizations: verify token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
 		return
 	}
-	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, verifyFn, service.NewArgument(param), service.WithInternalRequest()))
+	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, parseFn, service.NewArgument(param), service.WithInternalRequest()))
 	if requestErr != nil {
 		err = requestErr
 		return
 	}
 	scanErr := future.Scan(&result)
 	if scanErr != nil {
-		err = errors.Warning("authorizations: verify token failed").WithCause(scanErr)
+		err = errors.Warning("authorizations: parse token failed").WithCause(scanErr)
 		return
 	}
 	return

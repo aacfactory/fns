@@ -64,10 +64,6 @@ func (svc *_service_) Build(options service.Options) (err error) {
 	return
 }
 
-func (svc *_service_) Document() (doc service.Document) {
-	return
-}
-
 func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case createFn:

@@ -31,7 +31,6 @@ import (
 func TestDefaultTokens(t *testing.T) {
 	config := json.NewObject()
 	_ = config.Put("key", "key")
-	_ = config.Put("expire", (5 * time.Second).String)
 	opt, _ := configures.NewJsonConfig(config.Raw())
 	tokens := authorizations.DefaultTokens()
 	buildErr := tokens.Build(service.ComponentOptions{
@@ -48,9 +47,10 @@ func TestDefaultTokens(t *testing.T) {
 	attrs := json.NewObject()
 	_ = attrs.Put("attr0", "0")
 	token, createErr := tokens.Create(context.TODO(), authorizations.CreateTokenParam{
-		Id:         "0",
-		UserId:     "user:0",
-		Attributes: attrs,
+		Id:          "0",
+		UserId:      "user:0",
+		Attributes:  attrs,
+		Expirations: 1 * time.Second,
 	})
 	if createErr != nil {
 		t.Errorf("%+v", createErr)
@@ -62,5 +62,5 @@ func TestDefaultTokens(t *testing.T) {
 		t.Errorf("%+v", parseErr)
 		return
 	}
-	fmt.Println(parsed.Valid, parsed.Id, parsed.UserId, parsed.Attributes)
+	fmt.Println(parsed.Valid, parsed.Id, parsed.UserId, parsed.Attributes, parsed.ExpireAT)
 }

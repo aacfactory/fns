@@ -58,13 +58,14 @@ func ParseContext(ctx context.Context) (err errors.CodeError) {
 	return
 }
 
-type ParseResult struct {
+type ParsedToken struct {
 	Valid      bool                  `json:"valid"`
+	Id         string                `json:"id"`
 	UserId     service.RequestUserId `json:"userId"`
 	Attributes *json.Object          `json:"attributes"`
 }
 
-func Parse(ctx context.Context, param Token) (result ParseResult, err errors.CodeError) {
+func Parse(ctx context.Context, param Token) (result ParsedToken, err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, name)
 	if !hasEndpoint {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("authorizations: service was not deployed"))

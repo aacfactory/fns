@@ -25,19 +25,19 @@ import (
 
 func NewCreateTokenParam(userId service.RequestUserId) (param *CreateTokenParam) {
 	param = &CreateTokenParam{
-		UserId:  userId,
-		Options: json.NewObject(),
+		UserId:     userId,
+		Attributes: json.NewObject(),
 	}
 	return
 }
 
 type CreateTokenParam struct {
-	UserId  service.RequestUserId `json:"userId"`
-	Options *json.Object          `json:"options"`
+	UserId     service.RequestUserId `json:"userId"`
+	Attributes *json.Object          `json:"attributes"`
 }
 
-func (param *CreateTokenParam) AddOption(key string, value string) *CreateTokenParam {
-	_ = param.Options.Put(key, value)
+func (param *CreateTokenParam) AddAttribute(key string, value string) *CreateTokenParam {
+	_ = param.Attributes.Put(key, value)
 	return param
 }
 

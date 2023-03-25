@@ -18,13 +18,16 @@ package authorizations
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
 	"strconv"
 	"strings"
 	"time"
@@ -33,12 +36,13 @@ import (
 type Token string
 
 type CreateTokenParam struct {
-	UserId  service.RequestUserId `json:"userId"`
-	Options *json.Object          `json:"options"`
+	UserId     service.RequestUserId `json:"userId"`
+	Attributes *json.Object          `json:"attributes"`
 }
 
-type ParseResult struct {
+type ParsedToken struct {
 	Valid      bool                  `json:"valid"`
+	Id         string                `json:"id"`
 	UserId     service.RequestUserId `json:"userId"`
 	Attributes *json.Object          `json:"attributes"`
 }
@@ -46,7 +50,7 @@ type ParseResult struct {
 type Tokens interface {
 	service.Component
 	Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError)
-	Parse(ctx context.Context, token Token) (result ParseResult, err errors.CodeError)
+	Parse(ctx context.Context, token Token) (result ParsedToken, err errors.CodeError)
 }
 
 type defaultTokensConfig struct {
@@ -101,46 +105,66 @@ func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam)
 		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("user id is not exist"))
 		return
 	}
+	id := xxhash.Sum64(bytex.FromString(uid.UID()))
 	userId := param.UserId.String()
 	deadline := fmt.Sprintf(fmt.Sprintf("%d", time.Now().Add(tokens.expire).Unix()))
-	p := make([]byte, 4, 8)
-	binary.BigEndian.PutUint16(p[0:2], uint16(len(userId)))
-	binary.BigEndian.PutUint16(p[2:4], uint16(len(deadline)))
+	payload := ""
+	if param.Attributes != nil {
+		payload = bytex.ToString(param.Attributes.Raw())
+	}
+	p := make([]byte, 16, 64)
+	binary.BigEndian.PutUint64(p[0:8], id)
+	binary.BigEndian.PutUint16(p[8:10], uint16(len(userId)))
+	binary.BigEndian.PutUint16(p[10:12], uint16(len(deadline)))
+	binary.BigEndian.PutUint32(p[12:16], uint32(len(payload)))
 	p = append(p, bytex.FromString(userId)...)
 	p = append(p, bytex.FromString(deadline)...)
+	p = append(p, bytex.FromString(payload)...)
 	s := tokens.signer.Sign(p)
 	p = append(p, s...)
-	token = Token(bytex.ToString(p))
+	token = Token(base64.URLEncoding.EncodeToString(p))
 	return
 }
 
-func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result ParseResult, err errors.CodeError) {
+func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result ParsedToken, err errors.CodeError) {
 	if token == "" {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is required"))
 		return
 	}
-	p := bytex.FromString(string(token))
-	pLen := uint16(len(p))
-	if pLen < 5 {
+	p, decodeErr := base64.URLEncoding.DecodeString(string(token))
+	if decodeErr != nil {
+		err = errors.Warning("authorizations: parse token failed").WithCause(decodeErr)
+		return
+	}
+	pLen := uint32(len(p))
+	if pLen < 16 {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	userIdLen := binary.BigEndian.Uint16(p[0:2])
-	deadlineLen := binary.BigEndian.Uint16(p[2:4])
+	id := binary.BigEndian.Uint64(p[0:8])
+	if id == 0 {
+		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
+		return
+	}
+	userIdLen := uint32(binary.BigEndian.Uint16(p[8:10]))
+	deadlineLen := uint32(binary.BigEndian.Uint16(p[10:12]))
+	payloadLen := binary.BigEndian.Uint32(p[12:16])
 	if userIdLen == 0 || deadlineLen == 0 {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	ub := 4
-	ue := 4 + userIdLen
+	ub := 16
+	ue := 16 + userIdLen
 	db := ue
 	de := db + deadlineLen
-	if pLen <= de {
+	pb := de
+	pe := pb + payloadLen
+	if pLen <= pe {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	signature := p[de:]
-	if !tokens.signer.Verify(p[0:de], signature) {
+	signature := p[pe:]
+	if !tokens.signer.Verify(p[0:pe], signature) {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
@@ -161,10 +185,24 @@ func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result Par
 		return
 	}
 	deadline := time.Unix(deadlineSec, 0)
-	result = ParseResult{
+	attributes := json.NewObject()
+	if payloadLen > 0 {
+		payload := p[pb:pe]
+		if !json.Validate(payload) {
+			err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
+			return
+		}
+		attributesErr := attributes.UnmarshalJSON(payload)
+		if attributesErr != nil {
+			err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid").WithCause(attributesErr))
+			return
+		}
+	}
+	result = ParsedToken{
 		Valid:      deadline.After(time.Now()),
+		Id:         fmt.Sprintf("%d", id),
 		UserId:     userId,
-		Attributes: nil,
+		Attributes: attributes,
 	}
 	return
 }

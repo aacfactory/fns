@@ -23,11 +23,10 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
-	"github.com/cespare/xxhash/v2"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +35,7 @@ import (
 type Token string
 
 type CreateTokenParam struct {
+	Id         string                `json:"id"`
 	UserId     service.RequestUserId `json:"userId"`
 	Attributes *json.Object          `json:"attributes"`
 }
@@ -101,22 +101,39 @@ func (tokens *defaultTokens) Close() {
 }
 
 func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError) {
-	if !param.UserId.Exist() {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("user id is not exist"))
+	if param.Id == "" {
+		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("id is required"))
 		return
 	}
-	id := xxhash.Sum64(bytex.FromString(uid.UID()))
+	if !param.UserId.Exist() {
+		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("user id is required"))
+		return
+	}
+	id := param.Id
+	if len(id) > 64 {
+		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("id is too large"))
+		return
+	}
 	userId := param.UserId.String()
+	if len(userId) > 64 {
+		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("use id is too large"))
+		return
+	}
 	deadline := fmt.Sprintf(fmt.Sprintf("%d", time.Now().Add(tokens.expire).Unix()))
 	payload := ""
 	if param.Attributes != nil {
 		payload = bytex.ToString(param.Attributes.Raw())
 	}
+	if len(payload) > math.MaxInt64 {
+		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("payload is too large"))
+		return
+	}
 	p := make([]byte, 16, 64)
-	binary.BigEndian.PutUint64(p[0:8], id)
-	binary.BigEndian.PutUint16(p[8:10], uint16(len(userId)))
-	binary.BigEndian.PutUint16(p[10:12], uint16(len(deadline)))
+	binary.BigEndian.PutUint32(p[0:4], uint32(len(id)))
+	binary.BigEndian.PutUint32(p[4:8], uint32(len(userId)))
+	binary.BigEndian.PutUint32(p[8:12], uint32(len(deadline)))
 	binary.BigEndian.PutUint32(p[12:16], uint32(len(payload)))
+	p = append(p, bytex.FromString(id)...)
 	p = append(p, bytex.FromString(userId)...)
 	p = append(p, bytex.FromString(deadline)...)
 	p = append(p, bytex.FromString(payload)...)
@@ -146,20 +163,18 @@ func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result Par
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	id := binary.BigEndian.Uint64(p[0:8])
-	if id == 0 {
-		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
-		return
-	}
-	userIdLen := uint32(binary.BigEndian.Uint16(p[8:10]))
-	deadlineLen := uint32(binary.BigEndian.Uint16(p[10:12]))
+	idLen := binary.BigEndian.Uint32(p[0:4])
+	userIdLen := binary.BigEndian.Uint32(p[4:8])
+	deadlineLen := binary.BigEndian.Uint32(p[8:12])
 	payloadLen := binary.BigEndian.Uint32(p[12:16])
-	if userIdLen == 0 || deadlineLen == 0 {
+	if idLen == 0 || userIdLen == 0 || deadlineLen == 0 {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	ub := 16
-	ue := 16 + userIdLen
+	ib := uint32(16)
+	ie := ib + idLen
+	ub := ie
+	ue := ub + userIdLen
 	db := ue
 	de := db + deadlineLen
 	pb := de
@@ -173,6 +188,7 @@ func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result Par
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
+	idBytes := p[ib:ie]
 	userIdBytes := p[ub:ue]
 	if len(userIdBytes) == 0 {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
@@ -205,7 +221,7 @@ func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result Par
 	}
 	result = ParsedToken{
 		Valid:      deadline.After(time.Now()),
-		Id:         fmt.Sprintf("%d", id),
+		Id:         bytex.ToString(idBytes),
 		UserId:     userId,
 		Attributes: attributes,
 	}

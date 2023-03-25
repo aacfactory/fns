@@ -32,6 +32,7 @@ func NewCreateTokenParam(userId service.RequestUserId) (param *CreateTokenParam)
 }
 
 type CreateTokenParam struct {
+	Id         string                `json:"id"`
 	UserId     service.RequestUserId `json:"userId"`
 	Attributes *json.Object          `json:"attributes"`
 }

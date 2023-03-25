@@ -154,6 +154,11 @@ func (id RequestUserId) String() string {
 	return string(id)
 }
 
+func (id RequestUserId) Exist() (ok bool) {
+	ok = id != "" && id != "0"
+	return
+}
+
 type RequestUser interface {
 	json.Marshaler
 	json.Unmarshaler

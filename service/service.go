@@ -53,7 +53,7 @@ type Service interface {
 	Internal() (internal bool)
 	Components() (components map[string]Component)
 	Document() (doc Document)
-	Handle(context context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
+	Handle(ctx context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
 	Close()
 }
 
@@ -147,6 +147,10 @@ func (svc *Abstract) Internal() (internal bool) {
 
 func (svc *Abstract) Components() (components map[string]Component) {
 	components = svc.components
+	return
+}
+
+func (svc *Abstract) Document() (doc Document) {
 	return
 }
 

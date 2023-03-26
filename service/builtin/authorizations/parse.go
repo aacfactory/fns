@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/json"
 )
 
 func ParseContext(ctx context.Context) (err errors.CodeError) {
@@ -56,13 +55,6 @@ func ParseContext(ctx context.Context) (err errors.CodeError) {
 		request.User().SetAttributes(result.Attributes)
 	}
 	return
-}
-
-type ParsedToken struct {
-	Valid      bool                  `json:"valid"`
-	Id         string                `json:"id"`
-	UserId     service.RequestUserId `json:"userId"`
-	Attributes *json.Object          `json:"attributes"`
 }
 
 func Parse(ctx context.Context, param Token) (result ParsedToken, err errors.CodeError) {

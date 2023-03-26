@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	name     = "authorizations"
 	createFn = "create"
 	parseFn  = "parse"
 )
@@ -34,7 +35,7 @@ func Service(tokens Tokens) (v service.Service) {
 		return
 	}
 	v = &_service_{
-		Abstract: service.NewAbstract("authorizations", true, tokens),
+		Abstract: service.NewAbstract(name, true, tokens),
 	}
 	return
 }

@@ -23,11 +23,6 @@ import (
 	"github.com/aacfactory/fns/service"
 )
 
-const (
-	name      = "permissions"
-	enforceFn = "enforce"
-)
-
 func EnforceContext(ctx context.Context, serviceName string, fn string) (ok bool, err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
@@ -45,12 +40,6 @@ func EnforceContext(ctx context.Context, serviceName string, fn string) (ok bool
 		Fn:      fn,
 	})
 	return
-}
-
-type EnforceParam struct {
-	UserId  service.RequestUserId `json:"userId"`
-	Service string                `json:"service"`
-	Fn      string                `json:"fn"`
 }
 
 func Enforce(ctx context.Context, param EnforceParam) (ok bool, err errors.CodeError) {

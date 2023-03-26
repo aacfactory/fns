@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	name      = "permissions"
 	enforceFn = "enforce"
 )
 
@@ -33,7 +34,7 @@ func Service(enforcer Enforcer) (v service.Service) {
 		return
 	}
 	v = &service_{
-		Abstract: service.NewAbstract("permissions", true, enforcer),
+		Abstract: service.NewAbstract(name, true, enforcer),
 	}
 	return
 }

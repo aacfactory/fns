@@ -46,7 +46,7 @@ func TestDefaultTokens(t *testing.T) {
 	}
 	attrs := json.NewObject()
 	_ = attrs.Put("attr0", "0")
-	token, createErr := tokens.Create(context.TODO(), authorizations.CreateTokenParam{
+	token, createErr := tokens.Format(context.TODO(), authorizations.FormatTokenParam{
 		Id:          "0",
 		UserId:      "user:0",
 		Attributes:  attrs,

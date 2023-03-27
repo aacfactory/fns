@@ -25,7 +25,7 @@ import (
 
 const (
 	name     = "authorizations"
-	createFn = "create"
+	formatFn = "format"
 	parseFn  = "parse"
 )
 
@@ -67,14 +67,14 @@ func (svc *_service_) Build(options service.Options) (err error) {
 
 func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
-	case createFn:
-		param := CreateTokenParam{}
+	case formatFn:
+		param := FormatTokenParam{}
 		paramErr := argument.As(&param)
 		if paramErr != nil {
-			err = errors.Warning("authorizations: create token failed").WithCause(paramErr)
+			err = errors.Warning("authorizations: format token failed").WithCause(paramErr)
 			break
 		}
-		v, err = svc.tokens.Create(ctx, param)
+		v, err = svc.tokens.Format(ctx, param)
 		break
 	case parseFn:
 		param := Token("")

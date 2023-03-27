@@ -34,7 +34,7 @@ import (
 
 type Token string
 
-type CreateTokenParam struct {
+type FormatTokenParam struct {
 	Id          string                `json:"id"`
 	UserId      service.RequestUserId `json:"userId"`
 	Attributes  *json.Object          `json:"attributes"`
@@ -51,7 +51,7 @@ type ParsedToken struct {
 
 type Tokens interface {
 	service.Component
-	Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError)
+	Format(ctx context.Context, param FormatTokenParam) (token Token, err errors.CodeError)
 	Parse(ctx context.Context, token Token) (result ParsedToken, err errors.CodeError)
 }
 
@@ -91,28 +91,28 @@ func (tokens *defaultTokens) Close() {
 	return
 }
 
-func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError) {
+func (tokens *defaultTokens) Format(ctx context.Context, param FormatTokenParam) (token Token, err errors.CodeError) {
 	if param.Id == "" {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("id is required"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("id is required"))
 		return
 	}
 	if !param.UserId.Exist() {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("user id is required"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("user id is required"))
 		return
 	}
 	expirations := param.Expirations
 	if expirations < 1 {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("expirations is required"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("expirations is required"))
 		return
 	}
 	id := param.Id
 	if len(id) > 64 {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("id is too large"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("id is too large"))
 		return
 	}
 	userId := param.UserId.String()
 	if len(userId) > 64 {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("use id is too large"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("use id is too large"))
 		return
 	}
 	deadline := fmt.Sprintf(fmt.Sprintf("%d", time.Now().Add(expirations).Unix()))
@@ -121,7 +121,7 @@ func (tokens *defaultTokens) Create(ctx context.Context, param CreateTokenParam)
 		payload = bytex.ToString(param.Attributes.Raw())
 	}
 	if len(payload) > math.MaxInt64 {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("payload is too large"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("payload is too large"))
 		return
 	}
 	p := make([]byte, 16, 64)

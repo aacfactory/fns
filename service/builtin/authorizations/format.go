@@ -23,33 +23,33 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func NewCreateTokenParam(userId service.RequestUserId) (param *CreateTokenParam) {
-	param = &CreateTokenParam{
+func NewFormatTokenParam(userId service.RequestUserId) (param *FormatTokenParam) {
+	param = &FormatTokenParam{
 		UserId:     userId,
 		Attributes: json.NewObject(),
 	}
 	return
 }
 
-func (param *CreateTokenParam) AddAttribute(key string, value string) *CreateTokenParam {
+func (param *FormatTokenParam) AddAttribute(key string, value string) *FormatTokenParam {
 	_ = param.Attributes.Put(key, value)
 	return param
 }
 
-func Create(ctx context.Context, param CreateTokenParam) (token Token, err errors.CodeError) {
+func Format(ctx context.Context, param FormatTokenParam) (token Token, err errors.CodeError) {
 	endpoint, hasEndpoint := service.GetEndpoint(ctx, name)
 	if !hasEndpoint {
-		err = errors.Warning("authorizations: create token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
+		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
 		return
 	}
-	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, createFn, service.NewArgument(param), service.WithInternalRequest()))
+	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, formatFn, service.NewArgument(param), service.WithInternalRequest()))
 	if requestErr != nil {
 		err = requestErr
 		return
 	}
 	scanErr := future.Scan(&token)
 	if scanErr != nil {
-		err = errors.Warning("authorizations: create token failed").WithCause(scanErr)
+		err = errors.Warning("authorizations: format token failed").WithCause(scanErr)
 		return
 	}
 	return

@@ -50,7 +50,7 @@ func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <
 		dialer:         dialer,
 		discovery:      nil,
 		signer:         secret.NewSigner(secretKey),
-		cache:          lru.New[string, json.RawMessage](8),
+		attachment:     lru.New[string, json.RawMessage](8),
 		group:          &singleflight.Group{},
 	}
 	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer) {
@@ -67,6 +67,10 @@ func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <
 	return
 }
 
+type proxyHandlerConfig struct {
+	Cache *CacheControlConfig `json:"cache"`
+}
+
 type proxyHandler struct {
 	appId          string
 	appName        string
@@ -81,8 +85,9 @@ type proxyHandler struct {
 	dialer         HttpClientDialer
 	discovery      EndpointDiscovery
 	signer         *secret.Signer
-	cache          *lru.LRU[string, json.RawMessage]
+	attachment     *lru.LRU[string, json.RawMessage]
 	group          *singleflight.Group
+	cache          *CacheControl
 }
 
 func (handler *proxyHandler) Name() (name string) {
@@ -91,11 +96,24 @@ func (handler *proxyHandler) Name() (name string) {
 }
 
 func (handler *proxyHandler) Build(options *HttpHandlerOptions) (err error) {
+	config := proxyHandlerConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: build proxy handler failed").WithCause(configErr)
+		return
+	}
 	handler.log = options.Log
 	handler.appId = options.AppId
 	handler.appName = options.AppName
 	handler.appVersion = options.AppVersion
 	handler.discovery = options.Discovery
+	if config.Cache != nil {
+		handler.cache, err = NewCacheControl(*config.Cache)
+		if err != nil {
+			err = errors.Warning("fns: build proxy handler failed").WithCause(err)
+			return
+		}
+	}
 	return
 }
 
@@ -126,13 +144,15 @@ func (handler *proxyHandler) Accept(r *http.Request) (ok bool) {
 }
 
 func (handler *proxyHandler) Close() {
-
+	if handler.cache != nil {
+		handler.cache.Close()
+	}
 	return
 }
 
 func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
 	if !handler.ready {
-		handler.failed(writer, "", 0, http.StatusTooEarly, errors.Warning("proxy: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		handler.failed(writer, 0, http.StatusTooEarly, errors.Warning("proxy: handler is not ready, try later again").WithMeta("handler", handler.Name()))
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
@@ -156,6 +176,16 @@ func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Req
 		namesKey        = "names"
 		refreshGroupKey = "names_refresh"
 	)
+	groupKey := namesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	} else {
+		if handler.cache != nil {
+			if handler.cache.Check(writer, r.Header, r.URL, nil) {
+				return
+			}
+		}
+	}
 	handleBegAT := time.Time{}
 	latency := time.Duration(0)
 	if handler.log.DebugEnabled() {
@@ -164,13 +194,9 @@ func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Req
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	groupKey := namesKey
-	if r.URL.Query().Get("refresh") == "true" {
-		groupKey = refreshGroupKey
-	}
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
 		if r.URL.Query().Get("refresh") != "true" {
-			cached, has := handler.cache.Get(namesKey)
+			cached, has := handler.attachment.Get(namesKey)
 			if has {
 				v = cached
 				return
@@ -206,7 +232,7 @@ func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Req
 			err = errors.Warning("proxy: handle names request failed").WithCause(encodeErr)
 			return
 		}
-		handler.cache.Add(namesKey, p, 60*time.Second)
+		handler.attachment.Add(namesKey, p, 60*time.Second)
 		v = json.RawMessage(p)
 		return
 	})
@@ -214,10 +240,10 @@ func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Req
 		latency = time.Now().Sub(handleBegAT)
 	}
 	if err != nil {
-		handler.failed(writer, "", latency, 555, errors.Map(err))
+		handler.failed(writer, latency, 555, errors.Map(err))
 		return
 	}
-	handler.succeed(writer, "", latency, v)
+	handler.succeed(writer, r, latency, v)
 	return
 }
 
@@ -226,6 +252,16 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 		namesKey        = "openapi"
 		refreshGroupKey = "openapi_refresh"
 	)
+	groupKey := namesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	} else {
+		if handler.cache != nil {
+			if handler.cache.Check(writer, r.Header, r.URL, nil) {
+				return
+			}
+		}
+	}
 	handleBegAT := time.Time{}
 	latency := time.Duration(0)
 	if handler.log.DebugEnabled() {
@@ -234,13 +270,10 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	groupKey := namesKey
-	if r.URL.Query().Get("refresh") == "true" {
-		groupKey = refreshGroupKey
-	}
+
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
 		if r.URL.Query().Get("refresh") != "true" {
-			cached, has := handler.cache.Get(namesKey)
+			cached, has := handler.attachment.Get(namesKey)
 			if has {
 				v = cached
 				return
@@ -265,7 +298,7 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 			err = errors.Warning("proxy: handle openapi request failed").WithCause(encodeErr)
 			return
 		}
-		handler.cache.Add(namesKey, p, 60*time.Second)
+		handler.attachment.Add(namesKey, p, 60*time.Second)
 		v = json.RawMessage(p)
 		return
 	})
@@ -273,10 +306,10 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 		latency = time.Now().Sub(handleBegAT)
 	}
 	if err != nil {
-		handler.failed(writer, "", latency, 555, errors.Map(err))
+		handler.failed(writer, latency, 555, errors.Map(err))
 		return
 	}
-	handler.succeed(writer, "", latency, v)
+	handler.succeed(writer, r, latency, v)
 	return
 }
 
@@ -285,6 +318,16 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 		namesKey        = "documents"
 		refreshGroupKey = "documents_refresh"
 	)
+	groupKey := namesKey
+	if r.URL.Query().Get("refresh") == "true" {
+		groupKey = refreshGroupKey
+	} else {
+		if handler.cache != nil {
+			if handler.cache.Check(writer, r.Header, r.URL, nil) {
+				return
+			}
+		}
+	}
 	handleBegAT := time.Time{}
 	latency := time.Duration(0)
 	if handler.log.DebugEnabled() {
@@ -293,13 +336,10 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
-	groupKey := namesKey
-	if r.URL.Query().Get("refresh") == "true" {
-		groupKey = refreshGroupKey
-	}
+
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
 		if r.URL.Query().Get("refresh") != "true" {
-			cached, has := handler.cache.Get(namesKey)
+			cached, has := handler.attachment.Get(namesKey)
 			if has {
 				v = cached
 				return
@@ -328,7 +368,7 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 			err = errors.Warning("proxy: handle documents request failed").WithCause(encodeErr)
 			return
 		}
-		handler.cache.Add(namesKey, p, 60*time.Second)
+		handler.attachment.Add(namesKey, p, 60*time.Second)
 		v = json.RawMessage(p)
 		return
 	})
@@ -336,21 +376,21 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 		latency = time.Now().Sub(handleBegAT)
 	}
 	if err != nil {
-		handler.failed(writer, "", latency, 555, errors.Map(err))
+		handler.failed(writer, latency, 555, errors.Map(err))
 		return
 	}
-	handler.succeed(writer, "", latency, v)
+	handler.succeed(writer, r, latency, v)
 	return
 }
 
 func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Request) {
 	pathItems := strings.Split(r.URL.Path, "/")
 	if len(pathItems) != 3 {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: invalid request url path"))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: invalid request url path"))
 		return
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: X-Fns-Device-Id is required"))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: X-Fns-Device-Id is required"))
 		return
 	}
 	if r.Header.Get(httpProxyTargetNodeId) != "" {
@@ -359,30 +399,35 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 	}
 	leftVersion, rightVersion, parseErr := versions.ParseRange(r.Header.Get(httpRequestVersionsHeader))
 	if parseErr != nil {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: X-Fns-Request-Version is invalid").WithCause(parseErr))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: X-Fns-Request-Version is invalid").WithCause(parseErr))
 		return
 	}
 	serviceName := pathItems[1]
 	registration, has := handler.registrations.Get(serviceName, leftVersion, rightVersion)
 	if !has {
-		handler.failed(writer, "", 0, 404, errors.Warning("proxy: service was not found").WithMeta("service", serviceName))
+		handler.failed(writer, 0, 404, errors.Warning("proxy: service was not found").WithMeta("service", serviceName))
 		return
 	}
 	client, clientErr := handler.dialer.Dial(registration.address)
 	if clientErr != nil {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithCause(clientErr))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithCause(clientErr))
 		return
 	}
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
 		if readBodyErr != io.EOF {
-			handler.failed(writer, "", 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+			handler.failed(writer, 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+			return
+		}
+	}
+	if handler.cache != nil {
+		if handler.cache.Check(writer, r.Header, r.URL, body) {
 			return
 		}
 	}
 	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)
 	if postErr != nil {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithCause(postErr))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithCause(postErr))
 		return
 	}
 	writer.WriteHeader(status)
@@ -392,6 +437,9 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 				writer.Header().Add(k, v)
 			}
 		}
+	}
+	if status == http.StatusOK && handler.cache != nil {
+		handler.cache.Set(writer, header, r.URL, respBody)
 	}
 	n := 0
 	bodyLen := len(respBody)
@@ -407,7 +455,7 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 
 func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.Request) {
 	if !handler.devMode {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: dev mode is not enabled"))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: dev mode is not enabled"))
 		return
 	}
 	nodeId := r.Header.Get(httpProxyTargetNodeId)
@@ -415,30 +463,30 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 	serviceName := pathItems[1]
 	registration, has := handler.registrations.GetExact(serviceName, nodeId)
 	if !has {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: host was not found").WithMeta("service", serviceName).WithMeta("id", nodeId))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: host was not found").WithMeta("service", serviceName).WithMeta("id", nodeId))
 		return
 	}
 	client, clientErr := handler.dialer.Dial(registration.address)
 	if clientErr != nil {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(clientErr))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(clientErr))
 		return
 	}
 
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
 		if readBodyErr != io.EOF {
-			handler.failed(writer, "", 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+			handler.failed(writer, 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
 			return
 		}
 	}
 	// verify signature
 	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("proxy: X-Fns-Request-Signature is invalid"))
+		handler.failed(writer, 0, http.StatusNotAcceptable, errors.Warning("proxy: X-Fns-Request-Signature is invalid"))
 		return
 	}
 	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)
 	if postErr != nil {
-		handler.failed(writer, "", 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(postErr))
+		handler.failed(writer, 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(postErr))
 		return
 	}
 	writer.WriteHeader(status)
@@ -461,11 +509,8 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 	return
 }
 
-func (handler *proxyHandler) succeed(writer http.ResponseWriter, id string, latency time.Duration, result interface{}) {
+func (handler *proxyHandler) succeed(writer http.ResponseWriter, r *http.Request, latency time.Duration, result interface{}) {
 	writer.Header().Set(httpContentType, httpContentTypeJson)
-	if id != "" {
-		writer.Header().Set(httpRequestIdHeader, id)
-	}
 	if handler.log.DebugEnabled() {
 		writer.Header().Set(httpHandleLatencyHeader, latency.String())
 	}
@@ -473,8 +518,11 @@ func (handler *proxyHandler) succeed(writer http.ResponseWriter, id string, late
 	body, encodeErr := json.Marshal(result)
 	if encodeErr != nil {
 		cause := errors.Warning("encode result failed").WithCause(encodeErr)
-		handler.failed(writer, id, latency, cause.Code(), cause)
+		handler.failed(writer, latency, cause.Code(), cause)
 		return
+	}
+	if handler.cache != nil {
+		handler.cache.Set(writer, nil, r.URL, body)
 	}
 	n := 0
 	bodyLen := len(body)
@@ -488,11 +536,8 @@ func (handler *proxyHandler) succeed(writer http.ResponseWriter, id string, late
 	return
 }
 
-func (handler *proxyHandler) failed(writer http.ResponseWriter, id string, latency time.Duration, status int, cause interface{}) {
+func (handler *proxyHandler) failed(writer http.ResponseWriter, latency time.Duration, status int, cause interface{}) {
 	writer.Header().Set(httpContentType, httpContentTypeJson)
-	if id != "" {
-		writer.Header().Set(httpRequestIdHeader, id)
-	}
 	if handler.log.DebugEnabled() {
 		writer.Header().Set(httpHandleLatencyHeader, latency.String())
 	}

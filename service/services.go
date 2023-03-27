@@ -100,6 +100,10 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 	return
 }
 
+type serviceHandlerConfig struct {
+	Cache *CacheControlConfig `json:"cache"`
+}
+
 type servicesHandler struct {
 	log                    logs.Logger
 	ready                  bool
@@ -112,6 +116,7 @@ type servicesHandler struct {
 	internalRequestEnabled bool
 	signer                 *secret.Signer
 	discovery              EndpointDiscovery
+	cache                  *CacheControl
 }
 
 func (handler *servicesHandler) Name() (name string) {
@@ -120,11 +125,24 @@ func (handler *servicesHandler) Name() (name string) {
 }
 
 func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
+	config := serviceHandlerConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: build services handler failed").WithCause(configErr)
+		return
+	}
 	handler.log = options.Log.With("handler", "services")
 	handler.appId = options.AppId
 	handler.appName = options.AppName
 	handler.appVersion = options.AppVersion
 	handler.discovery = options.Discovery
+	if config.Cache != nil {
+		handler.cache, err = NewCacheControl(*config.Cache)
+		if err != nil {
+			err = errors.Warning("fns: build services handler failed").WithCause(err)
+			return
+		}
+	}
 	return
 }
 
@@ -155,11 +173,11 @@ func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Re
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-		handler.handleDocuments(writer)
+		handler.handleDocuments(writer, r)
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-		handler.handleOpenapi(writer)
+		handler.handleOpenapi(writer, r)
 		return
 	}
 	handler.handleRequest(writer, r)
@@ -167,6 +185,9 @@ func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Re
 }
 
 func (handler *servicesHandler) Close() {
+	if handler.cache != nil {
+		handler.cache.Close()
+	}
 	return
 }
 
@@ -231,7 +252,11 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 			return
 		}
 	}
-
+	if handler.cache != nil {
+		if handler.cache.Check(writer, r.Header, r.URL, body) {
+			return
+		}
+	}
 	if !handler.matchRequestVersion(writer, r) {
 		return
 	}
@@ -288,14 +313,14 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if requestErr != nil {
 		handler.failed(writer, id, latency, requestErr.Code(), requestErr)
 	} else {
-		handler.succeed(writer, id, latency, responseHeader, result)
+		handler.succeed(writer, r, true, id, latency, responseHeader, result)
 	}
 	return
 }
 
 func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter, r *http.Request) {
 	if !handler.internalRequestEnabled {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: cluster mode is disabled"))
+		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: cluster mode is not enabled"))
 		return
 	}
 	// id
@@ -400,16 +425,24 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 			handler.failed(writer, id, 0, 555, iResp)
 		} else {
 			iResp.Body = resultJsonBytes
-			handler.succeed(writer, id, 0, nil, iResp)
+			handler.succeed(writer, r, false, id, 0, nil, iResp)
 		}
 	}
 
 	return
 }
 
-func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
+func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *http.Request) {
+	if handler.cache != nil {
+		if handler.cache.Check(writer, r.Header, r.URL, nil) {
+			return
+		}
+	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(http.StatusOK)
+	if handler.cache != nil {
+		handler.cache.Set(writer, nil, r.URL, handler.documents)
+	}
 	n := 0
 	bodyLen := len(handler.documents)
 	for n < bodyLen {
@@ -422,9 +455,17 @@ func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
+func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter, r *http.Request) {
+	if handler.cache != nil {
+		if handler.cache.Check(writer, r.Header, r.URL, nil) {
+			return
+		}
+	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	writer.WriteHeader(http.StatusOK)
+	if handler.cache != nil {
+		handler.cache.Set(writer, nil, r.URL, handler.openapi)
+	}
 	n := 0
 	bodyLen := len(handler.openapi)
 	for n < bodyLen {
@@ -438,17 +479,28 @@ func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
 }
 
 func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.Request) {
+	if handler.cache != nil {
+		if handler.cache.Check(writer, r.Header, r.URL, nil) {
+			return
+		}
+	}
 	deviceId := r.Header.Get(httpDeviceIdHeader)
 	signature := r.Header.Get(httpRequestSignatureHeader)
 	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
 		handler.failed(writer, "", 0, 555, errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
 		return
 	}
-	handler.succeed(writer, "", 0, nil, handler.names)
+	handler.succeed(writer, r, true, "", 0, http.Header{}, handler.names)
 	return
 }
 
-func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, latency time.Duration, header http.Header, result interface{}) {
+func (handler *servicesHandler) succeed(writer http.ResponseWriter, r *http.Request, tryCache bool, id string, latency time.Duration, header http.Header, result interface{}) {
+	body, encodeErr := json.Marshal(result)
+	if encodeErr != nil {
+		cause := errors.Warning("encode result failed").WithCause(encodeErr)
+		handler.failed(writer, id, latency, cause.Code(), cause)
+		return
+	}
 	if header != nil && len(header) > 0 {
 		for key, vv := range header {
 			if vv == nil || len(vv) == 0 {
@@ -467,11 +519,8 @@ func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, l
 		writer.Header().Set(httpHandleLatencyHeader, latency.String())
 	}
 	writer.WriteHeader(http.StatusOK)
-	body, encodeErr := json.Marshal(result)
-	if encodeErr != nil {
-		cause := errors.Warning("encode result failed").WithCause(encodeErr)
-		handler.failed(writer, id, latency, cause.Code(), cause)
-		return
+	if tryCache && handler.cache != nil {
+		handler.cache.Set(writer, header, r.URL, body)
 	}
 	n := 0
 	bodyLen := len(body)

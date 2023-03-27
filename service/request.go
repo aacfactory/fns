@@ -316,6 +316,7 @@ func (trunk *requestTrunk) Remove(key string) {
 type Request interface {
 	Id() (id string)
 	Header() (header RequestHeader)
+	ResponseHeader() (header http.Header)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
 	Internal() (ok bool)
@@ -338,6 +339,12 @@ func WithHttpRequestHeader(header http.Header) RequestOption {
 				options.header.Add(key, value)
 			}
 		}
+	}
+}
+
+func WithHttpResponseHeader(header http.Header) RequestOption {
+	return func(options *RequestOptions) {
+		options.responseHeader = header
 	}
 }
 
@@ -372,24 +379,26 @@ func WithRequestTrunk(trunk RequestTrunk) RequestOption {
 }
 
 type RequestOptions struct {
-	id       string
-	header   RequestHeader
-	deviceId string
-	deviceIp string
-	internal bool
-	user     RequestUser
-	trunk    RequestTrunk
+	id             string
+	header         RequestHeader
+	responseHeader http.Header
+	deviceId       string
+	deviceIp       string
+	internal       bool
+	user           RequestUser
+	trunk          RequestTrunk
 }
 
 func NewRequest(ctx context.Context, service string, fn string, argument Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
-		id:       "",
-		header:   newRequestHeader(),
-		deviceId: "",
-		deviceIp: "",
-		user:     nil,
-		internal: false,
-		trunk:    newRequestTrunk(),
+		id:             "",
+		header:         newRequestHeader(),
+		responseHeader: http.Header{},
+		deviceId:       "",
+		deviceIp:       "",
+		user:           nil,
+		internal:       false,
+		trunk:          newRequestTrunk(),
 	}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
@@ -425,14 +434,15 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 			user = prev.User()
 		}
 		v = &request{
-			id:       id,
-			internal: internal,
-			user:     user,
-			trunk:    prev.Trunk(),
-			header:   header,
-			service:  service,
-			fn:       fn,
-			argument: argument,
+			id:             id,
+			internal:       internal,
+			user:           user,
+			trunk:          prev.Trunk(),
+			header:         header,
+			responseHeader: prev.ResponseHeader(),
+			service:        service,
+			fn:             fn,
+			argument:       argument,
 		}
 	} else {
 		id := opt.id
@@ -457,28 +467,30 @@ func NewRequest(ctx context.Context, service string, fn string, argument Argumen
 			user = NewRequestUser("", nil)
 		}
 		v = &request{
-			id:       id,
-			internal: opt.internal,
-			user:     user,
-			trunk:    opt.trunk,
-			header:   header,
-			service:  service,
-			fn:       fn,
-			argument: argument,
+			id:             id,
+			internal:       opt.internal,
+			user:           user,
+			trunk:          opt.trunk,
+			header:         header,
+			responseHeader: opt.responseHeader,
+			service:        service,
+			fn:             fn,
+			argument:       argument,
 		}
 	}
 	return
 }
 
 type request struct {
-	id       string
-	internal bool
-	user     RequestUser
-	trunk    RequestTrunk
-	header   RequestHeader
-	service  string
-	fn       string
-	argument Argument
+	id             string
+	internal       bool
+	user           RequestUser
+	trunk          RequestTrunk
+	header         RequestHeader
+	responseHeader http.Header
+	service        string
+	fn             string
+	argument       Argument
 }
 
 func (r *request) Id() (id string) {
@@ -503,6 +515,11 @@ func (r *request) Trunk() (trunk RequestTrunk) {
 
 func (r *request) Header() (header RequestHeader) {
 	header = r.header
+	return
+}
+
+func (r *request) ResponseHeader() (header http.Header) {
+	header = r.responseHeader
 	return
 }
 
@@ -558,15 +575,17 @@ type internalRequest struct {
 }
 
 type internalResponseImpl struct {
-	User  *requestUser    `json:"user"`
-	Trunk *requestTrunk   `json:"trunk"`
-	Span  *Span           `json:"Span"`
-	Body  json.RawMessage `json:"body"`
+	User   *requestUser    `json:"user"`
+	Trunk  *requestTrunk   `json:"trunk"`
+	Span   *Span           `json:"Span"`
+	Header http.Header     `json:"header"`
+	Body   json.RawMessage `json:"body"`
 }
 
 type internalResponse struct {
-	User  RequestUser     `json:"user"`
-	Trunk RequestTrunk    `json:"trunk"`
-	Span  *Span           `json:"Span"`
-	Body  json.RawMessage `json:"body"`
+	User   RequestUser     `json:"user"`
+	Trunk  RequestTrunk    `json:"trunk"`
+	Span   *Span           `json:"Span"`
+	Header http.Header     `json:"header"`
+	Body   json.RawMessage `json:"body"`
 }

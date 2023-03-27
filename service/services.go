@@ -268,12 +268,14 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if handler.log.DebugEnabled() {
 		handleBegAT = time.Now()
 	}
+	responseHeader := http.Header{}
 	result, requestErr := ep.RequestSync(withTracer(ctx, id), NewRequest(
 		ctx,
 		serviceName,
 		fnName,
 		NewArgument(body),
 		WithHttpRequestHeader(r.Header),
+		WithHttpResponseHeader(responseHeader),
 		WithDeviceIp(devIp),
 		WithRequestId(id),
 	))
@@ -286,7 +288,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if requestErr != nil {
 		handler.failed(writer, id, latency, requestErr.Code(), requestErr)
 	} else {
-		handler.succeed(writer, id, latency, result)
+		handler.succeed(writer, id, latency, responseHeader, result)
 	}
 	return
 }
@@ -349,12 +351,14 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	}
 
 	// request
+	responseHeader := http.Header{}
 	req := NewRequest(
 		ctx,
 		serviceName,
 		fnName,
 		NewArgument(iReq.Body),
 		WithHttpRequestHeader(r.Header),
+		WithHttpResponseHeader(responseHeader),
 		WithRequestId(id),
 		WithInternalRequest(),
 		WithRequestTrunk(iReq.Trunk),
@@ -372,10 +376,11 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		span = tracer_.RootSpan()
 	}
 	iResp := &internalResponse{
-		User:  req.User(),
-		Trunk: req.Trunk(),
-		Span:  span,
-		Body:  nil,
+		User:   req.User(),
+		Trunk:  req.Trunk(),
+		Span:   span,
+		Header: responseHeader,
+		Body:   nil,
 	}
 	if requestErr != nil {
 		requestErrBytes, encodeErr := json.Marshal(requestErr)
@@ -395,7 +400,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 			handler.failed(writer, id, 0, 555, iResp)
 		} else {
 			iResp.Body = resultJsonBytes
-			handler.succeed(writer, id, 0, iResp)
+			handler.succeed(writer, id, 0, nil, iResp)
 		}
 	}
 
@@ -439,11 +444,21 @@ func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.
 		handler.failed(writer, "", 0, 555, errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
 		return
 	}
-	handler.succeed(writer, "", 0, handler.names)
+	handler.succeed(writer, "", 0, nil, handler.names)
 	return
 }
 
-func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, latency time.Duration, result interface{}) {
+func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, latency time.Duration, header http.Header, result interface{}) {
+	if header != nil && len(header) > 0 {
+		for key, vv := range header {
+			if vv == nil || len(vv) == 0 {
+				continue
+			}
+			for _, v := range vv {
+				writer.Header().Add(key, v)
+			}
+		}
+	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	if id != "" {
 		writer.Header().Set(httpRequestIdHeader, id)

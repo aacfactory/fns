@@ -168,6 +168,17 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	if ir.Trunk != nil {
 		r.Trunk().ReadFrom(ir.Trunk)
 	}
+	// header
+	if ir.Header != nil && len(ir.Header) > 0 {
+		for key, vv := range ir.Header {
+			if vv == nil || len(vv) == 0 {
+				continue
+			}
+			for _, v := range vv {
+				r.ResponseHeader().Add(key, v)
+			}
+		}
+	}
 	// body
 	if status == http.StatusOK {
 		fr.Succeed(ir.Body)

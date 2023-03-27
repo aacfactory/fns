@@ -224,18 +224,38 @@ func (fr *futureResult) MarshalJSON() (p []byte, err error) {
 		p = bytex.FromString(nilJson)
 		return
 	}
-	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+	switch rv.Kind() {
+	case reflect.Array, reflect.Slice:
 		if rv.Len() == 0 {
 			p = bytex.FromString(emptyArrayJson)
 		} else {
 			p, err = json.Marshal(fr.data)
 		}
-		return
+		break
+	case reflect.Struct:
+		if rv.IsZero() {
+			p = bytex.FromString(nilJson)
+		} else {
+			p, err = json.Marshal(fr.data)
+		}
+		break
+	case reflect.Map:
+		if rv.IsZero() || rv.Len() == 0 {
+			p = bytex.FromString(nilJson)
+		} else {
+			p, err = json.Marshal(fr.data)
+		}
+		break
+	case reflect.Ptr:
+		if rv.IsNil() {
+			p = bytex.FromString(nilJson)
+		} else {
+			p, err = json.Marshal(fr.data)
+		}
+		break
+	default:
+		p, err = json.Marshal(fr.data)
+		break
 	}
-	if rv.IsZero() {
-		p = bytex.FromString(nilJson)
-		return
-	}
-	p, err = json.Marshal(fr.data)
 	return
 }

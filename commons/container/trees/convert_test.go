@@ -23,17 +23,33 @@ import (
 	"testing"
 )
 
+type Nodes []*Node
+
+func (nodes Nodes) Len() int {
+	return len(nodes)
+}
+
+func (nodes Nodes) Less(i, j int) bool {
+	return nodes[i].Id < nodes[j].Id
+}
+
+func (nodes Nodes) Swap(i, j int) {
+	nodes[i], nodes[j] = nodes[j], nodes[i]
+	return
+}
+
 type Node struct {
 	Id       string `tree:"Parent+Children"`
 	Parent   string
-	Children []*Node
+	Children Nodes
 }
 
 func TestConvertListToTree(t *testing.T) {
 	nodes := []*Node{
 		{Id: "A", Parent: ""},
-		{Id: "A1", Parent: "A"},
 		{Id: "A2", Parent: "A"},
+		{Id: "A1", Parent: "A"},
+		{Id: "A12", Parent: "A1"},
 		{Id: "A11", Parent: "A1"},
 		{Id: "B", Parent: ""},
 		{Id: "B1", Parent: "B"},

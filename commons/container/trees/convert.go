@@ -19,11 +19,16 @@ package trees
 import (
 	"github.com/aacfactory/errors"
 	"reflect"
+	"sort"
 	"strings"
 )
 
 const (
 	treeTag = "tree"
+)
+
+var (
+	sortType = reflect.TypeOf((*sort.Interface)(nil)).Elem()
 )
 
 func ConvertListToTree[T any](items []T) (v []T, err error) {
@@ -81,7 +86,7 @@ func ConvertListToTree[T any](items []T) (v []T, err error) {
 			err = errors.Warning("fns: convert list to tree failed").WithCause(errors.Warning("children field type must be exported"))
 			return
 		}
-		if childrenField.Type != itemsType {
+		if childrenField.Type != itemsType && !childrenField.Type.ConvertibleTo(itemsType) {
 			err = errors.Warning("fns: convert list to tree failed").WithCause(errors.Warning("children field type must be list node type"))
 			return
 		}
@@ -133,6 +138,11 @@ func convertTreeNode[T any](values []reflect.Value, node reflect.Value, nodeFiel
 			children = append(children, child)
 		}
 	}
-	reflect.Indirect(node).FieldByName(childrenFieldName).Set(reflect.ValueOf(children))
+	childrenField := reflect.Indirect(node).FieldByName(childrenFieldName)
+	childrenField.Set(reflect.ValueOf(children))
+	if childrenField.CanConvert(sortType) {
+		sortable := childrenField.Convert(sortType).Interface().(sort.Interface)
+		sort.Sort(sortable)
+	}
 	return
 }

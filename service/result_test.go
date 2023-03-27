@@ -14,15 +14,31 @@
  * limitations under the License.
  */
 
-package service
+package service_test
 
-const (
-	emptyJson      = "{}"
-	nilJson        = "null"
-	emptyArrayJson = "[]"
+import (
+	"context"
+	"fmt"
+	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/json"
+	"testing"
 )
 
-// Empty
-// @name Empty
-// @description Empty object
-type Empty struct{}
+func TestFutureResult_MarshalJSON(t *testing.T) {
+	p, f := service.NewFuture()
+	v := func() (v []string) {
+		return
+	}()
+	p.Succeed(v)
+	r, getErr := f.Get(context.TODO())
+	if getErr != nil {
+		t.Errorf("%+v", getErr)
+		return
+	}
+	b, encodeErr := json.Marshal(r)
+	if encodeErr != nil {
+		t.Errorf("%+v", encodeErr)
+		return
+	}
+	fmt.Println(string(b))
+}

@@ -17,12 +17,13 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/internal/commons/objects"
 	"github.com/aacfactory/json"
+	"reflect"
 )
 
 type Promise interface {
@@ -114,19 +115,18 @@ type futureResult struct {
 
 func (fr *futureResult) Exist() (ok bool) {
 	if fr.data == nil {
-		ok = false
 		return
 	}
 	switch fr.data.(type) {
 	case []byte:
 		p := fr.data.([]byte)
-		ok = !bytes.Equal(p, []byte{'n', 'u', 'l', 'l'})
+		ok = nilJson != bytex.ToString(p)
 	case json.RawMessage:
 		p := fr.data.(json.RawMessage)
-		ok = !bytes.Equal(p, []byte{'n', 'u', 'l', 'l'})
+		ok = nilJson != bytex.ToString(p)
 	case stdjson.RawMessage:
 		p := fr.data.(stdjson.RawMessage)
-		ok = !bytes.Equal(p, []byte{'n', 'u', 'l', 'l'})
+		ok = nilJson != bytex.ToString(p)
 	default:
 		ok = true
 		break
@@ -161,10 +161,16 @@ func (fr *futureResult) Scan(v interface{}) (err errors.CodeError) {
 		case *json.RawMessage:
 			vv := v.(*json.RawMessage)
 			*vv = append(*vv, value...)
+		case *stdjson.RawMessage:
+			vv := v.(*stdjson.RawMessage)
+			*vv = append(*vv, value...)
 		case *[]byte:
 			vv := v.(*[]byte)
 			*vv = append(*vv, value...)
 		default:
+			if nilJson == bytex.ToString(value) || emptyJson == bytex.ToString(value) || emptyArrayJson == bytex.ToString(value) {
+				return
+			}
 			decodeErr := json.Unmarshal(value, v)
 			if decodeErr != nil {
 				err = errors.Warning("fns: future result scan failed").WithMeta("fns", "future").WithCause(decodeErr)
@@ -213,6 +219,23 @@ func (fr *futureResult) Scan(v interface{}) (err errors.CodeError) {
 }
 
 func (fr *futureResult) MarshalJSON() (p []byte, err error) {
+	rv := reflect.ValueOf(fr.data)
+	if !rv.IsValid() {
+		p = bytex.FromString(nilJson)
+		return
+	}
+	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+		if rv.Len() == 0 {
+			p = bytex.FromString(emptyArrayJson)
+		} else {
+			p, err = json.Marshal(fr.data)
+		}
+		return
+	}
+	if rv.IsZero() {
+		p = bytex.FromString(nilJson)
+		return
+	}
 	p, err = json.Marshal(fr.data)
 	return
 }

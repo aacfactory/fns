@@ -79,7 +79,7 @@ type CacheControl struct {
 }
 
 func (cache *CacheControl) Check(w http.ResponseWriter, header http.Header, u *url.URL, body []byte) (ok bool) {
-	etag := header.Get("If-None-Match")
+	etag := header.Get(httpCacheControlIfNonMatch)
 	if etag == "" {
 		return
 	}
@@ -104,7 +104,7 @@ func (cache *CacheControl) Set(w http.ResponseWriter, header http.Header, u *url
 	key := cache.buildKey(u, body)
 	age := int64(0)
 	if header != nil {
-		control := header.Get("Cache-Control")
+		control := header.Get(httpCacheControlHeader)
 		if strings.Contains(control, "no-cache") || strings.Contains(control, "no-store") {
 			cache.ETags.Del(key)
 			return
@@ -112,19 +112,20 @@ func (cache *CacheControl) Set(w http.ResponseWriter, header http.Header, u *url
 		age = cache.GetMaxAge(header)
 	}
 	if age == 0 {
-		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", cache.MaxAge))
+		w.Header().Set(httpCacheControlHeader, fmt.Sprintf("max-age=%d", cache.MaxAge))
 	}
 	hash := sha1.Sum(body)
 	etag := fmt.Sprintf("\"%d-%x\"", len(hash), hash)
 	if cache.Weak {
 		etag = "W/" + etag
 	}
+	w.Header().Set(httpETagHeader, etag)
 	cache.ETags.SetWithTTL(key, etag, int64(len(etag)), time.Duration(age)*time.Second)
 	return
 }
 
 func (cache *CacheControl) GetMaxAge(header http.Header) (age int64) {
-	control := header.Get("Cache-Control")
+	control := header.Get(httpCacheControlHeader)
 	idx := strings.Index(control, "max-age")
 	if idx > -1 {
 		control = control[idx:]

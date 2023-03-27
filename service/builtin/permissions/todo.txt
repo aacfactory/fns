@@ -1,5 +1,0 @@
-目标：permissions.Enforce 是通用的，不受实例影响
-* [ ] components 单走一个enforce component（such as rbac）
-* * [ ] 只管enforce，其它的由component自己处理
-* * [ ] rbac移出去
-* [ ] forg: @permissions 没有值，然后render里也改对应的代码

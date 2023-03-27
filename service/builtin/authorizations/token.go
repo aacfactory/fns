@@ -34,6 +34,10 @@ import (
 
 type Token string
 
+func (token Token) String() string {
+	return string(token)
+}
+
 type FormatTokenParam struct {
 	Id          string                `json:"id"`
 	UserId      service.RequestUserId `json:"userId"`

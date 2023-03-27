@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/fns/service"
 )
 
-func EnforceContext(ctx context.Context, serviceName string, fn string) (ok bool, err errors.CodeError) {
+func EnforceContext(ctx context.Context, serviceName string, fn string) (err errors.CodeError) {
 	request, hasRequest := service.GetRequest(ctx)
 	if !hasRequest {
 		err = errors.Warning("permissions: enforce failed").WithCause(fmt.Errorf("there is no request in context"))
@@ -34,11 +34,19 @@ func EnforceContext(ctx context.Context, serviceName string, fn string) (ok bool
 		err = errors.Warning("permissions: enforce failed").WithCause(fmt.Errorf("there is no user id in request"))
 		return
 	}
-	ok, err = Enforce(ctx, EnforceParam{
+	ok, enforceErr := Enforce(ctx, EnforceParam{
 		UserId:  userId,
 		Service: serviceName,
 		Fn:      fn,
 	})
+	if enforceErr != nil {
+		err = errors.Warning("permissions: enforce failed").WithCause(enforceErr)
+		return
+	}
+	if !ok {
+		err = errors.Forbidden("permissions: forbidden")
+		return
+	}
 	return
 }
 

@@ -23,17 +23,17 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func NewFormatTokenParam(userId service.RequestUserId) (param *FormatTokenParam) {
-	param = &FormatTokenParam{
+func NewFormatTokenParam(userId service.RequestUserId) (param FormatTokenParam) {
+	param = FormatTokenParam{
 		UserId:     userId,
 		Attributes: json.NewObject(),
 	}
 	return
 }
 
-func (param *FormatTokenParam) AddAttribute(key string, value string) *FormatTokenParam {
+func (param *FormatTokenParam) AddAttribute(key string, value string) FormatTokenParam {
 	_ = param.Attributes.Put(key, value)
-	return param
+	return *param
 }
 
 func Format(ctx context.Context, param FormatTokenParam) (token Token, err errors.CodeError) {

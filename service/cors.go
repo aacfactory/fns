@@ -70,6 +70,9 @@ func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
 		if sort.SearchStrings(config.AllowedHeaders, httpProxyTargetNodeId) < 0 {
 			config.AllowedHeaders = append(config.AllowedHeaders, httpProxyTargetNodeId)
 		}
+		if sort.SearchStrings(config.AllowedHeaders, httpCacheControlIfNonMatch) < 0 {
+			config.AllowedHeaders = append(config.AllowedHeaders, httpCacheControlIfNonMatch)
+		}
 	}
 	if config.ExposedHeaders == nil {
 		config.ExposedHeaders = make([]string, 0, 1)
@@ -78,6 +81,7 @@ func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
 		config.ExposedHeaders,
 		httpAppIdHeader, httpAppNameHeader, httpAppVersionHeader,
 		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
+		httpCacheControlHeader, httpETagHeader,
 	)
 	h = cors.New(cors.Options{
 		AllowedOrigins:         config.AllowedOrigins,

@@ -18,13 +18,17 @@ package service
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/rings"
+	"github.com/dgraph-io/ristretto"
+	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"sort"
 	"strconv"
@@ -36,9 +40,9 @@ import (
 type EndpointDiscoveryGetOption func(options *EndpointDiscoveryGetOptions)
 
 type EndpointDiscoveryGetOptions struct {
-	id           string
-	native       bool
-	versionRange []versions.Version
+	id              string
+	native          bool
+	requestVersions RequestVersions
 }
 
 func Exact(id string) EndpointDiscoveryGetOption {
@@ -55,10 +59,9 @@ func Native() EndpointDiscoveryGetOption {
 	}
 }
 
-func VersionRange(left versions.Version, right versions.Version) EndpointDiscoveryGetOption {
+func Versions(requestVersions RequestVersions) EndpointDiscoveryGetOption {
 	return func(options *EndpointDiscoveryGetOptions) {
-		options.versionRange[0] = left
-		options.versionRange[1] = right
+		options.requestVersions = requestVersions
 		return
 	}
 }
@@ -108,27 +111,19 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	r := task.r
 	fr := task.result
 
-	var body json.RawMessage
-	if r.Argument() != nil {
-		var bodyErr error
-		body, bodyErr = json.Marshal(r.Argument())
-		if bodyErr != nil {
-			fr.Failed(errors.Warning("fns: registration request failed").WithCause(bodyErr))
-			return
-		}
-	}
-
 	requestBody, encodeErr := json.Marshal(internalRequest{
-		User:  r.User(),
-		Trunk: r.Trunk(),
-		Body:  body,
+		User:     r.User(),
+		Trunk:    r.Trunk(),
+		Argument: r.Argument(),
 	})
 	if encodeErr != nil {
 		fr.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
 		return
 	}
-	header := r.Header().MapToHttpHeader()
-	header.Del(httpRequestVersionsHeader)
+	// todo cache control
+
+	header := r.Header().Clone()
+	header.SetAcceptVersions(r.AcceptedVersions())
 	header.Add(httpRequestInternalHeader, "true")
 	header.Add(httpRequestIdHeader, r.Id())
 	header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
@@ -138,7 +133,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		header.Add(httpProxyTargetNodeId, task.registration.id)
 	}
 	serviceName, fn := r.Fn()
-	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), header, requestBody)
+	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
 	if postErr != nil {
 		fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
 		return
@@ -168,17 +163,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	if ir.Trunk != nil {
 		r.Trunk().ReadFrom(ir.Trunk)
 	}
-	// header
-	if ir.Header != nil && len(ir.Header) > 0 {
-		for key, vv := range ir.Header {
-			if vv == nil || len(vv) == 0 {
-				continue
-			}
-			for _, v := range vv {
-				r.ResponseHeader().Add(key, v)
-			}
-		}
-	}
+
 	// body
 	if status == http.StatusOK {
 		fr.Succeed(ir.Body)
@@ -259,7 +244,7 @@ func (registration *Registration) Request(ctx context.Context, r Request) (futur
 	task := registration.acquire()
 	task.begin(r, promise)
 	if !registration.worker.Dispatch(ctx, task) {
-		promise.Failed(errors.Warning("fns: service is overload"))
+		promise.Failed(ErrServiceOverload)
 		registration.release(task)
 	}
 	future = fr
@@ -291,14 +276,15 @@ func (registration *Registration) release(task *registrationTask) {
 }
 
 type Registrations struct {
-	id              string
-	locker          sync.Mutex
-	values          sync.Map
-	signer          *secret.Signer
-	dialer          HttpClientDialer
-	worker          Workers
-	timeout         time.Duration
-	devProxyAddress string
+	id                 string
+	locker             sync.Mutex
+	values             sync.Map
+	signer             *secret.Signer
+	dialer             HttpClientDialer
+	worker             Workers
+	timeout            time.Duration
+	remoteRequestCache *RemoteRequestCache
+	devProxyAddress    string
 }
 
 func (r *Registrations) Add(registration *Registration) {
@@ -349,7 +335,7 @@ func (r *Registrations) GetExact(name string, id string) (registration *Registra
 	return
 }
 
-func (r *Registrations) Get(name string, vrb versions.Version, vre versions.Version) (registration *Registration, has bool) {
+func (r *Registrations) Get(name string, rvs RequestVersions) (registration *Registration, has bool) {
 	v, loaded := r.values.Load(name)
 	if !loaded || v == nil {
 		return
@@ -364,7 +350,11 @@ func (r *Registrations) Get(name string, vrb versions.Version, vre versions.Vers
 		if registration == nil {
 			continue
 		}
-		if registration.version.Between(vrb, vre) {
+		if rvs == nil {
+			has = true
+			return
+		}
+		if rvs.Accept(name, registration.version) {
 			has = true
 			return
 		}
@@ -567,5 +557,97 @@ func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
 			}
 		}
 	}
+	return
+}
+
+type RemoteRequestCacheConfig struct {
+	MaxCost string `json:"maxCost"`
+}
+
+func NewRemoteRequestCache(config RemoteRequestCacheConfig) (v *RemoteRequestCache, err error) {
+	maxCost := uint64(64 * bytex.MEGABYTE)
+	if config.MaxCost != "" {
+		maxCost, err = bytex.ToBytes(strings.TrimSpace(config.MaxCost))
+		if err != nil {
+			err = errors.Warning("fns: max cost of remote request cache config must be bytes format")
+			return
+		}
+	}
+	if maxCost < uint64(10*bytex.MEGABYTE) {
+		maxCost = uint64(64 * bytex.MEGABYTE)
+	}
+	cache, createCacheErr := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e7,
+		MaxCost:     int64(maxCost),
+		BufferItems: 64,
+		Metrics:     false,
+	})
+	if createCacheErr != nil {
+		err = errors.Warning("fns: create remote request cache failed").WithCause(createCacheErr)
+		return
+	}
+	v = &RemoteRequestCache{
+		cache: cache,
+	}
+	return
+}
+
+type RemoteRequestCache struct {
+	cache *ristretto.Cache
+}
+
+func (rrc *RemoteRequestCache) Set(path string, body []byte, etag string, maxAge int, data []byte) {
+	key := rrc.buildKey(path, body)
+	ttl := time.Duration(maxAge) * time.Second
+	deadline := time.Now().Add(ttl)
+	cost := int64(len(etag))
+	if data == nil {
+		data = make([]byte, 0, 1)
+	}
+	dataLen := int64(len(data))
+	value := make([]byte, 16+dataLen+cost)
+	binary.BigEndian.PutUint64(value[0:8], uint64(deadline.Unix()))
+	binary.BigEndian.PutUint64(value[8:16], uint64(dataLen))
+	copy(value[16:16+dataLen], data)
+	copy(value[16+dataLen:], bytex.FromString(etag))
+	rrc.cache.SetWithTTL(key, value, cost, ttl)
+	return
+}
+
+func (rrc *RemoteRequestCache) Get(path string, body []byte) (data []byte, etag string, deadline time.Time, has bool) {
+	key := rrc.buildKey(path, body)
+	cached, exist := rrc.cache.Get(key)
+	if !exist {
+		return
+	}
+	value, isBytes := cached.([]byte)
+	if !isBytes {
+		return
+	}
+	if value == nil || len(value) < 16 {
+		return
+	}
+	deadlineUnix := binary.BigEndian.Uint64(value[0:8])
+	if deadlineUnix > 0 {
+		deadline = time.Unix(int64(deadlineUnix), 0)
+	}
+	dataLen := binary.BigEndian.Uint64(value[8:16])
+	data = value[16 : 16+dataLen]
+	etag = bytex.ToString(value[16+dataLen:])
+	return
+}
+
+func (rrc *RemoteRequestCache) Close() {
+	rrc.cache.Close()
+}
+
+func (rrc *RemoteRequestCache) buildKey(path string, body []byte) (key uint64) {
+	buf := bytebufferpool.Get()
+	_, _ = buf.WriteString(path)
+	if body != nil && len(body) > 0 {
+		_, _ = buf.Write(body)
+	}
+	key = mmhash.MemHash(buf.Bytes())
+	bytebufferpool.Put(buf)
 	return
 }

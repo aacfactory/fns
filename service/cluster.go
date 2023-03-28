@@ -261,6 +261,7 @@ func (cluster *clusterDevProxy) Nodes(ctx context.Context) (nodes Nodes, err err
 }
 
 func (cluster *clusterDevProxy) Shared() (shared Shared) {
+	// todo 也proxy
 	shared = cluster.proxy.Shared()
 	return
 }

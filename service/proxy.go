@@ -35,6 +35,15 @@ const (
 	proxyHandlerName = "proxy"
 )
 
+type Proxy struct {
+	http   Http
+	dialer HttpClientDialer
+}
+
+// todo proxy 单独做，单独拥有一个http server，与service的独立，然后发布出去的只有service的，cluster里取所有的port，然后由registation般配port是否为service。
+// todo 那websocket怎么办。。。
+// todo 主要是ssl的问题，
+// caseA: 两个server，只有一个service handler，proxy handler不要了，在service handler里增加cluster特性，两个server共享一个handler？？？proxy的handler是全的，http里的是只有services。
 func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer, openApiVersion string, devMode bool, secretKey []byte) (handler *proxyHandler) {
 	handler = &proxyHandler{
 		appId:          "",
@@ -50,7 +59,7 @@ func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <
 		dialer:         dialer,
 		discovery:      nil,
 		signer:         secret.NewSigner(secretKey),
-		attachment:     lru.New[string, json.RawMessage](8),
+		attachment:     lru.New[string, []byte](8),
 		group:          &singleflight.Group{},
 	}
 	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer) {
@@ -85,7 +94,7 @@ type proxyHandler struct {
 	dialer         HttpClientDialer
 	discovery      EndpointDiscovery
 	signer         *secret.Signer
-	attachment     *lru.LRU[string, json.RawMessage]
+	attachment     *lru.LRU[string, []byte]
 	group          *singleflight.Group
 	cache          *CacheControl
 }
@@ -152,7 +161,7 @@ func (handler *proxyHandler) Close() {
 
 func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
 	if !handler.ready {
-		handler.failed(writer, 0, http.StatusTooEarly, errors.Warning("proxy: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		handler.failed(writer, errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
@@ -179,20 +188,6 @@ func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Req
 	groupKey := namesKey
 	if r.URL.Query().Get("refresh") == "true" {
 		groupKey = refreshGroupKey
-	} else {
-		if handler.cache != nil {
-			if handler.cache.Check(writer, r.Header, r.URL, nil) {
-				return
-			}
-		}
-	}
-	handleBegAT := time.Time{}
-	latency := time.Duration(0)
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
 	}
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
 		if r.URL.Query().Get("refresh") != "true" {
@@ -233,17 +228,14 @@ func (handler *proxyHandler) handleNames(writer http.ResponseWriter, r *http.Req
 			return
 		}
 		handler.attachment.Add(namesKey, p, 60*time.Second)
-		v = json.RawMessage(p)
+		v = p
 		return
 	})
-	if handler.log.DebugEnabled() {
-		latency = time.Now().Sub(handleBegAT)
-	}
 	if err != nil {
-		handler.failed(writer, latency, 555, errors.Map(err))
+		handler.failed(writer, errors.Map(err))
 		return
 	}
-	handler.succeed(writer, r, latency, v)
+	handler.succeed(writer, v.([]byte))
 	return
 }
 
@@ -255,22 +247,7 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 	groupKey := namesKey
 	if r.URL.Query().Get("refresh") == "true" {
 		groupKey = refreshGroupKey
-	} else {
-		if handler.cache != nil {
-			if handler.cache.Check(writer, r.Header, r.URL, nil) {
-				return
-			}
-		}
 	}
-	handleBegAT := time.Time{}
-	latency := time.Duration(0)
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
-
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
 		if r.URL.Query().Get("refresh") != "true" {
 			cached, has := handler.attachment.Get(namesKey)
@@ -299,17 +276,14 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 			return
 		}
 		handler.attachment.Add(namesKey, p, 60*time.Second)
-		v = json.RawMessage(p)
+		v = p
 		return
 	})
-	if handler.log.DebugEnabled() {
-		latency = time.Now().Sub(handleBegAT)
-	}
 	if err != nil {
-		handler.failed(writer, latency, 555, errors.Map(err))
+		handler.failed(writer, errors.Map(err))
 		return
 	}
-	handler.succeed(writer, r, latency, v)
+	handler.succeed(writer, v.([]byte))
 	return
 }
 
@@ -321,22 +295,7 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 	groupKey := namesKey
 	if r.URL.Query().Get("refresh") == "true" {
 		groupKey = refreshGroupKey
-	} else {
-		if handler.cache != nil {
-			if handler.cache.Check(writer, r.Header, r.URL, nil) {
-				return
-			}
-		}
 	}
-	handleBegAT := time.Time{}
-	latency := time.Duration(0)
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
-
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
 		if r.URL.Query().Get("refresh") != "true" {
 			cached, has := handler.attachment.Get(namesKey)
@@ -369,67 +328,73 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 			return
 		}
 		handler.attachment.Add(namesKey, p, 60*time.Second)
-		v = json.RawMessage(p)
+		v = p
 		return
 	})
-	if handler.log.DebugEnabled() {
-		latency = time.Now().Sub(handleBegAT)
-	}
 	if err != nil {
-		handler.failed(writer, latency, 555, errors.Map(err))
+		handler.failed(writer, errors.Map(err))
 		return
 	}
-	handler.succeed(writer, r, latency, v)
+	handler.succeed(writer, v.([]byte))
 	return
 }
 
 func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Request) {
 	pathItems := strings.Split(r.URL.Path, "/")
 	if len(pathItems) != 3 {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: invalid request url path"))
+		handler.failed(writer, errors.Warning("proxy: invalid request url path"))
 		return
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: X-Fns-Device-Id is required"))
+		handler.failed(writer, errors.Warning("proxy: X-Fns-Device-Id is required"))
 		return
 	}
 	if r.Header.Get(httpProxyTargetNodeId) != "" {
 		handler.handleDevProxy(writer, r)
 		return
 	}
-	leftVersion, rightVersion, parseErr := versions.ParseRange(r.Header.Get(httpRequestVersionsHeader))
-	if parseErr != nil {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: X-Fns-Request-Version is invalid").WithCause(parseErr))
+	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header)
+	if parseVersionErr != nil {
+		handler.failed(writer, errors.Warning("proxy: X-Fns-Request-Version is invalid").WithCause(parseVersionErr))
 		return
+	}
+	if !hasVersion {
+		rvs = AllowAllRequestVersions()
 	}
 	serviceName := pathItems[1]
-	registration, has := handler.registrations.Get(serviceName, leftVersion, rightVersion)
+
+	registration, has := handler.registrations.Get(serviceName, rvs)
 	if !has {
-		handler.failed(writer, 0, 404, errors.Warning("proxy: service was not found").WithMeta("service", serviceName))
+		handler.failed(writer, errors.Warning("proxy: service was not found").WithMeta("service", serviceName))
 		return
 	}
+
 	client, clientErr := handler.dialer.Dial(registration.address)
 	if clientErr != nil {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithCause(clientErr))
+		handler.failed(writer, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithCause(clientErr))
 		return
 	}
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
-		if readBodyErr != io.EOF {
-			handler.failed(writer, 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
-			return
-		}
+		handler.failed(writer, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+		return
 	}
+	_ = r.Body.Close()
+
 	if handler.cache != nil {
-		if handler.cache.Check(writer, r.Header, r.URL, body) {
+		if handler.cache.Cached(writer, r.Header, r.URL, rvs, body) {
 			return
 		}
 	}
 	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)
 	if postErr != nil {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithCause(postErr))
+		handler.failed(writer, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithCause(postErr))
 		return
 	}
+	if status == http.StatusNotModified {
+
+	}
+	// todo cache
 	writer.WriteHeader(status)
 	if header != nil && len(header) > 0 {
 		for k, vv := range header {
@@ -439,7 +404,7 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 		}
 	}
 	if status == http.StatusOK && handler.cache != nil {
-		handler.cache.Set(writer, header, r.URL, respBody)
+		handler.cache.TrySet(writer, header, r.URL, rvs, respBody)
 	}
 	n := 0
 	bodyLen := len(respBody)
@@ -455,7 +420,7 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 
 func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.Request) {
 	if !handler.devMode {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: dev mode is not enabled"))
+		handler.failed(writer, errors.Warning("proxy: dev mode is not enabled"))
 		return
 	}
 	nodeId := r.Header.Get(httpProxyTargetNodeId)
@@ -463,30 +428,30 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 	serviceName := pathItems[1]
 	registration, has := handler.registrations.GetExact(serviceName, nodeId)
 	if !has {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: host was not found").WithMeta("service", serviceName).WithMeta("id", nodeId))
+		handler.failed(writer, errors.NotFound("proxy: host was not found").WithMeta("service", serviceName).WithMeta("id", nodeId))
 		return
 	}
 	client, clientErr := handler.dialer.Dial(registration.address)
 	if clientErr != nil {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(clientErr))
+		handler.failed(writer, errors.Warning("proxy: get host dialer failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(clientErr))
 		return
 	}
 
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
-		if readBodyErr != io.EOF {
-			handler.failed(writer, 0, 555, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
-			return
-		}
+		handler.failed(writer, errors.Warning("proxy: read body failed").WithCause(readBodyErr))
+		return
 	}
+	_ = r.Body.Close()
+
 	// verify signature
 	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
-		handler.failed(writer, 0, http.StatusNotAcceptable, errors.Warning("proxy: X-Fns-Request-Signature is invalid"))
+		handler.failed(writer, errors.Warning("proxy: X-Fns-Request-Signature is invalid"))
 		return
 	}
 	status, header, respBody, postErr := client.Post(r.Context(), r.URL.Path, r.Header.Clone(), body)
 	if postErr != nil {
-		handler.failed(writer, 0, 555, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(postErr))
+		handler.failed(writer, errors.Warning("proxy: proxy failed").WithMeta("service", serviceName).WithMeta("id", nodeId).WithCause(postErr))
 		return
 	}
 	writer.WriteHeader(status)
@@ -509,21 +474,9 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 	return
 }
 
-func (handler *proxyHandler) succeed(writer http.ResponseWriter, r *http.Request, latency time.Duration, result interface{}) {
-	writer.Header().Set(httpContentType, httpContentTypeJson)
-	if handler.log.DebugEnabled() {
-		writer.Header().Set(httpHandleLatencyHeader, latency.String())
-	}
+func (handler *proxyHandler) succeed(writer http.ResponseWriter, body []byte) {
 	writer.WriteHeader(http.StatusOK)
-	body, encodeErr := json.Marshal(result)
-	if encodeErr != nil {
-		cause := errors.Warning("encode result failed").WithCause(encodeErr)
-		handler.failed(writer, latency, cause.Code(), cause)
-		return
-	}
-	if handler.cache != nil {
-		handler.cache.Set(writer, nil, r.URL, body)
-	}
+	writer.Header().Set(httpContentType, httpContentTypeJson)
 	n := 0
 	bodyLen := len(body)
 	for n < bodyLen {
@@ -536,10 +489,11 @@ func (handler *proxyHandler) succeed(writer http.ResponseWriter, r *http.Request
 	return
 }
 
-func (handler *proxyHandler) failed(writer http.ResponseWriter, latency time.Duration, status int, cause interface{}) {
+func (handler *proxyHandler) failed(writer http.ResponseWriter, cause errors.CodeError) {
 	writer.Header().Set(httpContentType, httpContentTypeJson)
-	if handler.log.DebugEnabled() {
-		writer.Header().Set(httpHandleLatencyHeader, latency.String())
+	status := cause.Code()
+	if status == 0 {
+		status = 555
 	}
 	writer.WriteHeader(status)
 	body, _ := json.Marshal(cause)

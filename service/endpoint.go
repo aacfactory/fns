@@ -116,6 +116,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	var sharedStore shared.Store
 	var sharedLockers shared.Lockers
 	var barrier Barrier
+	var remoteRequestCache *RemoteRequestCache
 	clusterFetchMembersInterval := time.Duration(0)
 	clusterDevMode := false
 	clusterProxyAddress := ""
@@ -173,6 +174,16 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 					barrierTTL = time.Duration(config.Cluster.Shared.BarrierTTLMilliseconds) * time.Millisecond
 				}
 				barrier = clusterBarrier(sharedStore, sharedLockers, barrierTTL)
+			}
+		}
+		// remote request cache
+		if config.Cluster.RemoteRequestCache != nil {
+			remoteRequestCache, err = NewRemoteRequestCache(RemoteRequestCacheConfig{
+				MaxCost: config.Cluster.RemoteRequestCache.MaxCost,
+			})
+			if err != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
+				return
 			}
 		}
 	} else {
@@ -234,6 +245,19 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		closeCh:                  make(chan struct{}, 1),
 	}
 	v.rt.discovery = v
+	if cluster != nil {
+		v.registrations = &Registrations{
+			id:                 v.rt.appId,
+			locker:             sync.Mutex{},
+			values:             sync.Map{},
+			dialer:             v.http,
+			signer:             v.rt.signer,
+			worker:             v.rt.worker,
+			timeout:            v.handleTimeout,
+			remoteRequestCache: remoteRequestCache,
+			devProxyAddress:    v.clusterProxyAddress,
+		}
+	}
 	// http >>>
 	httpConfig := config.Http
 	if httpConfig == nil {
@@ -347,7 +371,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	// http <<<
 	// dev >>
 	if clusterDevMode {
+		// todo 在构建cluster的时候代理，取出cluster和http以及clusterProxyAddress参数。
+		// 因为自身http的dialer不是proxy的，所以不再proxy上开dev，而是在http上加dev handler。所以走的是非proxy的port。
+		// 实现为在services的internal handler里判断是否是dev。如果是，则discovery不带native，反之带。
 		v.cluster = newDevProxyCluster(v.rt.appId, v.cluster, v.clusterProxyAddress, v.http, bytex.FromString(secretKey))
+		// todo services 里的
 	}
 	// dev <<<
 	return
@@ -380,13 +408,20 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 		return
 	}
 	opt := &EndpointDiscoveryGetOptions{
-		id:           "",
-		native:       false,
-		versionRange: []versions.Version{versions.Min(), versions.Max()},
+		id:              "",
+		native:          false,
+		requestVersions: nil,
 	}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
 			option(opt)
+		}
+	}
+	rvs := opt.requestVersions
+	if rvs == nil {
+		req, hasRequest := GetRequest(ctx)
+		if hasRequest {
+			rvs = req.AcceptedVersions()
 		}
 	}
 	if opt.id != "" {
@@ -400,12 +435,17 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 		}
 	} else {
 		v, has = e.deployed[service]
-		if has && e.rt.appVersion.Between(opt.versionRange[0], opt.versionRange[1]) {
-			return
+		if has {
+			if rvs == nil || rvs.Accept(service, e.rt.appVersion) {
+				return
+			}
 		}
 		has = false
-		if e.registrations != nil && CanAccessInternal(ctx) && !opt.native {
-			v, has = e.registrations.Get(service, opt.versionRange[0], opt.versionRange[1])
+		if opt.native {
+			return
+		}
+		if e.registrations != nil && CanAccessInternal(ctx) {
+			v, has = e.registrations.Get(service, rvs)
 			return
 		}
 	}
@@ -461,16 +501,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 			return
 		}
 		// registrations
-		e.registrations = &Registrations{
-			id:              e.rt.appId,
-			locker:          sync.Mutex{},
-			values:          sync.Map{},
-			dialer:          e.http,
-			signer:          e.rt.signer,
-			worker:          e.rt.worker,
-			timeout:         e.handleTimeout,
-			devProxyAddress: e.clusterProxyAddress,
-		}
+
 		mergeErr := e.registrations.MergeNodes(nodes)
 		if mergeErr != nil {
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
@@ -589,6 +620,10 @@ func (e *Endpoints) fetchRegistrations() {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+var (
+	ErrServiceOverload = errors.Warning("fns: service is overload").WithMeta("fns", "overload")
+)
+
 type Endpoint interface {
 	Name() (name string)
 	Internal() (ok bool)
@@ -631,7 +666,7 @@ func (e *endpoint) Request(ctx context.Context, r Request) (future Future) {
 		if ctx.Err() != nil {
 			promise.Failed(errors.Timeout("fns: workers handle timeout").WithMeta("fns", "timeout").WithMeta("service", serviceName).WithMeta("fn", fnName))
 		} else {
-			promise.Failed(errors.Warning("fns: service is overload").WithMeta("fns", "overload").WithMeta("service", serviceName).WithMeta("fn", fnName))
+			promise.Failed(ErrServiceOverload.WithMeta("service", serviceName).WithMeta("fn", fnName))
 		}
 		e.release(task)
 	}

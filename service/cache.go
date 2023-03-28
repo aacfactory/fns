@@ -25,24 +25,17 @@ import (
 	"github.com/dgraph-io/ristretto"
 	"github.com/valyala/bytebufferpool"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type CacheControlConfig struct {
-	MaxAge  int64  `json:"maxAge"`
 	Weak    bool   `json:"weak"`
 	MaxCost string `json:"maxCost"`
 }
 
 func NewCacheControl(config CacheControlConfig) (cache *CacheControl, err error) {
-	maxAge := config.MaxAge
-	if maxAge < 1 {
-		err = errors.Warning("fns: max age of cache control config must be greater than 1")
-		return
-	}
 	maxCost := uint64(64 * bytex.MEGABYTE)
 	if config.MaxCost != "" {
 		maxCost, err = bytex.ToBytes(strings.TrimSpace(config.MaxCost))
@@ -65,25 +58,23 @@ func NewCacheControl(config CacheControlConfig) (cache *CacheControl, err error)
 		return
 	}
 	cache = &CacheControl{
-		ETags:  tags,
-		MaxAge: maxAge,
-		Weak:   config.Weak,
+		ETags: tags,
+		Weak:  config.Weak,
 	}
 	return
 }
 
 type CacheControl struct {
-	ETags  *ristretto.Cache
-	MaxAge int64
-	Weak   bool
+	ETags *ristretto.Cache
+	Weak  bool
 }
 
-func (cache *CacheControl) Check(w http.ResponseWriter, header http.Header, u *url.URL, body []byte) (ok bool) {
+func (cache *CacheControl) Cached(path string, header http.Header, body []byte) (key uint64, ok bool) {
+	key = cache.buildKey(path, header, body)
 	etag := header.Get(httpCacheControlIfNonMatch)
 	if etag == "" {
 		return
 	}
-	key := cache.buildKey(u, body)
 	item, has := cache.ETags.Get(key)
 	if !has {
 		return
@@ -93,58 +84,63 @@ func (cache *CacheControl) Check(w http.ResponseWriter, header http.Header, u *u
 		return
 	}
 	if cached == etag {
-		w.WriteHeader(http.StatusNotModified)
 		ok = true
 		return
 	}
 	return
 }
 
-func (cache *CacheControl) Set(w http.ResponseWriter, header http.Header, u *url.URL, body []byte) {
-	key := cache.buildKey(u, body)
-	age := int64(0)
-	if header != nil {
-		control := header.Get(httpCacheControlHeader)
-		if strings.Contains(control, "no-cache") || strings.Contains(control, "no-store") {
-			cache.ETags.Del(key)
-			return
-		}
-		age = cache.GetMaxAge(header)
+func (cache *CacheControl) MaxAge(header http.Header) (age int64, has bool) {
+	if header == nil || len(header) == 0 {
+		return
 	}
-	if age == 0 {
-		w.Header().Set(httpCacheControlHeader, fmt.Sprintf("max-age=%d", cache.MaxAge))
-	}
-	hash := sha1.Sum(body)
-	etag := fmt.Sprintf("\"%d-%x\"", len(hash), hash)
-	if cache.Weak {
-		etag = "W/" + etag
-	}
-	w.Header().Set(httpETagHeader, etag)
-	cache.ETags.SetWithTTL(key, etag, int64(len(etag)), time.Duration(age)*time.Second)
-	return
-}
-
-func (cache *CacheControl) GetMaxAge(header http.Header) (age int64) {
 	control := header.Get(httpCacheControlHeader)
-	idx := strings.Index(control, "max-age")
-	if idx > -1 {
-		control = control[idx:]
-		end := strings.Index(control, ",")
-		if end > -1 {
-			control = control[0:end]
-		}
-		mid := strings.Index(control, "=")
-		if mid > -1 && len(control) > mid+1 {
-			sec := strings.TrimSpace(control[mid+1:])
-			age, _ = strconv.ParseInt(sec, 10, 64)
-		}
+	if control == "" ||
+		strings.Contains(control, "no-cache") ||
+		strings.Contains(control, "no-store") ||
+		!strings.Contains(control, "max-age") {
+		return
 	}
+	idx := strings.Index(control, "max-age")
+	if idx < 0 {
+		return
+	}
+	control = control[idx:]
+	end := strings.Index(control, ",")
+	if end > -1 {
+		control = control[0:end]
+	}
+	mid := strings.Index(control, "=")
+	if mid < 0 || len(control) <= mid+1 {
+		return
+	}
+	sec := strings.TrimSpace(control[mid+1:])
+	age, _ = strconv.ParseInt(sec, 10, 64)
+	has = age > 0
 	return
 }
 
-func (cache *CacheControl) buildKey(u *url.URL, body []byte) (key uint64) {
+func (cache *CacheControl) CreateETag(key uint64, age int64, body []byte) (v string) {
+	hash := sha1.Sum(body)
+	v = fmt.Sprintf("\"%d-%x\"", len(hash), hash)
+	if cache.Weak {
+		v = "W/" + v
+	}
+	cache.ETags.SetWithTTL(key, v, int64(len(v)), time.Duration(age)*time.Second)
+	return
+}
+
+func (cache *CacheControl) buildKey(path string, header http.Header, body []byte) (key uint64) {
 	buf := bytebufferpool.Get()
-	_, _ = buf.WriteString(u.String())
+	_, _ = buf.WriteString(path)
+	devId := header.Get(httpDeviceIdHeader)
+	_, _ = buf.WriteString(devId)
+	acceptVersions := header.Values(httpRequestVersionsHeader)
+	if acceptVersions != nil && len(acceptVersions) > 0 {
+		for _, version := range acceptVersions {
+			_, _ = buf.WriteString(version)
+		}
+	}
 	if body != nil && len(body) > 0 {
 		_, _ = buf.Write(body)
 	}

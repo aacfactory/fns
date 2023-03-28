@@ -28,8 +28,8 @@ func TestCacheControl_GetMaxAge(t *testing.T) {
 	cache := &service.CacheControl{}
 	header := http.Header{}
 	header.Set("Cache-Control", "max-age=10")
-	age := cache.GetMaxAge(header)
-	fmt.Println(age)
+	age, has := cache.MaxAge(header)
+	fmt.Println(age, has)
 }
 
 func TestCache(t *testing.T) {

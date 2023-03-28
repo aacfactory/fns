@@ -165,7 +165,7 @@ func (handler *servicesHandler) Accept(r *http.Request) (ok bool) {
 
 func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
 	if !handler.ready {
-		handler.failed(writer, "", 0, http.StatusTooEarly, errors.Warning("fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		handler.failed(writer, errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
@@ -173,11 +173,11 @@ func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Re
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-		handler.handleDocuments(writer, r)
+		handler.handleDocuments(writer)
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-		handler.handleOpenapi(writer, r)
+		handler.handleOpenapi(writer)
 		return
 	}
 	handler.handleRequest(writer, r)
@@ -188,23 +188,6 @@ func (handler *servicesHandler) Close() {
 	if handler.cache != nil {
 		handler.cache.Close()
 	}
-	return
-}
-
-func (handler *servicesHandler) matchRequestVersion(writer http.ResponseWriter, r *http.Request) (ok bool) {
-	version := r.Header.Get(httpRequestVersionsHeader)
-	if version != "" {
-		leftVersion, rightVersion, parseErr := versions.ParseRange(version)
-		if parseErr != nil {
-			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: read request version failed").WithCause(parseErr))
-			return
-		}
-		if !handler.appVersion.Between(leftVersion, rightVersion) {
-			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: request version is not acceptable").WithMeta("version", handler.appVersion.String()))
-			return
-		}
-	}
-	ok = true
 	return
 }
 
@@ -230,11 +213,11 @@ func (handler *servicesHandler) getDeviceIp(r *http.Request) (devIp string) {
 func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *http.Request) {
 	pathItems := strings.Split(r.URL.Path, "/")
 	if len(pathItems) != 3 {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: invalid request url path"))
+		handler.failed(writer, errors.Warning("fns: invalid request url path"))
 		return
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
-		handler.failed(writer, "", 0, 555, errors.Warning("fns: X-Fns-Device-Id is required"))
+		handler.failed(writer, errors.Warning("fns: X-Fns-Device-Id is required"))
 		return
 	}
 
@@ -242,29 +225,47 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		handler.handleInternalRequest(writer, r)
 		return
 	}
-
+	// read path
 	serviceName := pathItems[1]
 	fnName := pathItems[2]
+	// check version
+	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header)
+	if parseVersionErr != nil {
+		handler.failed(writer, errors.Warning("fns: parse X-Fns-Request-Version failed").WithCause(parseVersionErr))
+		return
+	}
+	if hasVersion && !rvs.Accept(serviceName, handler.appVersion) {
+		handler.failed(writer,
+			errors.Warning("fns: X-Fns-Request-Version was not matched").
+				WithMeta("appVersion", handler.appVersion.String()).
+				WithMeta("requestVersion", rvs.String()).
+				WithMeta("service", serviceName).WithMeta("fn", fnName),
+		)
+		return
+	} else {
+		rvs = AllowAllRequestVersions()
+	}
+	// read body
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
-		if readBodyErr != io.EOF {
-			handler.failed(writer, "", 0, 555, errors.Warning("fns: read body failed").WithCause(readBodyErr))
-			return
-		}
-	}
-	if handler.cache != nil {
-		if handler.cache.Check(writer, r.Header, r.URL, body) {
-			return
-		}
-	}
-	if !handler.matchRequestVersion(writer, r) {
+		handler.failed(writer, errors.Warning("fns: read body failed").WithCause(readBodyErr))
 		return
+	}
+	_ = r.Body.Close()
+	// cache control
+	cacheKey := uint64(0)
+	if handler.cache != nil {
+		key, cached := handler.cache.Cached(r.URL.Path, r.Header, body)
+		if cached {
+			writer.WriteHeader(http.StatusNotModified)
+			return
+		}
+		cacheKey = key
 	}
 	// devIp
 	devIp := handler.getDeviceIp(r)
 	// id
 	id := uid.UID()
-
 	// timeout
 	ctx := r.Context()
 	var cancel context.CancelFunc
@@ -272,7 +273,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
-			handler.failed(writer, "", 0, 555, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			handler.failed(writer, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
 			return
 		}
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
@@ -283,7 +284,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		if cancel != nil {
 			cancel()
 		}
-		handler.failed(writer, "", 0, http.StatusNotFound, errors.Warning("fns: service was not found").WithMeta("service", serviceName))
+		handler.failed(writer, errors.NotFound("fns: service was not found").WithMeta("service", serviceName))
 		return
 	}
 
@@ -303,6 +304,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		WithHttpResponseHeader(responseHeader),
 		WithDeviceIp(devIp),
 		WithRequestId(id),
+		WithRequestVersions(rvs),
 	))
 	if cancel != nil {
 		cancel()
@@ -311,22 +313,23 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		latency = time.Now().Sub(handleBegAT)
 	}
 	if requestErr != nil {
-		handler.failed(writer, id, latency, requestErr.Code(), requestErr)
+		handler.failed(writer, requestErr)
 	} else {
-		handler.succeed(writer, r, true, id, latency, responseHeader, result)
+
+		handler.succeed(writer, id, latency, cacheKey, responseHeader, result)
 	}
 	return
 }
 
 func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter, r *http.Request) {
 	if !handler.internalRequestEnabled {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: cluster mode is not enabled"))
+		handler.failed(writer, errors.Warning("fns: cluster mode is not enabled"))
 		return
 	}
 	// id
 	id := r.Header.Get(httpRequestIdHeader)
 	if id == "" {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: no X-Fns-Request-Id in header"))
+		handler.failed(writer, errors.Warning("fns: no X-Fns-Request-Id in header"))
 		return
 	}
 	pathItems := strings.Split(r.URL.Path, "/")
@@ -334,22 +337,46 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	fnName := pathItems[2]
 	body, readBodyErr := io.ReadAll(r.Body)
 	if readBodyErr != nil {
-		handler.failed(writer, "", 0, http.StatusBadRequest, errors.Warning("fns: read body failed").WithCause(readBodyErr))
+		handler.failed(writer, errors.Warning("fns: read body failed").WithCause(readBodyErr))
 		return
 	}
+	_ = r.Body.Close()
 	// verify signature
 	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: signature is invalid"))
+		handler.failed(writer, errors.Warning("fns: signature is invalid"))
 		return
 	}
-	if !handler.matchRequestVersion(writer, r) {
+	// check version
+	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header)
+	if parseVersionErr != nil {
+		handler.failed(writer, errors.Warning("fns: parse X-Fns-Request-Version failed").WithCause(parseVersionErr))
 		return
+	}
+	if hasVersion && !rvs.Accept(serviceName, handler.appVersion) {
+		handler.failed(writer,
+			errors.Warning("fns: X-Fns-Request-Version was not matched").
+				WithMeta("appVersion", handler.appVersion.String()).
+				WithMeta("requestVersion", rvs.String()),
+		)
+		return
+	} else {
+		rvs = AllowAllRequestVersions()
+	}
+	// cache control
+	cacheKey := uint64(0)
+	if handler.cache != nil {
+		key, cached := handler.cache.Cached(r.URL.Path, r.Header, body)
+		if cached {
+			writer.WriteHeader(http.StatusNotModified)
+			return
+		}
+		cacheKey = key
 	}
 	// internal request
 	iReq := &internalRequestImpl{}
 	decodeErr := json.Unmarshal(body, iReq)
 	if decodeErr != nil {
-		handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: decode body failed").WithCause(decodeErr))
+		handler.failed(writer, errors.Warning("fns: decode body failed").WithCause(decodeErr))
 		return
 	}
 	// timeout
@@ -359,7 +386,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
-			handler.failed(writer, "", 0, http.StatusNotAcceptable, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			handler.failed(writer, errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
 			return
 		}
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
@@ -371,7 +398,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		if cancel != nil {
 			cancel()
 		}
-		handler.failed(writer, "", 0, http.StatusNotFound, errors.Warning("fns: service was not found").WithMeta("service", serviceName))
+		handler.failed(writer, errors.NotFound("fns: service was not found").WithMeta("service", serviceName))
 		return
 	}
 
@@ -381,13 +408,14 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		ctx,
 		serviceName,
 		fnName,
-		NewArgument(iReq.Body),
+		iReq.Argument,
 		WithHttpRequestHeader(r.Header),
 		WithHttpResponseHeader(responseHeader),
 		WithRequestId(id),
 		WithInternalRequest(),
 		WithRequestTrunk(iReq.Trunk),
 		WithRequestUser(iReq.User.Id(), iReq.User.Attributes()),
+		WithRequestVersions(rvs),
 	)
 
 	result, requestErr := ep.RequestSync(withTracer(ctx, id), req)
@@ -401,48 +429,26 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		span = tracer_.RootSpan()
 	}
 	iResp := &internalResponse{
-		User:   req.User(),
-		Trunk:  req.Trunk(),
-		Span:   span,
-		Header: responseHeader,
-		Body:   nil,
+		User:  req.User(),
+		Trunk: req.Trunk(),
+		Span:  span,
+		Body:  nil,
 	}
 	if requestErr != nil {
-		requestErrBytes, encodeErr := json.Marshal(requestErr)
-		if encodeErr != nil {
-			if handler.log.WarnEnabled() {
-				handler.log.Warn().Cause(encodeErr).Message("fns: service handle encode request error failed")
-			}
-			requestErrBytes = bytex.FromString(`{"message":"` + requestErr.Message() + `"}`)
-		}
-		iResp.Body = requestErrBytes
-		handler.failed(writer, id, 0, requestErr.Code(), iResp)
+		iResp.Body = requestErr
+		handler.writeInternalResponse(writer, requestErr.Code(), responseHeader, cacheKey, id, iResp)
 	} else {
-		resultJsonBytes, encodeErr := json.Marshal(result)
-		if encodeErr != nil {
-			resultJsonBytes, _ = json.Marshal(errors.Warning("fns: service handler encode internal result failed").WithCause(encodeErr))
-			iResp.Body = resultJsonBytes
-			handler.failed(writer, id, 0, 555, iResp)
-		} else {
-			iResp.Body = resultJsonBytes
-			handler.succeed(writer, r, false, id, 0, nil, iResp)
+		if result.Exist() {
+			iResp.Body = result
 		}
+		handler.writeInternalResponse(writer, http.StatusOK, responseHeader, cacheKey, id, iResp)
 	}
-
 	return
 }
 
-func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *http.Request) {
-	if handler.cache != nil {
-		if handler.cache.Check(writer, r.Header, r.URL, nil) {
-			return
-		}
-	}
-	writer.Header().Set(httpContentType, httpContentTypeJson)
+func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
 	writer.WriteHeader(http.StatusOK)
-	if handler.cache != nil {
-		handler.cache.Set(writer, nil, r.URL, handler.documents)
-	}
+	writer.Header().Set(httpContentType, httpContentTypeJson)
 	n := 0
 	bodyLen := len(handler.documents)
 	for n < bodyLen {
@@ -455,17 +461,9 @@ func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *h
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter, r *http.Request) {
-	if handler.cache != nil {
-		if handler.cache.Check(writer, r.Header, r.URL, nil) {
-			return
-		}
-	}
-	writer.Header().Set(httpContentType, httpContentTypeJson)
+func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
 	writer.WriteHeader(http.StatusOK)
-	if handler.cache != nil {
-		handler.cache.Set(writer, nil, r.URL, handler.openapi)
-	}
+	writer.Header().Set(httpContentType, httpContentTypeJson)
 	n := 0
 	bodyLen := len(handler.openapi)
 	for n < bodyLen {
@@ -479,28 +477,44 @@ func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter, r *htt
 }
 
 func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.Request) {
-	if handler.cache != nil {
-		if handler.cache.Check(writer, r.Header, r.URL, nil) {
-			return
-		}
-	}
 	deviceId := r.Header.Get(httpDeviceIdHeader)
 	signature := r.Header.Get(httpRequestSignatureHeader)
 	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
-		handler.failed(writer, "", 0, 555, errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
+		handler.failed(writer, errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
 		return
 	}
-	handler.succeed(writer, r, true, "", 0, http.Header{}, handler.names)
+	writer.WriteHeader(http.StatusOK)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	n := 0
+	bodyLen := len(handler.names)
+	for n < bodyLen {
+		nn, writeErr := writer.Write(handler.names[n:])
+		if writeErr != nil {
+			return
+		}
+		n += nn
+	}
 	return
 }
 
-func (handler *servicesHandler) succeed(writer http.ResponseWriter, r *http.Request, tryCache bool, id string, latency time.Duration, header http.Header, result interface{}) {
+func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, latency time.Duration, cacheKey uint64, header http.Header, result interface{}) {
 	body, encodeErr := json.Marshal(result)
 	if encodeErr != nil {
 		cause := errors.Warning("encode result failed").WithCause(encodeErr)
-		handler.failed(writer, id, latency, cause.Code(), cause)
+		handler.failed(writer, cause)
 		return
 	}
+	writer.WriteHeader(http.StatusOK)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	// cache control
+	if handler.cache != nil && cacheKey > 0 {
+		age, hasAge := handler.cache.MaxAge(header)
+		if hasAge {
+			etag := handler.cache.CreateETag(cacheKey, age, body)
+			writer.Header().Set(httpETagHeader, etag)
+		}
+	}
+	// write header
 	if header != nil && len(header) > 0 {
 		for key, vv := range header {
 			if vv == nil || len(vv) == 0 {
@@ -511,17 +525,13 @@ func (handler *servicesHandler) succeed(writer http.ResponseWriter, r *http.Requ
 			}
 		}
 	}
-	writer.Header().Set(httpContentType, httpContentTypeJson)
 	if id != "" {
 		writer.Header().Set(httpRequestIdHeader, id)
 	}
 	if handler.log.DebugEnabled() {
 		writer.Header().Set(httpHandleLatencyHeader, latency.String())
 	}
-	writer.WriteHeader(http.StatusOK)
-	if tryCache && handler.cache != nil {
-		handler.cache.Set(writer, header, r.URL, body)
-	}
+	// write body
 	n := 0
 	bodyLen := len(body)
 	for n < bodyLen {
@@ -534,16 +544,48 @@ func (handler *servicesHandler) succeed(writer http.ResponseWriter, r *http.Requ
 	return
 }
 
-func (handler *servicesHandler) failed(writer http.ResponseWriter, id string, latency time.Duration, status int, cause interface{}) {
+func (handler *servicesHandler) failed(writer http.ResponseWriter, cause errors.CodeError) {
+	status := cause.Code()
+	if status == 0 {
+		status = 555
+	}
+	writer.WriteHeader(status)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	body, _ := json.Marshal(cause)
+	n := 0
+	bodyLen := len(body)
+	for n < bodyLen {
+		nn, writeErr := writer.Write(body[n:])
+		if writeErr != nil {
+			return
+		}
+		n += nn
+	}
+	return
+}
+
+func (handler *servicesHandler) writeInternalResponse(writer http.ResponseWriter, status int, header http.Header, cacheKey uint64, id string, data *internalResponse) {
+	body, encodeErr := json.Marshal(data)
+	if encodeErr != nil {
+		data.Body = errors.Warning("fns: encode internal response failed").WithCause(encodeErr)
+		body, _ = json.Marshal(data)
+		status = 555
+	}
+	writer.WriteHeader(status)
+	if status == http.StatusOK {
+		// cache control
+		if handler.cache != nil && cacheKey > 0 {
+			age, hasAge := handler.cache.MaxAge(header)
+			if hasAge {
+				etag := handler.cache.CreateETag(cacheKey, age, body)
+				writer.Header().Set(httpETagHeader, etag)
+			}
+		}
+	}
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	if id != "" {
 		writer.Header().Set(httpRequestIdHeader, id)
 	}
-	if handler.log.DebugEnabled() {
-		writer.Header().Set(httpHandleLatencyHeader, latency.String())
-	}
-	writer.WriteHeader(status)
-	body, _ := json.Marshal(cause)
 	n := 0
 	bodyLen := len(body)
 	for n < bodyLen {

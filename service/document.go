@@ -549,7 +549,7 @@ func healthPath() (uri string, path *oas.Path) {
 		Get: &oas.Operation{
 			OperationId: "application_health",
 			Tags:        []string{"builtin"},
-			Summary:     "Check Health",
+			Summary:     "Health Check",
 			Description: "Check fns system health status",
 			Deprecated:  false,
 			Parameters:  nil,
@@ -559,7 +559,7 @@ func healthPath() (uri string, path *oas.Path) {
 					Content: func() (c map[string]*oas.MediaType) {
 						schema := &oas.Schema{
 							Key:         "github.com/aacfactory/fns/service.ApplicationHealth",
-							Title:       "Check Health Result",
+							Title:       "Health Check Result",
 							Description: "",
 							Type:        "object",
 							Required:    []string{"name", "id", "version", "running", "now"},

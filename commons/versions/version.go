@@ -87,6 +87,11 @@ func (ver Version) LessThan(o Version) (ok bool) {
 	return
 }
 
+func (ver Version) Equals(o Version) (ok bool) {
+	ok = ver.Major == o.Major && ver.Minor == o.Minor && ver.Patch == o.Patch
+	return
+}
+
 func (ver Version) IsZero() (ok bool) {
 	ok = ver.Major == 0 && ver.Minor == 0 && ver.Patch == 0
 	return

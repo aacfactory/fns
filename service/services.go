@@ -39,9 +39,8 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type ServicesHandlerOptions struct {
-	Signer         *secret.Signer
-	DeployedCh     <-chan map[string]*endpoint
-	OpenapiVersion string
+	Signer     *secret.Signer
+	DeployedCh <-chan map[string]*endpoint
 }
 
 func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
@@ -52,7 +51,7 @@ func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 		documents:              documents.NewDocuments(),
 		disableHandleDocuments: false,
 		disableHandleOpenapi:   false,
-		openapiVersion:         options.OpenapiVersion,
+		openapiVersion:         "",
 		appId:                  "",
 		appName:                "",
 		appVersion:             versions.Version{},
@@ -60,12 +59,12 @@ func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 		discovery:              nil,
 		group:                  &singleflight.Group{},
 	}
-	go func(handler *servicesHandler, deployedCh <-chan map[string]*endpoint, openApiVersion string) {
+	go func(handler *servicesHandler, deployedCh <-chan map[string]*endpoint) {
 		eps, ok := <-deployedCh
-		handler.ready = true
 		if !ok {
 			return
 		}
+		handler.ready = true
 		if eps == nil || len(eps) == 0 {
 			return
 		}
@@ -78,7 +77,7 @@ func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 			}
 			handler.documents.Add(ep.Document())
 		}
-	}(sh, options.DeployedCh, options.OpenapiVersion)
+	}(sh, options.DeployedCh)
 	handler = sh
 	return
 }
@@ -86,6 +85,7 @@ func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 type servicesHandlerConfig struct {
 	DisableHandleDocuments bool                 `json:"disableHandleDocuments"`
 	DisableHandleOpenapi   bool                 `json:"disableHandleOpenapi"`
+	OpenapiVersion         string               `json:"openapiVersion"`
 	Limiter                RequestLimiterConfig `json:"limiter"`
 }
 
@@ -126,7 +126,9 @@ func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
 	handler.discovery = options.Discovery
 	handler.disableHandleDocuments = config.DisableHandleDocuments
 	handler.disableHandleOpenapi = config.DisableHandleOpenapi
-
+	if !handler.disableHandleOpenapi {
+		handler.openapiVersion = strings.TrimSpace(config.OpenapiVersion)
+	}
 	maxPerDeviceRequest := config.Limiter.MaxPerDeviceRequest
 	if maxPerDeviceRequest < 1 {
 		maxPerDeviceRequest = 8

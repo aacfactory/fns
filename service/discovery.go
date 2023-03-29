@@ -112,6 +112,9 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	r := task.r
 	fr := task.result
 
+	// todo 当来自proxy的，则不用internal request
+	// todo 增加/services/foo
+
 	requestBody, encodeErr := json.Marshal(internalRequest{
 		User:     r.User(),
 		Trunk:    r.Trunk(),
@@ -443,6 +446,11 @@ func (r *Registrations) AddNode(node Node) (err error) {
 	}
 	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
 	defer cancel()
+
+	// todo 增加/application/。。检查是否为services handler
+
+	// todo 增加捕获response header，如果存在Connection=close，则关闭中
+	// todo http.StatusTooEarly
 
 	header := http.Header{}
 	header.Add(httpDeviceIdHeader, r.id)

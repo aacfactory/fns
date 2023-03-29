@@ -484,23 +484,27 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 }
 
 func (e *Endpoints) Listen(ctx context.Context) (err error) {
+	e.rt.running.HalfOn()
 	e.autoMaxProcs.Enable()
 	e.deployedCHS.publish(e.deployed)
 	// cluster join
 	if e.cluster != nil {
 		joinErr := e.cluster.Join(ctx)
 		if joinErr != nil {
+			e.rt.running.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
 			return
 		}
 		nodes, nodesErr := listMembers(ctx, e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
 		if nodesErr != nil {
+			e.rt.running.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints get nodes from cluster failed")).WithCause(nodesErr)
 			return
 		}
 		// registrations
 		mergeErr := e.registrations.MergeNodes(nodes)
 		if mergeErr != nil {
+			e.rt.running.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
 			return
 		}
@@ -519,6 +523,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	case <-time.After(1 * time.Second):
 		break
 	case httpErr := <-httpListenErrCh:
+		e.rt.running.Off()
 		err = errors.Warning("fns: endpoints listen failed").WithCause(httpErr)
 		return
 	}
@@ -546,6 +551,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 		select {
 		case serviceListenErr := <-serviceListenErrCh:
 			atomic.AddInt64(&closed, 1)
+			e.rt.running.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(serviceListenErr)
 			return
 		case <-time.After(time.Duration(lns) * time.Second):

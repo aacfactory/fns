@@ -1,0 +1,48 @@
+---
+cache control
+废弃，使用limiter，。
+与之相关的是删除request中的response header。
+
+---
+limiter
+
+作用域是device id
+决定单个device同时能访问多少次。
+
+
+---
+安全的device id
+使用签名，所以得增加签名的service。
+
+---
+proxy
+完全与services独立。
+
+在app的options里改成，Proxy（http，handlers）
+
+但是proxy的handler里service不是独立的。
+
+proxy的dev配置。
+如果开启，则增加cluster proxy handler。
+
+---
+dev mode
+单指cluster的dev mode。
+
+与proxy互斥。
+
+构建时直接创建proxy cluster，纯一个链接dev proxy。
+
+且返回一个proxy dialer，给Registrations。
+
+proxy cluster 返回的 node 的 address 是 proxy address。
+
+---
+Registrations
+维持单独性
+不再处理dev proxy相关的。
+它的dialer是谁不关心。
+
+为每个Registration 增加 熔断 github.com/alibaba/sentinel-golang，
+也可以自己做（circuit breaker）
+如果访问结果的错误是ErrServiceOverload，则降级，然后开一个监听，10s去访问，如果正常，则升级。

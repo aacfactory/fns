@@ -248,14 +248,12 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	v.rt.discovery = v
 	if cluster != nil {
 		v.registrations = &Registrations{
-			id:                 v.rt.appId,
-			values:             sync.Map{},
-			dialer:             v.http,
-			signer:             v.rt.signer,
-			worker:             v.rt.worker,
-			timeout:            v.handleTimeout,
-			remoteRequestCache: remoteRequestCache,
-			devProxyAddress:    v.clusterProxyAddress,
+			id:      v.rt.appId,
+			values:  sync.Map{},
+			dialer:  v.http,
+			signer:  v.rt.signer,
+			worker:  v.rt.worker,
+			timeout: v.handleTimeout,
 		}
 	}
 	// http >>>
@@ -621,7 +619,8 @@ func (e *Endpoints) fetchRegistrations() {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 var (
-	ErrServiceOverload = errors.Warning("fns: service is overload").WithMeta("fns", "overload")
+	ErrServiceOverload = errors.Unavailable("fns: service is overload").WithMeta("fns", "overload")
+	ErrRequestOverload = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request")
 )
 
 type Endpoint interface {

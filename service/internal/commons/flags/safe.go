@@ -33,8 +33,12 @@ type Flag struct {
 	value int64
 }
 
-func (f *Flag) On() {
+func (f *Flag) HalfOn() {
 	atomic.StoreInt64(&f.value, 1)
+}
+
+func (f *Flag) On() {
+	atomic.StoreInt64(&f.value, 2)
 }
 
 func (f *Flag) Off() {
@@ -42,6 +46,11 @@ func (f *Flag) Off() {
 }
 
 func (f *Flag) IsOn() (ok bool) {
+	ok = atomic.LoadInt64(&f.value) >= 1
+	return
+}
+
+func (f *Flag) IsHalfOn() (ok bool) {
 	ok = atomic.LoadInt64(&f.value) == 1
 	return
 }

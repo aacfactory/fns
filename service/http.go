@@ -47,8 +47,10 @@ const (
 	httpUpgradeHeader          = "Upgrade"
 	httpCloseHeader            = "close"
 	httpCacheControlHeader     = "Cache-Control"
+	httpPragmaHeader           = "Pragma"
 	httpETagHeader             = "ETag"
 	httpCacheControlIfNonMatch = "If-None-Match"
+	httpClearSiteData          = "Clear-Site-Data"
 	httpXForwardedForHeader    = "X-Forwarded-For"
 	httpAppIdHeader            = "X-Fns-Id"
 	httpAppNameHeader          = "X-Fns-Name"
@@ -61,7 +63,7 @@ const (
 	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
 	httpDeviceIdHeader         = "X-Fns-Device-Id"
 	httpDeviceIpHeader         = "X-Fns-Device-Ip"
-	httpProxyTargetNodeId      = "X-Fns-Proxy-Node"
+	httpDevModeHeader          = "X-Fns-Dev-Mode"
 )
 
 type HttpHandlerOptions struct {

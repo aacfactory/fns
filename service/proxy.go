@@ -44,6 +44,7 @@ type Proxy struct {
 // todo 那websocket怎么办。。。
 // todo 主要是ssl的问题，
 // caseA: 两个server，只有一个service handler，proxy handler不要了，在service handler里增加cluster特性，两个server共享一个handler？？？proxy的handler是全的，http里的是只有services。
+// todo Registrations 不管 dev，由Registrations的dialer处理dev，所以dialer需要代理
 func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer, openApiVersion string, devMode bool, secretKey []byte) (handler *proxyHandler) {
 	handler = &proxyHandler{
 		appId:          "",
@@ -349,7 +350,7 @@ func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Req
 		handler.failed(writer, errors.Warning("proxy: X-Fns-Device-Id is required"))
 		return
 	}
-	if r.Header.Get(httpProxyTargetNodeId) != "" {
+	if r.Header.Get(httpDevModeHeader) != "" {
 		handler.handleDevProxy(writer, r)
 		return
 	}
@@ -423,7 +424,7 @@ func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.
 		handler.failed(writer, errors.Warning("proxy: dev mode is not enabled"))
 		return
 	}
-	nodeId := r.Header.Get(httpProxyTargetNodeId)
+	nodeId := r.Header.Get(httpDevModeHeader)
 	pathItems := strings.Split(r.URL.Path, "/")
 	serviceName := pathItems[1]
 	registration, has := handler.registrations.GetExact(serviceName, nodeId)

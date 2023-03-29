@@ -116,6 +116,48 @@ func (documents Documents) Len() int {
 	return len(documents)
 }
 
+func (documents Documents) FindByNamesAndVersion(names []string, version versions.Version) (v []*Document) {
+	if documents == nil || len(documents) == 0 {
+		return
+	}
+	namesLen := len(names)
+	sort.Strings(names)
+	v = make([]*Document, 0, 1)
+	for name, sorts := range documents {
+		if sorts == nil || len(sorts) == 0 {
+			continue
+		}
+		pos := sort.Search(namesLen, func(i int) bool {
+			return names[i] == name
+		})
+		if pos >= namesLen {
+			continue
+		}
+		document, has := sorts.Get(version)
+		if has {
+			v = append(v, document)
+		}
+	}
+	return
+}
+
+func (documents Documents) FindByVersion(version versions.Version) (v []*Document) {
+	if documents == nil || len(documents) == 0 {
+		return
+	}
+	v = make([]*Document, 0, 1)
+	for _, sorts := range documents {
+		if sorts == nil || len(sorts) == 0 {
+			continue
+		}
+		document, has := sorts.Get(version)
+		if has {
+			v = append(v, document)
+		}
+	}
+	return
+}
+
 func (documents Documents) Merge(o Documents) Documents {
 	if o == nil || len(o) == 0 {
 		return documents

@@ -18,13 +18,17 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/documents"
+	"github.com/aacfactory/fns/service/internal/lru"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"golang.org/x/sync/singleflight"
 	"io"
 	"net/http"
 	"strconv"
@@ -34,18 +38,34 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh <-chan map[string]*endpoint, openApiVersion string) (handler HttpHandler) {
+type ServicesHandlerOptions struct {
+	Signer         *secret.Signer
+	DeployedCh     <-chan map[string]*endpoint
+	OpenapiVersion string
+	DevMode        bool
+	Registrations  *Registrations
+	Dialer         HttpClientDialer
+}
+
+func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 	sh := &servicesHandler{
-		log:                    nil,
-		names:                  []byte{'[', ']'},
-		documents:              []byte{'{', '}'},
-		openapi:                []byte{'{', '}'},
-		appId:                  "",
-		appName:                "",
-		appVersion:             versions.Version{},
-		internalRequestEnabled: internalRequestEnabled,
-		signer:                 secret.NewSigner(secretKey),
-		discovery:              nil,
+		log:              nil,
+		ready:            false,
+		names:            make([]string, 0, 1),
+		documents:        documents.NewDocuments(),
+		openapiVersion:   options.OpenapiVersion,
+		proxyMode:        options.Registrations != nil,
+		devMode:          options.DevMode,
+		registrations:    options.Registrations,
+		membersDocuments: lru.New[string, documents.Documents](64),
+		dialer:           options.Dialer,
+		appId:            "",
+		appName:          "",
+		appVersion:       versions.Version{},
+		signer:           options.Signer,
+		discovery:        nil,
+		group:            &singleflight.Group{},
+		cache:            nil,
 	}
 	go func(handler *servicesHandler, deployedCh <-chan map[string]*endpoint, openApiVersion string) {
 		eps, ok := <-deployedCh
@@ -57,66 +77,43 @@ func newServiceHandler(secretKey []byte, internalRequestEnabled bool, deployedCh
 			return
 		}
 		names := make([]string, 0, 1)
-		documents := make(map[string]Document)
 		for name, ep := range eps {
+			handler.names = append(handler.names, name)
 			names = append(names, name)
-			if !ep.Internal() {
-				document := ep.Document()
-				if document != nil {
-					documents[name] = document
-				}
+			if ep.Internal() || ep.Document() == nil {
+				continue
 			}
+			handler.documents.Add(ep.Document())
 		}
-		namesBytes, namesErr := json.Marshal(names)
-		if namesErr == nil {
-			handler.names = namesBytes
-		}
-		document, documentErr := newDocuments(eps, handler.appVersion)
-		if documentErr != nil {
-			if handler.log != nil && handler.log.ErrorEnabled() {
-				handler.log.Error().Cause(documentErr).With("handler", "service").Message("fns: create documents failed")
-			}
-		} else {
-			p, encodeErr := json.Marshal(document)
-			if encodeErr != nil {
-				if handler.log != nil && handler.log.ErrorEnabled() {
-					handler.log.Error().Cause(encodeErr).With("handler", "service").Message("fns: create documents failed")
-				}
-			} else {
-				handler.documents = p
-			}
-		}
-		openapi := newOpenapi(openApiVersion, handler.appId, handler.appName, handler.appVersion, eps)
-		openapiBytes, encodeApiErr := openapi.Encode()
-		if encodeApiErr != nil {
-			if handler.log != nil && handler.log.ErrorEnabled() {
-				handler.log.Error().Cause(encodeApiErr).With("handler", "service").Message("fns: create openapi failed")
-			}
-		} else {
-			handler.openapi = openapiBytes
-		}
-	}(sh, deployedCh, openApiVersion)
+	}(sh, options.DeployedCh, options.OpenapiVersion)
 	handler = sh
 	return
 }
 
-type serviceHandlerConfig struct {
-	Cache *CacheControlConfig `json:"cache"`
+type servicesHandlerConfig struct {
+	Documents    string              `json:"documents"`
+	Openapi      string              `json:"openapi"`
+	CacheControl *CacheControlConfig `json:"cacheControl"`
 }
 
 type servicesHandler struct {
-	log                    logs.Logger
-	ready                  bool
-	names                  []byte
-	documents              []byte
-	openapi                []byte
-	appId                  string
-	appName                string
-	appVersion             versions.Version
-	internalRequestEnabled bool
-	signer                 *secret.Signer
-	discovery              EndpointDiscovery
-	cache                  *CacheControl
+	log              logs.Logger
+	ready            bool
+	names            []string
+	documents        documents.Documents
+	openapiVersion   string
+	proxyMode        bool
+	devMode          bool
+	registrations    *Registrations
+	membersDocuments *lru.LRU[string, documents.Documents]
+	dialer           HttpClientDialer
+	appId            string
+	appName          string
+	appVersion       versions.Version
+	signer           *secret.Signer
+	discovery        EndpointDiscovery
+	group            *singleflight.Group
+	cache            *CacheControl
 }
 
 func (handler *servicesHandler) Name() (name string) {
@@ -125,7 +122,7 @@ func (handler *servicesHandler) Name() (name string) {
 }
 
 func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
-	config := serviceHandlerConfig{}
+	config := servicesHandlerConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
 		err = errors.Warning("fns: build services handler failed").WithCause(configErr)
@@ -136,8 +133,8 @@ func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
 	handler.appName = options.AppName
 	handler.appVersion = options.AppVersion
 	handler.discovery = options.Discovery
-	if config.Cache != nil {
-		handler.cache, err = NewCacheControl(*config.Cache)
+	if config.CacheControl != nil {
+		handler.cache, err = NewCacheControl(*config.CacheControl)
 		if err != nil {
 			err = errors.Warning("fns: build services handler failed").WithCause(err)
 			return
@@ -169,17 +166,44 @@ func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Re
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
-		handler.handleNames(writer, r)
+		if handler.proxyMode {
+			handler.handleProxyNames(writer, r)
+		} else {
+			handler.handleNames(writer, r)
+		}
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-		handler.handleDocuments(writer)
+		if handler.proxyMode {
+			handler.handleProxyDocuments(writer, r)
+		} else {
+			handler.handleDocuments(writer, r)
+		}
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-		handler.handleOpenapi(writer)
+		if handler.proxyMode {
+			handler.handleProxyOpenapi(writer, r)
+		} else {
+			handler.handleOpenapi(writer, r)
+		}
 		return
 	}
+	// local internal
+	if r.Header.Get(httpRequestInternalHeader) != "" {
+		handler.handleInternalRequest(writer, r)
+		return
+	}
+	// proxy
+	if handler.proxyMode {
+		if r.Header.Get(httpDevModeHeader) == "" {
+			handler.handleProxyRequest(writer, r)
+		} else {
+			handler.handleDevProxyRequest(writer, r)
+		}
+		return
+	}
+	// local
 	handler.handleRequest(writer, r)
 	return
 }
@@ -197,7 +221,7 @@ func (handler *servicesHandler) getDeviceIp(r *http.Request) (devIp string) {
 		forwarded := r.Header.Get(httpXForwardedForHeader)
 		if forwarded != "" {
 			forwardedIps := strings.Split(forwarded, ",")
-			devIp = strings.TrimSpace(forwardedIps[len(forwardedIps)-1])
+			devIp = strings.TrimSpace(forwardedIps[0])
 		} else {
 			remoteAddr := r.RemoteAddr
 			if remoteAddr != "" {
@@ -218,11 +242,6 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	}
 	if r.Header.Get(httpDeviceIdHeader) == "" {
 		handler.failed(writer, errors.Warning("fns: X-Fns-Device-Id is required"))
-		return
-	}
-
-	if r.Header.Get(httpRequestInternalHeader) != "" {
-		handler.handleInternalRequest(writer, r)
 		return
 	}
 	// read path
@@ -255,7 +274,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	// cache control
 	cacheKey := uint64(0)
 	if handler.cache != nil {
-		key, cached := handler.cache.Cached(r.URL.Path, r.Header, body)
+		key, cached := handler.cache.Cached(r.Header, r.URL.Path, body)
 		if cached {
 			writer.WriteHeader(http.StatusNotModified)
 			return
@@ -322,7 +341,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 }
 
 func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter, r *http.Request) {
-	if !handler.internalRequestEnabled {
+	if handler.cluster == nil {
 		handler.failed(writer, errors.Warning("fns: cluster mode is not enabled"))
 		return
 	}
@@ -365,7 +384,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	// cache control
 	cacheKey := uint64(0)
 	if handler.cache != nil {
-		key, cached := handler.cache.Cached(r.URL.Path, r.Header, body)
+		key, cached := handler.cache.Cached(r.Header, r.URL.Path, body)
 		if cached {
 			writer.WriteHeader(http.StatusNotModified)
 			return
@@ -446,9 +465,49 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	return
 }
 
-func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
+func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *http.Request) {
+	deviceId := r.URL.Query().Get("deviceId")
+	if deviceId == "" {
+		handler.failed(writer, errors.Warning("fns: deviceId was required in query"))
+		return
+	}
+	r.Header.Set(httpDeviceIdHeader, deviceId)
+
+	v, err, _ := handler.group.Do(fmt.Sprintf("documents:%s", targetVersion.String()), func() (v interface{}, err error) {
+		if r.URL.Query().Get("native") != "" && handler.cluster != nil {
+			p, encodeErr := json.Marshal(handler.documents)
+			if encodeErr != nil {
+				handler.failed(writer, errors.Warning("fns: encode documents failed").WithCause(encodeErr))
+				return
+			}
+			handler.write(writer, http.StatusOK, nil, p)
+			return
+		}
+
+		return
+	})
+
+	handler.documents.Merge()
+	if r.URL.Query().Get("native") != "" {
+
+	} else {
+
+	}
+	// cache control
+	cacheKey := uint64(0)
+	if handler.cache != nil {
+		r.Cookies()
+		key, cached := handler.cache.Cached(r.Header, r.URL.String(), nil)
+		if cached {
+			writer.WriteHeader(http.StatusNotModified)
+			return
+		}
+		cacheKey = key
+	}
+
 	writer.WriteHeader(http.StatusOK)
 	writer.Header().Set(httpContentType, httpContentTypeJson)
+
 	n := 0
 	bodyLen := len(handler.documents)
 	for n < bodyLen {
@@ -461,7 +520,22 @@ func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
+func (handler *servicesHandler) handleProxyDocuments(writer http.ResponseWriter, r *http.Request) {
+	targetVersion := handler.appVersion
+	version := r.URL.Query().Get("version")
+	if version != "" {
+		var parseVersionErr error
+		targetVersion, parseVersionErr = versions.Parse(version)
+		if parseVersionErr != nil {
+			handler.failed(writer, errors.Warning("fns: version in query is invalid").WithCause(parseVersionErr))
+			return
+		}
+	}
+
+	return
+}
+
+func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter, r *http.Request) {
 	writer.WriteHeader(http.StatusOK)
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	n := 0
@@ -473,6 +547,11 @@ func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
 		}
 		n += nn
 	}
+	return
+}
+
+func (handler *servicesHandler) handleProxyOpenapi(writer http.ResponseWriter, r *http.Request) {
+
 	return
 }
 
@@ -494,6 +573,21 @@ func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.
 		}
 		n += nn
 	}
+	return
+}
+
+func (handler *servicesHandler) handleProxyNames(writer http.ResponseWriter, r *http.Request) {
+
+	return
+}
+
+func (handler *servicesHandler) handleProxyRequest(writer http.ResponseWriter, r *http.Request) {
+	// todo set x-forwarded-for, when not exist
+	return
+}
+
+func (handler *servicesHandler) handleDevProxyRequest(writer http.ResponseWriter, r *http.Request) {
+
 	return
 }
 
@@ -545,22 +639,16 @@ func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, l
 }
 
 func (handler *servicesHandler) failed(writer http.ResponseWriter, cause errors.CodeError) {
+	if cause == nil {
+		handler.write(writer, 555, nil, nil)
+		return
+	}
 	status := cause.Code()
 	if status == 0 {
 		status = 555
 	}
-	writer.WriteHeader(status)
-	writer.Header().Set(httpContentType, httpContentTypeJson)
 	body, _ := json.Marshal(cause)
-	n := 0
-	bodyLen := len(body)
-	for n < bodyLen {
-		nn, writeErr := writer.Write(body[n:])
-		if writeErr != nil {
-			return
-		}
-		n += nn
-	}
+	handler.write(writer, status, nil, body)
 	return
 }
 
@@ -594,6 +682,32 @@ func (handler *servicesHandler) writeInternalResponse(writer http.ResponseWriter
 			return
 		}
 		n += nn
+	}
+	return
+}
+
+func (handler *servicesHandler) write(writer http.ResponseWriter, status int, header http.Header, body []byte) {
+	writer.WriteHeader(status)
+	writer.Header().Set(httpContentType, httpContentTypeJson)
+	if header != nil && len(header) > 0 {
+		for k, vv := range header {
+			if vv != nil && len(vv) > 0 {
+				for _, v := range vv {
+					writer.Header().Add(k, v)
+				}
+			}
+		}
+	}
+	if body != nil {
+		n := 0
+		bodyLen := len(body)
+		for n < bodyLen {
+			nn, writeErr := writer.Write(body[n:])
+			if writeErr != nil {
+				return
+			}
+			n += nn
+		}
 	}
 	return
 }

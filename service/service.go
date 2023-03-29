@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/logs"
 )
 
@@ -52,7 +53,7 @@ type Service interface {
 	Name() (name string)
 	Internal() (internal bool)
 	Components() (components map[string]Component)
-	Document() (doc Document)
+	Document() (doc *documents.Document)
 	Handle(ctx context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
 	Close()
 }
@@ -150,7 +151,7 @@ func (svc *Abstract) Components() (components map[string]Component) {
 	return
 }
 
-func (svc *Abstract) Document() (doc Document) {
+func (svc *Abstract) Document() (doc *documents.Document) {
 	return
 }
 

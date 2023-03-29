@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/validators"
 )
 
@@ -89,7 +90,7 @@ func (svc *tracing) Components() (components map[string]service.Component) {
 	return
 }
 
-func (svc *tracing) Document() (doc service.Document) {
+func (svc *tracing) Document() (doc *documents.Document) {
 	return
 }
 

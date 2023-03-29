@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/rings"
@@ -130,7 +131,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
 	// devMode
 	if task.registration.devMode {
-		header.Add(httpProxyTargetNodeId, task.registration.id)
+		header.Add(httpDevModeHeader, task.registration.id)
 	}
 	serviceName, fn := r.Fn()
 	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
@@ -235,7 +236,7 @@ func (registration *Registration) Internal() (ok bool) {
 	return
 }
 
-func (registration *Registration) Document() (document Document) {
+func (registration *Registration) Document() (document *documents.Document) {
 	return
 }
 
@@ -277,7 +278,6 @@ func (registration *Registration) release(task *registrationTask) {
 
 type Registrations struct {
 	id                 string
-	locker             sync.Mutex
 	values             sync.Map
 	signer             *secret.Signer
 	dialer             HttpClientDialer
@@ -295,9 +295,7 @@ func (r *Registrations) Add(registration *Registration) {
 		r.values.Store(registration.name, v)
 	}
 	ring, _ = v.(*rings.Ring[*Registration])
-	r.locker.Lock()
 	ring.Push(registration)
-	r.locker.Unlock()
 	return
 }
 
@@ -307,12 +305,10 @@ func (r *Registrations) Remove(id string) {
 		ring, _ := value.(*rings.Ring[*Registration])
 		_, has := ring.Get(id)
 		if has {
-			r.locker.Lock()
 			ring.Remove(id)
 			if ring.Len() == 0 {
 				empties = append(empties, key.(string))
 			}
-			r.locker.Unlock()
 		}
 		return true
 	})
@@ -363,7 +359,6 @@ func (r *Registrations) Get(name string, rvs RequestVersions) (registration *Reg
 }
 
 func (r *Registrations) Close() {
-	r.locker.Lock()
 	r.values.Range(func(key, value any) bool {
 		entries := value.(*rings.Ring[*Registration])
 		size := entries.Len()
@@ -375,7 +370,6 @@ func (r *Registrations) Close() {
 		}
 		return true
 	})
-	r.locker.Unlock()
 	return
 }
 
@@ -438,6 +432,7 @@ func (r *Registrations) AddNode(node Node) (err error) {
 		return
 	}
 	devMode := false
+	// todo Registrations 不管 dev，由Registrations的dialer处理dev，所以dialer需要代理
 	if r.devProxyAddress != "" {
 		devMode = true
 		address = r.devProxyAddress
@@ -454,7 +449,7 @@ func (r *Registrations) AddNode(node Node) (err error) {
 
 	header := http.Header{}
 	if devMode {
-		header.Add(httpProxyTargetNodeId, node.Id)
+		header.Add(httpDevModeHeader, node.Id)
 	}
 	header.Add(httpDeviceIdHeader, r.id)
 	header.Add(httpRequestSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))

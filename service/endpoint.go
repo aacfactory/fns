@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
 	"github.com/aacfactory/fns/service/internal/logger"
 	"github.com/aacfactory/fns/service/internal/procs"
@@ -248,7 +249,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	if cluster != nil {
 		v.registrations = &Registrations{
 			id:                 v.rt.appId,
-			locker:             sync.Mutex{},
 			values:             sync.Map{},
 			dialer:             v.http,
 			signer:             v.rt.signer,
@@ -318,7 +318,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			}
 		}
 	}
-	appendHandlerErr := handlers.Append(newServiceHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCHS.acquire(), options.OpenApiVersion))
+	appendHandlerErr := handlers.Append(newServicesHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCHS.acquire(), options.OpenApiVersion))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return
@@ -501,7 +501,6 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 			return
 		}
 		// registrations
-
 		mergeErr := e.registrations.MergeNodes(nodes)
 		if mergeErr != nil {
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
@@ -592,6 +591,7 @@ func (e *Endpoints) fetchRegistrations() {
 				stop = true
 				break
 			case <-timer.C:
+				// todo use registations.lister
 				nodes, nodesErr := listMembers(context.TODO(), e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
 				if nodesErr != nil {
 					if e.log.WarnEnabled() {
@@ -627,7 +627,7 @@ var (
 type Endpoint interface {
 	Name() (name string)
 	Internal() (ok bool)
-	Document() (document Document)
+	Document() (document *documents.Document)
 	Request(ctx context.Context, r Request) (future Future)
 	RequestSync(ctx context.Context, r Request) (result FutureResult, err errors.CodeError)
 }
@@ -649,7 +649,7 @@ func (e *endpoint) Internal() (ok bool) {
 	return
 }
 
-func (e *endpoint) Document() (document Document) {
+func (e *endpoint) Document() (document *documents.Document) {
 	document = e.svc.Document()
 	return
 }

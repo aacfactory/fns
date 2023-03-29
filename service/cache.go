@@ -69,24 +69,25 @@ type CacheControl struct {
 	Weak  bool
 }
 
-func (cache *CacheControl) Cached(path string, header http.Header, body []byte) (key uint64, ok bool) {
-	key = cache.buildKey(path, header, body)
-	etag := header.Get(httpCacheControlIfNonMatch)
-	if etag == "" {
+func (cache *CacheControl) Cached(header http.Header, path string, body []byte) (key uint64, ok bool) {
+	if header.Get(httpCacheControlHeader) == "no-cache" || header.Get(httpPragmaHeader) == "no-cache" {
 		return
 	}
+	key = cache.buildKey(path, header, body)
 	item, has := cache.ETags.Get(key)
 	if !has {
 		return
 	}
-	cached, isEtag := item.(string)
-	if !isEtag {
+	etag := header.Get(httpCacheControlIfNonMatch)
+	if etag != "" {
+		cached, isEtag := item.(string)
+		if !isEtag {
+			return
+		}
+		ok = cached == etag
 		return
 	}
-	if cached == etag {
-		ok = true
-		return
-	}
+	ok = true
 	return
 }
 
@@ -127,6 +128,11 @@ func (cache *CacheControl) CreateETag(key uint64, age int64, body []byte) (v str
 		v = "W/" + v
 	}
 	cache.ETags.SetWithTTL(key, v, int64(len(v)), time.Duration(age)*time.Second)
+	return
+}
+
+func (cache *CacheControl) Flush() {
+	cache.ETags.Wait()
 	return
 }
 

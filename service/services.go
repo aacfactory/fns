@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
@@ -83,9 +84,9 @@ func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 }
 
 type servicesHandlerConfig struct {
-	DisableHandleDocuments bool  `json:"disableHandleDocuments"`
-	DisableHandleOpenapi   bool  `json:"disableHandleOpenapi"`
-	MaxPerDeviceRequest    int64 `json:"maxPerDeviceRequest"`
+	DisableHandleDocuments bool                 `json:"disableHandleDocuments"`
+	DisableHandleOpenapi   bool                 `json:"disableHandleOpenapi"`
+	Limiter                RequestLimiterConfig `json:"limiter"`
 }
 
 type servicesHandler struct {
@@ -103,6 +104,7 @@ type servicesHandler struct {
 	discovery              EndpointDiscovery
 	group                  *singleflight.Group
 	limiter                *ratelimit.Limiter
+	retryAfter             string
 }
 
 func (handler *servicesHandler) Name() (name string) {
@@ -124,11 +126,21 @@ func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
 	handler.discovery = options.Discovery
 	handler.disableHandleDocuments = config.DisableHandleDocuments
 	handler.disableHandleOpenapi = config.DisableHandleOpenapi
-	maxPerDeviceRequest := config.MaxPerDeviceRequest
+
+	maxPerDeviceRequest := config.Limiter.MaxPerDeviceRequest
 	if maxPerDeviceRequest < 1 {
 		maxPerDeviceRequest = 8
 	}
+	retryAfter := 10 * time.Second
+	if config.Limiter.RetryAfter != "" {
+		retryAfter, err = time.ParseDuration(strings.TrimSpace(config.Limiter.RetryAfter))
+		if err != nil {
+			err = errors.Warning("fns: build services handler failed").WithCause(errors.Warning("retryAfter must be time.Duration format").WithCause(err))
+			return
+		}
+	}
 	handler.limiter = ratelimit.New(maxPerDeviceRequest)
+	handler.retryAfter = fmt.Sprintf("%d", int(retryAfter/time.Second))
 	return
 }
 
@@ -591,6 +603,9 @@ func (handler *servicesHandler) failed(writer http.ResponseWriter, cause errors.
 func (handler *servicesHandler) write(writer http.ResponseWriter, status int, body []byte) {
 	writer.WriteHeader(status)
 	writer.Header().Set(httpContentType, httpContentTypeJson)
+	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+		writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
+	}
 	if body != nil {
 		n := 0
 		bodyLen := len(body)

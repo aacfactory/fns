@@ -84,7 +84,7 @@ func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
 		config.ExposedHeaders,
 		httpAppIdHeader, httpAppNameHeader, httpAppVersionHeader,
 		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
-		httpCacheControlHeader, httpETagHeader, httpClearSiteData,
+		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter,
 	)
 	h = cors.New(cors.Options{
 		AllowedOrigins:         config.AllowedOrigins,

@@ -120,6 +120,11 @@ type SharedConfig struct {
 	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds"`
 }
 
+type RequestLimiterConfig struct {
+	MaxPerDeviceRequest int64  `json:"maxPerDeviceRequest"`
+	RetryAfter          string `json:"retryAfter"`
+}
+
 const (
 	activeSystemEnvKey = "FNS-ACTIVE"
 )

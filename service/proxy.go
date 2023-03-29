@@ -17,10 +17,13 @@
 package service
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/lru"
+	"github.com/aacfactory/fns/service/internal/ratelimit"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -35,9 +38,10 @@ const (
 	proxyHandlerName = "proxy"
 )
 
-type Proxy struct {
-	http   Http
-	dialer HttpClientDialer
+type ProxyHandlerOptions struct {
+	Signer        *secret.Signer
+	Registrations *Registrations
+	DeployedCh    <-chan map[string]*endpoint
 }
 
 // todo proxy 单独做，单独拥有一个http server，与service的独立，然后发布出去的只有service的，cluster里取所有的port，然后由registation般配port是否为service。
@@ -45,59 +49,59 @@ type Proxy struct {
 // todo 主要是ssl的问题，
 // caseA: 两个server，只有一个service handler，proxy handler不要了，在service handler里增加cluster特性，两个server共享一个handler？？？proxy的handler是全的，http里的是只有services。
 // todo Registrations 不管 dev，由Registrations的dialer处理dev，所以dialer需要代理
-func newProxyHandler(cluster Cluster, registrations *Registrations, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer, openApiVersion string, devMode bool, secretKey []byte) (handler *proxyHandler) {
+func newProxyHandler(options ProxyHandlerOptions) (handler *proxyHandler) {
 	handler = &proxyHandler{
-		appId:          "",
-		appName:        "",
-		appVersion:     versions.Version{},
-		openApiVersion: openApiVersion,
-		log:            nil,
-		ready:          false,
-		devMode:        devMode,
-		cluster:        cluster,
-		endpoints:      make(map[string]*endpoint),
-		registrations:  registrations,
-		dialer:         dialer,
-		discovery:      nil,
-		signer:         secret.NewSigner(secretKey),
-		attachment:     lru.New[string, []byte](8),
-		group:          &singleflight.Group{},
+		log:                    nil,
+		ready:                  false,
+		documents:              documents.NewDocuments(),
+		disableHandleDocuments: false,
+		disableHandleOpenapi:   false,
+		openapiVersion:         "",
+		appId:                  "",
+		appName:                "",
+		appVersion:             versions.Version{},
+		signer:                 options.Signer,
+		devMode:                false,
+		registrations:          options.Registrations,
+		attachments:            nil,
+		group:                  &singleflight.Group{},
+		limiter:                nil,
+		retryAfter:             "",
 	}
-	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint, dialer HttpClientDialer) {
-		eps, ok := <-deployedCh
-		handler.ready = true
+	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint) {
+		_, ok := <-deployedCh
 		if !ok {
 			return
 		}
-		if eps == nil || len(eps) == 0 {
-			return
-		}
-		handler.endpoints = eps
-	}(handler, deployedCh, dialer)
+		handler.ready = true
+	}(handler, options.DeployedCh)
 	return
 }
 
 type proxyHandlerConfig struct {
-	Cache *CacheControlConfig `json:"cache"`
+	DisableHandleDocuments bool                 `json:"disableHandleDocuments"`
+	DisableHandleOpenapi   bool                 `json:"disableHandleOpenapi"`
+	OpenapiVersion         string               `json:"openapiVersion"`
+	Limiter                RequestLimiterConfig `json:"limiter"`
 }
 
 type proxyHandler struct {
-	appId          string
-	appName        string
-	appVersion     versions.Version
-	openApiVersion string
-	log            logs.Logger
-	ready          bool
-	devMode        bool
-	cluster        Cluster
-	endpoints      map[string]*endpoint
-	registrations  *Registrations
-	dialer         HttpClientDialer
-	discovery      EndpointDiscovery
-	signer         *secret.Signer
-	attachment     *lru.LRU[string, []byte]
-	group          *singleflight.Group
-	cache          *CacheControl
+	log                    logs.Logger
+	ready                  bool
+	documents              documents.Documents
+	disableHandleDocuments bool
+	disableHandleOpenapi   bool
+	openapiVersion         string
+	appId                  string
+	appName                string
+	appVersion             versions.Version
+	signer                 *secret.Signer
+	devMode                bool
+	registrations          *Registrations
+	attachments            *lru.LRU[string, []byte]
+	group                  *singleflight.Group
+	limiter                *ratelimit.Limiter
+	retryAfter             string
 }
 
 func (handler *proxyHandler) Name() (name string) {
@@ -116,14 +120,25 @@ func (handler *proxyHandler) Build(options *HttpHandlerOptions) (err error) {
 	handler.appId = options.AppId
 	handler.appName = options.AppName
 	handler.appVersion = options.AppVersion
-	handler.discovery = options.Discovery
-	if config.Cache != nil {
-		handler.cache, err = NewCacheControl(*config.Cache)
+	handler.disableHandleDocuments = config.DisableHandleDocuments
+	handler.disableHandleOpenapi = config.DisableHandleOpenapi
+	if !handler.disableHandleOpenapi {
+		handler.openapiVersion = strings.TrimSpace(config.OpenapiVersion)
+	}
+	maxPerDeviceRequest := config.Limiter.MaxPerDeviceRequest
+	if maxPerDeviceRequest < 1 {
+		maxPerDeviceRequest = 8
+	}
+	retryAfter := 10 * time.Second
+	if config.Limiter.RetryAfter != "" {
+		retryAfter, err = time.ParseDuration(strings.TrimSpace(config.Limiter.RetryAfter))
 		if err != nil {
-			err = errors.Warning("fns: build proxy handler failed").WithCause(err)
+			err = errors.Warning("fns: build services handler failed").WithCause(errors.Warning("retryAfter must be time.Duration format").WithCause(err))
 			return
 		}
 	}
+	handler.limiter = ratelimit.New(maxPerDeviceRequest)
+	handler.retryAfter = fmt.Sprintf("%d", int(retryAfter/time.Second))
 	return
 }
 
@@ -136,10 +151,7 @@ func (handler *proxyHandler) Accept(r *http.Request) (ok bool) {
 	if ok {
 		return
 	}
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/names" && r.URL.Query().Get("native") == ""
-	if ok {
-		return
-	}
+
 	pathItems := strings.Split(r.URL.Path, "/")
 	ok = r.Method == http.MethodPost && r.Header.Get(httpContentType) == httpContentTypeJson && len(pathItems) == 3
 	if ok {

@@ -64,6 +64,7 @@ const (
 	httpDeviceIdHeader         = "X-Fns-Device-Id"
 	httpDeviceIpHeader         = "X-Fns-Device-Ip"
 	httpDevModeHeader          = "X-Fns-Dev-Mode"
+	httpResponseRetryAfter     = "Retry-After"
 )
 
 type HttpHandlerOptions struct {

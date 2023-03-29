@@ -23,7 +23,6 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/internal/commons/objects"
 	"github.com/aacfactory/json"
-	"reflect"
 )
 
 type Promise interface {
@@ -120,13 +119,13 @@ func (fr *futureResult) Exist() (ok bool) {
 	switch fr.data.(type) {
 	case []byte:
 		p := fr.data.([]byte)
-		ok = nilJson != bytex.ToString(p)
+		ok = len(p) > 0 && nilJson != bytex.ToString(p)
 	case json.RawMessage:
 		p := fr.data.(json.RawMessage)
-		ok = nilJson != bytex.ToString(p)
+		ok = len(p) > 0 && nilJson != bytex.ToString(p)
 	case stdjson.RawMessage:
 		p := fr.data.(stdjson.RawMessage)
-		ok = nilJson != bytex.ToString(p)
+		ok = len(p) > 0 && nilJson != bytex.ToString(p)
 	default:
 		ok = true
 		break
@@ -219,43 +218,10 @@ func (fr *futureResult) Scan(v interface{}) (err errors.CodeError) {
 }
 
 func (fr *futureResult) MarshalJSON() (p []byte, err error) {
-	rv := reflect.ValueOf(fr.data)
-	if !rv.IsValid() {
+	if fr.data == nil {
 		p = bytex.FromString(nilJson)
 		return
 	}
-	switch rv.Kind() {
-	case reflect.Array, reflect.Slice:
-		if rv.Len() == 0 {
-			p = bytex.FromString(emptyArrayJson)
-		} else {
-			p, err = json.Marshal(fr.data)
-		}
-		break
-	case reflect.Struct:
-		if rv.IsZero() {
-			p = bytex.FromString(nilJson)
-		} else {
-			p, err = json.Marshal(fr.data)
-		}
-		break
-	case reflect.Map:
-		if rv.IsZero() || rv.Len() == 0 {
-			p = bytex.FromString(nilJson)
-		} else {
-			p, err = json.Marshal(fr.data)
-		}
-		break
-	case reflect.Ptr:
-		if rv.IsNil() {
-			p = bytex.FromString(nilJson)
-		} else {
-			p, err = json.Marshal(fr.data)
-		}
-		break
-	default:
-		p, err = json.Marshal(fr.data)
-		break
-	}
+	p, err = json.Marshal(fr.data)
 	return
 }

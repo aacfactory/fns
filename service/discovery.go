@@ -112,9 +112,6 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	r := task.r
 	fr := task.result
 
-	// todo 当来自proxy的，则不用internal request
-	// todo 增加/services/foo
-
 	requestBody, encodeErr := json.Marshal(internalRequest{
 		User:     r.User(),
 		Trunk:    r.Trunk(),
@@ -137,6 +134,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
 		return
 	}
+	// todo handle http.StatusTooEarly and Connection=close
 	ir := &internalResponseImpl{}
 	decodeErr := json.Unmarshal(responseBody, ir)
 	if decodeErr != nil {
@@ -169,6 +167,14 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	} else {
 		fr.Failed(errors.Decode(ir.Body))
 	}
+	return
+}
+
+func (task *registrationTask) Proxy(ctx context.Context) {
+	// todo 当来自proxy的，则不用internal request
+	// todo 增加/services/foo
+	// todo 增加 registration proxy task
+
 	return
 }
 
@@ -553,6 +559,11 @@ func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
 			}
 		}
 	}
+	return
+}
+
+func (r *Registrations) FetchDocuments() (v documents.Documents, err error) {
+	// todo
 	return
 }
 

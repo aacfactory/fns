@@ -165,9 +165,18 @@ func (handlers *HttpHandlers) ServeHTTP(writer http.ResponseWriter, request *htt
 	writer.Header().Set(httpAppNameHeader, handlers.appName)
 	writer.Header().Set(httpAppVersionHeader, handlers.appVersion.String())
 	if handlers.running.IsOff() {
+		writer.WriteHeader(http.StatusRequestTimeout)
 		writer.Header().Set(httpConnectionHeader, httpCloseHeader)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
-		writer.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: service is not serving").WithMeta("fns", "handlers")))
+		atomic.AddInt64(&handlers.requestCounts, -1)
+		handlers.counter.Done()
+		return
+	}
+	if handlers.running.IsHalfOn() {
+		writer.WriteHeader(http.StatusTooEarly)
+		writer.Header().Set(httpResponseRetryAfter, "30")
+		writer.Header().Set(httpContentType, httpContentTypeJson)
 		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: service is not serving").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
@@ -187,9 +196,9 @@ func (handlers *HttpHandlers) ServeHTTP(writer http.ResponseWriter, request *htt
 		}
 	}
 	if !handled {
+		writer.WriteHeader(http.StatusNotFound)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
-		writer.WriteHeader(http.StatusNotAcceptable)
-		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: request is not accepted").WithMeta("fns", "handlers")))
+		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: no handler accept request").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
 		return
@@ -219,8 +228,8 @@ func (handlers *HttpHandlers) handleApplication(writer http.ResponseWriter, requ
 			v, _ = json.Marshal(handlers.HandlerNames())
 			return
 		})
-		writer.Header().Set(httpContentType, httpContentTypeJson)
 		writer.WriteHeader(http.StatusOK)
+		writer.Header().Set(httpContentType, httpContentTypeJson)
 		_, _ = writer.Write(v.([]byte))
 		ok = true
 		return
@@ -254,8 +263,8 @@ func (handlers *HttpHandlers) handleApplication(writer http.ResponseWriter, requ
 			v, _ = json.Marshal(stat)
 			return
 		})
-		writer.Header().Set(httpContentType, httpContentTypeJson)
 		writer.WriteHeader(http.StatusOK)
+		writer.Header().Set(httpContentType, httpContentTypeJson)
 		_, _ = writer.Write(v.([]byte))
 		ok = true
 		return

@@ -33,19 +33,19 @@ func New(major int, minor int, patch int) (v Version) {
 	return
 }
 
-func Min() Version {
+func Origin() Version {
 	return Version{
 		Major: 0,
 		Minor: 0,
-		Patch: 0,
+		Patch: 1,
 	}
 }
 
-func Max() Version {
+func Latest() Version {
 	return Version{
-		Major: math.MaxInt,
-		Minor: math.MaxInt,
-		Patch: math.MaxInt,
+		Major: math.MaxInt64,
+		Minor: math.MaxInt64,
+		Patch: math.MaxInt64,
 	}
 }
 
@@ -56,11 +56,6 @@ type Version struct {
 }
 
 func (ver Version) Between(left Version, right Version) (ok bool) {
-	if right.IsZero() {
-		right.Major = math.MaxInt
-		right.Minor = math.MaxInt
-		right.Patch = math.MaxInt
-	}
 	if ver.Major >= left.Major && ver.Major < right.Major {
 		if ver.Minor >= left.Minor && ver.Minor < right.Minor {
 			if ver.Patch >= left.Patch && ver.Patch < right.Patch {
@@ -92,18 +87,31 @@ func (ver Version) Equals(o Version) (ok bool) {
 	return
 }
 
-func (ver Version) IsZero() (ok bool) {
-	ok = ver.Major == 0 && ver.Minor == 0 && ver.Patch == 0
+func (ver Version) IsOrigin() (ok bool) {
+	ok = ver.Major == 0 && ver.Minor == 0 && ver.Patch == 1
+	return
+}
+
+func (ver Version) IsLatest() (ok bool) {
+	ok = ver.Major == math.MaxInt64 && ver.Minor == math.MaxInt64 && ver.Patch == math.MaxInt64
 	return
 }
 
 func (ver Version) String() (v string) {
+	if ver.IsLatest() {
+		v = "latest"
+		return
+	}
 	v = fmt.Sprintf("v%d.%d.%d", ver.Major, ver.Minor, ver.Patch)
 	return
 }
 
 func Parse(v string) (ver Version, err error) {
 	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "latest" {
+		ver = Latest()
+		return
+	}
 	if v[0] != 'v' {
 		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", v)
 		return

@@ -23,9 +23,24 @@ import (
 	"sort"
 )
 
-type SortedDocuments []*Document
+type NameSortedDocuments []*Document
 
-func (documents SortedDocuments) Get(version versions.Version) (document *Document, has bool) {
+func (documents NameSortedDocuments) Len() int {
+	return len(documents)
+}
+
+func (documents NameSortedDocuments) Less(i, j int) bool {
+	return documents[i].Name < documents[j].Name
+}
+
+func (documents NameSortedDocuments) Swap(i, j int) {
+	documents[i], documents[j] = documents[j], documents[i]
+	return
+}
+
+type VersionSortedDocuments []*Document
+
+func (documents VersionSortedDocuments) Get(version versions.Version) (document *Document, has bool) {
 	if documents == nil || len(documents) == 0 {
 		return
 	}
@@ -39,7 +54,7 @@ func (documents SortedDocuments) Get(version versions.Version) (document *Docume
 	return
 }
 
-func (documents SortedDocuments) Merge(o SortedDocuments) SortedDocuments {
+func (documents VersionSortedDocuments) Merge(o VersionSortedDocuments) VersionSortedDocuments {
 	if o == nil || len(o) == 0 {
 		return documents
 	}
@@ -55,7 +70,7 @@ func (documents SortedDocuments) Merge(o SortedDocuments) SortedDocuments {
 	if len(deltas) == 0 {
 		return documents
 	}
-	merged := SortedDocuments(make([]*Document, 0, 1))
+	merged := VersionSortedDocuments(make([]*Document, 0, 1))
 	for _, document := range documents {
 		merged = append(merged, document)
 	}
@@ -66,24 +81,24 @@ func (documents SortedDocuments) Merge(o SortedDocuments) SortedDocuments {
 	return merged
 }
 
-func (documents SortedDocuments) Len() int {
+func (documents VersionSortedDocuments) Len() int {
 	return len(documents)
 }
 
-func (documents SortedDocuments) Less(i, j int) bool {
+func (documents VersionSortedDocuments) Less(i, j int) bool {
 	return documents[i].Version.LessThan(documents[j].Version)
 }
 
-func (documents SortedDocuments) Swap(i, j int) {
+func (documents VersionSortedDocuments) Swap(i, j int) {
 	documents[i], documents[j] = documents[j], documents[i]
 	return
 }
 
 func NewDocuments() Documents {
-	return make(map[string]SortedDocuments)
+	return make(map[string]VersionSortedDocuments)
 }
 
-type Documents map[string]SortedDocuments
+type Documents map[string]VersionSortedDocuments
 
 func (documents Documents) Add(doc *Document) (ok bool) {
 	if doc == nil {
@@ -116,32 +131,7 @@ func (documents Documents) Len() int {
 	return len(documents)
 }
 
-func (documents Documents) FindByNamesAndVersion(names []string, version versions.Version) (v []*Document) {
-	if documents == nil || len(documents) == 0 {
-		return
-	}
-	namesLen := len(names)
-	sort.Strings(names)
-	v = make([]*Document, 0, 1)
-	for name, sorts := range documents {
-		if sorts == nil || len(sorts) == 0 {
-			continue
-		}
-		pos := sort.Search(namesLen, func(i int) bool {
-			return names[i] == name
-		})
-		if pos >= namesLen {
-			continue
-		}
-		document, has := sorts.Get(version)
-		if has {
-			v = append(v, document)
-		}
-	}
-	return
-}
-
-func (documents Documents) FindByVersion(version versions.Version) (v []*Document) {
+func (documents Documents) FindByVersion(version versions.Version) (v NameSortedDocuments) {
 	if documents == nil || len(documents) == 0 {
 		return
 	}
@@ -150,10 +140,20 @@ func (documents Documents) FindByVersion(version versions.Version) (v []*Documen
 		if sorts == nil || len(sorts) == 0 {
 			continue
 		}
-		document, has := sorts.Get(version)
+		var document *Document
+		var has bool
+		if version.IsLatest() {
+			document = sorts[len(sorts)-1]
+			has = true
+		} else {
+			document, has = sorts.Get(version)
+		}
 		if has {
 			v = append(v, document)
 		}
+	}
+	if len(v) > 0 {
+		sort.Sort(v)
 	}
 	return
 }
@@ -221,7 +221,14 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 			if sorts == nil || len(sorts) == 0 {
 				continue
 			}
-			document, matched := sorts.Get(appVersion)
+			var document *Document
+			var matched bool
+			if appVersion.IsLatest() {
+				document = sorts[len(sorts)-1]
+				matched = true
+			} else {
+				document, matched = sorts.Get(appVersion)
+			}
 			if !matched {
 				continue
 			}

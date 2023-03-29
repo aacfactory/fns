@@ -33,8 +33,8 @@ var (
 	allowAllRequestVersions = RequestVersions{
 		{
 			Pattern: "*",
-			Begin:   versions.Min(),
-			End:     versions.Max(),
+			Begin:   versions.Origin(),
+			End:     versions.Latest(),
 			Exact:   false,
 		},
 	}
@@ -128,7 +128,7 @@ func ParseRequestVersion(s string) (rv *RequestVersion, err error) {
 		}
 		return
 	}
-	beg := versions.Version{}
+	beg := versions.Origin()
 	begValue := strings.TrimSpace(s[0:idx])
 	if begValue != "" {
 		beg, err = versions.Parse(begValue)
@@ -137,7 +137,7 @@ func ParseRequestVersion(s string) (rv *RequestVersion, err error) {
 			return
 		}
 	}
-	end := versions.Version{}
+	end := versions.Latest()
 	endValue := strings.TrimSpace(s[idx+1:])
 	if endValue != "" {
 		end, err = versions.Parse(endValue)

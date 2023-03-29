@@ -21,6 +21,7 @@ import (
 	"github.com/aacfactory/fns/service/internal/oas"
 	"reflect"
 	"sort"
+	"strings"
 )
 
 func NewElement(path string, name string, typ string, format string, title string, description string) *Element {
@@ -31,7 +32,7 @@ func NewElement(path string, name string, typ string, format string, title strin
 		Description: description,
 		Type:        typ,
 		Format:      format,
-		Enum:        make([]interface{}, 0, 1),
+		Enums:       make([]string, 0, 1),
 		Required:    false,
 		Validation:  nil,
 		Properties:  make(map[string]*Element),
@@ -93,11 +94,11 @@ func Float64() *Element {
 }
 
 func Complex64() *Element {
-	return NewElement("_", "complex64", "string", "", "Complex64", "Complex64").SetExample("15+3i")
+	return NewElement("_", "complex64", "string", "", "Complex64", "Complex64 format, such as 15+3i")
 }
 
 func Complex128() *Element {
-	return NewElement("_", "complex128", "string", "", "Complex128", "Complex128").SetExample("15+3i")
+	return NewElement("_", "complex128", "string", "", "Complex128", "Complex128 format, such as 15+3i")
 }
 
 func Date() *Element {
@@ -105,15 +106,15 @@ func Date() *Element {
 }
 
 func Time() *Element {
-	return NewElement("_", "time", "string", "", "Time", "Time value").SetExample("15:04:05")
+	return NewElement("_", "time", "string", "", "Time", "Time format, such as 15:04:05")
 }
 
 func Duration() *Element {
-	return NewElement("_", "duration", "integer", "int64", "Duration", "Nanosecond value").SetExample("1000")
+	return NewElement("_", "duration", "integer", "int64", "Duration", "Nanosecond")
 }
 
 func DateTime() *Element {
-	return NewElement("_", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339").SetExample("2022-01-10T19:13:07+08:00")
+	return NewElement("_", "datetime", "string", "2006-01-02T15:04:05Z07:00", "Datetime", "RFC3339 format, such as 2022-01-10T19:13:07+08:00")
 }
 
 func Any() *Element {
@@ -193,13 +194,12 @@ type Element struct {
 	Description string              `json:"description,omitempty"`
 	Type        string              `json:"type,omitempty"`
 	Format      string              `json:"format,omitempty"`
-	Enum        []interface{}       `json:"enum,omitempty"`
+	Enums       []string            `json:"enums,omitempty"`
 	Required    bool                `json:"required,omitempty"`
 	Validation  *ElementValidation  `json:"validation,omitempty"`
 	Properties  map[string]*Element `json:"properties,omitempty"`
 	Additional  bool                `json:"additional,omitempty"`
 	Deprecated  bool                `json:"deprecated,omitempty"`
-	Example     interface{}         `json:"example,omitempty"`
 }
 
 func (element *Element) SetPath(path string) *Element {
@@ -242,18 +242,13 @@ func (element *Element) SetDescription(description string) *Element {
 	return element
 }
 
-func (element *Element) SetExample(example interface{}) *Element {
-	element.Example = example
-	return element
-}
-
 func (element *Element) SetFormat(format string) *Element {
 	element.Format = format
 	return element
 }
 
-func (element *Element) AddEnum(v ...interface{}) *Element {
-	element.Enum = append(element.Enum, v...)
+func (element *Element) AddEnum(v ...string) *Element {
+	element.Enums = append(element.Enums, v...)
 	return element
 }
 
@@ -352,18 +347,26 @@ func (element *Element) Schema() (v *oas.Schema) {
 		return
 	}
 	v = &oas.Schema{
-		Key:                  element.Key(),
-		Title:                element.Title,
-		Description:          "",
-		Type:                 element.Type,
-		Required:             nil,
-		Format:               element.Format,
-		Enum:                 element.Enum,
+		Key:         element.Key(),
+		Title:       element.Title,
+		Description: "",
+		Type:        element.Type,
+		Required:    nil,
+		Format:      element.Format,
+		Enum: func(enums []string) (v []interface{}) {
+			if enums == nil || len(enums) == 0 {
+				return
+			}
+			v = make([]interface{}, 0, len(enums))
+			for _, enum := range enums {
+				v = append(v, enum)
+			}
+			return
+		}(element.Enums),
 		Properties:           nil,
 		Items:                nil,
 		AdditionalProperties: nil,
 		Deprecated:           element.Deprecated,
-		Example:              element.Example,
 		Ref:                  "",
 	}
 	// Description
@@ -384,9 +387,9 @@ func (element *Element) Schema() (v *oas.Schema) {
 			}
 		}
 	}
-	if element.Enum != nil && len(element.Enum) > 0 {
+	if element.Enums != nil && len(element.Enums) > 0 {
 		description = description + "\n\n***Enum***" + " "
-		description = description + fmt.Sprintf("%v", element.Enum) + " "
+		description = description + fmt.Sprintf("[%s]", strings.Join(element.Enums, ", ")) + " "
 	}
 	v.Description = description
 	// builtin

@@ -16,84 +16,39 @@
 
 package documents
 
-import "github.com/aacfactory/fns/service"
-
-func newFn(name string, title string, description string, authorization bool, deprecated bool, arg *Element, result *Element, errs []FnError) *Fn {
+func newFn(name string, title string, description string, authorization bool, deprecated bool, arg *Element, result *Element, errs []Error) *Fn {
 	return &Fn{
-		Name_:          name,
-		Title_:         title,
-		Description_:   description,
-		Authorization_: authorization,
-		Argument_:      arg,
-		Result_:        result,
-		Deprecated_:    deprecated,
-		Errors_:        errs,
+		Name:          name,
+		Title:         title,
+		Description:   description,
+		Authorization: authorization,
+		Argument:      arg,
+		Result:        result,
+		Deprecated:    deprecated,
+		Errors:        errs,
 	}
 }
 
 type Fn struct {
-	Name_          string    `json:"name,omitempty"`
-	Title_         string    `json:"title,omitempty"`
-	Description_   string    `json:"description,omitempty"`
-	Authorization_ bool      `json:"authorization,omitempty"`
-	Argument_      *Element  `json:"argument,omitempty"`
-	Result_        *Element  `json:"result,omitempty"`
-	Deprecated_    bool      `json:"deprecated,omitempty"`
-	Errors_        []FnError `json:"errors,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	Title         string   `json:"title,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Authorization bool     `json:"authorization,omitempty"`
+	Argument      *Element `json:"argument,omitempty"`
+	Result        *Element `json:"result,omitempty"`
+	Deprecated    bool     `json:"deprecated,omitempty"`
+	Errors        []Error  `json:"errors,omitempty"`
 }
 
-func (fn *Fn) Name() (name string) {
-	name = fn.Name_
-	return
-}
-
-func (fn *Fn) Title() (title string) {
-	title = fn.Title_
-	return
-}
-
-func (fn *Fn) Description() (description string) {
-	description = fn.Description_
-	return
-}
-
-func (fn *Fn) Authorization() (has bool) {
-	has = fn.Authorization_
-	return
-}
-
-func (fn *Fn) Deprecated() (deprecated bool) {
-	deprecated = fn.Deprecated_
-	return
-}
-
-func (fn *Fn) Argument() (argument service.ElementDocument) {
-	argument = fn.Argument_
-	return
-}
-
-func (fn *Fn) Result() (result service.ElementDocument) {
-	result = fn.Result_
-	return
-}
-
-func (fn *Fn) Errors() (errs []service.FnErrorDocument) {
-	errs = make([]service.FnErrorDocument, 0, 1)
-	for _, fnError := range fn.Errors_ {
-		errs = append(errs, fnError)
-	}
-	return
-}
-
-type FnError struct {
+type Error struct {
 	Name_         string
 	Descriptions_ map[string]string
 }
 
-func (e FnError) Name() string {
+func (e Error) Name() string {
 	return e.Name_
 }
 
-func (e FnError) Descriptions() map[string]string {
+func (e Error) Descriptions() map[string]string {
 	return e.Descriptions_
 }

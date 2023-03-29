@@ -17,59 +17,43 @@
 package documents
 
 import (
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/commons/versions"
 	"sort"
 )
 
-func NewService(name string, description string) *Service {
-	return &Service{
-		Name_:        name,
-		Description_: description,
-		Fns_:         make([]service.FnDocument, 0, 1),
-		Elements_:    make(map[string]service.ElementDocument),
+// NewDocument todo change with fnc(forg was changed)
+func NewDocument(name string, description string, ver versions.Version) *Document {
+	return &Document{
+		Name:        name,
+		Description: description,
+		Version:     ver,
+		Fns:         make([]*Fn, 0, 1),
+		Elements:    make(map[string]*Element),
 	}
 }
 
-type Service struct {
+type Document struct {
 	// Name
 	// as tag
-	Name_ string `json:"name"`
+	Name string `json:"name"`
 	// Description
 	// as description of tag, support markdown
-	Description_ string `json:"description"`
+	Description string `json:"description"`
+	// Version
+	Version versions.Version `json:"version"`
 	// Fns
-	Fns_ []service.FnDocument `json:"fns"`
+	Fns []*Fn `json:"fns"`
 	// Elements
-	Elements_ map[string]service.ElementDocument `json:"elements"`
+	Elements map[string]*Element `json:"elements"`
 }
 
-func (svc *Service) Name() (name string) {
-	name = svc.Name_
-	return
+func (doc *Document) AddFn(name string, title string, description string, hasAuthorization bool, deprecated bool, arg *Element, result *Element, errs []Error) {
+	argRef := doc.addElement(arg)
+	resultRef := doc.addElement(result)
+	doc.Fns = append(doc.Fns, newFn(name, title, description, hasAuthorization, deprecated, argRef, resultRef, errs))
 }
 
-func (svc *Service) Description() (description string) {
-	description = svc.Description_
-	return
-}
-
-func (svc *Service) Fns() (fns []service.FnDocument) {
-	fns = svc.Fns_
-	return
-}
-
-func (svc *Service) Elements() (elements map[string]service.ElementDocument) {
-	elements = svc.Elements_
-	return
-}
-
-func (svc *Service) AddFn(name string, title string, description string, hasAuthorization bool, deprecated bool, arg *Element, result *Element, errs []FnError) {
-	argRef := svc.addElement(arg)
-	resultRef := svc.addElement(result)
-	svc.Fns_ = append(svc.Fns_, newFn(name, title, description, hasAuthorization, deprecated, argRef, resultRef, errs))
-}
-
-func (svc *Service) addElement(element *Element) (ref *Element) {
+func (doc *Document) addElement(element *Element) (ref *Element) {
 	if element == nil {
 		return
 	}
@@ -85,10 +69,9 @@ func (svc *Service) addElement(element *Element) (ref *Element) {
 			continue
 		}
 		key := remain.Key()
-		if _, has := svc.Elements_[key]; !has {
-			svc.Elements_[key] = remain
+		if _, has := doc.Elements[key]; !has {
+			doc.Elements[key] = remain
 		}
-
 	}
 	return
 }

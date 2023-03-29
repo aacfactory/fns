@@ -178,6 +178,9 @@ func (documents Documents) Merge(o Documents) Documents {
 }
 
 func (documents Documents) Openapi(openapiVersion string, appId string, appName string, appVersion versions.Version) (api *oas.API) {
+	if openapiVersion == "" {
+		openapiVersion = "3.1.0"
+	}
 	// oas
 	api = &oas.API{
 		Openapi: openapiVersion,

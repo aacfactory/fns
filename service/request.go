@@ -268,65 +268,6 @@ func (header RequestHeader) ForEach(fn func(key string, values []string) (next b
 	}
 }
 
-type ResponseHeader http.Header
-
-func (header ResponseHeader) Empty() bool {
-	return header == nil || len(header) == 0
-}
-
-func (header ResponseHeader) Add(key, value string) {
-	http.Header(header).Add(key, value)
-}
-
-func (header ResponseHeader) Set(key, value string) {
-	http.Header(header).Set(key, value)
-}
-
-func (header ResponseHeader) Get(key string) string {
-	return http.Header(header).Get(key)
-}
-
-func (header ResponseHeader) Values(key string) []string {
-	return http.Header(header).Values(key)
-}
-
-func (header ResponseHeader) Del(key string) {
-	http.Header(header).Del(key)
-}
-
-func (header ResponseHeader) EnableCacheControl(age int64) {
-	if age < 1 {
-		return
-	}
-	http.Header(header).Set(httpCacheControlHeader, fmt.Sprintf("max-age=%d", age))
-	return
-}
-
-func (header ResponseHeader) DisableCacheControl() {
-	http.Header(header).Set(httpCacheControlHeader, "no-cache, private")
-}
-
-func (header ResponseHeader) Clone() ResponseHeader {
-	return ResponseHeader(http.Header(header).Clone())
-}
-
-func (header ResponseHeader) Contains(key string) (ok bool) {
-	ok = http.Header(header).Get(key) != ""
-	return
-}
-
-func (header ResponseHeader) ForEach(fn func(key string, values []string) (next bool)) {
-	if fn == nil {
-		return
-	}
-	for key, values := range header {
-		next := fn(key, values)
-		if !next {
-			break
-		}
-	}
-}
-
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type RequestUserId string
@@ -507,14 +448,12 @@ func (trunk *requestTrunk) Remove(key string) {
 type Request interface {
 	Id() (id string)
 	Header() (header RequestHeader)
-	ResponseHeader() (header ResponseHeader)
 	AcceptedVersions() (acceptedVersions RequestVersions)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
 	Internal() (ok bool)
 	User() (user RequestUser)
 	Trunk() (trunk RequestTrunk)
-	CacheControlEnabled() (ok bool)
 }
 
 type RequestOption func(*RequestOptions)
@@ -528,12 +467,6 @@ func WithRequestId(id string) RequestOption {
 func WithHttpRequestHeader(header http.Header) RequestOption {
 	return func(options *RequestOptions) {
 		options.header = RequestHeader(header)
-	}
-}
-
-func WithHttpResponseHeader(header http.Header) RequestOption {
-	return func(options *RequestOptions) {
-		options.responseHeader = ResponseHeader(header)
 	}
 }
 
@@ -573,37 +506,27 @@ func WithRequestVersions(acceptedVersions RequestVersions) RequestOption {
 	}
 }
 
-func EnableCacheControl() RequestOption {
-	return func(options *RequestOptions) {
-		options.cacheControlEnabled = true
-	}
-}
-
 type RequestOptions struct {
-	id                  string
-	header              RequestHeader
-	responseHeader      ResponseHeader
-	acceptedVersions    RequestVersions
-	deviceId            string
-	deviceIp            string
-	internal            bool
-	user                RequestUser
-	trunk               RequestTrunk
-	cacheControlEnabled bool
+	id               string
+	header           RequestHeader
+	acceptedVersions RequestVersions
+	deviceId         string
+	deviceIp         string
+	internal         bool
+	user             RequestUser
+	trunk            RequestTrunk
 }
 
 func NewRequest(ctx context.Context, service string, fn string, arg Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
-		id:                  "",
-		header:              RequestHeader{},
-		responseHeader:      ResponseHeader{},
-		acceptedVersions:    nil,
-		deviceId:            "",
-		deviceIp:            "",
-		user:                nil,
-		internal:            false,
-		trunk:               nil,
-		cacheControlEnabled: false,
+		id:               "",
+		header:           RequestHeader{},
+		acceptedVersions: nil,
+		deviceId:         "",
+		deviceIp:         "",
+		user:             nil,
+		internal:         false,
+		trunk:            nil,
 	}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
@@ -645,17 +568,15 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			acceptedVersions = AllowAllRequestVersions()
 		}
 		v = &request{
-			id:                  id,
-			internal:            true,
-			user:                user,
-			trunk:               trunk,
-			header:              header,
-			responseHeader:      prev.ResponseHeader(),
-			service:             service,
-			fn:                  fn,
-			argument:            arg,
-			acceptedVersions:    acceptedVersions,
-			cacheControlEnabled: opt.cacheControlEnabled,
+			id:               id,
+			internal:         true,
+			user:             user,
+			trunk:            trunk,
+			header:           header,
+			service:          service,
+			fn:               fn,
+			argument:         arg,
+			acceptedVersions: acceptedVersions,
 		}
 	} else {
 		id := opt.id
@@ -691,34 +612,30 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			acceptedVersions = AllowAllRequestVersions()
 		}
 		v = &request{
-			id:                  id,
-			internal:            opt.internal,
-			user:                user,
-			trunk:               trunk,
-			header:              header,
-			responseHeader:      opt.responseHeader,
-			service:             service,
-			fn:                  fn,
-			argument:            arg,
-			acceptedVersions:    acceptedVersions,
-			cacheControlEnabled: opt.cacheControlEnabled,
+			id:               id,
+			internal:         opt.internal,
+			user:             user,
+			trunk:            trunk,
+			header:           header,
+			service:          service,
+			fn:               fn,
+			argument:         arg,
+			acceptedVersions: acceptedVersions,
 		}
 	}
 	return
 }
 
 type request struct {
-	id                  string
-	internal            bool
-	user                RequestUser
-	trunk               RequestTrunk
-	header              RequestHeader
-	responseHeader      ResponseHeader
-	acceptedVersions    RequestVersions
-	cacheControlEnabled bool
-	service             string
-	fn                  string
-	argument            Argument
+	id               string
+	internal         bool
+	user             RequestUser
+	trunk            RequestTrunk
+	header           RequestHeader
+	acceptedVersions RequestVersions
+	service          string
+	fn               string
+	argument         Argument
 }
 
 func (r *request) Id() (id string) {
@@ -746,18 +663,8 @@ func (r *request) Header() (header RequestHeader) {
 	return
 }
 
-func (r *request) ResponseHeader() (header ResponseHeader) {
-	header = r.responseHeader
-	return
-}
-
 func (r *request) AcceptedVersions() (acceptedVersions RequestVersions) {
 	acceptedVersions = r.acceptedVersions
-	return
-}
-
-func (r *request) CacheControlEnabled() (ok bool) {
-	ok = r.cacheControlEnabled
 	return
 }
 
@@ -813,15 +720,17 @@ type internalRequest struct {
 }
 
 type internalResponseImpl struct {
-	User  *requestUser    `json:"user"`
-	Trunk *requestTrunk   `json:"trunk"`
-	Span  *Span           `json:"Span"`
-	Body  json.RawMessage `json:"body"`
+	User    *requestUser    `json:"user"`
+	Trunk   *requestTrunk   `json:"trunk"`
+	Span    *Span           `json:"Span"`
+	Succeed bool            `json:"succeed"`
+	Body    json.RawMessage `json:"body"`
 }
 
 type internalResponse struct {
-	User  RequestUser  `json:"user"`
-	Trunk RequestTrunk `json:"trunk"`
-	Span  *Span        `json:"Span"`
-	Body  interface{}  `json:"body,omitempty"`
+	User    RequestUser  `json:"user"`
+	Trunk   RequestTrunk `json:"trunk"`
+	Span    *Span        `json:"Span"`
+	Succeed bool         `json:"succeed"`
+	Body    interface{}  `json:"body,omitempty"`
 }

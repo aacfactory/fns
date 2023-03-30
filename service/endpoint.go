@@ -54,6 +54,7 @@ type EndpointsOptions struct {
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
+	embeds := make([]Service, 0, 1)
 	// config
 	config := &Config{}
 	configErr := options.Config.As(config)
@@ -299,6 +300,13 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 				err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 				return
 			}
+			handlerWithService, ok := handler.(HttpHandlerWithServices)
+			if ok {
+				servicesOfHandler := handlerWithService.Services()
+				if servicesOfHandler != nil && len(servicesOfHandler) > 0 {
+					embeds = append(embeds, servicesOfHandler...)
+				}
+			}
 		}
 	}
 	if options.HttpInterceptors != nil && len(options.HttpInterceptors) > 0 {
@@ -310,6 +318,13 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			if appendHandlerErr != nil {
 				err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 				return
+			}
+			interceptorWithService, ok := interceptor.(HttpInterceptorWithServices)
+			if ok {
+				servicesOfInterceptorWithService := interceptorWithService.Services()
+				if servicesOfInterceptorWithService != nil && len(servicesOfInterceptorWithService) > 0 {
+					embeds = append(embeds, servicesOfInterceptorWithService...)
+				}
 			}
 		}
 	}
@@ -356,6 +371,16 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		// todo services 里的
 	}
 	// dev <<<
+	// embeds
+	if len(embeds) > 0 {
+		for _, embed := range embeds {
+			deployErr := v.Deploy(embed)
+			if deployErr != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("deploy embed service failed").WithCause(deployErr))
+				return
+			}
+		}
+	}
 	return
 }
 
@@ -444,7 +469,7 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 		Config:     serviceConfig,
 	})
 	if buildErr != nil {
-		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithCause(buildErr)
+		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithMeta("service", name).WithCause(buildErr)
 		return
 	}
 	ep := &endpoint{

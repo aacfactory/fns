@@ -61,11 +61,12 @@ type AutoMaxProcsConfig struct {
 }
 
 type HttpConfig struct {
-	Port     int             `json:"port"`
-	Cors     *CorsConfig     `json:"cors"`
-	TLS      *TLSConfig      `json:"tls"`
-	Options  json.RawMessage `json:"options"`
-	Handlers json.RawMessage `json:"handlers"`
+	Port        int             `json:"port"`
+	Cors        *CorsConfig     `json:"cors"`
+	TLS         *TLSConfig      `json:"tls"`
+	Options     json.RawMessage `json:"options"`
+	Middlewares json.RawMessage `json:"middlewares"`
+	Handlers    json.RawMessage `json:"handlers"`
 }
 
 type TLSConfig struct {

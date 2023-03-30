@@ -185,3 +185,7 @@ func (svc *Abstract) Barrier(ctx context.Context, name string, arg Argument, fn 
 	result, err = barrier.Do(ctx, key, fn)
 	return
 }
+
+type ServicesSupplier interface {
+	Services() (services []Service)
+}

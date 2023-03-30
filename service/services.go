@@ -603,11 +603,11 @@ func (handler *servicesHandler) failed(writer http.ResponseWriter, cause errors.
 }
 
 func (handler *servicesHandler) write(writer http.ResponseWriter, status int, body []byte) {
-	writer.WriteHeader(status)
 	writer.Header().Set(httpContentType, httpContentTypeJson)
 	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
 		writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
 	}
+	writer.WriteHeader(status)
 	if body != nil {
 		n := 0
 		bodyLen := len(body)

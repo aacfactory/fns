@@ -42,14 +42,15 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type EndpointsOptions struct {
-	OpenApiVersion string
-	AppId          string
-	AppName        string
-	AppVersion     versions.Version
-	ProxyMode      bool
-	Http           Http
-	HttpHandlers   []HttpHandler
-	Config         configures.Config
+	OpenApiVersion   string
+	AppId            string
+	AppName          string
+	AppVersion       versions.Version
+	ProxyMode        bool
+	Http             Http
+	HttpHandlers     []HttpHandler
+	HttpInterceptors []HttpInterceptor
+	Config           configures.Config
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
@@ -117,7 +118,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	var sharedStore shared.Store
 	var sharedLockers shared.Lockers
 	var barrier Barrier
-	var remoteRequestCache *RemoteRequestCache
 	clusterFetchMembersInterval := time.Duration(0)
 	clusterDevMode := false
 	clusterProxyAddress := ""
@@ -175,16 +175,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 					barrierTTL = time.Duration(config.Cluster.Shared.BarrierTTLMilliseconds) * time.Millisecond
 				}
 				barrier = clusterBarrier(sharedStore, sharedLockers, barrierTTL)
-			}
-		}
-		// remote request cache
-		if config.Cluster.RemoteRequestCache != nil {
-			remoteRequestCache, err = NewRemoteRequestCache(RemoteRequestCacheConfig{
-				MaxCost: config.Cluster.RemoteRequestCache.MaxCost,
-			})
-			if err != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
-				return
 			}
 		}
 	} else {
@@ -290,33 +280,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		return
 	}
 	v.httpHandlers = handlers
-	if options.ProxyMode {
-		if cluster == nil || v.registrations == nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("fns: proxy mode require cluster"))
-			return
-		}
-		if clusterDevMode {
-			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("fns: proxy mode require no dev kind cluster"))
-			return
-		}
-		proxyDevMode := false
-		if config.Proxy != nil {
-			proxyDevMode = config.Proxy.EnableDevMode
-		}
-		appendProxyHandlerErr := handlers.Append(newProxyHandler(cluster, v.registrations, v.deployedCHS.acquire(), v.http, options.OpenApiVersion, proxyDevMode, bytex.FromString(secretKey)))
-		if appendProxyHandlerErr != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(appendProxyHandlerErr)
-			return
-		}
-		if proxyDevMode {
-			appendClusterHandlerErr := handlers.Append(newClusterProxyHandler(cluster, bytex.FromString(secretKey)))
-			if appendClusterHandlerErr != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(appendClusterHandlerErr)
-				return
-			}
-		}
-	}
-	appendHandlerErr := handlers.Append(newServicesHandler(bytex.FromString(secretKey), v.cluster != nil, v.deployedCHS.acquire(), options.OpenApiVersion))
+
+	appendHandlerErr := handlers.Append(newServicesHandler(ServicesHandlerOptions{
+		Signer:     v.rt.signer,
+		DeployedCh: v.deployedCHS.acquire(),
+	}))
 	if appendHandlerErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
 		return
@@ -333,7 +301,19 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			}
 		}
 	}
-	var httpHandler http.Handler = handlers
+	if options.HttpInterceptors != nil && len(options.HttpInterceptors) > 0 {
+		for _, interceptor := range options.HttpInterceptors {
+			if interceptor == nil {
+				continue
+			}
+			appendHandlerErr = handlers.AppendInterceptor(interceptor)
+			if appendHandlerErr != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
+				return
+			}
+		}
+	}
+	httpHandler := handlers.Build()
 	if httpConfig.Cors != nil {
 		httpHandler = newCorsHandler(httpConfig.Cors).Handler(httpHandler)
 	}

@@ -103,12 +103,11 @@ type CorsConfig struct {
 }
 
 type ClusterConfig struct {
-	Kind                 string                    `json:"kind"`
-	FetchMembersInterval string                    `json:"fetchMembersInterval"`
-	DevMode              *ClusterDevMode           `json:"devMode"`
-	Shared               *SharedConfig             `json:"shared"`
-	RemoteRequestCache   *RemoteRequestCacheConfig `json:"remoteRequestCache"`
-	Options              json.RawMessage           `json:"options"`
+	Kind                 string          `json:"kind"`
+	FetchMembersInterval string          `json:"fetchMembersInterval"`
+	DevMode              *ClusterDevMode `json:"devMode"`
+	Shared               *SharedConfig   `json:"shared"`
+	Options              json.RawMessage `json:"options"`
 }
 
 type ClusterDevMode struct {

@@ -89,6 +89,27 @@ type HttpHandlerWithServices interface {
 	Services() (services []Service)
 }
 
+type HttpInterceptorOptions struct {
+	AppId      string
+	AppName    string
+	AppVersion versions.Version
+	Log        logs.Logger
+	Config     configures.Config
+	Discovery  EndpointDiscovery
+}
+
+type HttpInterceptor interface {
+	Name() (name string)
+	Build(options *HttpInterceptorOptions) (err error)
+	Handler(next http.Handler) http.Handler
+	Close()
+}
+
+type HttpInterceptorWithServices interface {
+	HttpInterceptor
+	Services() (services []Service)
+}
+
 type HandlersOptions struct {
 	AppId      string
 	AppName    string
@@ -109,6 +130,7 @@ func NewHttpHandlers(options HandlersOptions) (handlers *HttpHandlers, err error
 		config:        options.Config,
 		discovery:     options.Discovery,
 		handlers:      make([]HttpHandler, 0, 1),
+		interceptors:  make([]HttpInterceptor, 0, 1),
 		running:       options.Running,
 		counter:       sync.WaitGroup{},
 		group:         singleflight.Group{},
@@ -127,9 +149,36 @@ type HttpHandlers struct {
 	discovery     EndpointDiscovery
 	running       *flags.Flag
 	handlers      []HttpHandler
+	interceptors  []HttpInterceptor
 	counter       sync.WaitGroup
 	group         singleflight.Group
 	requestCounts int64
+}
+
+func (handlers *HttpHandlers) AppendInterceptor(h HttpInterceptor) (err errors.CodeError) {
+	if h == nil {
+		return
+	}
+	name := h.Name()
+	handleConfig, hasHandleConfig := handlers.config.Node(name)
+	if !hasHandleConfig {
+		handleConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
+	}
+	options := &HttpInterceptorOptions{
+		AppId:      handlers.appId,
+		AppName:    handlers.appName,
+		AppVersion: handlers.appVersion,
+		Log:        handlers.log.With("handler", name),
+		Config:     handleConfig,
+		Discovery:  handlers.discovery,
+	}
+	buildErr := h.Build(options)
+	if buildErr != nil {
+		err = errors.Warning("fns: build interceptor handler failed").WithMeta("name", name).WithCause(errors.Map(buildErr))
+		return
+	}
+	handlers.interceptors = append(handlers.interceptors, h)
+	return
 }
 
 func (handlers *HttpHandlers) Append(h HttpHandler) (err errors.CodeError) {
@@ -158,7 +207,20 @@ func (handlers *HttpHandlers) Append(h HttpHandler) (err errors.CodeError) {
 	return
 }
 
-func (handlers *HttpHandlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+func (handlers *HttpHandlers) Build() (h http.Handler) {
+	h = http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
+		handlers.Handle(writer, r)
+	})
+	if handlers.interceptors == nil || len(handlers.interceptors) == 0 {
+		return h
+	}
+	for i := len(handlers.interceptors) - 1; i > -1; i-- {
+		h = handlers.interceptors[i].Handler(h)
+	}
+	return h
+}
+
+func (handlers *HttpHandlers) Handle(writer http.ResponseWriter, request *http.Request) {
 	handlers.counter.Add(1)
 	atomic.AddInt64(&handlers.requestCounts, 1)
 	writer.Header().Set(httpAppIdHeader, handlers.appId)
@@ -288,6 +350,13 @@ func (handlers *HttpHandlers) Close() {
 			handler.Close()
 			waiter.Done()
 		}(handler, &handlers.counter)
+	}
+	for _, interceptor := range handlers.interceptors {
+		handlers.counter.Add(1)
+		go func(interceptor HttpInterceptor, waiter *sync.WaitGroup) {
+			interceptor.Close()
+			waiter.Done()
+		}(interceptor, &handlers.counter)
 	}
 	handlers.counter.Wait()
 }

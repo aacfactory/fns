@@ -40,8 +40,7 @@ var (
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		httpEngine:            &service.FastHttp{},
 		httpHandlers:          make([]service.HttpHandler, 0, 1),
-		openApiVersion:        "3.1.0",
-		services:              make([]service.Service, 0, 1),
+		httpInterceptors:      make([]service.HttpInterceptor, 0, 1),
 		shutdownTimeout:       60 * time.Second,
 	}
 )
@@ -54,8 +53,7 @@ type Options struct {
 	configRetrieverOption configures.RetrieverOption
 	httpEngine            service.Http
 	httpHandlers          []service.HttpHandler
-	openApiVersion        string
-	services              []service.Service
+	httpInterceptors      []service.HttpInterceptor
 	shutdownTimeout       time.Duration
 }
 
@@ -148,19 +146,6 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func OpenApiVersion(version string) Option {
-	return func(options *Options) error {
-		version = strings.TrimSpace(version)
-		if version == "" {
-			return fmt.Errorf("set openapi version failed for empty")
-		}
-		options.openApiVersion = version
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 func ShutdownTimeout(timeout time.Duration) Option {
 	return func(options *Options) error {
 		if timeout < 1 {
@@ -196,23 +181,14 @@ func Handlers(handlers ...service.HttpHandler) Option {
 	}
 }
 
-func Services(services ...service.Service) Option {
+func Interceptor(interceptors ...service.HttpInterceptor) Option {
 	return func(options *Options) error {
-		if services == nil || len(services) == 0 {
+		if interceptors == nil || len(interceptors) == 0 {
 			return nil
 		}
-		for _, s := range services {
-			if s == nil {
-				return fmt.Errorf("can not deploy a nil service")
-			}
-			name := s.Name()
-			for _, o := range options.services {
-				if name == o.Name() {
-					return fmt.Errorf("can not deploy duplicated service")
-				}
-			}
-			options.services = append(options.services, s)
-		}
+		options.httpInterceptors = append(options.httpInterceptors, interceptors...)
 		return nil
 	}
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+

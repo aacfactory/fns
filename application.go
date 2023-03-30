@@ -76,14 +76,14 @@ func New(options ...Option) (app Application) {
 
 	// endpoints
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
-		OpenApiVersion: opt.openApiVersion,
-		AppId:          appId,
-		AppName:        appName,
-		AppVersion:     appVersion,
-		ProxyMode:      opt.proxyMode,
-		Http:           opt.httpEngine,
-		HttpHandlers:   opt.httpHandlers,
-		Config:         config,
+		AppId:            appId,
+		AppName:          appName,
+		AppVersion:       appVersion,
+		ProxyMode:        opt.proxyMode,
+		Http:             opt.httpEngine,
+		HttpHandlers:     opt.httpHandlers,
+		HttpInterceptors: opt.httpInterceptors,
+		Config:           config,
 	})
 	if endpointsErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(endpointsErr))))
@@ -109,15 +109,6 @@ func New(options ...Option) (app Application) {
 		synced:          false,
 	}
 
-	if opt.services != nil && len(opt.services) > 0 {
-		for _, svc := range opt.services {
-			deployErr := app.Deploy(svc)
-			if deployErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, deploy service failed").WithCause(errors.Map(deployErr))))
-				return
-			}
-		}
-	}
 	if opt.httpHandlers != nil && len(opt.httpHandlers) > 0 {
 		for _, handler := range opt.httpHandlers {
 			handlerWithServices, isHandlerWithServices := handler.(service.HttpHandlerWithServices)

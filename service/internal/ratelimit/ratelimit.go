@@ -19,21 +19,34 @@ package ratelimit
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
-func New(max int64) *Limiter {
+func New(max int64, window time.Duration, counter Counter) *Limiter {
 	return &Limiter{
-		keys: sync.Map{},
-		max:  max,
+		keys:    sync.Map{},
+		counter: counter,
+		max:     max,
+		window:  window,
 	}
 }
 
+type Counter interface {
+	Incr(key string, window time.Time) (err error)
+	Decr(key string, window time.Time) (err error)
+	Get(key string) (n int64)
+}
+
 type Limiter struct {
-	keys sync.Map
-	max  int64
+	keys    sync.Map
+	counter Counter
+	max     int64
+	window  time.Duration
 }
 
 func (limiter *Limiter) Take(key string) (ok bool) {
+	limiter.counter.Get(key)
+	// todo make it as interceptor
 	value, _ := limiter.keys.LoadOrStore(key, &Times{})
 	times := value.(*Times)
 	if times.Value() >= limiter.max {

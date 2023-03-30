@@ -24,7 +24,6 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/lru"
-	"github.com/aacfactory/fns/service/internal/ratelimit"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -66,8 +65,6 @@ func newProxyHandler(options ProxyHandlerOptions) (handler *proxyHandler) {
 		registrations:          options.Registrations,
 		attachments:            lru.New[string, json.RawMessage](8),
 		group:                  &singleflight.Group{},
-		limiter:                nil,
-		retryAfter:             "",
 	}
 	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint) {
 		_, ok := <-deployedCh
@@ -102,8 +99,6 @@ type proxyHandler struct {
 	registrations          *Registrations
 	attachments            *lru.LRU[string, json.RawMessage]
 	group                  *singleflight.Group
-	limiter                *ratelimit.Limiter
-	retryAfter             string
 }
 
 func (handler *proxyHandler) Name() (name string) {
@@ -143,16 +138,6 @@ func (handler *proxyHandler) Build(options *HttpHandlerOptions) (err error) {
 	if maxPerDeviceRequest < 1 {
 		maxPerDeviceRequest = 8
 	}
-	retryAfter := 10 * time.Second
-	if config.Limiter.RetryAfter != "" {
-		retryAfter, err = time.ParseDuration(strings.TrimSpace(config.Limiter.RetryAfter))
-		if err != nil {
-			err = errors.Warning("fns: build services handler failed").WithCause(errors.Warning("retryAfter must be time.Duration format").WithCause(err))
-			return
-		}
-	}
-	handler.limiter = ratelimit.New(maxPerDeviceRequest)
-	handler.retryAfter = fmt.Sprintf("%d", int(retryAfter/time.Second))
 	return
 }
 
@@ -353,9 +338,9 @@ func (handler *proxyHandler) failed(writer http.ResponseWriter, cause errors.Cod
 func (handler *proxyHandler) write(writer http.ResponseWriter, status int, body []byte) {
 	writer.WriteHeader(status)
 	writer.Header().Set(httpContentType, httpContentTypeJson)
-	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
-		writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
-	}
+	//if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+	//	writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
+	//}
 	if body != nil {
 		n := 0
 		bodyLen := len(body)

@@ -18,18 +18,14 @@ package service
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/rings"
-	"github.com/dgraph-io/ristretto"
-	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"sort"
 	"strconv"
@@ -564,97 +560,5 @@ func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
 
 func (r *Registrations) FetchDocuments() (v documents.Documents, err error) {
 	// todo
-	return
-}
-
-type RemoteRequestCacheConfig struct {
-	MaxCost string `json:"maxCost"`
-}
-
-func NewRemoteRequestCache(config RemoteRequestCacheConfig) (v *RemoteRequestCache, err error) {
-	maxCost := uint64(64 * bytex.MEGABYTE)
-	if config.MaxCost != "" {
-		maxCost, err = bytex.ToBytes(strings.TrimSpace(config.MaxCost))
-		if err != nil {
-			err = errors.Warning("fns: max cost of remote request cache config must be bytes format")
-			return
-		}
-	}
-	if maxCost < uint64(10*bytex.MEGABYTE) {
-		maxCost = uint64(64 * bytex.MEGABYTE)
-	}
-	cache, createCacheErr := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,
-		MaxCost:     int64(maxCost),
-		BufferItems: 64,
-		Metrics:     false,
-	})
-	if createCacheErr != nil {
-		err = errors.Warning("fns: create remote request cache failed").WithCause(createCacheErr)
-		return
-	}
-	v = &RemoteRequestCache{
-		cache: cache,
-	}
-	return
-}
-
-type RemoteRequestCache struct {
-	cache *ristretto.Cache
-}
-
-func (rrc *RemoteRequestCache) Set(path string, body []byte, etag string, maxAge int, data []byte) {
-	key := rrc.buildKey(path, body)
-	ttl := time.Duration(maxAge) * time.Second
-	deadline := time.Now().Add(ttl)
-	cost := int64(len(etag))
-	if data == nil {
-		data = make([]byte, 0, 1)
-	}
-	dataLen := int64(len(data))
-	value := make([]byte, 16+dataLen+cost)
-	binary.BigEndian.PutUint64(value[0:8], uint64(deadline.Unix()))
-	binary.BigEndian.PutUint64(value[8:16], uint64(dataLen))
-	copy(value[16:16+dataLen], data)
-	copy(value[16+dataLen:], bytex.FromString(etag))
-	rrc.cache.SetWithTTL(key, value, cost, ttl)
-	return
-}
-
-func (rrc *RemoteRequestCache) Get(path string, body []byte) (data []byte, etag string, deadline time.Time, has bool) {
-	key := rrc.buildKey(path, body)
-	cached, exist := rrc.cache.Get(key)
-	if !exist {
-		return
-	}
-	value, isBytes := cached.([]byte)
-	if !isBytes {
-		return
-	}
-	if value == nil || len(value) < 16 {
-		return
-	}
-	deadlineUnix := binary.BigEndian.Uint64(value[0:8])
-	if deadlineUnix > 0 {
-		deadline = time.Unix(int64(deadlineUnix), 0)
-	}
-	dataLen := binary.BigEndian.Uint64(value[8:16])
-	data = value[16 : 16+dataLen]
-	etag = bytex.ToString(value[16+dataLen:])
-	return
-}
-
-func (rrc *RemoteRequestCache) Close() {
-	rrc.cache.Close()
-}
-
-func (rrc *RemoteRequestCache) buildKey(path string, body []byte) (key uint64) {
-	buf := bytebufferpool.Get()
-	_, _ = buf.WriteString(path)
-	if body != nil && len(body) > 0 {
-		_, _ = buf.Write(body)
-	}
-	key = mmhash.MemHash(buf.Bytes())
-	bytebufferpool.Put(buf)
 	return
 }

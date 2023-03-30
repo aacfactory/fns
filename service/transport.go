@@ -129,6 +129,13 @@ func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) 
 		err = errors.Warning("append handler failed").WithCause(errors.Warning("one of handler has no name"))
 		return
 	}
+	pos := sort.Search(len(handlers.handlers), func(i int) bool {
+		return handlers.handlers[i].Name() == name
+	})
+	if pos < len(handlers.handlers) {
+		err = errors.Warning("append handler failed").WithCause(errors.Warning("this handle was appended")).WithMeta("handler", name)
+		return
+	}
 	config, exist := handlers.config.Node(name)
 	if !exist {
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
@@ -225,6 +232,13 @@ func (middlewares *TransportMiddlewares) Append(middleware TransportMiddleware) 
 	name := strings.TrimSpace(middleware.Name())
 	if name == "" {
 		err = errors.Warning("append middleware failed").WithCause(errors.Warning("one of middlewares has no name"))
+		return
+	}
+	pos := sort.Search(len(middlewares.middlewares), func(i int) bool {
+		return middlewares.middlewares[i].Name() == name
+	})
+	if pos < len(middlewares.middlewares) {
+		err = errors.Warning("append middleware failed").WithCause(errors.Warning("this middleware was appended")).WithMeta("middleware", name)
 		return
 	}
 	config, exist := middlewares.config.Node(name)
@@ -418,15 +432,16 @@ func newTransportApplicationMiddleware(running *flags.Flag) *TransportApplicatio
 }
 
 type TransportApplicationMiddleware struct {
-	appId        string
-	appName      string
-	appVersion   versions.Version
-	running      *flags.Flag
-	launchAT     time.Time
-	statsEnabled bool
-	requests     int64
-	counter      sync.WaitGroup
-	group        singleflight.Group
+	appId          string
+	appName        string
+	appVersion     versions.Version
+	running        *flags.Flag
+	launchAT       time.Time
+	statsEnabled   bool
+	latencyEnabled bool
+	requests       int64
+	counter        sync.WaitGroup
+	group          singleflight.Group
 }
 
 func (middleware *TransportApplicationMiddleware) Name() (name string) {
@@ -444,6 +459,11 @@ func (middleware *TransportApplicationMiddleware) Build(options TransportMiddlew
 		err = errors.Warning("fns: application middleware handler build failed").WithCause(statsErr).WithMeta("middleware", middleware.Name())
 		return
 	}
+	_, latencyErr := options.Config.Get("latencyEnabled", &middleware.latencyEnabled)
+	if latencyErr != nil {
+		err = errors.Warning("fns: application middleware handler build failed").WithCause(latencyErr).WithMeta("middleware", middleware.Name())
+		return
+	}
 	middleware.counter = sync.WaitGroup{}
 	middleware.group = singleflight.Group{}
 	return
@@ -453,11 +473,19 @@ func (middleware *TransportApplicationMiddleware) Handler(next http.Handler) htt
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		middleware.counter.Add(1)
 		atomic.AddInt64(&middleware.requests, 1)
+		// latency
+		handleBeg := time.Time{}
+		if middleware.latencyEnabled {
+			handleBeg = time.Now()
+		}
 		// deviceId
 		deviceId := strings.TrimSpace(r.Header.Get(httpDeviceIdHeader))
 		if deviceId == "" {
 			deviceId = strings.TrimSpace(r.URL.Query().Get("deviceId"))
 			if deviceId == "" {
+				if middleware.latencyEnabled {
+					w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
+				}
 				w.WriteHeader(555)
 				p, _ := json.Marshal(errors.Warning("fns: device id was required"))
 				_, _ = w.Write(p)
@@ -501,6 +529,9 @@ func (middleware *TransportApplicationMiddleware) Handler(next http.Handler) htt
 		// try handle application handler
 		if !middleware.tryHandle(w, r) {
 			next.ServeHTTP(w, r)
+		}
+		if middleware.latencyEnabled {
+			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 		}
 		atomic.AddInt64(&middleware.requests, -1)
 		middleware.counter.Done()
@@ -578,6 +609,22 @@ func (middleware *TransportApplicationMiddleware) canonicalizeIp(ip string) stri
 		return ip
 	}
 	return ipv6.Mask(net.CIDRMask(64, 128)).String()
+}
+
+type applicationStats struct {
+	Id       string         `json:"id"`
+	Name     string         `json:"name"`
+	Running  bool           `json:"running"`
+	Requests uint64         `json:"requests"`
+	Mem      *memory.Memory `json:"mem"`
+	CPU      *cpuOccupancy  `json:"cpu"`
+}
+
+type cpuOccupancy struct {
+	Max   cpu.Core `json:"max"`
+	Min   cpu.Core `json:"min"`
+	Avg   float64  `json:"avg"`
+	Cores cpu.CPU  `json:"cores"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

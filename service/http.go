@@ -374,22 +374,6 @@ func (handlers *HttpHandlers) Close() {
 	handlers.counter.Wait()
 }
 
-type applicationStats struct {
-	Id       string         `json:"id"`
-	Name     string         `json:"name"`
-	Running  bool           `json:"running"`
-	Requests uint64         `json:"requests"`
-	Mem      *memory.Memory `json:"mem"`
-	CPU      *cpuOccupancy  `json:"cpu"`
-}
-
-type cpuOccupancy struct {
-	Max   cpu.Core `json:"max"`
-	Min   cpu.Core `json:"min"`
-	Avg   float64  `json:"avg"`
-	Cores cpu.CPU  `json:"cores"`
-}
-
 func NewHttpOptions(config *HttpConfig, log logs.Logger, handler http.Handler) (opt HttpOptions, err error) {
 	log = log.With("fns", "http")
 	opt = HttpOptions{

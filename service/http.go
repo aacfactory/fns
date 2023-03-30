@@ -40,33 +40,6 @@ import (
 	"time"
 )
 
-const (
-	httpContentType            = "Content-Type"
-	httpContentTypeJson        = "application/json"
-	httpConnectionHeader       = "Connection"
-	httpUpgradeHeader          = "Upgrade"
-	httpCloseHeader            = "close"
-	httpCacheControlHeader     = "Cache-Control"
-	httpPragmaHeader           = "Pragma"
-	httpETagHeader             = "ETag"
-	httpCacheControlIfNonMatch = "If-None-Match"
-	httpClearSiteData          = "Clear-Site-Data"
-	httpXForwardedForHeader    = "X-Forwarded-For"
-	httpAppIdHeader            = "X-Fns-Id"
-	httpAppNameHeader          = "X-Fns-Name"
-	httpAppVersionHeader       = "X-Fns-Version"
-	httpRequestIdHeader        = "X-Fns-Request-Id"
-	httpRequestSignatureHeader = "X-Fns-Request-Signature"
-	httpRequestInternalHeader  = "X-Fns-Request-Internal"
-	httpRequestTimeoutHeader   = "X-Fns-Request-Timeout"
-	httpRequestVersionsHeader  = "X-Fns-Request-Version"
-	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
-	httpDeviceIdHeader         = "X-Fns-Device-Id"
-	httpDeviceIpHeader         = "X-Fns-Device-Ip"
-	httpDevModeHeader          = "X-Fns-Dev-Mode"
-	httpResponseRetryAfter     = "Retry-After"
-)
-
 type HttpHandlerOptions struct {
 	AppId      string
 	AppName    string
@@ -108,6 +81,46 @@ type HttpInterceptor interface {
 type HttpInterceptorWithServices interface {
 	HttpInterceptor
 	Services() (services []Service)
+}
+
+type HttpLatencyInterceptorConfig struct {
+	Enable bool `json:"enable"`
+}
+
+type HttpLatencyInterceptor struct {
+	enable bool
+}
+
+func (interceptor *HttpLatencyInterceptor) Name() (name string) {
+	name = "latency"
+	return
+}
+
+func (interceptor *HttpLatencyInterceptor) Build(options *HttpInterceptorOptions) (err error) {
+	config := HttpLatencyInterceptorConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: build latency interceptor failed").WithCause(configErr)
+		return
+	}
+	interceptor.enable = config.Enable
+	return
+}
+
+func (interceptor *HttpLatencyInterceptor) Handler(next http.Handler) http.Handler {
+	if interceptor.enable {
+		return http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
+			beg := time.Now()
+			next.ServeHTTP(writer, r)
+			latency := time.Now().Sub(beg).String()
+			writer.Header().Set(httpHandleLatencyHeader, latency)
+		})
+	}
+	return next
+}
+
+func (interceptor *HttpLatencyInterceptor) Close() {
+	return
 }
 
 type HandlersOptions struct {
@@ -227,18 +240,18 @@ func (handlers *HttpHandlers) Handle(writer http.ResponseWriter, request *http.R
 	writer.Header().Set(httpAppNameHeader, handlers.appName)
 	writer.Header().Set(httpAppVersionHeader, handlers.appVersion.String())
 	if handlers.running.IsOff() {
-		writer.WriteHeader(http.StatusRequestTimeout)
 		writer.Header().Set(httpConnectionHeader, httpCloseHeader)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
+		writer.WriteHeader(http.StatusRequestTimeout)
 		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: service is not serving").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
 		return
 	}
 	if handlers.running.IsHalfOn() {
-		writer.WriteHeader(http.StatusTooEarly)
 		writer.Header().Set(httpResponseRetryAfter, "30")
 		writer.Header().Set(httpContentType, httpContentTypeJson)
+		writer.WriteHeader(http.StatusTooEarly)
 		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: service is not serving").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
@@ -258,8 +271,8 @@ func (handlers *HttpHandlers) Handle(writer http.ResponseWriter, request *http.R
 		}
 	}
 	if !handled {
-		writer.WriteHeader(http.StatusNotFound)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
+		writer.WriteHeader(http.StatusNotFound)
 		_, _ = writer.Write(json.UnsafeMarshal(errors.Warning("fns: no handler accept request").WithMeta("fns", "handlers")))
 		atomic.AddInt64(&handlers.requestCounts, -1)
 		handlers.counter.Done()
@@ -290,8 +303,8 @@ func (handlers *HttpHandlers) handleApplication(writer http.ResponseWriter, requ
 			v, _ = json.Marshal(handlers.HandlerNames())
 			return
 		})
-		writer.WriteHeader(http.StatusOK)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
+		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write(v.([]byte))
 		ok = true
 		return
@@ -325,8 +338,8 @@ func (handlers *HttpHandlers) handleApplication(writer http.ResponseWriter, requ
 			v, _ = json.Marshal(stat)
 			return
 		})
-		writer.WriteHeader(http.StatusOK)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
+		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write(v.([]byte))
 		ok = true
 		return

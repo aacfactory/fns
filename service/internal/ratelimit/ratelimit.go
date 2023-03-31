@@ -23,7 +23,7 @@ import (
 )
 
 func New(max int64, window time.Duration) *Limiter {
-	// todo counter use fastcache
+	// todo counter use fastcache (use max tickets to calc max bytes of cache)
 	return &Limiter{
 		max:    max,
 		window: window,
@@ -48,7 +48,7 @@ func (limiter *Limiter) getWindow() time.Time {
 
 func (limiter *Limiter) Take(key string) (ok bool, err error) {
 	window := limiter.getWindow()
-	ok = limiter.counter.Get(key, window) <= limiter.max
+	ok = limiter.counter.Get(key, window) < limiter.max
 	if ok {
 		err = limiter.counter.Incr(key, window)
 		if err != nil {

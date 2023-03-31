@@ -28,6 +28,7 @@ import (
 	"time"
 )
 
+// todo change ristretto to caches
 type Store interface {
 	Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError)
 	Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError)

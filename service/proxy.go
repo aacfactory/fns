@@ -97,7 +97,7 @@ type proxyHandler struct {
 	signer                 *secret.Signer
 	devMode                bool
 	registrations          *Registrations
-	attachments            *lru.LRU[string, json.RawMessage]
+	attachments            *lru.LRU[string, json.RawMessage] // todo do not change to caches
 	group                  *singleflight.Group
 }
 

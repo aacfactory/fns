@@ -287,7 +287,7 @@ type clusterProxyHandler struct {
 	log        logs.Logger
 	cluster    Cluster
 	signer     *secret.Signer
-	cache      *lru.LRU[string, json.RawMessage]
+	cache      *lru.LRU[string, json.RawMessage] // todo change lru to caches
 	group      *singleflight.Group
 }
 

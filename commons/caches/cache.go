@@ -19,7 +19,6 @@ package caches
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
 	"time"
 )
@@ -98,7 +97,7 @@ func (c *Cache) SetWithTTL(k []byte, v []byte, ttl time.Duration) (err error) {
 	expire := make([]byte, 8)
 	binary.BigEndian.PutUint64(expire, deadline)
 	v = append(v, expire...)
-	h := xxhash.Sum64(k)
+	h := c.hash.Sum(k)
 	if len(v) > maxSubValueLen {
 		c.setBig(k, v)
 		c.bigKeys[0].Set(k, k, h)
@@ -110,18 +109,18 @@ func (c *Cache) SetWithTTL(k []byte, v []byte, ttl time.Duration) (err error) {
 }
 
 func (c *Cache) set(k []byte, v []byte) {
-	h := xxhash.Sum64(k)
+	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	c.buckets[idx].Set(k, v, h)
 }
 
 func (c *Cache) Get(k []byte) ([]byte, bool) {
 	dst := make([]byte, 0, 8)
-	h := xxhash.Sum64(k)
+	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	v, has := c.buckets[idx].Get(dst, k, h, true)
 	if has && len(v) == 16 && unmarshalUint64(v) > 0 {
-		_, hasBigKey := c.bigKeys[0].Get(nil, k, xxhash.Sum64(k), false)
+		_, hasBigKey := c.bigKeys[0].Get(nil, k, c.hash.Sum(k), false)
 		if !hasBigKey {
 			return nil, false
 		}
@@ -151,7 +150,7 @@ func (c *Cache) checkExpire(k []byte, v []byte) ([]byte, bool) {
 }
 
 func (c *Cache) get(dst []byte, k []byte) ([]byte, bool) {
-	h := xxhash.Sum64(k)
+	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	has := false
 	dst, has = c.buckets[idx].Get(dst, k, h, true)
@@ -159,7 +158,7 @@ func (c *Cache) get(dst []byte, k []byte) ([]byte, bool) {
 }
 
 func (c *Cache) Exist(k []byte) bool {
-	h := xxhash.Sum64(k)
+	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	_, ok := c.buckets[idx].Get(nil, k, h, false)
 	return ok
@@ -169,7 +168,7 @@ func (c *Cache) Remove(k []byte) {
 	if len(k) > maxKeyLen {
 		return
 	}
-	h := xxhash.Sum64(k)
+	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	c.buckets[idx].Remove(h)
 	c.bigKeys[0].Remove(h)
@@ -180,7 +179,7 @@ func (c *Cache) setBig(k []byte, v []byte) {
 		return
 	}
 	valueLen := len(v)
-	valueHash := xxhash.Sum64(v)
+	valueHash := c.hash.Sum(v)
 
 	subKey := bytebufferpool.Get()
 	var i uint64
@@ -243,7 +242,7 @@ func (c *Cache) getBig(dst, k []byte) (r []byte) {
 	if uint64(len(v)) != valueLen {
 		return dst[:dstLen]
 	}
-	h := xxhash.Sum64(v)
+	h := c.hash.Sum(v)
 	if h != valueHash {
 		return dst[:dstLen]
 	}

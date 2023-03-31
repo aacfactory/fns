@@ -60,3 +60,16 @@ func TestNew(t *testing.T) {
 	fmt.Println(hasC, string(valC))
 	cache.Remove(keyB)
 }
+
+func TestIncr(t *testing.T) {
+	cache := caches.New(32 * 1024 * 1024)
+	key := []byte("a")
+	for i := 0; i < 10; i++ {
+		fmt.Println(cache.Incr(key, 1))
+	}
+	fmt.Println(cache.Expire(key, 10*time.Second))
+	cache.Remove(key)
+	for i := 0; i < 10; i++ {
+		fmt.Println(cache.Decr(key, 1))
+	}
+}

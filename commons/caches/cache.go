@@ -20,6 +20,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/valyala/bytebufferpool"
+	"sync"
 	"time"
 )
 
@@ -41,7 +42,7 @@ var (
 	ErrInvalidValue = fmt.Errorf("value content is invalid")
 )
 
-// todo add incr decr expire
+// todo add incr decr
 func New(maxBytes uint64) (cache *Cache) {
 	cache = NewWithHash(maxBytes, MemHash{})
 	return
@@ -57,7 +58,11 @@ func NewWithHash(maxBytes uint64, h Hash) (cache *Cache) {
 	cache = &Cache{
 		buckets: [512]bucket{},
 		bigKeys: NewKeys(),
-		hash:    h,
+		increments: &Increments{
+			values: sync.Map{},
+		},
+		incrementKeys: NewKeys(),
+		hash:          h,
 	}
 	maxBucketBytes := (maxBytes + bucketsCount - 1) / bucketsCount
 	for i := range cache.buckets[:] {
@@ -67,9 +72,11 @@ func NewWithHash(maxBytes uint64, h Hash) (cache *Cache) {
 }
 
 type Cache struct {
-	buckets [bucketsCount]bucket
-	bigKeys *Keys
-	hash    Hash
+	buckets       [bucketsCount]bucket
+	bigKeys       *Keys
+	increments    *Increments
+	incrementKeys *Keys
+	hash          Hash
 }
 
 func (c *Cache) Set(k []byte, v []byte) (err error) {
@@ -160,10 +167,54 @@ func (c *Cache) get(dst []byte, k []byte) ([]byte, bool) {
 }
 
 func (c *Cache) Exist(k []byte) bool {
+	_, ok := c.exist(k)
+	return ok
+}
+
+func (c *Cache) exist(k []byte) (uint64, bool) {
 	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	_, ok := c.buckets[idx].Get(nil, k, h, false)
-	return ok
+	return h, ok
+}
+
+func (c *Cache) Expire(k []byte, ttl time.Duration) (err error) {
+	h, has := c.exist(k)
+	if !has {
+		return
+	}
+	v, _ := c.Get(k)
+	err = c.SetWithTTL(k, v, ttl)
+	if c.incrementKeys.Exist(h) {
+		c.increments.Expire(h, ttl)
+	}
+	return
+}
+
+func (c *Cache) Incr(k []byte, delta int64) (n int64, err error) {
+	h, ok := c.exist(k)
+	if !ok {
+		err = c.Set(k, []byte{1})
+		if err != nil {
+			return
+		}
+		c.incrementKeys.Set(h)
+	}
+	n = c.increments.Incr(h, delta)
+	return
+}
+
+func (c *Cache) Decr(k []byte, delta int64) (n int64, err error) {
+	h, ok := c.exist(k)
+	if !ok {
+		err = c.Set(k, []byte{1})
+		if err != nil {
+			return
+		}
+		c.incrementKeys.Set(h)
+	}
+	n = c.increments.Decr(h, delta)
+	return
 }
 
 func (c *Cache) Remove(k []byte) {
@@ -173,7 +224,6 @@ func (c *Cache) Remove(k []byte) {
 	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	c.buckets[idx].Remove(h)
-	c.bigKeys.Remove(h)
 }
 
 func (c *Cache) setBig(k []byte, v []byte) {
@@ -252,7 +302,12 @@ func (c *Cache) getBig(dst, k []byte) (r []byte) {
 }
 
 func (c *Cache) evict(key uint64) {
-	c.bigKeys.Remove(key)
+	if c.bigKeys.Exist(key) {
+		c.bigKeys.Remove(key)
+	}
+	if c.incrementKeys.Exist(key) {
+		c.increments.Remove(key)
+	}
 }
 
 func marshalUint64(dst []byte, u uint64) []byte {

@@ -175,6 +175,6 @@ end:
 func (b *bucket) Remove(h uint64) {
 	b.mu.Lock()
 	delete(b.m, h)
-	b.evict(h)
 	b.mu.Unlock()
+	b.evict(h)
 }

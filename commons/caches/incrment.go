@@ -84,6 +84,21 @@ func (increments *Increments) Decr(k uint64, delta int64) (n int64) {
 	return
 }
 
+func (increments *Increments) Value(k uint64) (n int64, has bool) {
+	v, exist := increments.values.Load(k)
+	if !exist {
+		return
+	}
+	incr := v.(*Increment)
+	if incr.Expired() {
+		increments.values.Delete(k)
+		return
+	}
+	n = incr.Value()
+	has = true
+	return
+}
+
 func (increments *Increments) Expire(k uint64, ttl time.Duration) {
 	v, has := increments.values.Load(k)
 	if !has {

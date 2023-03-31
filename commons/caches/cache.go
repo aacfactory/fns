@@ -19,6 +19,7 @@ package caches
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/valyala/bytebufferpool"
 	"sync"
 	"time"
@@ -125,9 +126,19 @@ func (c *Cache) set(k []byte, v []byte) {
 }
 
 func (c *Cache) Get(k []byte) ([]byte, bool) {
-	dst := make([]byte, 0, 8)
 	h := c.hash.Sum(k)
+	if c.incrementKeys.Exist(h) {
+		n, has := c.increments.Value(h)
+		if !has {
+			c.del(h)
+			return nil, has
+		}
+		return bytex.FromString(fmt.Sprintf("%d", n)), has
+	}
+
 	idx := h % bucketsCount
+	dst := make([]byte, 0, 8)
+
 	v, has := c.buckets[idx].Get(dst, k, h, true)
 	if has && len(v) == 16 && unmarshalUint64(v) > 0 {
 		if !c.bigKeys.Exist(c.hash.Sum(k)) {
@@ -135,15 +146,15 @@ func (c *Cache) Get(k []byte) ([]byte, bool) {
 		}
 		dst = make([]byte, 0, 8)
 		v = c.getBig(dst, k)
-		return c.checkExpire(k, v)
+		return c.checkExpire(v, h)
 	}
-	return c.checkExpire(k, v)
+	return c.checkExpire(v, h)
 }
 
-func (c *Cache) checkExpire(k []byte, v []byte) ([]byte, bool) {
+func (c *Cache) checkExpire(v []byte, h uint64) ([]byte, bool) {
 	vLen := len(v)
 	if vLen < 8 {
-		c.Remove(k)
+		c.del(h)
 		return nil, false
 	}
 	deadlinePos := vLen - 8
@@ -152,7 +163,7 @@ func (c *Cache) checkExpire(k []byte, v []byte) ([]byte, bool) {
 		return v[0:deadlinePos], true
 	}
 	if deadline < uint64(time.Now().UnixNano()) {
-		c.Remove(k)
+		c.del(h)
 		return nil, false
 	}
 	return v[0:deadlinePos], true
@@ -222,6 +233,10 @@ func (c *Cache) Remove(k []byte) {
 		return
 	}
 	h := c.hash.Sum(k)
+	c.del(h)
+}
+
+func (c *Cache) del(h uint64) {
 	idx := h % bucketsCount
 	c.buckets[idx].Remove(h)
 }

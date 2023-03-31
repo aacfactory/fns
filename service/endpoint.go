@@ -282,7 +282,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	v.httpHandlers = handlers
 
-	appendHandlerErr := handlers.Append(newServicesHandler(ServicesHandlerOptions{
+	appendHandlerErr := handlers.Append(newServicesHandler(servicesHandlerOptions{
 		Signer:     v.rt.signer,
 		DeployedCh: v.deployedCHS.acquire(),
 	}))

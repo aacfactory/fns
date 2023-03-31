@@ -17,55 +17,60 @@
 package ratelimit
 
 import (
-	"sync"
+	"github.com/aacfactory/errors"
 	"sync/atomic"
 	"time"
 )
 
-func New(max int64, window time.Duration, counter Counter) *Limiter {
+func New(max int64, window time.Duration) *Limiter {
+	// todo counter use fastcache
 	return &Limiter{
-		keys:    sync.Map{},
-		counter: counter,
-		max:     max,
-		window:  window,
+		max:    max,
+		window: window,
 	}
 }
 
 type Counter interface {
 	Incr(key string, window time.Time) (err error)
 	Decr(key string, window time.Time) (err error)
-	Get(key string) (n int64)
+	Get(key string, window time.Time) (n int64)
 }
 
 type Limiter struct {
-	keys    sync.Map
 	counter Counter
 	max     int64
 	window  time.Duration
 }
 
-func (limiter *Limiter) Take(key string) (ok bool) {
-	limiter.counter.Get(key)
-	// todo make it as interceptor
-	value, _ := limiter.keys.LoadOrStore(key, &Times{})
-	times := value.(*Times)
-	if times.Value() >= limiter.max {
-		return
+func (limiter *Limiter) getWindow() time.Time {
+	return time.Now().Truncate(limiter.window)
+}
+
+func (limiter *Limiter) Take(key string) (ok bool, err error) {
+	window := limiter.getWindow()
+	ok = limiter.counter.Get(key, window) <= limiter.max
+	if ok {
+		err = limiter.counter.Incr(key, window)
+		if err != nil {
+			err = errors.Warning("fns: limiter take ticket failed").WithCause(err).WithMeta("key", key).WithMeta("window", window.Format(time.RFC3339))
+			return
+		}
 	}
-	times.Incr()
-	ok = true
 	return
 }
 
-func (limiter *Limiter) Repay(key string) {
-	value, has := limiter.keys.Load(key)
-	if !has {
+func (limiter *Limiter) Repay(key string) (err error) {
+	window := limiter.getWindow()
+	err = limiter.counter.Decr(key, window)
+	if err != nil {
+		err = errors.Warning("fns: limiter repay ticket failed").WithCause(err).WithMeta("key", key).WithMeta("window", window.Format(time.RFC3339))
 		return
 	}
-	times := value.(*Times)
-	if times.Decr() <= 0 {
-		limiter.keys.Delete(key)
-	}
+	return
+}
+
+func (limiter *Limiter) Close() {
+
 }
 
 type Times struct {

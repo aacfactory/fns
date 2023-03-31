@@ -18,13 +18,11 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/ratelimit"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -38,12 +36,12 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type ServicesHandlerOptions struct {
+type servicesHandlerOptions struct {
 	Signer     *secret.Signer
 	DeployedCh <-chan map[string]*endpoint
 }
 
-func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
+func newServicesHandler(options servicesHandlerOptions) (handler HttpHandler) {
 	sh := &servicesHandler{
 		log:                    nil,
 		ready:                  false,
@@ -83,10 +81,9 @@ func newServicesHandler(options ServicesHandlerOptions) (handler HttpHandler) {
 }
 
 type servicesHandlerConfig struct {
-	DisableHandleDocuments bool                 `json:"disableHandleDocuments"`
-	DisableHandleOpenapi   bool                 `json:"disableHandleOpenapi"`
-	OpenapiVersion         string               `json:"openapiVersion"`
-	Limiter                RequestLimiterConfig `json:"limiter"`
+	DisableHandleDocuments bool   `json:"disableHandleDocuments"`
+	DisableHandleOpenapi   bool   `json:"disableHandleOpenapi"`
+	OpenapiVersion         string `json:"openapiVersion"`
 }
 
 type servicesHandler struct {
@@ -103,8 +100,6 @@ type servicesHandler struct {
 	signer                 *secret.Signer
 	discovery              EndpointDiscovery
 	group                  *singleflight.Group
-	limiter                *ratelimit.Limiter
-	retryAfter             string
 }
 
 func (handler *servicesHandler) Name() (name string) {
@@ -129,20 +124,6 @@ func (handler *servicesHandler) Build(options *HttpHandlerOptions) (err error) {
 	if !handler.disableHandleOpenapi {
 		handler.openapiVersion = strings.TrimSpace(config.OpenapiVersion)
 	}
-	maxPerDeviceRequest := config.Limiter.MaxPerDeviceRequest
-	if maxPerDeviceRequest < 1 {
-		maxPerDeviceRequest = 8
-	}
-	retryAfter := 10 * time.Second
-	if config.Limiter.RetryAfter != "" {
-		retryAfter, err = time.ParseDuration(strings.TrimSpace(config.Limiter.RetryAfter))
-		if err != nil {
-			err = errors.Warning("fns: build services handler failed").WithCause(errors.Warning("retryAfter must be time.Duration format").WithCause(err))
-			return
-		}
-	}
-	handler.limiter = ratelimit.New(maxPerDeviceRequest)
-	handler.retryAfter = fmt.Sprintf("%d", int(retryAfter/time.Second))
 	return
 }
 
@@ -173,11 +154,11 @@ func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Re
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-		handler.handleDocuments(writer, r)
+		handler.handleDocuments(writer)
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-		handler.handleOpenapi(writer, r)
+		handler.handleOpenapi(writer)
 		return
 	}
 	// internal
@@ -233,12 +214,6 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		return
 	}
 	deviceIp := handler.getDeviceIp(r)
-	// limiter
-	if !handler.limiter.Take(deviceId) {
-		handler.failed(writer, ErrRequestOverload)
-		return
-	}
-	defer handler.limiter.Repay(deviceId)
 	// read path
 	pathItems := strings.Split(r.URL.Path, "/")
 	if len(pathItems) != 3 {
@@ -334,12 +309,6 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		return
 	}
 	deviceIp := handler.getDeviceIp(r)
-	// limiter
-	if !handler.limiter.Take(deviceId) {
-		handler.failed(writer, ErrRequestOverload)
-		return
-	}
-	defer handler.limiter.Repay(deviceId)
 	// reade request id
 	id := r.Header.Get(httpRequestIdHeader)
 	if id == "" {
@@ -458,7 +427,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	return
 }
 
-func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *http.Request) {
+func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
 	if handler.disableHandleDocuments {
 		handler.write(writer, http.StatusOK, bytex.FromString(emptyJson))
 		return
@@ -466,17 +435,6 @@ func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *h
 	const (
 		key = "documents"
 	)
-	deviceId, hasDeviceId := handler.getDeviceId(r)
-	if !hasDeviceId {
-		handler.failed(writer, errors.Warning("fns: deviceId was required in query"))
-		return
-	}
-	// limiter
-	if !handler.limiter.Take(deviceId) {
-		handler.failed(writer, ErrRequestOverload)
-		return
-	}
-	defer handler.limiter.Repay(deviceId)
 	// handle
 	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
 		p, encodeErr := json.Marshal(handler.documents)
@@ -495,7 +453,7 @@ func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter, r *h
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter, r *http.Request) {
+func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
 	if handler.disableHandleOpenapi {
 		handler.write(writer, http.StatusOK, bytex.FromString(emptyJson))
 		return
@@ -503,17 +461,6 @@ func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter, r *htt
 	const (
 		key = "openapi"
 	)
-	deviceId, hasDeviceId := handler.getDeviceId(r)
-	if !hasDeviceId {
-		handler.failed(writer, errors.Warning("fns: deviceId was required in query"))
-		return
-	}
-	// limiter
-	if !handler.limiter.Take(deviceId) {
-		handler.failed(writer, ErrRequestOverload)
-		return
-	}
-	defer handler.limiter.Repay(deviceId)
 	// handle
 	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
 		openapi := handler.documents.Openapi(handler.openapiVersion, handler.appId, handler.appName, handler.appVersion)
@@ -542,12 +489,6 @@ func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.
 		handler.failed(writer, errors.Warning("fns: deviceId was required in query"))
 		return
 	}
-	// limiter
-	if !handler.limiter.Take(deviceId) {
-		handler.failed(writer, ErrRequestOverload)
-		return
-	}
-	defer handler.limiter.Repay(deviceId)
 	// handle
 	signature := r.Header.Get(httpRequestSignatureHeader)
 	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
@@ -603,10 +544,10 @@ func (handler *servicesHandler) failed(writer http.ResponseWriter, cause errors.
 }
 
 func (handler *servicesHandler) write(writer http.ResponseWriter, status int, body []byte) {
-	writer.Header().Set(httpContentType, httpContentTypeJson)
-	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
-		writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
-	}
+	// todo move StatusTooManyRequests into limiter
+	//if status == http.StatusTooEarly {
+	//	writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
+	//}
 	writer.WriteHeader(status)
 	if body != nil {
 		n := 0

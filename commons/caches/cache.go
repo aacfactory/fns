@@ -52,20 +52,19 @@ func NewWithHash(maxBytes int, h Hash) (cache *Cache) {
 	}
 	cache = &Cache{
 		buckets: [512]bucket{},
-		bigKeys: [1]bucket{},
+		bigKeys: NewKeys(),
 		hash:    h,
 	}
 	maxBucketBytes := uint64((maxBytes + bucketsCount - 1) / bucketsCount)
 	for i := range cache.buckets[:] {
 		cache.buckets[i].create(maxBucketBytes)
 	}
-	cache.bigKeys[0].create(maxBucketBytes)
 	return
 }
 
 type Cache struct {
 	buckets [bucketsCount]bucket
-	bigKeys [1]bucket
+	bigKeys *Keys
 	hash    Hash
 }
 
@@ -100,7 +99,7 @@ func (c *Cache) SetWithTTL(k []byte, v []byte, ttl time.Duration) (err error) {
 	h := c.hash.Sum(k)
 	if len(v) > maxSubValueLen {
 		c.setBig(k, v)
-		c.bigKeys[0].Set(k, k, h)
+		c.bigKeys.Set(h)
 		return
 	}
 	idx := h % bucketsCount
@@ -120,8 +119,7 @@ func (c *Cache) Get(k []byte) ([]byte, bool) {
 	idx := h % bucketsCount
 	v, has := c.buckets[idx].Get(dst, k, h, true)
 	if has && len(v) == 16 && unmarshalUint64(v) > 0 {
-		_, hasBigKey := c.bigKeys[0].Get(nil, k, c.hash.Sum(k), false)
-		if !hasBigKey {
+		if !c.bigKeys.Exist(c.hash.Sum(k)) {
 			return nil, false
 		}
 		dst = make([]byte, 0, 8)
@@ -171,7 +169,7 @@ func (c *Cache) Remove(k []byte) {
 	h := c.hash.Sum(k)
 	idx := h % bucketsCount
 	c.buckets[idx].Remove(h)
-	c.bigKeys[0].Remove(h)
+	c.bigKeys.Remove(h)
 }
 
 func (c *Cache) setBig(k []byte, v []byte) {

@@ -41,6 +41,7 @@ var (
 	ErrInvalidValue = fmt.Errorf("value content is invalid")
 )
 
+// todo add incr decr expire
 func New(maxBytes int) (cache *Cache) {
 	cache = NewWithHash(maxBytes, MemHash{})
 	return

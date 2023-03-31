@@ -21,14 +21,13 @@ import (
 	"encoding/binary"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/caches"
 	"github.com/aacfactory/fns/commons/container/smap"
 	"github.com/aacfactory/fns/commons/mmhash"
-	"github.com/dgraph-io/ristretto"
 	"sync"
 	"time"
 )
 
-// todo change ristretto to caches
 type Store interface {
 	Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError)
 	Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError)
@@ -43,18 +42,9 @@ func LocalStore(memSize int64) (store Store, err error) {
 	if memSize < 1 {
 		memSize = 64 * bytex.MEGABYTE
 	}
-	cache, cacheErr := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,
-		MaxCost:     memSize,
-		BufferItems: 64,
-	})
-	if cacheErr != nil {
-		err = errors.Warning("create local cache failed").WithCause(cacheErr)
-		return
-	}
 	store = &localStore{
 		lock:   sync.RWMutex{},
-		cache:  cache,
+		cache:  caches.New(int(memSize)),
 		values: smap.New(),
 	}
 	return
@@ -62,14 +52,18 @@ func LocalStore(memSize int64) (store Store, err error) {
 
 type localStore struct {
 	lock   sync.RWMutex
-	cache  *ristretto.Cache
+	cache  *caches.Cache
 	values *smap.Map
 }
 
 func (store *localStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
-	store.cache.Set(key, value, int64(len(value)))
+	setErr := store.cache.Set(key, value)
+	if setErr != nil {
+		err = errors.Warning("fns: shared store set failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
 	store.values.Set(mmhash.MemHash(key), value)
 	return
 }
@@ -77,7 +71,11 @@ func (store *localStore) Set(ctx context.Context, key []byte, value []byte) (err
 func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
-	store.cache.SetWithTTL(key, value, int64(len(value)), ttl)
+	setErr := store.cache.SetWithTTL(key, value, ttl)
+	if setErr != nil {
+		err = errors.Warning("fns: shared store set failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
 	return
 }
 
@@ -88,8 +86,11 @@ func (store *localStore) ExpireKey(ctx context.Context, key []byte, ttl time.Dur
 	if !has {
 		return
 	}
-	vv := v.([]byte)
-	store.cache.SetWithTTL(key, v, int64(len(vv)), ttl)
+	setErr := store.cache.SetWithTTL(key, v, ttl)
+	if setErr != nil {
+		err = errors.Warning("fns: shared store expire key failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
 	return
 }
 
@@ -105,7 +106,11 @@ func (store *localStore) Incr(ctx context.Context, key []byte, delta int64) (v i
 	}
 	p := make([]byte, 10)
 	binary.PutVarint(p, v)
-	store.cache.Set(key, p, int64(len(p)))
+	setErr := store.cache.Set(key, p)
+	if setErr != nil {
+		err = errors.Warning("fns: shared incr failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
 	store.values.Set(mmhash.MemHash(key), p)
 	return
 }
@@ -138,11 +143,10 @@ func (store *localStore) get(ctx context.Context, key []byte) (value []byte, has
 func (store *localStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
 	store.lock.Lock()
 	store.lock.Unlock()
-	store.cache.Del(key)
+	store.cache.Remove(key)
 	store.values.Delete(mmhash.MemHash(key))
 	return
 }
 
 func (store *localStore) Close() {
-	store.cache.Close()
 }

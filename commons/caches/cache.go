@@ -42,22 +42,32 @@ var (
 	ErrInvalidValue = fmt.Errorf("value content is invalid")
 )
 
-func New(maxBytes int) *Cache {
+func New(maxBytes int) (cache *Cache) {
+	cache = NewWithHash(maxBytes, MemHash{})
+	return
+}
+
+func NewWithHash(maxBytes int, h Hash) (cache *Cache) {
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxBytes
 	}
-	var c Cache
-	maxBucketBytes := uint64((maxBytes + bucketsCount - 1) / bucketsCount)
-	for i := range c.buckets[:] {
-		c.buckets[i].create(maxBucketBytes)
+	cache = &Cache{
+		buckets: [512]bucket{},
+		bigKeys: [1]bucket{},
+		hash:    h,
 	}
-	c.bigKeys[0].create(maxBucketBytes)
-	return &c
+	maxBucketBytes := uint64((maxBytes + bucketsCount - 1) / bucketsCount)
+	for i := range cache.buckets[:] {
+		cache.buckets[i].create(maxBucketBytes)
+	}
+	cache.bigKeys[0].create(maxBucketBytes)
+	return
 }
 
 type Cache struct {
 	buckets [bucketsCount]bucket
 	bigKeys [1]bucket
+	hash    Hash
 }
 
 func (c *Cache) Set(k []byte, v []byte) (err error) {

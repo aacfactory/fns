@@ -46,7 +46,7 @@ func (f *Flag) Off() {
 }
 
 func (f *Flag) IsOn() (ok bool) {
-	ok = atomic.LoadInt64(&f.value) >= 1
+	ok = atomic.LoadInt64(&f.value) == 2
 	return
 }
 
@@ -58,4 +58,8 @@ func (f *Flag) IsHalfOn() (ok bool) {
 func (f *Flag) IsOff() (ok bool) {
 	ok = atomic.LoadInt64(&f.value) == 0
 	return
+}
+
+func (f *Flag) Value() int64 {
+	return atomic.LoadInt64(&f.value)
 }

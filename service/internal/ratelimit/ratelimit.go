@@ -17,13 +17,12 @@
 package ratelimit
 
 import (
-	"github.com/aacfactory/errors"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 func New(max int64, window time.Duration) *Limiter {
-	// todo counter use fastcache (use max tickets to calc max bytes of cache)
 	return &Limiter{
 		max:    max,
 		window: window,
@@ -37,34 +36,48 @@ type Counter interface {
 }
 
 type Limiter struct {
-	counter Counter
-	max     int64
-	window  time.Duration
+	times  sync.Map
+	max    int64
+	window time.Duration
 }
 
-func (limiter *Limiter) getWindow() time.Time {
-	return time.Now().Truncate(limiter.window)
+func (limiter *Limiter) getWindow() int64 {
+	if limiter.window == 0 {
+		return 0
+	}
+	return time.Now().Truncate(limiter.window).UnixNano()
 }
 
 func (limiter *Limiter) Take(key string) (ok bool, err error) {
 	window := limiter.getWindow()
-	ok = limiter.counter.Get(key, window) < limiter.max
-	if ok {
-		err = limiter.counter.Incr(key, window)
-		if err != nil {
-			err = errors.Warning("fns: limiter take ticket failed").WithCause(err).WithMeta("key", key).WithMeta("window", window.Format(time.RFC3339))
-			return
+	v, _ := limiter.times.LoadOrStore(key, &Times{
+		mu:     sync.Mutex{},
+		n:      0,
+		window: window,
+	})
+	times := v.(*Times)
+	if times.Window() == window {
+		if times.Value() < limiter.max {
+			times.Incr()
+			ok = true
 		}
+	} else {
+		times.SetWindow(window)
+		times.Incr()
+		ok = true
 	}
 	return
 }
 
 func (limiter *Limiter) Repay(key string) (err error) {
 	window := limiter.getWindow()
-	err = limiter.counter.Decr(key, window)
-	if err != nil {
-		err = errors.Warning("fns: limiter repay ticket failed").WithCause(err).WithMeta("key", key).WithMeta("window", window.Format(time.RFC3339))
+	v, loaded := limiter.times.Load(key)
+	if !loaded {
 		return
+	}
+	times := v.(*Times)
+	if times.Window() == window {
+		times.Decr()
 	}
 	return
 }
@@ -74,7 +87,9 @@ func (limiter *Limiter) Close() {
 }
 
 type Times struct {
-	n int64
+	mu     sync.Mutex
+	n      int64
+	window int64
 }
 
 func (t *Times) Value() int64 {
@@ -87,4 +102,15 @@ func (t *Times) Incr() int64 {
 
 func (t *Times) Decr() int64 {
 	return atomic.AddInt64(&t.n, -1)
+}
+
+func (t *Times) Window() int64 {
+	return atomic.LoadInt64(&t.window)
+}
+
+func (t *Times) SetWindow(window int64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	atomic.StoreInt64(&t.window, window)
+	atomic.StoreInt64(&t.n, 0)
 }

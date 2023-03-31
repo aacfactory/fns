@@ -21,15 +21,18 @@ import (
 	"sync"
 )
 
+type onEvict func(key uint64)
+
 type bucket struct {
 	mu     sync.RWMutex
 	chunks [][]byte
 	m      map[uint64]uint64
 	idx    uint64
 	gen    uint64
+	evict  onEvict
 }
 
-func (b *bucket) create(maxBytes uint64) {
+func (b *bucket) create(maxBytes uint64, evict onEvict) {
 	if maxBytes == 0 {
 		panic(fmt.Errorf("maxBytes cannot be zero"))
 	}
@@ -39,6 +42,7 @@ func (b *bucket) create(maxBytes uint64) {
 	maxChunks := (maxBytes + chunkSize - 1) / chunkSize
 	b.chunks = make([][]byte, maxChunks)
 	b.m = make(map[uint64]uint64)
+	b.evict = evict
 	b.reset()
 }
 
@@ -66,6 +70,7 @@ func (b *bucket) cleanLocked() {
 			continue
 		}
 		delete(bm, k)
+		b.evict(k)
 	}
 }
 
@@ -170,5 +175,6 @@ end:
 func (b *bucket) Remove(h uint64) {
 	b.mu.Lock()
 	delete(b.m, h)
+	b.evict(h)
 	b.mu.Unlock()
 }

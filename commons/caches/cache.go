@@ -42,23 +42,26 @@ var (
 )
 
 // todo add incr decr expire
-func New(maxBytes int) (cache *Cache) {
+func New(maxBytes uint64) (cache *Cache) {
 	cache = NewWithHash(maxBytes, MemHash{})
 	return
 }
 
-func NewWithHash(maxBytes int, h Hash) (cache *Cache) {
+func NewWithHash(maxBytes uint64, h Hash) (cache *Cache) {
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxBytes
+	}
+	if maxBytes >= maxBucketSize {
+		maxBytes = maxBucketSize - 1<<30
 	}
 	cache = &Cache{
 		buckets: [512]bucket{},
 		bigKeys: NewKeys(),
 		hash:    h,
 	}
-	maxBucketBytes := uint64((maxBytes + bucketsCount - 1) / bucketsCount)
+	maxBucketBytes := (maxBytes + bucketsCount - 1) / bucketsCount
 	for i := range cache.buckets[:] {
-		cache.buckets[i].create(maxBucketBytes)
+		cache.buckets[i].create(maxBucketBytes, cache.evict)
 	}
 	return
 }
@@ -246,6 +249,10 @@ func (c *Cache) getBig(dst, k []byte) (r []byte) {
 		return dst[:dstLen]
 	}
 	return dst
+}
+
+func (c *Cache) evict(key uint64) {
+	c.bigKeys.Remove(key)
 }
 
 func marshalUint64(dst []byte, u uint64) []byte {

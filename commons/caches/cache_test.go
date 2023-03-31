@@ -55,7 +55,8 @@ func TestNew(t *testing.T) {
 	}
 	valC, hasC := cache.Get(keyC)
 	fmt.Println(hasC, string(valC))
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	valC, hasC = cache.Get(keyC)
 	fmt.Println(hasC, string(valC))
+	cache.Remove(keyB)
 }

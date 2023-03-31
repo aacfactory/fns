@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
+	"github.com/aacfactory/fns/service/internal/ratelimit"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -37,7 +38,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -73,12 +73,13 @@ const (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type TransportHandlerOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
+	AppId       string
+	AppName     string
+	AppVersion  versions.Version
+	Log         logs.Logger
+	Config      configures.Config
+	Discovery   EndpointDiscovery
+	ClusterMode bool
 }
 
 type TransportHandler interface {
@@ -90,34 +91,40 @@ type TransportHandler interface {
 }
 
 type TransportHandlersOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
+	AppId       string
+	AppName     string
+	AppVersion  versions.Version
+	AppRunning  *flags.Flag
+	Log         logs.Logger
+	Config      configures.Config
+	Discovery   EndpointDiscovery
+	ClusterMode bool
 }
 
 func newTransportHandlers(options TransportHandlersOptions) *TransportHandlers {
+	handlers := make([]TransportHandler, 0, 1)
+	handlers = append(handlers, newTransportApplicationHandler(options.AppRunning))
 	return &TransportHandlers{
-		appId:      options.AppId,
-		appName:    options.AppName,
-		appVersion: options.AppVersion,
-		log:        options.Log.With("transports", "handlers"),
-		config:     options.Config,
-		discovery:  options.Discovery,
-		handlers:   make([]TransportHandler, 0, 1),
+		appId:       options.AppId,
+		appName:     options.AppName,
+		appVersion:  options.AppVersion,
+		log:         options.Log.With("transports", "handlers"),
+		config:      options.Config,
+		discovery:   options.Discovery,
+		clusterMode: options.ClusterMode,
+		handlers:    handlers,
 	}
 }
 
 type TransportHandlers struct {
-	appId      string
-	appName    string
-	appVersion versions.Version
-	log        logs.Logger
-	config     configures.Config
-	discovery  EndpointDiscovery
-	handlers   []TransportHandler
+	appId       string
+	appName     string
+	appVersion  versions.Version
+	log         logs.Logger
+	config      configures.Config
+	discovery   EndpointDiscovery
+	clusterMode bool
+	handlers    []TransportHandler
 }
 
 func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) {
@@ -141,12 +148,13 @@ func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) 
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
 	buildErr := handler.Build(TransportHandlerOptions{
-		AppId:      handlers.appId,
-		AppName:    handlers.appName,
-		AppVersion: handlers.appVersion,
-		Log:        handlers.log.With("handler", name),
-		Config:     config,
-		Discovery:  handlers.discovery,
+		AppId:       handlers.appId,
+		AppName:     handlers.appName,
+		AppVersion:  handlers.appVersion,
+		Log:         handlers.log.With("handler", name),
+		Config:      config,
+		Discovery:   handlers.discovery,
+		ClusterMode: handlers.clusterMode,
 	})
 	if buildErr != nil {
 		err = errors.Warning("append handler failed").WithCause(buildErr).WithMeta("handler", name)
@@ -176,12 +184,13 @@ func (handlers *TransportHandlers) ServeHTTP(w http.ResponseWriter, r *http.Requ
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type TransportMiddlewareOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
+	AppId       string
+	AppName     string
+	AppVersion  versions.Version
+	Log         logs.Logger
+	Config      configures.Config
+	Discovery   EndpointDiscovery
+	ClusterMode bool
 }
 
 type TransportMiddleware interface {
@@ -192,13 +201,14 @@ type TransportMiddleware interface {
 }
 
 type TransportMiddlewaresOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppRunning *flags.Flag
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
+	AppId       string
+	AppName     string
+	AppVersion  versions.Version
+	AppRunning  *flags.Flag
+	Log         logs.Logger
+	Config      configures.Config
+	Discovery   EndpointDiscovery
+	ClusterMode bool
 }
 
 func newTransportMiddlewares(options TransportMiddlewaresOptions) *TransportMiddlewares {
@@ -211,7 +221,8 @@ func newTransportMiddlewares(options TransportMiddlewaresOptions) *TransportMidd
 		log:         options.Log.With("transports", "middlewares"),
 		config:      options.Config,
 		discovery:   options.Discovery,
-		middlewares: middlewares,
+		clusterMode: options.ClusterMode,
+		middlewares: make([]TransportMiddleware, 0, 1),
 	}
 }
 
@@ -222,6 +233,7 @@ type TransportMiddlewares struct {
 	log         logs.Logger
 	config      configures.Config
 	discovery   EndpointDiscovery
+	clusterMode bool
 	middlewares []TransportMiddleware
 }
 
@@ -246,12 +258,13 @@ func (middlewares *TransportMiddlewares) Append(middleware TransportMiddleware) 
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
 	buildErr := middleware.Build(TransportMiddlewareOptions{
-		AppId:      middlewares.appId,
-		AppName:    middlewares.appName,
-		AppVersion: middlewares.appVersion,
-		Log:        middlewares.log.With("middleware", name),
-		Config:     config,
-		Discovery:  middlewares.discovery,
+		AppId:       middlewares.appId,
+		AppName:     middlewares.appName,
+		AppVersion:  middlewares.appVersion,
+		Log:         middlewares.log.With("middleware", name),
+		Config:      config,
+		Discovery:   middlewares.discovery,
+		ClusterMode: middlewares.clusterMode,
 	})
 	if buildErr != nil {
 		err = errors.Warning("append middleware failed").WithCause(buildErr).WithMeta("middleware", name)
@@ -363,7 +376,7 @@ func (middleware *bufferResponseMiddleware) ServeHTTP(w http.ResponseWriter, r *
 // +-------------------------------------------------------------------------------------------------------------------+
 
 func createTransportOptions(config *HttpConfig, log logs.Logger, handler http.Handler) (opt transports.Options, err error) {
-	log = log.With("fns", "http")
+	log = log.With("fns", "transport")
 	opt = transports.Options{
 		Port:      80,
 		ServerTLS: nil,
@@ -417,39 +430,35 @@ const (
 	transportApplicationMiddlewareName = "application"
 )
 
-func newTransportApplicationMiddleware(running *flags.Flag) *TransportApplicationMiddleware {
-	return &TransportApplicationMiddleware{
+func newTransportApplicationMiddleware(appRunning *flags.Flag) *transportApplicationMiddleware {
+	return &transportApplicationMiddleware{
 		appId:        "",
 		appName:      "",
 		appVersion:   versions.Version{},
-		running:      running,
+		appRunning:   appRunning,
 		launchAT:     time.Time{},
 		statsEnabled: false,
-		requests:     0,
 		counter:      sync.WaitGroup{},
-		group:        singleflight.Group{},
 	}
 }
 
-type TransportApplicationMiddleware struct {
+type transportApplicationMiddleware struct {
 	appId          string
 	appName        string
 	appVersion     versions.Version
-	running        *flags.Flag
+	appRunning     *flags.Flag
 	launchAT       time.Time
 	statsEnabled   bool
 	latencyEnabled bool
-	requests       int64
 	counter        sync.WaitGroup
-	group          singleflight.Group
 }
 
-func (middleware *TransportApplicationMiddleware) Name() (name string) {
+func (middleware *transportApplicationMiddleware) Name() (name string) {
 	name = transportApplicationMiddlewareName
 	return
 }
 
-func (middleware *TransportApplicationMiddleware) Build(options TransportMiddlewareOptions) (err error) {
+func (middleware *transportApplicationMiddleware) Build(options TransportMiddlewareOptions) (err error) {
 	middleware.appId = options.AppId
 	middleware.appName = options.AppName
 	middleware.appVersion = options.AppVersion
@@ -465,14 +474,26 @@ func (middleware *TransportApplicationMiddleware) Build(options TransportMiddlew
 		return
 	}
 	middleware.counter = sync.WaitGroup{}
-	middleware.group = singleflight.Group{}
 	return
 }
 
-func (middleware *TransportApplicationMiddleware) Handler(next http.Handler) http.Handler {
+func (middleware *transportApplicationMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if middleware.appRunning.IsOff() {
+			w.Header().Set(httpConnectionHeader, httpCloseHeader)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			p, _ := json.Marshal(errors.Unavailable("fns: application is closed").WithMeta("middleware", middleware.Name()))
+			_, _ = w.Write(p)
+			return
+		}
+		if middleware.appRunning.IsHalfOn() {
+			w.Header().Set(httpResponseRetryAfter, "10")
+			w.WriteHeader(http.StatusTooEarly)
+			p, _ := json.Marshal(errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: application is not ready, try later again").WithMeta("middleware", middleware.Name()))
+			_, _ = w.Write(p)
+			return
+		}
 		middleware.counter.Add(1)
-		atomic.AddInt64(&middleware.requests, 1)
 		// latency
 		handleBeg := time.Time{}
 		if middleware.latencyEnabled {
@@ -489,7 +510,6 @@ func (middleware *TransportApplicationMiddleware) Handler(next http.Handler) htt
 				w.WriteHeader(555)
 				p, _ := json.Marshal(errors.Warning("fns: device id was required"))
 				_, _ = w.Write(p)
-				atomic.AddInt64(&middleware.requests, -1)
 				middleware.counter.Done()
 				return
 			}
@@ -526,69 +546,20 @@ func (middleware *TransportApplicationMiddleware) Handler(next http.Handler) htt
 				r.Header.Set(httpRequestIdHeader, requestId)
 			}
 		}
-		// try handle application handler
-		if !middleware.tryHandle(w, r) {
-			next.ServeHTTP(w, r)
-		}
+		next.ServeHTTP(w, r)
 		if middleware.latencyEnabled {
 			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 		}
-		atomic.AddInt64(&middleware.requests, -1)
 		middleware.counter.Done()
 		return
 	})
 }
 
-func (middleware *TransportApplicationMiddleware) tryHandle(w http.ResponseWriter, r *http.Request) (handled bool) {
-	if r.Method == http.MethodGet && r.URL.Path == "/application/health" {
-		body := fmt.Sprintf(
-			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\", \"deviceIp\":\"%s\"}",
-			middleware.appName, middleware.appId, middleware.appVersion.String(), middleware.launchAT.Format(time.RFC3339), time.Now().Format(time.RFC3339), r.Header.Get(httpDeviceIpHeader),
-		)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(bytex.FromString(body))
-		handled = true
-		return
-	}
-	if middleware.statsEnabled && r.Method == http.MethodGet && r.URL.Path == "/application/stats" {
-		v, _, _ := middleware.group.Do(middleware.Name(), func() (v interface{}, err error) {
-			stat := &applicationStats{
-				Id:       middleware.appId,
-				Name:     middleware.appName,
-				Running:  middleware.running.IsOn(),
-				Requests: uint64(atomic.LoadInt64(&middleware.requests)),
-				Mem:      nil,
-				CPU:      nil,
-			}
-			mem, memErr := memory.Stats()
-			if memErr == nil {
-				stat.Mem = mem
-			}
-			cpus, cpuErr := cpu.Occupancy()
-			if cpuErr == nil {
-				stat.CPU = &cpuOccupancy{
-					Max:   cpus.Max(),
-					Min:   cpus.Min(),
-					Avg:   cpus.AVG(),
-					Cores: cpus,
-				}
-			}
-			v, _ = json.Marshal(stat)
-			return
-		})
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(v.([]byte))
-		handled = true
-		return
-	}
-	return
-}
-
-func (middleware *TransportApplicationMiddleware) Close() {
+func (middleware *transportApplicationMiddleware) Close() {
 	middleware.counter.Wait()
 }
 
-func (middleware *TransportApplicationMiddleware) canonicalizeIp(ip string) string {
+func (middleware *transportApplicationMiddleware) canonicalizeIp(ip string) string {
 	isIPv6 := false
 	for i := 0; !isIPv6 && i < len(ip); i++ {
 		switch ip[i] {
@@ -611,13 +582,18 @@ func (middleware *TransportApplicationMiddleware) canonicalizeIp(ip string) stri
 	return ipv6.Mask(net.CIDRMask(64, 128)).String()
 }
 
+// +-------------------------------------------------------------------------------------------------------------------+
+
+const (
+	transportApplicationHandlerName = "application"
+)
+
 type applicationStats struct {
-	Id       string         `json:"id"`
-	Name     string         `json:"name"`
-	Running  bool           `json:"running"`
-	Requests uint64         `json:"requests"`
-	Mem      *memory.Memory `json:"mem"`
-	CPU      *cpuOccupancy  `json:"cpu"`
+	Id      string         `json:"id"`
+	Name    string         `json:"name"`
+	Running int64          `json:"running"`
+	Mem     *memory.Memory `json:"mem"`
+	CPU     *cpuOccupancy  `json:"cpu"`
 }
 
 type cpuOccupancy struct {
@@ -625,6 +601,104 @@ type cpuOccupancy struct {
 	Min   cpu.Core `json:"min"`
 	Avg   float64  `json:"avg"`
 	Cores cpu.CPU  `json:"cores"`
+}
+
+func newTransportApplicationHandler(running *flags.Flag) *transportApplicationHandler {
+	return &transportApplicationHandler{
+		appId:        "",
+		appName:      "",
+		appVersion:   versions.Version{},
+		appRunning:   running,
+		launchAT:     time.Time{},
+		statsEnabled: false,
+		group:        singleflight.Group{},
+	}
+}
+
+type transportApplicationHandler struct {
+	appId        string
+	appName      string
+	appVersion   versions.Version
+	appRunning   *flags.Flag
+	launchAT     time.Time
+	statsEnabled bool
+	group        singleflight.Group
+}
+
+func (handler *transportApplicationHandler) Name() (name string) {
+	name = transportApplicationHandlerName
+	return
+}
+
+func (handler *transportApplicationHandler) Build(options TransportHandlerOptions) (err error) {
+	handler.appId = options.AppId
+	handler.appName = options.AppName
+	handler.appVersion = options.AppVersion
+	handler.launchAT = time.Now()
+	_, statsErr := options.Config.Get("statsEnable", &handler.statsEnabled)
+	if statsErr != nil {
+		err = errors.Warning("fns: application handler build failed").WithCause(statsErr).WithMeta("handler", handler.Name())
+		return
+	}
+	return
+}
+
+func (handler *transportApplicationHandler) Accept(r *http.Request) (ok bool) {
+	ok = r.Method == http.MethodGet && r.URL.Path == "/application/health"
+	if ok {
+		return
+	}
+	ok = r.Method == http.MethodGet && r.URL.Path == "/application/stats"
+	if ok {
+		return
+	}
+	return
+}
+
+func (handler *transportApplicationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Path == "/application/health" {
+		body := fmt.Sprintf(
+			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\", \"deviceIp\":\"%s\"}",
+			handler.appName, handler.appId, handler.appVersion.String(), handler.launchAT.Format(time.RFC3339), time.Now().Format(time.RFC3339), r.Header.Get(httpDeviceIpHeader),
+		)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bytex.FromString(body))
+		return
+	}
+	if handler.statsEnabled && r.Method == http.MethodGet && r.URL.Path == "/application/stats" {
+		v, _, _ := handler.group.Do(handler.Name(), func() (v interface{}, err error) {
+			stat := &applicationStats{
+				Id:      handler.appId,
+				Name:    handler.appName,
+				Running: handler.appRunning.Value(),
+				Mem:     nil,
+				CPU:     nil,
+			}
+			mem, memErr := memory.Stats()
+			if memErr == nil {
+				stat.Mem = mem
+			}
+			cpus, cpuErr := cpu.Occupancy()
+			if cpuErr == nil {
+				stat.CPU = &cpuOccupancy{
+					Max:   cpus.Max(),
+					Min:   cpus.Min(),
+					Avg:   cpus.AVG(),
+					Cores: cpus,
+				}
+			}
+			v, _ = json.Marshal(stat)
+			return
+		})
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(v.([]byte))
+		return
+	}
+	return
+}
+
+func (handler *transportApplicationHandler) Close() {
+	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -707,6 +781,95 @@ func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
 		OptionsSuccessStatus:   204,
 		Debug:                  false,
 	})
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+const (
+	limiterMiddlewareName = "limiter"
+)
+
+type limiterMiddlewareConfig struct {
+	Max        int64  `json:"max"`
+	RetryAfter int    `json:"retryAfter"`
+	TimeWindow string `json:"timeWindow"`
+}
+
+func LimiterMiddleware() TransportMiddleware {
+	return &limiterMiddleware{}
+}
+
+type limiterMiddleware struct {
+	log        logs.Logger
+	tickets    *ratelimit.Limiter
+	retryAfter string
+}
+
+func (middleware *limiterMiddleware) Name() (name string) {
+	name = limiterMiddlewareName
+	return
+}
+
+func (middleware *limiterMiddleware) Build(options TransportMiddlewareOptions) (err error) {
+	middleware.log = options.Log
+	config := limiterMiddlewareConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: limiter middleware build failed").WithCause(configErr)
+		return
+	}
+	max := config.Max
+	if max <= 0 {
+		max = 5
+	}
+	timeWindow := 10 * time.Second
+	if config.TimeWindow != "" {
+		timeWindow, err = time.ParseDuration(strings.TrimSpace(config.TimeWindow))
+		if err != nil {
+			err = errors.Warning("fns: limiter middleware build failed").WithCause(errors.Warning("timeWindow must be time.Duration format")).WithCause(configErr)
+			return
+		}
+	}
+	if config.RetryAfter > 0 {
+		middleware.retryAfter = fmt.Sprintf("%d", config.RetryAfter)
+	} else {
+		middleware.retryAfter = "10"
+	}
+	middleware.tickets = ratelimit.New(max, timeWindow)
+	return
+}
+
+func (middleware *limiterMiddleware) Handler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		deviceId := r.Header.Get(httpDeviceIdHeader)
+		ok, takeErr := middleware.tickets.Take(deviceId)
+		if takeErr != nil {
+			p, _ := json.Marshal(errors.Warning("fns: request limiter take ticket failed").WithCause(takeErr))
+			w.WriteHeader(555)
+			_, _ = w.Write(p)
+			return
+		}
+		if !ok {
+			p, _ := json.Marshal(errors.Warning("fns: request limiter take ticket failed").WithCause(takeErr))
+			w.Header().Set(httpResponseRetryAfter, middleware.retryAfter)
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write(p)
+			return
+		}
+		next.ServeHTTP(w, r)
+		repayErr := middleware.tickets.Repay(deviceId)
+		if repayErr != nil && middleware.log.ErrorEnabled() {
+			middleware.log.Error().Cause(
+				errors.Warning("fns: request limiter repay ticket failed").WithCause(repayErr),
+			).With("middleware", middleware.Name()).Message("fns: request limiter repay ticket failed")
+		}
+		return
+	})
+}
+
+func (middleware *limiterMiddleware) Close() {
+	middleware.tickets.Close()
 	return
 }
 

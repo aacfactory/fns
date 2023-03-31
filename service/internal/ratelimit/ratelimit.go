@@ -29,12 +29,6 @@ func New(max int64, window time.Duration) *Limiter {
 	}
 }
 
-type Counter interface {
-	Incr(key string, window time.Time) (err error)
-	Decr(key string, window time.Time) (err error)
-	Get(key string, window time.Time) (n int64)
-}
-
 type Limiter struct {
 	times  sync.Map
 	max    int64

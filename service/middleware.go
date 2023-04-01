@@ -325,7 +325,6 @@ func (middleware *transportApplicationMiddleware) Handler(next http.Handler) htt
 				}
 				deviceIp = remoteIp
 			}
-			r.Header.Set(httpDeviceIpHeader, deviceIp)
 		}
 		deviceIp = middleware.canonicalizeIp(deviceIp)
 		r.Header.Set(httpDeviceIpHeader, deviceIp)

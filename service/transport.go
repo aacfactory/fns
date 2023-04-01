@@ -73,7 +73,7 @@ func newTransportOptions(config *HttpConfig, log logs.Logger, handler http.Handl
 		ClientTLS: nil,
 		Handler:   handler,
 		Log:       log,
-		Options:   nil,
+		Config:    nil,
 	}
 	if config == nil {
 		return
@@ -106,7 +106,7 @@ func newTransportOptions(config *HttpConfig, log logs.Logger, handler http.Handl
 	if config.Options == nil {
 		config.Options = []byte("{}")
 	}
-	opt.Options, err = configures.NewJsonConfig(config.Options)
+	opt.Config, err = configures.NewJsonConfig(config.Options)
 	if err != nil {
 		err = errors.Warning("create transport options failed").WithCause(fmt.Errorf("options is invalid")).WithCause(err)
 		return
@@ -122,7 +122,7 @@ type TransportOptions struct {
 	ClientTLS *tls.Config
 	Handler   http.Handler
 	Log       logs.Logger
-	Options   configures.Config
+	Config    configures.Config
 }
 
 type Transport interface {
@@ -288,7 +288,7 @@ func (srv *fastHttpTransport) Build(options TransportOptions) (err error) {
 	srv.ssl = options.ServerTLS != nil
 
 	opt := &fastHttpTransportOptions{}
-	optErr := options.Options.As(opt)
+	optErr := options.Config.As(opt)
 	if optErr != nil {
 		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("transport", fastHttpTransportName)
 		return

@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/caches"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/lru"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -38,19 +38,14 @@ const (
 	proxyContextKey  = "@fns_proxy"
 )
 
-type ProxyHandlerOptions struct {
-	DevMode       bool
+type proxyHandlerOptions struct {
 	Signer        *secret.Signer
 	Registrations *Registrations
 	DeployedCh    <-chan map[string]*endpoint
 }
 
-// todo proxy 单独做，单独拥有一个http server，与service的独立，然后发布出去的只有service的，cluster里取所有的port，然后由registation般配port是否为service。
-// todo 那websocket怎么办。。。
-// todo 主要是ssl的问题，
-// caseA: 两个server，只有一个service handler，proxy handler不要了，在service handler里增加cluster特性，两个server共享一个handler？？？proxy的handler是全的，http里的是只有services。
-// todo Registrations 不管 dev，由Registrations的dialer处理dev，所以dialer需要代理
-func newProxyHandler(options ProxyHandlerOptions) (handler *proxyHandler) {
+// todo 只管正常代理和转发。开发由devProxy负责。
+func newProxyHandler(options proxyHandlerOptions) (handler *proxyHandler) {
 	handler = &proxyHandler{
 		log:                    nil,
 		ready:                  false,
@@ -61,9 +56,8 @@ func newProxyHandler(options ProxyHandlerOptions) (handler *proxyHandler) {
 		appName:                "",
 		appVersion:             versions.Version{},
 		signer:                 options.Signer,
-		devMode:                options.DevMode,
 		registrations:          options.Registrations,
-		attachments:            lru.New[string, json.RawMessage](8),
+		attachments:            caches.NewLRU[string, []byte](4),
 		group:                  &singleflight.Group{},
 	}
 	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint) {
@@ -77,27 +71,25 @@ func newProxyHandler(options ProxyHandlerOptions) (handler *proxyHandler) {
 }
 
 type proxyHandlerConfig struct {
-	DisableHandleDocuments bool                 `json:"disableHandleDocuments"`
-	DisableHandleOpenapi   bool                 `json:"disableHandleOpenapi"`
-	OpenapiVersion         string               `json:"openapiVersion"`
-	DocumentsTTL           string               `json:"documentsTTL"`
-	Limiter                RequestLimiterConfig `json:"limiter"`
+	DisableHandleDocuments bool   `json:"disableHandleDocuments"`
+	DisableHandleOpenapi   bool   `json:"disableHandleOpenapi"`
+	OpenapiVersion         string `json:"openapiVersion"`
+	DocumentsTTL           string `json:"documentsTTL"`
 }
 
 type proxyHandler struct {
 	log                    logs.Logger
+	appId                  string
+	appName                string
+	appVersion             versions.Version
 	ready                  bool
 	disableHandleDocuments bool
 	disableHandleOpenapi   bool
 	openapiVersion         string
 	documentsTTL           time.Duration
-	appId                  string
-	appName                string
-	appVersion             versions.Version
 	signer                 *secret.Signer
-	devMode                bool
 	registrations          *Registrations
-	attachments            *lru.LRU[string, json.RawMessage] // todo do not change to caches
+	attachments            *caches.LRU[string, []byte]
 	group                  *singleflight.Group
 }
 
@@ -106,7 +98,7 @@ func (handler *proxyHandler) Name() (name string) {
 	return
 }
 
-func (handler *proxyHandler) Build(options *HttpHandlerOptions) (err error) {
+func (handler *proxyHandler) Build(options TransportHandlerOptions) (err error) {
 	config := proxyHandlerConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
@@ -134,10 +126,6 @@ func (handler *proxyHandler) Build(options *HttpHandlerOptions) (err error) {
 		documentsTTL = 60 * time.Second
 	}
 	handler.documentsTTL = documentsTTL
-	maxPerDeviceRequest := config.Limiter.MaxPerDeviceRequest
-	if maxPerDeviceRequest < 1 {
-		maxPerDeviceRequest = 8
-	}
 	return
 }
 
@@ -161,7 +149,7 @@ func (handler *proxyHandler) Close() {
 
 func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
 	if !handler.ready {
-		handler.failed(writer, errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: handler is not ready, try later again").WithMeta("handler", handler.Name()))
+		handler.failed(writer, ErrTooEarly.WithMeta("handler", handler.Name()))
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
@@ -172,12 +160,7 @@ func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Reque
 		handler.handleDocuments(writer, r)
 		return
 	}
-	if r.Header.Get(httpDevModeHeader) == "" {
-		handler.handleProxy(writer, r)
-	} else {
-		handler.handleDevProxy(writer, r)
-	}
-
+	handler.handleProxy(writer, r)
 	return
 }
 
@@ -199,20 +182,17 @@ func (handler *proxyHandler) fetchDocuments() (v documents.Documents, err error)
 	return
 }
 
-func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.Request) {
+func (handler *proxyHandler) handleOpenapi(w http.ResponseWriter, r *http.Request) {
 	version := versions.Latest()
 	if targetVersion := r.URL.Query().Get("version"); targetVersion != "" {
 		var err error
 		version, err = versions.Parse(targetVersion)
 		if err != nil {
-			handler.failed(writer, errors.Warning("proxy: parse version failed").WithCause(err))
+			handler.failed(w, errors.Warning("proxy: parse version failed").WithCause(err))
 			return
 		}
 	}
-	handleBegAT := time.Time{}
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
+
 	key := fmt.Sprintf("openapi:%s", version.String())
 	refresh := r.URL.Query().Get("refresh") == "true"
 	v, err, _ := handler.group.Do(fmt.Sprintf("%s:%v", key, refresh), func() (v interface{}, err error) {
@@ -235,26 +215,18 @@ func (handler *proxyHandler) handleOpenapi(writer http.ResponseWriter, r *http.R
 			return
 		}
 		handler.attachments.Add(key, p, handler.documentsTTL)
-		v = json.RawMessage(p)
+		v = p
 		return
 	})
 	if err != nil {
-		handler.failed(writer, errors.Map(err))
+		handler.failed(w, errors.Map(err))
 		return
 	}
-	latency := time.Duration(0)
-	if handler.log.DebugEnabled() {
-		latency = time.Now().Sub(handleBegAT)
-	}
-	handler.succeed(writer, "", latency, v.(json.RawMessage))
+	handler.write(w, http.StatusOK, nil, v.([]byte))
 	return
 }
 
-func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http.Request) {
-	handleBegAT := time.Time{}
-	if handler.log.DebugEnabled() {
-		handleBegAT = time.Now()
-	}
+func (handler *proxyHandler) handleDocuments(w http.ResponseWriter, r *http.Request) {
 	key := "documents:write"
 	refresh := r.URL.Query().Get("refresh") == "true"
 	v, err, _ := handler.group.Do(fmt.Sprintf("%s:%v", key, refresh), func() (v interface{}, err error) {
@@ -276,54 +248,29 @@ func (handler *proxyHandler) handleDocuments(writer http.ResponseWriter, r *http
 			return
 		}
 		handler.attachments.Add(key, p, handler.documentsTTL)
-		v = json.RawMessage(p)
+		v = p
 		return
 	})
 	if err != nil {
-		handler.failed(writer, errors.Map(err))
+		handler.failed(w, errors.Map(err))
 		return
 	}
-	latency := time.Duration(0)
-	if handler.log.DebugEnabled() {
-		latency = time.Now().Sub(handleBegAT)
-	}
-	handler.succeed(writer, "", latency, v.(json.RawMessage))
+	handler.write(w, http.StatusOK, nil, v.([]byte))
 	return
 }
 
-func (handler *proxyHandler) handleProxy(writer http.ResponseWriter, r *http.Request) {
+func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
+	// mark registrations to use no internal request ? registrations send internal request when request is internal
 	ctx = context.WithValue(ctx, proxyContextKey, 1)
 
 	return
 }
 
-func (handler *proxyHandler) handleDevProxy(writer http.ResponseWriter, r *http.Request) {
-
-	return
-}
-
-func (handler *proxyHandler) succeed(writer http.ResponseWriter, id string, latency time.Duration, result interface{}) {
-	body, encodeErr := json.Marshal(result)
-	if encodeErr != nil {
-		cause := errors.Warning("encode result failed").WithCause(encodeErr)
-		handler.failed(writer, cause)
-		return
-	}
-	if id != "" {
-		writer.Header().Set(httpRequestIdHeader, id)
-	}
-	if handler.log.DebugEnabled() {
-		writer.Header().Set(httpHandleLatencyHeader, latency.String())
-	}
-	handler.write(writer, http.StatusOK, body)
-	return
-}
-
 func (handler *proxyHandler) failed(writer http.ResponseWriter, cause errors.CodeError) {
 	if cause == nil {
-		handler.write(writer, 555, bytex.FromString(emptyJson))
+		handler.write(writer, 555, nil, bytex.FromString(emptyJson))
 		return
 	}
 	status := cause.Code()
@@ -331,26 +278,24 @@ func (handler *proxyHandler) failed(writer http.ResponseWriter, cause errors.Cod
 		status = 555
 	}
 	body, _ := json.Marshal(cause)
-	handler.write(writer, status, body)
+	handler.write(writer, status, nil, body)
 	return
 }
 
-func (handler *proxyHandler) write(writer http.ResponseWriter, status int, body []byte) {
+func (handler *proxyHandler) write(writer http.ResponseWriter, status int, header http.Header, body []byte) {
 	writer.WriteHeader(status)
-	writer.Header().Set(httpContentType, httpContentTypeJson)
-	//if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
-	//	writer.Header().Set(httpResponseRetryAfter, handler.retryAfter)
-	//}
-	if body != nil {
-		n := 0
-		bodyLen := len(body)
-		for n < bodyLen {
-			nn, writeErr := writer.Write(body[n:])
-			if writeErr != nil {
-				return
+	if header != nil && len(header) > 0 {
+		for k, vv := range header {
+			if vv == nil || len(vv) == 0 {
+				continue
 			}
-			n += nn
+			for _, v := range vv {
+				writer.Header().Add(k, v)
+			}
 		}
+	}
+	if body != nil {
+		_, _ = writer.Write(body)
 	}
 	return
 }

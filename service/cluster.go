@@ -25,7 +25,6 @@ import (
 	"github.com/aacfactory/fns/service/internal/lru"
 	"github.com/aacfactory/fns/service/internal/oas"
 	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
@@ -74,11 +73,6 @@ func (nodes Nodes) Less(i, j int) bool {
 func (nodes Nodes) Swap(i, j int) {
 	nodes[i], nodes[j] = nodes[j], nodes[i]
 	return
-}
-
-type Shared interface {
-	Lockers() (lockers shared.Lockers)
-	Store() (store shared.Store)
 }
 
 func listMembers(ctx context.Context, cluster Cluster, currentId string, currentName string, currentVersion versions.Version) (members Nodes, err error) {

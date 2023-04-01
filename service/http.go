@@ -24,7 +24,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/internal/commons/flags"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/systems/cpu"
@@ -130,7 +129,7 @@ type HandlersOptions struct {
 	Log        logs.Logger
 	Config     configures.Config
 	Discovery  EndpointDiscovery
-	Running    *flags.Flag
+	Status     *Status
 }
 
 func NewHttpHandlers(options HandlersOptions) (handlers *HttpHandlers, err errors.CodeError) {
@@ -144,7 +143,7 @@ func NewHttpHandlers(options HandlersOptions) (handlers *HttpHandlers, err error
 		discovery:     options.Discovery,
 		handlers:      make([]HttpHandler, 0, 1),
 		interceptors:  make([]HttpInterceptor, 0, 1),
-		running:       options.Running,
+		status:        options.Status,
 		counter:       sync.WaitGroup{},
 		group:         singleflight.Group{},
 		requestCounts: int64(0),
@@ -160,7 +159,7 @@ type HttpHandlers struct {
 	log           logs.Logger
 	config        configures.Config
 	discovery     EndpointDiscovery
-	running       *flags.Flag
+	status        *Status
 	handlers      []HttpHandler
 	interceptors  []HttpInterceptor
 	counter       sync.WaitGroup
@@ -239,7 +238,7 @@ func (handlers *HttpHandlers) Handle(writer http.ResponseWriter, request *http.R
 	writer.Header().Set(httpAppIdHeader, handlers.appId)
 	writer.Header().Set(httpAppNameHeader, handlers.appName)
 	writer.Header().Set(httpAppVersionHeader, handlers.appVersion.String())
-	if handlers.running.IsOff() {
+	if handlers.status.Closed() {
 		writer.Header().Set(httpConnectionHeader, httpCloseHeader)
 		writer.Header().Set(httpContentType, httpContentTypeJson)
 		writer.WriteHeader(http.StatusRequestTimeout)
@@ -248,7 +247,7 @@ func (handlers *HttpHandlers) Handle(writer http.ResponseWriter, request *http.R
 		handlers.counter.Done()
 		return
 	}
-	if handlers.running.IsHalfOn() {
+	if handlers.status.Starting() {
 		writer.Header().Set(httpResponseRetryAfter, "30")
 		writer.Header().Set(httpContentType, httpContentTypeJson)
 		writer.WriteHeader(http.StatusTooEarly)
@@ -315,12 +314,11 @@ func (handlers *HttpHandlers) handleApplication(writer http.ResponseWriter, requ
 		)
 		v, _, _ := handlers.group.Do(statsKey, func() (v interface{}, err error) {
 			stat := &applicationStats{
-				Id:       handlers.appId,
-				Name:     handlers.appName,
-				Running:  handlers.running.IsOn(),
-				Requests: uint64(atomic.LoadInt64(&handlers.requestCounts)),
-				Mem:      nil,
-				CPU:      nil,
+				Id:      handlers.appId,
+				Name:    handlers.appName,
+				Running: handlers.status.Starting() || handlers.status.Serving(),
+				Mem:     nil,
+				CPU:     nil,
 			}
 			mem, memErr := memory.Stats()
 			if memErr == nil {

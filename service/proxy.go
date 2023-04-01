@@ -269,6 +269,10 @@ func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request)
 		配置内容为upgrade的类型。
 		配置里再增加malloc，即read buffer size，必须是K的整数
 	*/
+	// todo: BufferPool try use caches.malloc_heap and mmap 尝试，可以用，因为它为空时，创建了buf = make([]byte, 32*1024)，所以新malloc的参数是多少K，最小4k。
+	/*
+		但是会有锁，一般是预分配，但是也不知道要分配多少，所以改用pool
+	*/
 	ctx := r.Context()
 	// wrap registrations to ReverseProxy
 	ctx = context.WithValue(ctx, proxyContextKey, 1)
@@ -278,7 +282,7 @@ func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request)
 		Transport:      nil, // dialer return Transport (fasthttp，自己实现，就map request to requestCTX，然后client调用)
 		FlushInterval:  0,
 		ErrorLog:       nil,
-		BufferPool:     nil, // todo try use caches.malloc_heap and mmap 尝试，可以用，因为它为空时，创建了buf = make([]byte, 32*1024)，所以新malloc的参数是多少K，最小4k。
+		BufferPool:     nil,
 		ModifyResponse: nil,
 		ErrorHandler:   nil,
 	}

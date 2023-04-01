@@ -20,6 +20,7 @@ package caches
 
 import (
 	"fmt"
+	"github.com/aacfactory/errors"
 	"sync"
 	"unsafe"
 
@@ -38,7 +39,7 @@ func getChunk() []byte {
 	if len(freeChunks) == 0 {
 		data, err := unix.Mmap(-1, 0, chunkSize*chunksPerAlloc, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_ANON|unix.MAP_PRIVATE)
 		if err != nil {
-			panic(fmt.Errorf("cannot allocate %d bytes via mmap: %s", chunkSize*chunksPerAlloc, err))
+			panic(fmt.Errorf("%+v", errors.Warning(fmt.Sprintf("fns: cannot allocate %d bytes via mmap", chunkSize*chunksPerAlloc)).WithCause(err)))
 		}
 		for len(data) > 0 {
 			p := (*[chunkSize]byte)(unsafe.Pointer(&data[0]))

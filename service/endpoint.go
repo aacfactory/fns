@@ -388,7 +388,7 @@ type Endpoints struct {
 	deployedCHS              *deployed
 	registrations            *Registrations
 	transport                Transport
-	transportHandlers        *TransportHandlers
+	transportHandlers        *transportHandlers
 	cluster                  Cluster
 	clusterNodeFetchInterval time.Duration
 	clusterProxyAddress      string

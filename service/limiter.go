@@ -38,6 +38,7 @@ type RateLimitCounterOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
+	AppStatus  *Status
 	Log        logs.Logger
 	Config     configures.Config
 	Discovery  EndpointDiscovery
@@ -73,6 +74,7 @@ type rateLimitMiddleware struct {
 	appId      string
 	appName    string
 	appVersion versions.Version
+	appStatus  *Status
 	log        logs.Logger
 	config     configures.Config
 	discovery  EndpointDiscovery
@@ -111,6 +113,7 @@ func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions)
 		AppId:      middleware.appId,
 		AppName:    middleware.appName,
 		AppVersion: middleware.appVersion,
+		AppStatus:  middleware.appStatus,
 		Log:        middleware.log.With("counter", middleware.counter.Name()),
 		Config:     counterConfig,
 		Discovery:  middleware.discovery,
@@ -253,6 +256,4 @@ func (counter *rateLimitCounter) preflight(key string) string {
 	return fmt.Sprintf("%s:%d", key, time.Now().Truncate(counter.window).Unix())
 }
 
-func (counter *rateLimitCounter) Close() {
-
-}
+func (counter *rateLimitCounter) Close() {}

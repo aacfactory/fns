@@ -65,7 +65,7 @@ const (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func newTransportOptions(rt *Runtime, config *HttpConfig, log logs.Logger, handler http.Handler) (opt TransportOptions, err error) {
+func newTransportOptions(config *HttpConfig, log logs.Logger, handler http.Handler) (opt TransportOptions, err error) {
 	log = log.With("fns", "transport")
 	opt = TransportOptions{
 		Port:      80,
@@ -73,7 +73,6 @@ func newTransportOptions(rt *Runtime, config *HttpConfig, log logs.Logger, handl
 		ClientTLS: nil,
 		Handler:   handler,
 		Log:       log,
-		Runtime:   rt,
 		Options:   nil,
 	}
 	if config == nil {
@@ -123,7 +122,6 @@ type TransportOptions struct {
 	ClientTLS *tls.Config
 	Handler   http.Handler
 	Log       logs.Logger
-	Runtime   *Runtime
 	Options   configures.Config
 }
 
@@ -355,12 +353,8 @@ func (srv *fastHttpTransport) Build(options TransportOptions) (err error) {
 
 	reduceMemoryUsage := opt.ReduceMemoryUsage
 
-	adaptor := &fastHttpTransportHandlerAdaptor{
-		runtime: options.Runtime,
-	}
-
 	srv.server = &fasthttp.Server{
-		Handler:                            adaptor.Handler(options.Handler),
+		Handler:                            fastHttpTransportHandlerAdaptor(options.Handler),
 		ErrorHandler:                       fastHttpErrorHandler,
 		Name:                               "",
 		Concurrency:                        0,
@@ -528,11 +522,7 @@ func fastHttpErrorHandler(ctx *fasthttp.RequestCtx, err error) {
 	ctx.SetBody(p)
 }
 
-type fastHttpTransportHandlerAdaptor struct {
-	runtime *Runtime
-}
-
-func (adaptor *fastHttpTransportHandlerAdaptor) Handler(h http.Handler) fasthttp.RequestHandler {
+func fastHttpTransportHandlerAdaptor(h http.Handler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var r http.Request
 		if err := convertFastHttpRequestToHttpRequest(ctx, &r, true); err != nil {
@@ -545,7 +535,7 @@ func (adaptor *fastHttpTransportHandlerAdaptor) Handler(h http.Handler) fasthttp
 		}
 
 		w := netHTTPResponseWriter{w: ctx.Response.BodyWriter()}
-		h.ServeHTTP(&w, r.WithContext(adaptor.runtime.SetIntoContext(ctx)))
+		h.ServeHTTP(&w, r.WithContext(ctx))
 
 		ctx.SetStatusCode(w.StatusCode())
 		haveContentType := false

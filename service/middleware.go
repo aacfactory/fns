@@ -20,9 +20,9 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/internal/commons/flags"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/rs/cors"
 	"github.com/valyala/bytebufferpool"
 	"net"
 	"net/http"
@@ -36,6 +36,7 @@ type TransportMiddlewareOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
+	AppStatus  *Status
 	Log        logs.Logger
 	Config     configures.Config
 	Discovery  EndpointDiscovery
@@ -49,44 +50,31 @@ type TransportMiddleware interface {
 	Close()
 }
 
-type TransportMiddlewaresOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppRunning *flags.Flag
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
+type transportMiddlewaresOptions struct {
+	Runtime *Runtime
+	Cors    cors.Cors
+	Config  configures.Config
 }
 
-func newTransportMiddlewares(options TransportMiddlewaresOptions) *TransportMiddlewares {
+func newTransportMiddlewares(options transportMiddlewaresOptions) *transportMiddlewares {
 	middlewares := make([]TransportMiddleware, 0, 1)
-	middlewares = append(middlewares, newTransportApplicationMiddleware(options.AppRunning))
-	return &TransportMiddlewares{
-		appId:       options.AppId,
-		appName:     options.AppName,
-		appVersion:  options.AppVersion,
-		log:         options.Log.With("transports", "middlewares"),
+	middlewares = append(middlewares, newTransportApplicationMiddleware(options.Runtime.status))
+	return &transportMiddlewares{
 		config:      options.Config,
-		discovery:   options.Discovery,
-		shared:      options.Shared,
+		runtime:     options.Runtime,
+		cors:        options.Cors,
 		middlewares: make([]TransportMiddleware, 0, 1),
 	}
 }
 
-type TransportMiddlewares struct {
-	appId       string
-	appName     string
-	appVersion  versions.Version
-	log         logs.Logger
+type transportMiddlewares struct {
 	config      configures.Config
-	discovery   EndpointDiscovery
-	shared      Shared
+	runtime     *Runtime
+	cors        cors.Cors
 	middlewares []TransportMiddleware
 }
 
-func (middlewares *TransportMiddlewares) Append(middleware TransportMiddleware) (err error) {
+func (middlewares *transportMiddlewares) Append(middleware TransportMiddleware) (err error) {
 	if middleware == nil {
 		return
 	}
@@ -107,13 +95,14 @@ func (middlewares *TransportMiddlewares) Append(middleware TransportMiddleware) 
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
 	buildErr := middleware.Build(TransportMiddlewareOptions{
-		AppId:      middlewares.appId,
-		AppName:    middlewares.appName,
-		AppVersion: middlewares.appVersion,
-		Log:        middlewares.log.With("middleware", name),
+		AppId:      middlewares.runtime.AppId(),
+		AppName:    middlewares.runtime.AppName(),
+		AppVersion: middlewares.runtime.AppVersion(),
+		AppStatus:  middlewares.runtime.AppStatus(),
+		Log:        middlewares.runtime.log.With("transports", "middlewares").With("middleware", name),
 		Config:     config,
-		Discovery:  middlewares.discovery,
-		Shared:     middlewares.shared,
+		Discovery:  middlewares.runtime.Discovery(),
+		Shared:     middlewares.runtime.Shared(),
 	})
 	if buildErr != nil {
 		err = errors.Warning("append middleware failed").WithCause(buildErr).WithMeta("middleware", name)
@@ -123,11 +112,12 @@ func (middlewares *TransportMiddlewares) Append(middleware TransportMiddleware) 
 	return
 }
 
-func (middlewares *TransportMiddlewares) Wrap(handler http.Handler) http.Handler {
+func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) http.Handler {
+	var handler http.Handler = handlers
 	for i := len(middlewares.middlewares) - 1; i > -1; i-- {
 		handler = middlewares.middlewares[i].Handler(handler)
 	}
-	return newBufferResponseMiddleware(handler)
+	return middlewares.cors.Handler(newRuntimeMiddleware(middlewares.runtime, handler))
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -150,8 +140,8 @@ func (r *responseWriter) WriteHeader(statusCode int) {
 	r.status = statusCode
 }
 
-func newBufferResponseMiddleware(handler http.Handler) http.Handler {
-	return &bufferResponseMiddleware{
+func newRuntimeMiddleware(runtime *Runtime, handler http.Handler) http.Handler {
+	return &runtimeMiddleware{
 		pool: sync.Pool{
 			New: func() any {
 				return &responseWriter{
@@ -161,16 +151,18 @@ func newBufferResponseMiddleware(handler http.Handler) http.Handler {
 				}
 			},
 		},
-		next: handler,
+		runtime: runtime,
+		next:    handler,
 	}
 }
 
-type bufferResponseMiddleware struct {
-	pool sync.Pool
-	next http.Handler
+type runtimeMiddleware struct {
+	pool    sync.Pool
+	runtime *Runtime
+	next    http.Handler
 }
 
-func (middleware *bufferResponseMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (middleware *runtimeMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var bw *responseWriter
 	got := middleware.pool.Get()
 	if got == nil {
@@ -190,6 +182,7 @@ func (middleware *bufferResponseMiddleware) ServeHTTP(w http.ResponseWriter, r *
 	}
 	bw.header = http.Header{}
 	bw.buf = bytebufferpool.Get()
+	r = r.WithContext(middleware.runtime.SetIntoContext(r.Context()))
 	middleware.next.ServeHTTP(bw, r)
 	if bw.header != nil && len(bw.header) > 0 {
 		for k, vv := range bw.header {
@@ -228,12 +221,12 @@ const (
 	transportApplicationMiddlewareName = "application"
 )
 
-func newTransportApplicationMiddleware(appRunning *flags.Flag) *transportApplicationMiddleware {
+func newTransportApplicationMiddleware(status *Status) *transportApplicationMiddleware {
 	return &transportApplicationMiddleware{
 		appId:        "",
 		appName:      "",
 		appVersion:   versions.Version{},
-		appRunning:   appRunning,
+		appStatus:    status,
 		launchAT:     time.Time{},
 		statsEnabled: false,
 		counter:      sync.WaitGroup{},
@@ -244,7 +237,7 @@ type transportApplicationMiddleware struct {
 	appId          string
 	appName        string
 	appVersion     versions.Version
-	appRunning     *flags.Flag
+	appStatus      *Status
 	launchAT       time.Time
 	statsEnabled   bool
 	latencyEnabled bool
@@ -277,14 +270,14 @@ func (middleware *transportApplicationMiddleware) Build(options TransportMiddlew
 
 func (middleware *transportApplicationMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if middleware.appRunning.IsOff() {
+		if middleware.appStatus.Closed() {
 			w.Header().Set(httpConnectionHeader, httpCloseHeader)
 			w.WriteHeader(http.StatusServiceUnavailable)
 			p, _ := json.Marshal(ErrUnavailable)
 			_, _ = w.Write(p)
 			return
 		}
-		if middleware.appRunning.IsHalfOn() {
+		if middleware.appStatus.Starting() {
 			w.Header().Set(httpResponseRetryAfter, "10")
 			w.WriteHeader(http.StatusTooEarly)
 			p, _ := json.Marshal(ErrTooEarly)

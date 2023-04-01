@@ -37,6 +37,7 @@ type TransportHandlerOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
+	AppStatus  *Status
 	Log        logs.Logger
 	Config     configures.Config
 	Discovery  EndpointDiscovery
@@ -51,44 +52,28 @@ type TransportHandler interface {
 	Close()
 }
 
-type TransportHandlersOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppStatus  *Status
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
+type transportHandlersOptions struct {
+	Runtime *Runtime
+	Config  configures.Config
 }
 
-func newTransportHandlers(options TransportHandlersOptions) *TransportHandlers {
+func newTransportHandlers(options transportHandlersOptions) *transportHandlers {
 	handlers := make([]TransportHandler, 0, 1)
-	handlers = append(handlers, newTransportApplicationHandler(options.AppStatus))
-	return &TransportHandlers{
-		appId:      options.AppId,
-		appName:    options.AppName,
-		appVersion: options.AppVersion,
-		log:        options.Log.With("transports", "handlers"),
-		config:     options.Config,
-		discovery:  options.Discovery,
-		shared:     options.Shared,
-		handlers:   handlers,
+	handlers = append(handlers, newTransportApplicationHandler())
+	return &transportHandlers{
+		runtime:  options.Runtime,
+		config:   options.Config,
+		handlers: handlers,
 	}
 }
 
-type TransportHandlers struct {
-	appId      string
-	appName    string
-	appVersion versions.Version
-	log        logs.Logger
-	config     configures.Config
-	discovery  EndpointDiscovery
-	shared     Shared
-	handlers   []TransportHandler
+type transportHandlers struct {
+	runtime  *Runtime
+	config   configures.Config
+	handlers []TransportHandler
 }
 
-func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) {
+func (handlers *transportHandlers) Append(handler TransportHandler) (err error) {
 	if handler == nil {
 		return
 	}
@@ -109,13 +94,14 @@ func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) 
 		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 	}
 	buildErr := handler.Build(TransportHandlerOptions{
-		AppId:      handlers.appId,
-		AppName:    handlers.appName,
-		AppVersion: handlers.appVersion,
-		Log:        handlers.log.With("handler", name),
+		AppId:      handlers.runtime.AppId(),
+		AppName:    handlers.runtime.AppName(),
+		AppVersion: handlers.runtime.AppVersion(),
+		AppStatus:  handlers.runtime.AppStatus(),
+		Log:        handlers.runtime.RootLog().With("transports", "handlers").With("handler", name),
 		Config:     config,
-		Discovery:  handlers.discovery,
-		Shared:     handlers.shared,
+		Discovery:  handlers.runtime.discovery,
+		Shared:     handlers.runtime.shared,
 	})
 	if buildErr != nil {
 		err = errors.Warning("append handler failed").WithCause(buildErr).WithMeta("handler", name)
@@ -125,7 +111,7 @@ func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) 
 	return
 }
 
-func (handlers *TransportHandlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (handlers *transportHandlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handled := false
 	for _, handler := range handlers.handlers {
 		if accepted := handler.Accept(r); accepted {
@@ -142,7 +128,7 @@ func (handlers *TransportHandlers) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (handlers *TransportHandlers) Close() {
+func (handlers *transportHandlers) Close() {
 	for _, handler := range handlers.handlers {
 		handler.Close()
 	}
@@ -169,12 +155,12 @@ type cpuOccupancy struct {
 	Cores cpu.CPU  `json:"cores"`
 }
 
-func newTransportApplicationHandler(status *Status) *transportApplicationHandler {
+func newTransportApplicationHandler() *transportApplicationHandler {
 	return &transportApplicationHandler{
 		appId:        "",
 		appName:      "",
 		appVersion:   versions.Version{},
-		status:       status,
+		appStatus:    nil,
 		launchAT:     time.Time{},
 		statsEnabled: false,
 		group:        singleflight.Group{},
@@ -185,7 +171,7 @@ type transportApplicationHandler struct {
 	appId        string
 	appName      string
 	appVersion   versions.Version
-	status       *Status
+	appStatus    *Status
 	launchAT     time.Time
 	statsEnabled bool
 	group        singleflight.Group
@@ -200,6 +186,7 @@ func (handler *transportApplicationHandler) Build(options TransportHandlerOption
 	handler.appId = options.AppId
 	handler.appName = options.AppName
 	handler.appVersion = options.AppVersion
+	handler.appStatus = options.AppStatus
 	handler.launchAT = time.Now()
 	_, statsErr := options.Config.Get("statsEnable", &handler.statsEnabled)
 	if statsErr != nil {
@@ -236,7 +223,7 @@ func (handler *transportApplicationHandler) ServeHTTP(w http.ResponseWriter, r *
 			stat := &applicationStats{
 				Id:      handler.appId,
 				Name:    handler.appName,
-				Running: handler.status.Starting() || handler.status.Serving(),
+				Running: handler.appStatus.Starting() || handler.appStatus.Serving(),
 				Mem:     nil,
 				CPU:     nil,
 			}

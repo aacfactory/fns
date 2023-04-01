@@ -32,7 +32,6 @@ import (
 	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
-	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -631,7 +630,6 @@ func (e *Endpoints) fetchRegistrations() {
 
 var (
 	ErrServiceOverload = errors.Unavailable("fns: service is overload").WithMeta("fns", "overload")
-	ErrRequestOverload = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request")
 )
 
 type Endpoint interface {
@@ -665,6 +663,8 @@ func (e *endpoint) Document() (document *documents.Document) {
 }
 
 func (e *endpoint) Request(ctx context.Context, r Request) (future Future) {
+	// todo with runtime move into http server base context
+	// todo fasthttp rewrite fasthttpadaptor.NewFastHTTPHandler(options.Handler), set ctx with runtime
 	ctx = withRuntime(ctx, e.rt)
 	ctx = withTracer(ctx, r.Id())
 	ctx = withRequest(ctx, r)

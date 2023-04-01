@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"golang.org/x/sync/singleflight"
@@ -59,19 +58,17 @@ func (barrier *sfgBarrier) Forget(_ context.Context, key string) {
 	barrier.group.Forget(key)
 }
 
-func clusterBarrier(store shared.Store, lockers shared.Lockers, resultTTL time.Duration) Barrier {
+func clusterBarrier(shared Shared, resultTTL time.Duration) Barrier {
 	return &sharedBarrier{
 		group:     singleflight.Group{},
-		lockers:   lockers,
-		store:     store,
+		shared:    shared,
 		resultTTL: resultTTL,
 	}
 }
 
 type sharedBarrier struct {
 	group     singleflight.Group
-	lockers   shared.Lockers
-	store     shared.Store
+	shared    Shared
 	resultTTL time.Duration
 }
 
@@ -79,7 +76,7 @@ func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (res
 	var doErr error
 	result, doErr, _ = barrier.group.Do(key, func() (v interface{}, err error) {
 		barrierKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s", key))
-		locker, getLockerErr := barrier.lockers.Acquire(ctx, barrierKey, 2*time.Second)
+		locker, getLockerErr := barrier.shared.Lockers().Acquire(ctx, barrierKey, 2*time.Second)
 		if getLockerErr != nil {
 			err = errors.Warning("fns: shared barrier execute failed").WithCause(getLockerErr)
 			return
@@ -90,7 +87,7 @@ func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (res
 			return
 		}
 		resultKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s/result", key))
-		cached, has, getErr := barrier.store.Get(ctx, resultKey)
+		cached, has, getErr := barrier.shared.Store().Get(ctx, resultKey)
 		if getErr != nil {
 			_ = locker.Unlock(ctx)
 			err = errors.Warning("fns: shared barrier execute failed").WithCause(getErr)
@@ -137,7 +134,7 @@ func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (res
 		}
 		cached = rb.Bytes()
 		bytebufferpool.Put(rb)
-		_ = barrier.store.SetWithTTL(ctx, resultKey, cached, barrier.resultTTL)
+		_ = barrier.shared.Store().SetWithTTL(ctx, resultKey, cached, barrier.resultTTL)
 		_ = locker.Unlock(ctx)
 		return
 	})
@@ -150,7 +147,7 @@ func (barrier *sharedBarrier) Do(ctx context.Context, key string, fn func() (res
 func (barrier *sharedBarrier) Forget(ctx context.Context, key string) {
 	barrier.group.Forget(key)
 	barrierKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s", key))
-	_ = barrier.store.Remove(ctx, barrierKey)
+	_ = barrier.shared.Store().Remove(ctx, barrierKey)
 	resultKey := bytex.FromString(fmt.Sprintf("fns/barrier/%s/result", key))
-	_ = barrier.store.Remove(ctx, resultKey)
+	_ = barrier.shared.Store().Remove(ctx, resultKey)
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/aacfactory/fns/service/internal/logger"
 	"github.com/aacfactory/fns/service/internal/procs"
 	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/shared"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"strings"
@@ -115,8 +114,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 
 	// cluster
 	var cluster Cluster
-	var sharedStore shared.Store
-	var sharedLockers shared.Lockers
+	var shared Shared
 	var barrier Barrier
 	clusterFetchMembersInterval := time.Duration(0)
 	clusterDevMode := false
@@ -164,8 +162,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			return
 		}
 		// cluster <<<
-		sharedStore = cluster.Shared().Store()
-		sharedLockers = cluster.Shared().Lockers()
+		shared = cluster.Shared()
 		if config.Cluster.Shared != nil {
 			if config.Cluster.Shared.BarrierDisabled {
 				barrier = defaultBarrier()
@@ -174,11 +171,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 				if config.Cluster.Shared.BarrierTTLMilliseconds > 0 {
 					barrierTTL = time.Duration(config.Cluster.Shared.BarrierTTLMilliseconds) * time.Millisecond
 				}
-				barrier = clusterBarrier(sharedStore, sharedLockers, barrierTTL)
+				barrier = clusterBarrier(shared, barrierTTL)
 			}
 		}
 	} else {
-		// shared store >>>
+		// shared >>>
 		sharedMemSizeStr := strings.TrimSpace(runtimeConfig.LocalSharedStoreCacheSize)
 		if sharedMemSizeStr == "" {
 			sharedMemSizeStr = "64M"
@@ -188,15 +185,12 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
 			return
 		}
-		sharedStore, err = shared.LocalStore(int64(sharedMemSize))
+		shared, err = newLocalShared(int64(sharedMemSize))
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err)
 			return
 		}
-		// shared store <<<
-		// shared lockers >>>
-		sharedLockers = shared.LocalLockers()
-		// shared lockers <<<
+		// shared <<<
 		// barrier >>>
 		barrier = defaultBarrier()
 		// barrier <<<
@@ -208,18 +202,19 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	// endpoints
 	v = &Endpoints{
-		rt: &runtimes{
-			appId:         options.AppId,
-			appName:       options.AppName,
-			appVersion:    options.AppVersion,
-			running:       flags.New(false),
-			log:           log,
-			worker:        worker,
-			discovery:     nil,
-			barrier:       barrier,
-			sharedLockers: sharedLockers,
-			sharedStore:   sharedStore,
-			signer:        secret.NewSigner(bytex.FromString(secretKey)),
+		rt: &Runtime{
+			appId:      options.AppId,
+			appName:    options.AppName,
+			appVersion: options.AppVersion,
+			status: &Status{
+				flag: flags.New(false),
+			},
+			log:       log,
+			worker:    worker,
+			discovery: nil,
+			barrier:   barrier,
+			shared:    shared,
+			signer:    secret.NewSigner(bytex.FromString(secretKey)),
 		},
 		config:                   options.Config,
 		autoMaxProcs:             goprocs,
@@ -273,7 +268,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		Log:        v.rt.log.With("http", "handlers"),
 		Config:     handlersConfig,
 		Discovery:  v,
-		Running:    v.rt.running,
+		Status:     v.rt.status,
 	})
 	if handlersErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(handlersErr)
@@ -385,7 +380,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 
 type Endpoints struct {
 	log                      logs.Logger
-	rt                       *runtimes
+	rt                       *Runtime
 	autoMaxProcs             *procs.AutoMaxProcs
 	handleTimeout            time.Duration
 	config                   configures.Config
@@ -488,27 +483,27 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 }
 
 func (e *Endpoints) Listen(ctx context.Context) (err error) {
-	e.rt.running.HalfOn()
+	e.rt.status.flag.HalfOn()
 	e.autoMaxProcs.Enable()
 	e.deployedCHS.publish(e.deployed)
 	// cluster join
 	if e.cluster != nil {
 		joinErr := e.cluster.Join(ctx)
 		if joinErr != nil {
-			e.rt.running.Off()
+			e.rt.status.flag.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
 			return
 		}
 		nodes, nodesErr := listMembers(ctx, e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
 		if nodesErr != nil {
-			e.rt.running.Off()
+			e.rt.status.flag.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints get nodes from cluster failed")).WithCause(nodesErr)
 			return
 		}
 		// registrations
 		mergeErr := e.registrations.MergeNodes(nodes)
 		if mergeErr != nil {
-			e.rt.running.Off()
+			e.rt.status.flag.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
 			return
 		}
@@ -527,7 +522,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	case <-time.After(1 * time.Second):
 		break
 	case httpErr := <-httpListenErrCh:
-		e.rt.running.Off()
+		e.rt.status.flag.Off()
 		err = errors.Warning("fns: endpoints listen failed").WithCause(httpErr)
 		return
 	}
@@ -549,32 +544,32 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 					errCh <- lnErr
 				}
 			}
-		}(withRuntime(context.TODO(), e.rt), ln, serviceListenErrCh)
+		}(e.rt.WithContext(context.TODO()), ln, serviceListenErrCh)
 	}
 	if lns > 0 {
 		select {
 		case serviceListenErr := <-serviceListenErrCh:
 			atomic.AddInt64(&closed, 1)
-			e.rt.running.Off()
+			e.rt.status.flag.Off()
 			err = errors.Warning("fns: endpoints listen failed").WithCause(serviceListenErr)
 			return
 		case <-time.After(time.Duration(lns) * time.Second):
 			break
 		}
 	}
-	e.rt.running.On()
+	e.rt.status.flag.On()
 	return
 }
 
 func (e *Endpoints) Running() (ok bool) {
-	ok = e.rt.running.IsOn()
+	ok = !e.rt.status.Closed()
 	return
 }
 
 func (e *Endpoints) Close(ctx context.Context) {
 	e.closeCh <- struct{}{}
 	close(e.closeCh)
-	e.rt.running.Off()
+	e.rt.status.flag.Off()
 	if e.cluster != nil {
 		_ = e.cluster.Leave(ctx)
 	}
@@ -643,7 +638,7 @@ type Endpoint interface {
 type endpoint struct {
 	handleTimeout time.Duration
 	svc           Service
-	rt            *runtimes
+	rt            *Runtime
 	pool          sync.Pool
 }
 
@@ -665,7 +660,6 @@ func (e *endpoint) Document() (document *documents.Document) {
 func (e *endpoint) Request(ctx context.Context, r Request) (future Future) {
 	// todo with runtime move into http server base context
 	// todo fasthttp rewrite fasthttpadaptor.NewFastHTTPHandler(options.Handler), set ctx with runtime
-	ctx = withRuntime(ctx, e.rt)
 	ctx = withTracer(ctx, r.Id())
 	ctx = withRequest(ctx, r)
 	promise, fr := NewFuture()

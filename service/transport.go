@@ -92,7 +92,7 @@ type TransportHandlersOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
-	AppRunning *flags.Flag
+	AppStatus  *Status
 	Log        logs.Logger
 	Config     configures.Config
 	Discovery  EndpointDiscovery
@@ -101,7 +101,7 @@ type TransportHandlersOptions struct {
 
 func newTransportHandlers(options TransportHandlersOptions) *TransportHandlers {
 	handlers := make([]TransportHandler, 0, 1)
-	handlers = append(handlers, newTransportApplicationHandler(options.AppRunning))
+	handlers = append(handlers, newTransportApplicationHandler(options.AppStatus))
 	return &TransportHandlers{
 		appId:      options.AppId,
 		appName:    options.AppName,
@@ -589,7 +589,7 @@ const (
 type applicationStats struct {
 	Id      string         `json:"id"`
 	Name    string         `json:"name"`
-	Running int64          `json:"running"`
+	Running bool           `json:"running"`
 	Mem     *memory.Memory `json:"mem"`
 	CPU     *cpuOccupancy  `json:"cpu"`
 }
@@ -601,12 +601,12 @@ type cpuOccupancy struct {
 	Cores cpu.CPU  `json:"cores"`
 }
 
-func newTransportApplicationHandler(running *flags.Flag) *transportApplicationHandler {
+func newTransportApplicationHandler(status *Status) *transportApplicationHandler {
 	return &transportApplicationHandler{
 		appId:        "",
 		appName:      "",
 		appVersion:   versions.Version{},
-		appRunning:   running,
+		status:       status,
 		launchAT:     time.Time{},
 		statsEnabled: false,
 		group:        singleflight.Group{},
@@ -617,7 +617,7 @@ type transportApplicationHandler struct {
 	appId        string
 	appName      string
 	appVersion   versions.Version
-	appRunning   *flags.Flag
+	status       *Status
 	launchAT     time.Time
 	statsEnabled bool
 	group        singleflight.Group
@@ -668,7 +668,7 @@ func (handler *transportApplicationHandler) ServeHTTP(w http.ResponseWriter, r *
 			stat := &applicationStats{
 				Id:      handler.appId,
 				Name:    handler.appName,
-				Running: handler.appRunning.Value(),
+				Running: handler.status.Starting() || handler.status.Serving(),
 				Mem:     nil,
 				CPU:     nil,
 			}

@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
 	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/shared"
+	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/logs"
 	"os"
 	"time"
@@ -34,6 +34,94 @@ const (
 	contextLogKey        = "@fns_log"
 	contextComponentsKey = "@fns_service_components"
 )
+
+type Status struct {
+	flag *flags.Flag
+}
+
+func (status *Status) Starting() (ok bool) {
+	ok = status.flag.IsHalfOn()
+	return
+}
+
+func (status *Status) Serving() (ok bool) {
+	ok = status.flag.IsOn()
+	return
+}
+
+func (status *Status) Closed() (ok bool) {
+	ok = status.flag.IsOff()
+	return
+}
+
+type Runtime struct {
+	appId      string
+	appName    string
+	appVersion versions.Version
+	status     *Status
+	log        logs.Logger
+	worker     Workers
+	discovery  EndpointDiscovery
+	barrier    Barrier
+	shared     Shared
+	signer     *secret.Signer
+}
+
+func (rt *Runtime) AppId() string {
+	return rt.appId
+}
+
+func (rt *Runtime) AppName() string {
+	return rt.appName
+}
+
+func (rt *Runtime) AppVersion() versions.Version {
+	return rt.appVersion
+}
+
+func (rt *Runtime) AppStatus() *Status {
+	return rt.status
+}
+
+func (rt *Runtime) RootLog() logs.Logger {
+	return rt.log
+}
+
+func (rt *Runtime) Workers() Workers {
+	return rt.worker
+}
+
+func (rt *Runtime) Discovery() EndpointDiscovery {
+	return rt.discovery
+}
+
+func (rt *Runtime) Barrier() Barrier {
+	return rt.barrier
+}
+
+func (rt *Runtime) Shared() Shared {
+	return rt.shared
+}
+
+func (rt *Runtime) Signer() *secret.Signer {
+	return rt.signer
+}
+
+func (rt *Runtime) WithContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: runtime must with a non nil context")))
+	}
+	return context.WithValue(ctx, contextRuntimeKey, rt)
+}
+
+func GetRuntime(ctx context.Context) (v *Runtime) {
+	rt := ctx.Value(contextRuntimeKey)
+	if rt == nil {
+		return nil
+	}
+	v = rt.(*Runtime)
+	return
+}
 
 func GetLog(ctx context.Context) (log logs.Logger) {
 	log = ctx.Value(contextLogKey).(logs.Logger)
@@ -84,7 +172,7 @@ func CanAccessInternal(ctx context.Context) (ok bool) {
 }
 
 func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryGetOption) (v Endpoint, has bool) {
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		return
 	}
@@ -92,24 +180,8 @@ func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryG
 	return
 }
 
-func withRuntime(ctx context.Context, rt *runtimes) context.Context {
-	if getRuntime(ctx) != nil {
-		return ctx
-	}
-	return context.WithValue(ctx, contextRuntimeKey, rt)
-}
-
-func getRuntime(ctx context.Context) (v *runtimes) {
-	rt := ctx.Value(contextRuntimeKey)
-	if rt == nil {
-		return nil
-	}
-	v = rt.(*runtimes)
-	return
-}
-
 func GetApplication(ctx context.Context) (appId string, appName string, appVersion versions.Version) {
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		return
 	}
@@ -120,7 +192,7 @@ func GetApplication(ctx context.Context) (appId string, appName string, appVersi
 }
 
 func GetBarrier(ctx context.Context) (barrier Barrier) {
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: barrier was not found")))
 		return
@@ -130,7 +202,7 @@ func GetBarrier(ctx context.Context) (barrier Barrier) {
 }
 
 func GetSigner(ctx context.Context) (signer *secret.Signer) {
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: signer was not found")))
 		return
@@ -139,24 +211,24 @@ func GetSigner(ctx context.Context) (signer *secret.Signer) {
 	return
 }
 
-func SharedStore(ctx context.Context) (store shared.Store) {
-	rt := getRuntime(ctx)
+func SharedStore(ctx context.Context) (store shareds.Store) {
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: shared store was not found")))
 		return
 	}
-	store = rt.sharedStore
+	store = rt.shared.Store()
 	return
 }
 
-func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shared.Locker, err errors.CodeError) {
-	rt := getRuntime(ctx)
+func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err errors.CodeError) {
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: shared lockers was not found")))
 		return
 	}
 	var acquireErr error
-	locker, acquireErr = rt.sharedLockers.Acquire(ctx, key, ttl)
+	locker, acquireErr = rt.shared.Lockers().Acquire(ctx, key, ttl)
 	if acquireErr != nil {
 		err = errors.ServiceError("fns: get shared locker failed").WithCause(acquireErr)
 		return
@@ -169,19 +241,19 @@ func AbortApplication() {
 }
 
 func Todo(ctx context.Context, endpoints *Endpoints) context.Context {
-	return withRuntime(ctx, endpoints.rt)
+	return endpoints.rt.WithContext(ctx)
 }
 
 func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: there is no application runtime")))
 		return
 	}
 	ch := make(chan struct{}, 1)
-	go func(rt *runtimes, ch chan struct{}) {
+	go func(rt *Runtime, ch chan struct{}) {
 		for {
-			if ctx.Err() != nil || rt.running.IsOn() {
+			if ctx.Err() != nil || !rt.status.Closed() {
 				ch <- struct{}{}
 				close(ch)
 				break
@@ -191,18 +263,4 @@ func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {
 	}(rt, ch)
 	signal = ch
 	return
-}
-
-type runtimes struct {
-	appId         string
-	appName       string
-	appVersion    versions.Version
-	running       *flags.Flag
-	log           logs.Logger
-	worker        Workers
-	discovery     EndpointDiscovery
-	barrier       Barrier
-	sharedLockers shared.Lockers
-	sharedStore   shared.Store
-	signer        *secret.Signer
 }

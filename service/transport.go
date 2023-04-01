@@ -267,6 +267,10 @@ const (
 	fastHttpTransportName = "fasthttp"
 )
 
+func FastHttpTransport() Transport {
+	return &fastHttpTransport{}
+}
+
 type fastHttpTransport struct {
 	log     logs.Logger
 	ssl     bool

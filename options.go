@@ -38,12 +38,40 @@ var (
 		version:               versions.New(0, 0, 1),
 		proxyMode:             false,
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
-		httpEngine:            &service.FastHttp{},
-		httpHandlers:          make([]service.HttpHandler, 0, 1),
-		httpInterceptors:      make([]service.HttpInterceptor, 0, 1),
+		transportOptions:      UseTransport(service.FastHttpTransport()),
 		shutdownTimeout:       60 * time.Second,
 	}
 )
+
+func UseTransport(transport service.Transport) *TransportOptions {
+	return &TransportOptions{
+		transport:   transport,
+		handlers:    make([]service.TransportHandler, 0, 1),
+		middlewares: make([]service.TransportMiddleware, 0, 1),
+	}
+}
+
+type TransportOptions struct {
+	transport   service.Transport
+	handlers    []service.TransportHandler
+	middlewares []service.TransportMiddleware
+}
+
+func (options *TransportOptions) Append(handlers ...service.TransportHandler) *TransportOptions {
+	if handlers == nil || len(handlers) == 0 {
+		return options
+	}
+	options.handlers = append(options.handlers, handlers...)
+	return options
+}
+
+func (options *TransportOptions) Use(middlewares ...service.TransportMiddleware) *TransportOptions {
+	if middlewares == nil || len(middlewares) == 0 {
+		return options
+	}
+	options.middlewares = append(options.middlewares, middlewares...)
+	return options
+}
 
 type Options struct {
 	id                    string
@@ -51,9 +79,7 @@ type Options struct {
 	version               versions.Version
 	proxyMode             bool
 	configRetrieverOption configures.RetrieverOption
-	httpEngine            service.Http
-	httpHandlers          []service.HttpHandler
-	httpInterceptors      []service.HttpInterceptor
+	transportOptions      *TransportOptions
 	shutdownTimeout       time.Duration
 }
 
@@ -158,35 +184,35 @@ func ShutdownTimeout(timeout time.Duration) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func Server(engine service.Http) Option {
+func Transport(tr *TransportOptions) Option {
 	return func(options *Options) error {
-		if engine == nil {
-			return fmt.Errorf("customize http failed for engine is nil")
+		if tr == nil || tr.transport == nil {
+			return fmt.Errorf("customize transport failed for it is nil")
 		}
-		if engine.Name() == "" {
-			return fmt.Errorf("customize http failed for engine name is nil")
+		if tr.transport.Name() == "" {
+			return fmt.Errorf("customize transport failed for name of transport is nil")
 		}
-		options.httpEngine = engine
+		options.transportOptions = tr
 		return nil
 	}
 }
 
-func Handlers(handlers ...service.HttpHandler) Option {
+func Handlers(handlers ...service.TransportHandler) Option {
 	return func(options *Options) error {
 		if handlers == nil || len(handlers) == 0 {
 			return nil
 		}
-		options.httpHandlers = append(options.httpHandlers, handlers...)
+		options.transportOptions.Append(handlers...)
 		return nil
 	}
 }
 
-func Interceptor(interceptors ...service.HttpInterceptor) Option {
+func Middlewares(middlewares ...service.TransportMiddleware) Option {
 	return func(options *Options) error {
-		if interceptors == nil || len(interceptors) == 0 {
+		if middlewares == nil || len(middlewares) == 0 {
 			return nil
 		}
-		options.httpInterceptors = append(options.httpInterceptors, interceptors...)
+		options.transportOptions.Use(middlewares...)
 		return nil
 	}
 }

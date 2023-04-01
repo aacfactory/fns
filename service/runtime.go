@@ -107,9 +107,9 @@ func (rt *Runtime) Signer() *secret.Signer {
 	return rt.signer
 }
 
-func (rt *Runtime) WithContext(ctx context.Context) context.Context {
+func (rt *Runtime) SetIntoContext(ctx context.Context) context.Context {
 	if ctx == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: runtime must with a non nil context")))
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: runtime must be set into a non nil context")))
 	}
 	return context.WithValue(ctx, contextRuntimeKey, rt)
 }
@@ -180,7 +180,7 @@ func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryG
 	return
 }
 
-func GetApplication(ctx context.Context) (appId string, appName string, appVersion versions.Version) {
+func DataPlate(ctx context.Context) (appId string, appName string, appVersion versions.Version) {
 	rt := GetRuntime(ctx)
 	if rt == nil {
 		return
@@ -236,15 +236,11 @@ func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shar
 	return
 }
 
-func AbortApplication() {
+func Abort() {
 	os.Exit(9)
 }
 
-func Todo(ctx context.Context, endpoints *Endpoints) context.Context {
-	return endpoints.rt.WithContext(ctx)
-}
-
-func ApplicationRunning(ctx context.Context) (signal <-chan struct{}) {
+func Running(ctx context.Context) (signal <-chan struct{}) {
 	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: there is no application runtime")))

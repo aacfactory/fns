@@ -108,24 +108,6 @@ func New(options ...Option) (app Application) {
 		signalCh:        signalCh,
 		synced:          false,
 	}
-
-	if opt.httpHandlers != nil && len(opt.httpHandlers) > 0 {
-		for _, handler := range opt.httpHandlers {
-			handlerWithServices, isHandlerWithServices := handler.(service.HttpHandlerWithServices)
-			if isHandlerWithServices {
-				handlerServices := handlerWithServices.Services()
-				if handlerServices != nil && len(handlerServices) > 0 {
-					for _, handlerService := range handlerServices {
-						deployErr := app.Deploy(handlerService)
-						if deployErr != nil {
-							panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, deploy service failed").WithCause(errors.Map(deployErr))))
-							return
-						}
-					}
-				}
-			}
-		}
-	}
 	return
 }
 
@@ -187,7 +169,8 @@ func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err er
 	if hooks == nil || len(hooks) == 0 {
 		return
 	}
-	ctx = service.Todo(ctx, app.endpoints)
+
+	ctx = app.wrapCtx(ctx)
 
 	config, hasConfig := app.config.Node("hooks")
 	if !hasConfig {
@@ -221,7 +204,7 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service name or fn is invalid"))
 		return
 	}
-	ctx = service.Todo(ctx, app.endpoints)
+	ctx = app.wrapCtx(ctx)
 	endpoint, hasEndpoint := app.endpoints.Get(ctx, serviceName)
 	if !hasEndpoint {
 		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service was not found")).WithMeta("service", serviceName)
@@ -247,6 +230,10 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 		err = errors.Warning("fns: execute failed").WithCause(err).WithMeta("service", serviceName)
 	}
 	return
+}
+
+func (app *application) wrapCtx(ctx context.Context) context.Context {
+	return app.endpoints.Runtime().SetIntoContext(ctx)
 }
 
 func (app *application) Sync() (err error) {

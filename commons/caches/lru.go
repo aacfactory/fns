@@ -14,45 +14,58 @@
  * limitations under the License.
  */
 
-package lru
+package caches
 
 import (
 	"container/list"
+	"sync"
 	"time"
 )
 
-type LRU[K any, V any] struct {
-	size      int64
-	evictList *list.List
-	items     map[interface{}]*list.Element
+type ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64 | ~string
 }
 
-type lruItem[K any, V any] struct {
+type LRU[K ordered, V any] struct {
+	mu        sync.RWMutex
+	size      int64
+	evictList *list.List
+	items     map[K]*list.Element
+}
+
+type lruItem[K ordered, V any] struct {
 	key      K
 	value    V
 	expireAT time.Time
 }
 
-func New[K any, V any](size uint32) (lru *LRU[K, V]) {
+func NewLRU[K ordered, V any](size uint32) (lru *LRU[K, V]) {
 	lru = &LRU[K, V]{
+		mu:        sync.RWMutex{},
 		size:      int64(size),
 		evictList: list.New(),
-		items:     make(map[interface{}]*list.Element),
+		items:     make(map[K]*list.Element),
 	}
 	return
 }
 
 func (c *LRU[K, V]) Purge() {
+	c.mu.Lock()
 	for k := range c.items {
 		delete(c.items, k)
 	}
 	c.evictList.Init()
+	c.mu.Unlock()
 }
 
 func (c *LRU[K, V]) Add(key K, value V, ttl time.Duration) (evicted bool) {
+	c.mu.Lock()
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
 		ent.Value.(*lruItem[K, V]).value = value
+		c.mu.Unlock()
 		return
 	}
 	expireAT := time.Time{}
@@ -61,7 +74,7 @@ func (c *LRU[K, V]) Add(key K, value V, ttl time.Duration) (evicted bool) {
 	}
 	ent := &lruItem[K, V]{key, value, expireAT}
 	c.items[key] = c.evictList.PushFront(ent)
-
+	c.mu.Unlock()
 	evicted = int64(c.evictList.Len()) > c.size
 	if evicted {
 		c.removeOldest()
@@ -70,6 +83,7 @@ func (c *LRU[K, V]) Add(key K, value V, ttl time.Duration) (evicted bool) {
 }
 
 func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
+	c.mu.RLock()
 	if ent, has := c.items[key]; has {
 		c.evictList.MoveToFront(ent)
 		if ent.Value.(*lruItem[K, V]) == nil {
@@ -79,11 +93,13 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 		if item.expireAT.IsZero() {
 			value = item.value
 			ok = true
+			c.mu.RUnlock()
 			return
 		}
 		ok = item.expireAT.After(time.Now())
 		if ok {
 			value = item.value
+			c.mu.RUnlock()
 		} else {
 			c.removeElement(ent)
 		}
@@ -93,15 +109,20 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 }
 
 func (c *LRU[K, V]) Remove(key K) (present bool) {
+	c.mu.RLock()
 	if ent, ok := c.items[key]; ok {
+		c.mu.RUnlock()
 		c.removeElement(ent)
 		present = true
 		return
 	}
+	c.mu.RUnlock()
 	return
 }
 
 func (c *LRU[K, V]) Keys() []K {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	keys := make([]K, len(c.items))
 	i := 0
 	for ent := c.evictList.Back(); ent != nil; ent = ent.Prev() {
@@ -112,6 +133,8 @@ func (c *LRU[K, V]) Keys() []K {
 }
 
 func (c *LRU[K, V]) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.evictList.Len()
 }
 
@@ -128,13 +151,17 @@ func (c *LRU[K, V]) Resize(size int64) (evicted int64) {
 }
 
 func (c *LRU[K, V]) removeOldest() {
+	c.mu.RLock()
 	ent := c.evictList.Back()
+	c.mu.RUnlock()
 	if ent != nil {
 		c.removeElement(ent)
 	}
 }
 
 func (c *LRU[K, V]) removeElement(e *list.Element) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.evictList.Remove(e)
 	kv := e.Value.(*lruItem[K, V])
 	delete(c.items, kv.key)

@@ -387,8 +387,8 @@ type Endpoints struct {
 	deployed                 map[string]*endpoint
 	deployedCHS              *deployed
 	registrations            *Registrations
-	http                     Http
-	httpHandlers             *HttpHandlers
+	transport                Transport
+	transportHandlers        *TransportHandlers
 	cluster                  Cluster
 	clusterNodeFetchInterval time.Duration
 	clusterProxyAddress      string
@@ -397,6 +397,11 @@ type Endpoints struct {
 
 func (e *Endpoints) Log() (log logs.Logger) {
 	log = e.rt.log
+	return
+}
+
+func (e *Endpoints) Runtime() (rt *Runtime) {
+	rt = e.rt
 	return
 }
 
@@ -511,13 +516,13 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	}
 	// http listen
 	httpListenErrCh := make(chan error, 1)
-	go func(srv Http, ch chan error) {
+	go func(srv Transport, ch chan error) {
 		listenErr := srv.ListenAndServe()
 		if listenErr != nil {
 			ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
 			close(ch)
 		}
-	}(e.http, httpListenErrCh)
+	}(e.transport, httpListenErrCh)
 	select {
 	case <-time.After(1 * time.Second):
 		break
@@ -544,7 +549,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 					errCh <- lnErr
 				}
 			}
-		}(e.rt.WithContext(context.TODO()), ln, serviceListenErrCh)
+		}(e.rt.SetIntoContext(context.TODO()), ln, serviceListenErrCh)
 	}
 	if lns > 0 {
 		select {
@@ -576,8 +581,8 @@ func (e *Endpoints) Close(ctx context.Context) {
 	if e.registrations != nil {
 		e.registrations.Close()
 	}
-	e.httpHandlers.Close()
-	_ = e.http.Close()
+	e.transportHandlers.Close()
+	_ = e.transport.Close()
 	for _, ep := range e.deployed {
 		ep.svc.Close()
 	}
@@ -622,10 +627,6 @@ func (e *Endpoints) fetchRegistrations() {
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
-
-var (
-	ErrServiceOverload = errors.Unavailable("fns: service is overload").WithMeta("fns", "overload")
-)
 
 type Endpoint interface {
 	Name() (name string)

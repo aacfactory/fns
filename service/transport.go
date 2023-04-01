@@ -17,25 +17,20 @@
 package service
 
 import (
+	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/internal/commons/flags"
-	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"github.com/aacfactory/systems/cpu"
-	"github.com/aacfactory/systems/memory"
-	"github.com/valyala/bytebufferpool"
-	"golang.org/x/sync/singleflight"
-	"net"
+	"github.com/valyala/fasthttp"
+	"io"
 	"net/http"
-	"sort"
+	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -70,317 +65,15 @@ const (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type TransportHandlerOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
-}
-
-type TransportHandler interface {
-	Name() (name string)
-	Build(options TransportHandlerOptions) (err error)
-	Accept(r *http.Request) (ok bool)
-	http.Handler
-	Close()
-}
-
-type TransportHandlersOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppStatus  *Status
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
-}
-
-func newTransportHandlers(options TransportHandlersOptions) *TransportHandlers {
-	handlers := make([]TransportHandler, 0, 1)
-	handlers = append(handlers, newTransportApplicationHandler(options.AppStatus))
-	return &TransportHandlers{
-		appId:      options.AppId,
-		appName:    options.AppName,
-		appVersion: options.AppVersion,
-		log:        options.Log.With("transports", "handlers"),
-		config:     options.Config,
-		discovery:  options.Discovery,
-		shared:     options.Shared,
-		handlers:   handlers,
-	}
-}
-
-type TransportHandlers struct {
-	appId      string
-	appName    string
-	appVersion versions.Version
-	log        logs.Logger
-	config     configures.Config
-	discovery  EndpointDiscovery
-	shared     Shared
-	handlers   []TransportHandler
-}
-
-func (handlers *TransportHandlers) Append(handler TransportHandler) (err error) {
-	if handler == nil {
-		return
-	}
-	name := strings.TrimSpace(handler.Name())
-	if name == "" {
-		err = errors.Warning("append handler failed").WithCause(errors.Warning("one of handler has no name"))
-		return
-	}
-	pos := sort.Search(len(handlers.handlers), func(i int) bool {
-		return handlers.handlers[i].Name() == name
-	})
-	if pos < len(handlers.handlers) {
-		err = errors.Warning("append handler failed").WithCause(errors.Warning("this handle was appended")).WithMeta("handler", name)
-		return
-	}
-	config, exist := handlers.config.Node(name)
-	if !exist {
-		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
-	}
-	buildErr := handler.Build(TransportHandlerOptions{
-		AppId:      handlers.appId,
-		AppName:    handlers.appName,
-		AppVersion: handlers.appVersion,
-		Log:        handlers.log.With("handler", name),
-		Config:     config,
-		Discovery:  handlers.discovery,
-		Shared:     handlers.shared,
-	})
-	if buildErr != nil {
-		err = errors.Warning("append handler failed").WithCause(buildErr).WithMeta("handler", name)
-		return
-	}
-	handlers.handlers = append(handlers.handlers, handler)
-	return
-}
-
-func (handlers *TransportHandlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handled := false
-	for _, handler := range handlers.handlers {
-		if accepted := handler.Accept(r); accepted {
-			handler.ServeHTTP(w, r)
-			handled = true
-			break
-		}
-	}
-	if !handled {
-		w.Header().Set(httpContentType, httpContentTypeJson)
-		w.WriteHeader(http.StatusNotFound)
-		p, _ := json.Marshal(errors.NotFound("fns: no handlers accept request").WithMeta("fns", "handlers"))
-		_, _ = w.Write(p)
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type TransportMiddlewareOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
-}
-
-type TransportMiddleware interface {
-	Name() (name string)
-	Build(options TransportMiddlewareOptions) (err error)
-	Handler(next http.Handler) http.Handler
-	Close()
-}
-
-type TransportMiddlewaresOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppRunning *flags.Flag
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
-}
-
-func newTransportMiddlewares(options TransportMiddlewaresOptions) *TransportMiddlewares {
-	middlewares := make([]TransportMiddleware, 0, 1)
-	middlewares = append(middlewares, newTransportApplicationMiddleware(options.AppRunning))
-	return &TransportMiddlewares{
-		appId:       options.AppId,
-		appName:     options.AppName,
-		appVersion:  options.AppVersion,
-		log:         options.Log.With("transports", "middlewares"),
-		config:      options.Config,
-		discovery:   options.Discovery,
-		shared:      options.Shared,
-		middlewares: make([]TransportMiddleware, 0, 1),
-	}
-}
-
-type TransportMiddlewares struct {
-	appId       string
-	appName     string
-	appVersion  versions.Version
-	log         logs.Logger
-	config      configures.Config
-	discovery   EndpointDiscovery
-	shared      Shared
-	middlewares []TransportMiddleware
-}
-
-func (middlewares *TransportMiddlewares) Append(middleware TransportMiddleware) (err error) {
-	if middleware == nil {
-		return
-	}
-	name := strings.TrimSpace(middleware.Name())
-	if name == "" {
-		err = errors.Warning("append middleware failed").WithCause(errors.Warning("one of middlewares has no name"))
-		return
-	}
-	pos := sort.Search(len(middlewares.middlewares), func(i int) bool {
-		return middlewares.middlewares[i].Name() == name
-	})
-	if pos < len(middlewares.middlewares) {
-		err = errors.Warning("append middleware failed").WithCause(errors.Warning("this middleware was appended")).WithMeta("middleware", name)
-		return
-	}
-	config, exist := middlewares.config.Node(name)
-	if !exist {
-		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
-	}
-	buildErr := middleware.Build(TransportMiddlewareOptions{
-		AppId:      middlewares.appId,
-		AppName:    middlewares.appName,
-		AppVersion: middlewares.appVersion,
-		Log:        middlewares.log.With("middleware", name),
-		Config:     config,
-		Discovery:  middlewares.discovery,
-		Shared:     middlewares.shared,
-	})
-	if buildErr != nil {
-		err = errors.Warning("append middleware failed").WithCause(buildErr).WithMeta("middleware", name)
-		return
-	}
-	middlewares.middlewares = append(middlewares.middlewares, middleware)
-	return
-}
-
-func (middlewares *TransportMiddlewares) Wrap(handler http.Handler) http.Handler {
-	for i := len(middlewares.middlewares) - 1; i > -1; i-- {
-		handler = middlewares.middlewares[i].Handler(handler)
-	}
-	return newBufferResponseMiddleware(handler)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type responseWriter struct {
-	status int
-	header http.Header
-	buf    *bytebufferpool.ByteBuffer
-}
-
-func (r *responseWriter) Header() http.Header {
-	return r.header
-}
-
-func (r *responseWriter) Write(p []byte) (int, error) {
-	return r.buf.Write(p)
-}
-
-func (r *responseWriter) WriteHeader(statusCode int) {
-	r.status = statusCode
-}
-
-func newBufferResponseMiddleware(handler http.Handler) http.Handler {
-	return &bufferResponseMiddleware{
-		pool: sync.Pool{
-			New: func() any {
-				return &responseWriter{
-					status: http.StatusOK,
-					header: nil,
-					buf:    nil,
-				}
-			},
-		},
-		next: handler,
-	}
-}
-
-type bufferResponseMiddleware struct {
-	pool sync.Pool
-	next http.Handler
-}
-
-func (middleware *bufferResponseMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var bw *responseWriter
-	got := middleware.pool.Get()
-	if got == nil {
-		bw = &responseWriter{}
-	} else {
-		ok := false
-		bw, ok = got.(*responseWriter)
-		if !ok {
-			w.Header().Set(httpContentType, httpContentTypeJson)
-			w.WriteHeader(555)
-			p, _ := json.Marshal(errors.NotFound("fns: get buffer response writer from pool failed").
-				WithCause(errors.Warning("type was not matched")).
-				WithMeta("fns", "handlers"))
-			_, _ = w.Write(p)
-			return
-		}
-	}
-	bw.header = http.Header{}
-	bw.buf = bytebufferpool.Get()
-	middleware.next.ServeHTTP(bw, r)
-	if bw.header != nil && len(bw.header) > 0 {
-		for k, vv := range bw.header {
-			if vv == nil || len(vv) == 0 {
-				continue
-			}
-			for _, v := range vv {
-				w.Header().Add(k, v)
-			}
-		}
-	}
-	w.Header().Set(httpContentType, httpContentTypeJson)
-	w.WriteHeader(bw.status)
-	bodyLen := bw.buf.Len()
-	if bodyLen == 0 {
-		bytebufferpool.Put(bw.buf)
-		middleware.pool.Put(bw)
-		return
-	}
-	body := bw.buf.Bytes()
-	n := 0
-	for n < bodyLen {
-		nn, writeErr := w.Write(body[n:])
-		if writeErr != nil {
-			break
-		}
-		n += nn
-	}
-	bytebufferpool.Put(bw.buf)
-	middleware.pool.Put(bw)
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-func createTransportOptions(config *HttpConfig, log logs.Logger, handler http.Handler) (opt transports.Options, err error) {
+func newTransportOptions(rt *Runtime, config *HttpConfig, log logs.Logger, handler http.Handler) (opt TransportOptions, err error) {
 	log = log.With("fns", "transport")
-	opt = transports.Options{
+	opt = TransportOptions{
 		Port:      80,
 		ServerTLS: nil,
 		ClientTLS: nil,
 		Handler:   handler,
 		Log:       log,
+		Runtime:   rt,
 		Options:   nil,
 	}
 	if config == nil {
@@ -424,281 +117,531 @@ func createTransportOptions(config *HttpConfig, log logs.Logger, handler http.Ha
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-const (
-	transportApplicationMiddlewareName = "application"
-)
+type TransportOptions struct {
+	Port      int
+	ServerTLS *tls.Config
+	ClientTLS *tls.Config
+	Handler   http.Handler
+	Log       logs.Logger
+	Runtime   *Runtime
+	Options   configures.Config
+}
 
-func newTransportApplicationMiddleware(appRunning *flags.Flag) *transportApplicationMiddleware {
-	return &transportApplicationMiddleware{
-		appId:        "",
-		appName:      "",
-		appVersion:   versions.Version{},
-		appRunning:   appRunning,
-		launchAT:     time.Time{},
-		statsEnabled: false,
-		counter:      sync.WaitGroup{},
+type Transport interface {
+	Name() (name string)
+	Build(options TransportOptions) (err error)
+	Dialer
+	ListenAndServe() (err error)
+	io.Closer
+}
+
+type Dialer interface {
+	Dial(address string) (client Client, err error)
+}
+
+type Client interface {
+	Get(ctx context.Context, path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error)
+	Post(ctx context.Context, path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
+	Close()
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type fastHttpTransportClientOptions struct {
+	DialDualStack             bool   `json:"dialDualStack"`
+	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
+	MaxIdleConnDuration       string `json:"maxIdleConnDuration"`
+	MaxConnDuration           string `json:"maxConnDuration"`
+	MaxIdemponentCallAttempts int    `json:"maxIdemponentCallAttempts"`
+	ReadBufferSize            string `json:"readBufferSize"`
+	ReadTimeout               string `json:"readTimeout"`
+	WriteBufferSize           string `json:"writeBufferSize"`
+	WriteTimeout              string `json:"writeTimeout"`
+	MaxResponseBodySize       string `json:"maxResponseBodySize"`
+	MaxConnWaitTimeout        string `json:"maxConnWaitTimeout"`
+}
+
+type fastHttpTransportOptions struct {
+	ReadBufferSize        string                         `json:"readBufferSize"`
+	ReadTimeout           string                         `json:"readTimeout"`
+	WriteBufferSize       string                         `json:"writeBufferSize"`
+	WriteTimeout          string                         `json:"writeTimeout"`
+	MaxIdleWorkerDuration string                         `json:"maxIdleWorkerDuration"`
+	TCPKeepalive          bool                           `json:"tcpKeepalive"`
+	TCPKeepalivePeriod    string                         `json:"tcpKeepalivePeriod"`
+	MaxRequestBodySize    string                         `json:"maxRequestBodySize"`
+	ReduceMemoryUsage     bool                           `json:"reduceMemoryUsage"`
+	MaxRequestsPerConn    int                            `json:"maxRequestsPerConn"`
+	KeepHijackedConns     bool                           `json:"keepHijackedConns"`
+	StreamRequestBody     bool                           `json:"streamRequestBody"`
+	Client                fastHttpTransportClientOptions `json:"client"`
+}
+
+type fastHttpTransportClient struct {
+	ssl     bool
+	address string
+	tr      *fasthttp.Client
+}
+
+func (client *fastHttpTransportClient) Get(ctx context.Context, path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error) {
+	req := client.prepareRequest(bytex.FromString(http.MethodGet), path, header)
+	resp := fasthttp.AcquireResponse()
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		err = client.tr.DoDeadline(req, resp, deadline)
+	} else {
+		err = client.tr.Do(req, resp)
 	}
-}
-
-type transportApplicationMiddleware struct {
-	appId          string
-	appName        string
-	appVersion     versions.Version
-	appRunning     *flags.Flag
-	launchAT       time.Time
-	statsEnabled   bool
-	latencyEnabled bool
-	counter        sync.WaitGroup
-}
-
-func (middleware *transportApplicationMiddleware) Name() (name string) {
-	name = transportApplicationMiddlewareName
-	return
-}
-
-func (middleware *transportApplicationMiddleware) Build(options TransportMiddlewareOptions) (err error) {
-	middleware.appId = options.AppId
-	middleware.appName = options.AppName
-	middleware.appVersion = options.AppVersion
-	middleware.launchAT = time.Now()
-	_, statsErr := options.Config.Get("statsEnable", &middleware.statsEnabled)
-	if statsErr != nil {
-		err = errors.Warning("fns: application middleware handler build failed").WithCause(statsErr).WithMeta("middleware", middleware.Name())
+	if err != nil {
+		err = errors.Warning("fns: fasthttp client do get failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(resp)
 		return
 	}
-	_, latencyErr := options.Config.Get("latencyEnabled", &middleware.latencyEnabled)
-	if latencyErr != nil {
-		err = errors.Warning("fns: application middleware handler build failed").WithCause(latencyErr).WithMeta("middleware", middleware.Name())
-		return
-	}
-	middleware.counter = sync.WaitGroup{}
-	return
-}
-
-func (middleware *transportApplicationMiddleware) Handler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if middleware.appRunning.IsOff() {
-			w.Header().Set(httpConnectionHeader, httpCloseHeader)
-			w.WriteHeader(http.StatusServiceUnavailable)
-			p, _ := json.Marshal(errors.Unavailable("fns: application is closed").WithMeta("middleware", middleware.Name()))
-			_, _ = w.Write(p)
-			return
-		}
-		if middleware.appRunning.IsHalfOn() {
-			w.Header().Set(httpResponseRetryAfter, "10")
-			w.WriteHeader(http.StatusTooEarly)
-			p, _ := json.Marshal(errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: application is not ready, try later again").WithMeta("middleware", middleware.Name()))
-			_, _ = w.Write(p)
-			return
-		}
-		middleware.counter.Add(1)
-		// latency
-		handleBeg := time.Time{}
-		if middleware.latencyEnabled {
-			handleBeg = time.Now()
-		}
-		// deviceId
-		deviceId := strings.TrimSpace(r.Header.Get(httpDeviceIdHeader))
-		if deviceId == "" {
-			deviceId = strings.TrimSpace(r.URL.Query().Get("deviceId"))
-			if deviceId == "" {
-				if middleware.latencyEnabled {
-					w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
-				}
-				w.WriteHeader(555)
-				p, _ := json.Marshal(errors.Warning("fns: device id was required"))
-				_, _ = w.Write(p)
-				middleware.counter.Done()
-				return
-			}
-		}
-		// device ip
-		deviceIp := r.Header.Get(httpDeviceIpHeader)
-		if deviceIp == "" {
-			if trueClientIp := r.Header.Get(httpTrueClientIp); trueClientIp != "" {
-				deviceIp = trueClientIp
-			} else if realIp := r.Header.Get(httpXRealIp); realIp != "" {
-				deviceIp = realIp
-			} else if forwarded := r.Header.Get(httpXForwardedForHeader); forwarded != "" {
-				i := strings.Index(forwarded, ", ")
-				if i == -1 {
-					i = len(forwarded)
-				}
-				deviceIp = forwarded[:i]
-			} else {
-				remoteIp, _, remoteIpErr := net.SplitHostPort(r.RemoteAddr)
-				if remoteIpErr != nil {
-					remoteIp = r.RemoteAddr
-				}
-				deviceIp = remoteIp
-			}
-			r.Header.Set(httpDeviceIpHeader, deviceIp)
-		}
-		deviceIp = middleware.canonicalizeIp(deviceIp)
-		r.Header.Set(httpDeviceIpHeader, deviceIp)
-		// requestId
-		requestId := strings.TrimSpace(r.Header.Get(httpRequestIdHeader))
-		if requestId == "" {
-			requestId = strings.TrimSpace(r.URL.Query().Get("requestId"))
-			if requestId != "" {
-				r.Header.Set(httpRequestIdHeader, requestId)
-			}
-		}
-		next.ServeHTTP(w, r)
-		if middleware.latencyEnabled {
-			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
-		}
-		middleware.counter.Done()
-		return
+	status = resp.StatusCode()
+	respHeader = http.Header{}
+	resp.Header.VisitAll(func(key, value []byte) {
+		respHeader.Add(bytex.ToString(key), bytex.ToString(value))
 	})
+	respBody = resp.Body()
+	fasthttp.ReleaseRequest(req)
+	fasthttp.ReleaseResponse(resp)
+	return
 }
 
-func (middleware *transportApplicationMiddleware) Close() {
-	middleware.counter.Wait()
+func (client *fastHttpTransportClient) Post(ctx context.Context, path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error) {
+	req := client.prepareRequest(bytex.FromString(http.MethodPost), path, header)
+	if body != nil && len(body) > 0 {
+		req.SetBodyRaw(body)
+	}
+	resp := fasthttp.AcquireResponse()
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		err = client.tr.DoDeadline(req, resp, deadline)
+	} else {
+		err = client.tr.Do(req, resp)
+	}
+	if err != nil {
+		err = errors.Warning("fns: fasthttp client do post failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(resp)
+		return
+	}
+	status = resp.StatusCode()
+	respHeader = http.Header{}
+	resp.Header.VisitAll(func(key, value []byte) {
+		respHeader.Add(bytex.ToString(key), bytex.ToString(value))
+	})
+	respBody = resp.Body()
+	fasthttp.ReleaseRequest(req)
+	fasthttp.ReleaseResponse(resp)
+	return
 }
 
-func (middleware *transportApplicationMiddleware) canonicalizeIp(ip string) string {
-	isIPv6 := false
-	for i := 0; !isIPv6 && i < len(ip); i++ {
-		switch ip[i] {
-		case '.':
-			// IPv4
-			return ip
-		case ':':
-			// IPv6
-			isIPv6 = true
-			break
+func (client *fastHttpTransportClient) prepareRequest(method []byte, path string, header http.Header) (req *fasthttp.Request) {
+	req = fasthttp.AcquireRequest()
+	uri := req.URI()
+	if client.ssl {
+		uri.SetSchemeBytes(bytex.FromString("https"))
+	} else {
+		uri.SetSchemeBytes(bytex.FromString("http"))
+	}
+	uri.SetPathBytes(bytex.FromString(path))
+	uri.SetHostBytes(bytex.FromString(client.address))
+	req.Header.SetMethodBytes(method)
+	if header != nil && len(header) > 0 {
+		for k, vv := range header {
+			for _, v := range vv {
+				req.Header.Add(k, v)
+			}
 		}
 	}
-	if !isIPv6 {
-		return ip
-	}
-	ipv6 := net.ParseIP(ip)
-	if ipv6 == nil {
-		return ip
-	}
-	return ipv6.Mask(net.CIDRMask(64, 128)).String()
+	return
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
+func (client *fastHttpTransportClient) Close() {
+	client.tr.CloseIdleConnections()
+}
 
 const (
-	transportApplicationHandlerName = "application"
+	fastHttpTransportName = "fasthttp"
 )
 
-type applicationStats struct {
-	Id      string         `json:"id"`
-	Name    string         `json:"name"`
-	Running bool           `json:"running"`
-	Mem     *memory.Memory `json:"mem"`
-	CPU     *cpuOccupancy  `json:"cpu"`
+type fastHttpTransport struct {
+	log     logs.Logger
+	ssl     bool
+	address string
+	client  *fasthttp.Client
+	server  *fasthttp.Server
 }
 
-type cpuOccupancy struct {
-	Max   cpu.Core `json:"max"`
-	Min   cpu.Core `json:"min"`
-	Avg   float64  `json:"avg"`
-	Cores cpu.CPU  `json:"cores"`
-}
-
-func newTransportApplicationHandler(status *Status) *transportApplicationHandler {
-	return &transportApplicationHandler{
-		appId:        "",
-		appName:      "",
-		appVersion:   versions.Version{},
-		status:       status,
-		launchAT:     time.Time{},
-		statsEnabled: false,
-		group:        singleflight.Group{},
-	}
-}
-
-type transportApplicationHandler struct {
-	appId        string
-	appName      string
-	appVersion   versions.Version
-	status       *Status
-	launchAT     time.Time
-	statsEnabled bool
-	group        singleflight.Group
-}
-
-func (handler *transportApplicationHandler) Name() (name string) {
-	name = transportApplicationHandlerName
+func (srv *fastHttpTransport) Name() (name string) {
+	name = fastHttpTransportName
 	return
 }
 
-func (handler *transportApplicationHandler) Build(options TransportHandlerOptions) (err error) {
-	handler.appId = options.AppId
-	handler.appName = options.AppName
-	handler.appVersion = options.AppVersion
-	handler.launchAT = time.Now()
-	_, statsErr := options.Config.Get("statsEnable", &handler.statsEnabled)
-	if statsErr != nil {
-		err = errors.Warning("fns: application handler build failed").WithCause(statsErr).WithMeta("handler", handler.Name())
-		return
-	}
-	return
-}
+func (srv *fastHttpTransport) Build(options TransportOptions) (err error) {
+	srv.log = options.Log
+	srv.address = fmt.Sprintf(":%d", options.Port)
+	srv.ssl = options.ServerTLS != nil
 
-func (handler *transportApplicationHandler) Accept(r *http.Request) (ok bool) {
-	ok = r.Method == http.MethodGet && r.URL.Path == "/application/health"
-	if ok {
+	opt := &fastHttpTransportOptions{}
+	optErr := options.Options.As(opt)
+	if optErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("transport", fastHttpTransportName)
 		return
 	}
-	ok = r.Method == http.MethodGet && r.URL.Path == "/application/stats"
-	if ok {
-		return
-	}
-	return
-}
-
-func (handler *transportApplicationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && r.URL.Path == "/application/health" {
-		body := fmt.Sprintf(
-			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\", \"deviceIp\":\"%s\"}",
-			handler.appName, handler.appId, handler.appVersion.String(), handler.launchAT.Format(time.RFC3339), time.Now().Format(time.RFC3339), r.Header.Get(httpDeviceIpHeader),
-		)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(bytex.FromString(body))
-		return
-	}
-	if handler.statsEnabled && r.Method == http.MethodGet && r.URL.Path == "/application/stats" {
-		v, _, _ := handler.group.Do(handler.Name(), func() (v interface{}, err error) {
-			stat := &applicationStats{
-				Id:      handler.appId,
-				Name:    handler.appName,
-				Running: handler.status.Starting() || handler.status.Serving(),
-				Mem:     nil,
-				CPU:     nil,
-			}
-			mem, memErr := memory.Stats()
-			if memErr == nil {
-				stat.Mem = mem
-			}
-			cpus, cpuErr := cpu.Occupancy()
-			if cpuErr == nil {
-				stat.CPU = &cpuOccupancy{
-					Max:   cpus.Max(),
-					Min:   cpus.Min(),
-					Avg:   cpus.AVG(),
-					Cores: cpus,
-				}
-			}
-			v, _ = json.Marshal(stat)
+	readBufferSize := uint64(0)
+	if opt.ReadBufferSize != "" {
+		readBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.ReadBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return
-		})
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(v.([]byte))
+		}
+	}
+	readTimeout := 10 * time.Second
+	if opt.ReadTimeout != "" {
+		readTimeout, err = time.ParseDuration(strings.TrimSpace(opt.ReadTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	writeBufferSize := uint64(0)
+	if opt.WriteBufferSize != "" {
+		writeBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.WriteBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	writeTimeout := 10 * time.Second
+	if opt.WriteTimeout != "" {
+		writeTimeout, err = time.ParseDuration(strings.TrimSpace(opt.WriteTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	maxIdleWorkerDuration := time.Duration(0)
+	if opt.MaxIdleWorkerDuration != "" {
+		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxIdleWorkerDuration))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxIdleWorkerDuration must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	tcpKeepalivePeriod := time.Duration(0)
+	if opt.TCPKeepalivePeriod != "" {
+		tcpKeepalivePeriod, err = time.ParseDuration(strings.TrimSpace(opt.TCPKeepalivePeriod))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("tcpKeepalivePeriod must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+
+	maxRequestBodySize := uint64(4 * bytex.MEGABYTE)
+	if opt.MaxRequestBodySize != "" {
+		maxRequestBodySize, err = bytex.ToBytes(strings.TrimSpace(opt.MaxRequestBodySize))
+		if err != nil {
+			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxRequestBodySize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+
+	reduceMemoryUsage := opt.ReduceMemoryUsage
+
+	adaptor := &fastHttpTransportHandlerAdaptor{
+		runtime: options.Runtime,
+	}
+
+	srv.server = &fasthttp.Server{
+		Handler:                            adaptor.Handler(options.Handler),
+		ErrorHandler:                       fastHttpErrorHandler,
+		Name:                               "",
+		Concurrency:                        0,
+		ReadBufferSize:                     int(readBufferSize),
+		WriteBufferSize:                    int(writeBufferSize),
+		ReadTimeout:                        readTimeout,
+		WriteTimeout:                       writeTimeout,
+		MaxRequestsPerConn:                 opt.MaxRequestsPerConn,
+		MaxIdleWorkerDuration:              maxIdleWorkerDuration,
+		TCPKeepalivePeriod:                 tcpKeepalivePeriod,
+		MaxRequestBodySize:                 int(maxRequestBodySize),
+		DisableKeepalive:                   false,
+		TCPKeepalive:                       opt.TCPKeepalive,
+		ReduceMemoryUsage:                  reduceMemoryUsage,
+		GetOnly:                            false,
+		DisablePreParseMultipartForm:       true,
+		LogAllErrors:                       false,
+		SecureErrorLogMessage:              false,
+		DisableHeaderNamesNormalizing:      false,
+		SleepWhenConcurrencyLimitsExceeded: 10 * time.Second,
+		NoDefaultServerHeader:              true,
+		NoDefaultDate:                      false,
+		NoDefaultContentType:               false,
+		KeepHijackedConns:                  opt.KeepHijackedConns,
+		CloseOnShutdown:                    true,
+		StreamRequestBody:                  opt.StreamRequestBody,
+		ConnState:                          nil,
+		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
+		TLSConfig:                          options.ServerTLS,
+		FormValueFunc:                      nil,
+	}
+	// client
+	err = srv.buildClient(opt.Client, options.ClientTLS)
+	if err != nil {
+		err = errors.Warning("fns: fasthttp build failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
 		return
 	}
 	return
 }
 
-func (handler *transportApplicationHandler) Close() {
+func (srv *fastHttpTransport) buildClient(opt fastHttpTransportClientOptions, cliConfig *tls.Config) (err error) {
+	maxIdleWorkerDuration := time.Duration(0)
+	if opt.MaxIdleConnDuration != "" {
+		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxIdleConnDuration))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxIdleWorkerDuration must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	maxConnDuration := time.Duration(0)
+	if opt.MaxConnDuration != "" {
+		maxConnDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxConnDuration))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxConnDuration must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	readBufferSize := uint64(0)
+	if opt.ReadBufferSize != "" {
+		readBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.ReadBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	readTimeout := 10 * time.Second
+	if opt.ReadTimeout != "" {
+		readTimeout, err = time.ParseDuration(strings.TrimSpace(opt.ReadTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	writeBufferSize := uint64(0)
+	if opt.WriteBufferSize != "" {
+		writeBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.WriteBufferSize))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	writeTimeout := 10 * time.Second
+	if opt.WriteTimeout != "" {
+		writeTimeout, err = time.ParseDuration(strings.TrimSpace(opt.WriteTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	maxResponseBodySize := uint64(4 * bytex.MEGABYTE)
+	if opt.MaxResponseBodySize != "" {
+		maxResponseBodySize, err = bytex.ToBytes(strings.TrimSpace(opt.MaxResponseBodySize))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxResponseBodySize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	maxConnWaitTimeout := time.Duration(0)
+	if opt.MaxConnWaitTimeout != "" {
+		maxConnWaitTimeout, err = time.ParseDuration(strings.TrimSpace(opt.MaxConnWaitTimeout))
+		if err != nil {
+			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxConnWaitTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+	}
+	srv.client = &fasthttp.Client{
+		Name:                          "",
+		NoDefaultUserAgentHeader:      true,
+		Dial:                          nil,
+		DialDualStack:                 false,
+		TLSConfig:                     cliConfig,
+		MaxConnsPerHost:               opt.MaxConnsPerHost,
+		MaxIdleConnDuration:           maxIdleWorkerDuration,
+		MaxConnDuration:               maxConnDuration,
+		MaxIdemponentCallAttempts:     opt.MaxIdemponentCallAttempts,
+		ReadBufferSize:                int(readBufferSize),
+		WriteBufferSize:               int(writeBufferSize),
+		ReadTimeout:                   readTimeout,
+		WriteTimeout:                  writeTimeout,
+		MaxResponseBodySize:           int(maxResponseBodySize),
+		DisableHeaderNamesNormalizing: false,
+		DisablePathNormalizing:        false,
+		MaxConnWaitTimeout:            maxConnWaitTimeout,
+		RetryIf:                       nil,
+		ConnPoolStrategy:              0,
+		ConfigureClient:               nil,
+	}
 	return
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
+func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
+	client = &fastHttpTransportClient{
+		ssl:     srv.ssl,
+		address: address,
+		tr:      srv.client,
+	}
+	return
+}
 
-// +-------------------------------------------------------------------------------------------------------------------+
+func (srv *fastHttpTransport) ListenAndServe() (err error) {
+	if srv.ssl {
+		err = srv.server.ListenAndServeTLS(srv.address, "", "")
+	} else {
+		err = srv.server.ListenAndServe(srv.address)
+	}
+	if err != nil {
+		err = errors.Warning("fns: server listen and serve failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+		return
+	}
+	return
+}
+
+func (srv *fastHttpTransport) Close() (err error) {
+	err = srv.server.Shutdown()
+	if err != nil {
+		err = errors.Warning("fns: server close failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+	}
+	return
+}
+
+func fastHttpErrorHandler(ctx *fasthttp.RequestCtx, err error) {
+	ctx.SetStatusCode(555)
+	ctx.SetContentType("application/json")
+	p, _ := json.Marshal(errors.Warning("fns: fasthttp receiving or parsing the request failed").WithCause(err).WithMeta("transport", fastHttpTransportName))
+	ctx.SetBody(p)
+}
+
+type fastHttpTransportHandlerAdaptor struct {
+	runtime *Runtime
+}
+
+func (adaptor *fastHttpTransportHandlerAdaptor) Handler(h http.Handler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		var r http.Request
+		if err := convertFastHttpRequestToHttpRequest(ctx, &r, true); err != nil {
+			p, _ := json.Marshal(errors.Warning("fns: cannot parse requestURI").WithMeta("uri", r.RequestURI).WithMeta("transport", fastHttpTransportName).WithCause(err))
+			ctx.Response.Reset()
+			ctx.SetStatusCode(555)
+			ctx.SetContentTypeBytes(bytex.FromString(httpContentTypeJson))
+			ctx.SetBody(p)
+			return
+		}
+
+		w := netHTTPResponseWriter{w: ctx.Response.BodyWriter()}
+		h.ServeHTTP(&w, r.WithContext(adaptor.runtime.SetIntoContext(ctx)))
+
+		ctx.SetStatusCode(w.StatusCode())
+		haveContentType := false
+		for k, vv := range w.Header() {
+			if k == fasthttp.HeaderContentType {
+				haveContentType = true
+			}
+
+			for _, v := range vv {
+				ctx.Response.Header.Add(k, v)
+			}
+		}
+		if !haveContentType {
+			l := 512
+			b := ctx.Response.Body()
+			if len(b) < 512 {
+				l = len(b)
+			}
+			ctx.Response.Header.Set(fasthttp.HeaderContentType, http.DetectContentType(b[:l]))
+		}
+	}
+}
+
+func convertFastHttpRequestToHttpRequest(ctx *fasthttp.RequestCtx, r *http.Request, forServer bool) error {
+	body := ctx.PostBody()
+	strRequestURI := bytex.ToString(ctx.RequestURI())
+
+	rURL, err := url.ParseRequestURI(strRequestURI)
+	if err != nil {
+		return err
+	}
+
+	r.Method = bytex.ToString(ctx.Method())
+	r.Proto = bytex.ToString(ctx.Request.Header.Protocol())
+	if r.Proto == "HTTP/2" {
+		r.ProtoMajor = 2
+	} else {
+		r.ProtoMajor = 1
+	}
+	r.ProtoMinor = 1
+	r.ContentLength = int64(len(body))
+	r.RemoteAddr = ctx.RemoteAddr().String()
+	r.Host = bytex.ToString(ctx.Host())
+	r.TLS = ctx.TLSConnectionState()
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.URL = rURL
+
+	if forServer {
+		r.RequestURI = strRequestURI
+	}
+
+	if r.Header == nil {
+		r.Header = make(http.Header)
+	} else if len(r.Header) > 0 {
+		for k := range r.Header {
+			delete(r.Header, k)
+		}
+	}
+
+	ctx.Request.Header.VisitAll(func(k, v []byte) {
+		sk := bytex.ToString(k)
+		sv := bytex.ToString(v)
+
+		switch sk {
+		case "Transfer-Encoding":
+			r.TransferEncoding = append(r.TransferEncoding, sv)
+		default:
+			r.Header.Set(sk, sv)
+		}
+	})
+
+	return nil
+}
+
+type netHTTPResponseWriter struct {
+	statusCode int
+	h          http.Header
+	w          io.Writer
+}
+
+func (w *netHTTPResponseWriter) StatusCode() int {
+	if w.statusCode == 0 {
+		return http.StatusOK
+	}
+	return w.statusCode
+}
+
+func (w *netHTTPResponseWriter) Header() http.Header {
+	if w.h == nil {
+		w.h = make(http.Header)
+	}
+	return w.h
+}
+
+func (w *netHTTPResponseWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+}
+
+func (w *netHTTPResponseWriter) Write(p []byte) (int, error) {
+	return w.w.Write(p)
+}
+
+func (w *netHTTPResponseWriter) Flush() {}

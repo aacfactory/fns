@@ -14,27 +14,17 @@
  * limitations under the License.
  */
 
-package transports
+package service
 
 import (
-	"github.com/valyala/bytebufferpool"
+	"github.com/aacfactory/errors"
 	"net/http"
 )
 
-type responseWriter struct {
-	status int
-	header http.Header
-	buf    bytebufferpool.ByteBuffer
-}
-
-func (r responseWriter) Header() http.Header {
-	return r.header
-}
-
-func (r responseWriter) Write(p []byte) (int, error) {
-	return r.buf.Write(p)
-}
-
-func (r responseWriter) WriteHeader(statusCode int) {
-	r.status = statusCode
-}
+var (
+	ErrServiceOverload = errors.Unavailable("fns: service is overload").WithMeta("fns", "overload")
+	ErrTooEarly        = errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: service is not ready, try later again")
+	ErrUnavailable     = errors.Unavailable("fns: service is closed")
+	ErrDeviceId        = errors.Warning("fns: device id was required")
+	ErrNotFound        = errors.NotFound("fns: no handlers accept request")
+)

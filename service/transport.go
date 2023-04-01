@@ -135,6 +135,7 @@ type Transport interface {
 
 type Dialer interface {
 	Dial(address string) (client Client, err error)
+	RoundTripper() (rt http.RoundTripper)
 }
 
 type Client interface {
@@ -491,6 +492,12 @@ func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
 		address: address,
 		tr:      srv.client,
 	}
+	return
+}
+
+func (srv *fastHttpTransport) RoundTripper() (rt http.RoundTripper) {
+	// todo
+
 	return
 }
 

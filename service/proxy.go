@@ -29,6 +29,7 @@ import (
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 	"time"
 )
@@ -262,8 +263,18 @@ func (handler *proxyHandler) handleDocuments(w http.ResponseWriter, r *http.Requ
 func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
-	// mark registrations to use no internal request ? registrations send internal request when request is internal
+	// wrap registrations to ReverseProxy
 	ctx = context.WithValue(ctx, proxyContextKey, 1)
+	proxy := &httputil.ReverseProxy{
+		Rewrite:        nil,
+		Director:       nil,
+		Transport:      nil, // dialer return Transport (fasthttp，自己实现，就map request to requestCTX，然后client调用)
+		FlushInterval:  0,
+		ErrorLog:       nil,
+		BufferPool:     nil,
+		ModifyResponse: nil,
+		ErrorHandler:   nil,
+	}
 
 	return
 }

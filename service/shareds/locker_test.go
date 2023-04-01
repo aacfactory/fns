@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package shared_test
+package shareds_test
 
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/fns/service/shared"
+	"github.com/aacfactory/fns/service/shareds"
 	"sync"
 	"testing"
 	"time"
@@ -30,7 +30,7 @@ type N struct {
 }
 
 func TestLocalLockers(t *testing.T) {
-	lockers := shared.LocalLockers()
+	lockers := shareds.LocalLockers()
 	ctx := context.TODO()
 	wg := sync.WaitGroup{}
 	n := &N{
@@ -38,7 +38,7 @@ func TestLocalLockers(t *testing.T) {
 	}
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
-		go func(ctx context.Context, lockers shared.Lockers, group *sync.WaitGroup, x *N) {
+		go func(ctx context.Context, lockers shareds.Lockers, group *sync.WaitGroup, x *N) {
 			defer group.Done()
 			locker, getErr := lockers.Acquire(ctx, []byte("locker"), 2*time.Second)
 			if getErr != nil {

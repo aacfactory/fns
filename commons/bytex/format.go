@@ -33,9 +33,9 @@ const (
 	EXABYTE
 )
 
-var invalidByteQuantityError = errors.New("fns Application: byte quantity must be a positive integer with a unit of measurement like M, MB, MiB, G, GiB, or GB")
+var invalidByteQuantityError = errors.New("fns : byte quantity must be a positive integer with a unit of measurement like M, MB, MiB, G, GiB, or GB")
 
-// ByteSize returns a human-readable byte string of the form 10M, 12.5K, and so forth.  The following units are available:
+// FormatBytes returns a human-readable byte string of the form 10M, 12.5K, and so forth.  The following units are available:
 //
 //	E: Exabyte
 //	P: Petabyte
@@ -46,7 +46,7 @@ var invalidByteQuantityError = errors.New("fns Application: byte quantity must b
 //	B: Byte
 //
 // The unit that results in the smallest number greater than or equal to 1 is always chosen.
-func ByteSize(bytes uint64) string {
+func FormatBytes(bytes uint64) string {
 	unit := ""
 	value := float64(bytes)
 
@@ -80,24 +80,14 @@ func ByteSize(bytes uint64) string {
 	return result + unit
 }
 
-// ToMegabytes parses a string formatted by ByteSize as megabytes.
-func ToMegabytes(s string) (uint64, error) {
-	bytes, err := ToBytes(s)
-	if err != nil {
-		return 0, err
-	}
-
-	return bytes / MEGABYTE, nil
-}
-
-// ToBytes parses a string formatted by ByteSize as bytes. Note binary-prefixed and SI prefixed units both mean a base-2 units
+// ParseBytes parses a string formatted by FormatBytes as bytes. Note binary-prefixed and SI prefixed units both mean a base-2 units
 // KB = K = KiB	= 1024
 // MB = M = MiB = 1024 * K
 // GB = G = GiB = 1024 * M
 // TB = T = TiB = 1024 * G
 // PB = P = PiB = 1024 * T
 // EB = E = EiB = 1024 * P
-func ToBytes(s string) (uint64, error) {
+func ParseBytes(s string) (uint64, error) {
 	s = strings.TrimSpace(s)
 	s = strings.ToUpper(s)
 

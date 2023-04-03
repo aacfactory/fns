@@ -296,7 +296,7 @@ func (srv *fastHttpTransport) Build(options TransportOptions) (err error) {
 	}
 	readBufferSize := uint64(0)
 	if opt.ReadBufferSize != "" {
-		readBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.ReadBufferSize))
+		readBufferSize, err = bytex.ParseBytes(strings.TrimSpace(opt.ReadBufferSize))
 		if err != nil {
 			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return
@@ -312,7 +312,7 @@ func (srv *fastHttpTransport) Build(options TransportOptions) (err error) {
 	}
 	writeBufferSize := uint64(0)
 	if opt.WriteBufferSize != "" {
-		writeBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.WriteBufferSize))
+		writeBufferSize, err = bytex.ParseBytes(strings.TrimSpace(opt.WriteBufferSize))
 		if err != nil {
 			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return
@@ -345,7 +345,7 @@ func (srv *fastHttpTransport) Build(options TransportOptions) (err error) {
 
 	maxRequestBodySize := uint64(4 * bytex.MEGABYTE)
 	if opt.MaxRequestBodySize != "" {
-		maxRequestBodySize, err = bytex.ToBytes(strings.TrimSpace(opt.MaxRequestBodySize))
+		maxRequestBodySize, err = bytex.ParseBytes(strings.TrimSpace(opt.MaxRequestBodySize))
 		if err != nil {
 			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxRequestBodySize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return
@@ -415,7 +415,7 @@ func (srv *fastHttpTransport) buildClient(opt fastHttpTransportClientOptions, cl
 	}
 	readBufferSize := uint64(0)
 	if opt.ReadBufferSize != "" {
-		readBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.ReadBufferSize))
+		readBufferSize, err = bytex.ParseBytes(strings.TrimSpace(opt.ReadBufferSize))
 		if err != nil {
 			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return
@@ -431,7 +431,7 @@ func (srv *fastHttpTransport) buildClient(opt fastHttpTransportClientOptions, cl
 	}
 	writeBufferSize := uint64(0)
 	if opt.WriteBufferSize != "" {
-		writeBufferSize, err = bytex.ToBytes(strings.TrimSpace(opt.WriteBufferSize))
+		writeBufferSize, err = bytex.ParseBytes(strings.TrimSpace(opt.WriteBufferSize))
 		if err != nil {
 			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return
@@ -447,7 +447,7 @@ func (srv *fastHttpTransport) buildClient(opt fastHttpTransportClientOptions, cl
 	}
 	maxResponseBodySize := uint64(4 * bytex.MEGABYTE)
 	if opt.MaxResponseBodySize != "" {
-		maxResponseBodySize, err = bytex.ToBytes(strings.TrimSpace(opt.MaxResponseBodySize))
+		maxResponseBodySize, err = bytex.ParseBytes(strings.TrimSpace(opt.MaxResponseBodySize))
 		if err != nil {
 			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxResponseBodySize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
 			return

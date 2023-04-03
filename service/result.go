@@ -222,6 +222,20 @@ func (fr *futureResult) MarshalJSON() (p []byte, err error) {
 		p = bytex.FromString(nilJson)
 		return
 	}
-	p, err = json.Marshal(fr.data)
+	switch fr.data.(type) {
+	case []byte:
+		x := fr.data.([]byte)
+		if json.Validate(x) {
+			p = x
+		} else {
+			p, err = json.Marshal(fr.data)
+		}
+	case json.RawMessage:
+		p = fr.data.(json.RawMessage)
+	case stdjson.RawMessage:
+		p = fr.data.(stdjson.RawMessage)
+	default:
+		p, err = json.Marshal(fr.data)
+	}
 	return
 }

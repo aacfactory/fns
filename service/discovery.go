@@ -108,69 +108,95 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	r := task.r
 	fr := task.result
 
-	requestBody, encodeErr := json.Marshal(internalRequest{
-		User:     r.User(),
-		Trunk:    r.Trunk(),
-		Argument: r.Argument(),
-	})
-	if encodeErr != nil {
-		fr.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
-		return
-	}
-	header := r.Header().Clone()
-	header.SetAcceptVersions(r.AcceptedVersions())
-	header.Add(httpRequestInternalHeader, "true")
-	header.Add(httpRequestIdHeader, r.Id())
-	header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
-	header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
-	// devMode
-	serviceName, fn := r.Fn()
-	status, _, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
-	if postErr != nil {
-		fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
-		return
-	}
-	// todo handle http.StatusTooEarly and Connection=close
-	ir := &internalResponseImpl{}
-	decodeErr := json.Unmarshal(responseBody, ir)
-	if decodeErr != nil {
-		fr.Failed(errors.Warning("fns: registration request failed").WithCause(decodeErr))
-		return
-	}
+	// todo check cache control
 
-	// Span
-	trace, hasTracer := GetTracer(ctx)
-	if hasTracer && ir.Span != nil {
-		trace.Span().AppendChild(ir.Span)
-	}
-	// user
-	if ir.User != nil {
-		if !r.User().Authenticated() && ir.User.Authenticated() {
-			r.User().SetId(ir.User.Id())
+	if r.Internal() {
+		// body
+		requestBody, encodeErr := json.Marshal(internalRequest{
+			User:     r.User(),
+			Trunk:    r.Trunk(),
+			Argument: r.Argument(),
+		})
+		if encodeErr != nil {
+			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(encodeErr))
+			return
 		}
-		if r.User().Authenticated() && ir.User.Authenticated() {
-			r.User().SetAttributes(ir.User.Attributes())
-		}
-	}
-	// trunk
-	if ir.Trunk != nil {
-		r.Trunk().ReadFrom(ir.Trunk)
-	}
+		// header
+		header := r.Header().Clone()
+		header.SetAcceptVersions(r.AcceptedVersions())
+		header.Add(httpRequestInternalHeader, "true")
+		header.Add(httpRequestIdHeader, r.Id())
+		header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
+		header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
 
-	// body
-	if status == http.StatusOK {
-		fr.Succeed(ir.Body)
+		serviceName, fn := r.Fn()
+		status, responseHeader, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
+		if postErr != nil {
+			// todo add error times in reg
+			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(postErr))
+			return
+		}
+		if responseHeader.Get(httpConnectionHeader) == httpCloseHeader {
+			// todo mark reg is closed
+
+		}
+		// todo cache control
+
+		ir := &internalResponseImpl{}
+		decodeErr := json.Unmarshal(responseBody, ir)
+		if decodeErr != nil {
+			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(decodeErr))
+			return
+		}
+		// Span
+		trace, hasTracer := GetTracer(ctx)
+		if hasTracer && ir.Span != nil {
+			trace.Span().AppendChild(ir.Span)
+		}
+		// user
+		if ir.User != nil {
+			if !r.User().Authenticated() && ir.User.Authenticated() {
+				r.User().SetId(ir.User.Id())
+			}
+			if r.User().Authenticated() && ir.User.Authenticated() {
+				r.User().SetAttributes(ir.User.Attributes())
+			}
+		}
+		// trunk
+		if ir.Trunk != nil {
+			r.Trunk().ReadFrom(ir.Trunk)
+		}
+		// body
+		if status == http.StatusOK {
+			fr.Succeed(ir.Body)
+		} else {
+			fr.Failed(errors.Decode(ir.Body))
+		}
 	} else {
-		fr.Failed(errors.Decode(ir.Body))
+		requestBody, encodeErr := json.Marshal(r.Argument())
+		if encodeErr != nil {
+			fr.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
+			return
+		}
+		header := r.Header()
+		serviceName, fn := r.Fn()
+		status, responseHeader, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
+		if postErr != nil {
+			// todo add error times in reg
+			fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
+			return
+		}
+		if responseHeader.Get(httpConnectionHeader) == httpCloseHeader {
+			// todo mark reg is closed
+
+		}
+		// todo cache control
+		if status == http.StatusOK {
+			fr.Succeed(json.RawMessage(responseBody))
+		} else {
+			fr.Failed(errors.Decode(responseBody))
+		}
 	}
-	return
-}
-
-func (task *registrationTask) Proxy(ctx context.Context) {
-	// todo 当来自proxy的，则不用internal request
-	// todo 增加/services/foo
-	// todo 增加 registration proxy task
-
 	return
 }
 
@@ -213,7 +239,7 @@ type Registration struct {
 	version versions.Version
 	address string
 	name    string
-	client  HttpClient
+	client  TransportClient
 	signer  *secret.Signer
 	worker  Workers
 	timeout time.Duration
@@ -275,7 +301,7 @@ func (registration *Registration) release(task *registrationTask) {
 	return
 }
 
-func newRegistrations(id string, worker Workers, dialer HttpClientDialer, signer *secret.Signer, timeout time.Duration) *Registrations {
+func newRegistrations(id string, worker Workers, dialer TransportDialer, signer *secret.Signer, timeout time.Duration) *Registrations {
 	return &Registrations{
 		id:      id,
 		values:  sync.Map{},
@@ -290,7 +316,7 @@ type Registrations struct {
 	id      string
 	values  sync.Map
 	signer  *secret.Signer
-	dialer  HttpClientDialer
+	dialer  TransportDialer
 	worker  Workers
 	timeout time.Duration
 }
@@ -336,6 +362,7 @@ func (r *Registrations) GetExact(name string, id string) (registration *Registra
 	if !has || registration == nil {
 		return
 	}
+	// todo check closed and error times
 	return
 }
 
@@ -354,7 +381,8 @@ func (r *Registrations) Get(name string, rvs RequestVersions) (registration *Reg
 		if registration == nil {
 			continue
 		}
-		if rvs == nil {
+		// todo check closed and error times
+		if rvs == nil || len(rvs) == 0 {
 			has = true
 			return
 		}
@@ -449,7 +477,7 @@ func (r *Registrations) AddNode(node Node) (err error) {
 	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
 	defer cancel()
 
-	// todo 增加/application/。。检查是否为services handler
+	// todo 增加/services/names 判断是否为service
 
 	// todo 增加捕获response header，如果存在Connection=close，则关闭中
 	// todo http.StatusTooEarly

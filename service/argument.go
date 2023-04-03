@@ -17,6 +17,7 @@
 package service
 
 import (
+	stdjson "encoding/json"
 	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service/internal/commons/objects"
@@ -56,13 +57,16 @@ func (arg *argument) MarshalJSON() (data []byte, err error) {
 	case []byte:
 		value := arg.value.([]byte)
 		if !json.Validate(value) {
-			err = errors.Warning("fns: type of argument is not json bytes").WithMeta("scope", "argument")
+			data, err = json.Marshal(arg.value)
 			return
 		}
 		data = value
 		break
 	case json.RawMessage:
 		data = arg.value.(json.RawMessage)
+		break
+	case stdjson.RawMessage:
+		data = arg.value.(stdjson.RawMessage)
 		break
 	default:
 		data, err = json.Marshal(arg.value)
@@ -110,6 +114,14 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 			return
 		}
 		break
+	case stdjson.RawMessage:
+		value := arg.value.(stdjson.RawMessage)
+		decodeErr := json.Unmarshal(value, v)
+		if decodeErr != nil {
+			err = errors.Warning("fns: decode argument failed").WithMeta("scope", "argument").WithCause(decodeErr)
+			return
+		}
+		break
 	default:
 		cpErr := objects.CopyInterface(v, arg.value)
 		if cpErr != nil {
@@ -136,6 +148,9 @@ func (arg *argument) HashCode() (code uint64) {
 		break
 	case json.RawMessage:
 		p = arg.value.(json.RawMessage)
+		break
+	case stdjson.RawMessage:
+		p = arg.value.(stdjson.RawMessage)
 		break
 	default:
 		p, _ = json.Marshal(arg.value)

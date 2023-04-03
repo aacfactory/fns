@@ -201,9 +201,17 @@ func (handler *proxyHandler) handleOpenapi(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		}
-		doc, fetchDocumentsErr := handler.fetchDocuments()
-		if fetchDocumentsErr != nil {
-			err = errors.Warning("proxy: fetch backend documents failed").WithCause(fetchDocumentsErr)
+		var doc documents.Documents
+		var docErr error
+		cachedDoc, hasCachedDoc := handler.attachments.Get("documents")
+		if hasCachedDoc {
+			doc = documents.Documents{}
+			docErr = json.Unmarshal(cachedDoc, &doc)
+		} else {
+			doc, docErr = handler.fetchDocuments()
+		}
+		if docErr != nil {
+			err = errors.Warning("proxy: fetch backend documents failed").WithCause(docErr)
 			return
 		}
 		api := doc.Openapi(handler.openapiVersion, handler.appId, handler.appName, version)
@@ -225,9 +233,9 @@ func (handler *proxyHandler) handleOpenapi(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *proxyHandler) handleDocuments(w http.ResponseWriter, r *http.Request) {
-	key := "documents:write"
+	key := "documents"
 	refresh := r.URL.Query().Get("refresh") == "true"
-	v, err, _ := handler.group.Do(fmt.Sprintf("%s:%v", key, refresh), func() (v interface{}, err error) {
+	v, err, _ := handler.group.Do(fmt.Sprintf("%s:write:%v", key, refresh), func() (v interface{}, err error) {
 		if !refresh {
 			cached, has := handler.attachments.Get(key)
 			if has {

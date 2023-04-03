@@ -42,7 +42,7 @@ type proxyHandlerOptions struct {
 	DeployedCh    <-chan map[string]*endpoint
 }
 
-// todo 只管正常代理和转发。开发由devProxy负责。
+// todo 只管正常代理和转发。开发由devProxy负责。且由于端口必然是services的端口，更加确凿的是，ssl如果存在，则必然是services的端口。
 func newProxyHandler(options proxyHandlerOptions) (handler *proxyHandler) {
 	handler = &proxyHandler{
 		log:                    nil,

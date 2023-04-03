@@ -128,17 +128,16 @@ type TransportOptions struct {
 type Transport interface {
 	Name() (name string)
 	Build(options TransportOptions) (err error)
-	Dialer
+	TransportDialer
 	ListenAndServe() (err error)
 	io.Closer
 }
 
-type Dialer interface {
-	Dial(address string) (client Client, err error)
-	RoundTripper() (rt http.RoundTripper)
+type TransportDialer interface {
+	Dial(address string) (client TransportClient, err error)
 }
 
-type Client interface {
+type TransportClient interface {
 	Get(ctx context.Context, path string, header http.Header) (status int, respHeader http.Header, respBody []byte, err error)
 	Post(ctx context.Context, path string, header http.Header, body []byte) (status int, respHeader http.Header, respBody []byte, err error)
 	Close()
@@ -486,18 +485,12 @@ func (srv *fastHttpTransport) buildClient(opt fastHttpTransportClientOptions, cl
 	return
 }
 
-func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
+func (srv *fastHttpTransport) Dial(address string) (client TransportClient, err error) {
 	client = &fastHttpTransportClient{
 		ssl:     srv.ssl,
 		address: address,
 		tr:      srv.client,
 	}
-	return
-}
-
-func (srv *fastHttpTransport) RoundTripper() (rt http.RoundTripper) {
-	// todo
-
 	return
 }
 

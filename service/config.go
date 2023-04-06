@@ -101,59 +101,33 @@ type TransportConfig struct {
 	Handlers    json.RawMessage        `json:"handlers"`
 }
 
-func (config *TransportConfig) MiddlewareConfig(name string) (conf configures.Config, err error) {
-	if name == "" {
-		err = errors.Warning("fns: get middleware config failed").WithCause(errors.Warning("service name is nil"))
-		return
-	}
+func (config *TransportConfig) MiddlewaresConfig() (conf configures.Config, err error) {
 	if config.Middlewares == nil || len(config.Middlewares) == 0 {
 		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
 		if err != nil {
-			err = errors.Warning("fns: get middleware config failed").WithCause(err).WithMeta("middleware", name)
+			err = errors.Warning("fns: get middleware config failed").WithCause(err)
 		}
 		return
 	}
 	conf, err = configures.NewJsonConfig(config.Middlewares)
 	if err != nil {
-		err = errors.Warning("fns: get middleware config failed").WithCause(err).WithMeta("middleware", name)
-		return
-	}
-	has := false
-	conf, has = conf.Node(name)
-	if !has {
-		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
-		if err != nil {
-			err = errors.Warning("fns: get middleware config failed").WithCause(err).WithMeta("middleware", name)
-		}
+		err = errors.Warning("fns: get middleware config failed").WithCause(err)
 		return
 	}
 	return
 }
 
-func (config *TransportConfig) HandlerConfig(name string) (conf configures.Config, err error) {
-	if name == "" {
-		err = errors.Warning("fns: get middleware handler failed").WithCause(errors.Warning("service name is nil"))
-		return
-	}
+func (config *TransportConfig) HandlersConfig() (conf configures.Config, err error) {
 	if config.Handlers == nil || len(config.Handlers) == 0 {
 		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
 		if err != nil {
-			err = errors.Warning("fns: get handler config failed").WithCause(err).WithMeta("handler", name)
+			err = errors.Warning("fns: get handler config failed").WithCause(err)
 		}
 		return
 	}
 	conf, err = configures.NewJsonConfig(config.Handlers)
 	if err != nil {
-		err = errors.Warning("fns: get handler config failed").WithCause(err).WithMeta("handler", name)
-		return
-	}
-	has := false
-	conf, has = conf.Node(name)
-	if !has {
-		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
-		if err != nil {
-			err = errors.Warning("fns: get handler config failed").WithCause(err).WithMeta("handler", name)
-		}
+		err = errors.Warning("fns: get handler config failed").WithCause(err)
 		return
 	}
 	return

@@ -17,10 +17,12 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/caches"
+	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
@@ -29,6 +31,7 @@ import (
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,6 +39,72 @@ import (
 const (
 	proxyHandlerName = "proxy"
 )
+
+func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, cluster Cluster, registrations *Registrations, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (err error) {
+	midConfig, midConfigErr := config.MiddlewaresConfig()
+	if midConfigErr != nil {
+		err = errors.Warning("fns: create proxy failed").WithCause(midConfigErr)
+		return
+	}
+	mid := newTransportMiddlewares(transportMiddlewaresOptions{
+		Runtime: runtime,
+		Cors:    config.Cors,
+		Config:  midConfig,
+	})
+	if middlewares != nil && len(middlewares) > 0 {
+		for _, middleware := range middlewares {
+			appendErr := mid.Append(middleware)
+			if appendErr != nil {
+				err = errors.Warning("fns: create proxy failed").WithCause(appendErr)
+				return
+			}
+		}
+	}
+	handlersConfig, handlersConfigErr := config.HandlersConfig()
+	if handlersConfigErr != nil {
+		err = errors.Warning("fns: create proxy failed").WithCause(handlersConfigErr)
+		return
+	}
+	h := newTransportHandlers(transportHandlersOptions{
+		Runtime: runtime,
+		Config:  handlersConfig,
+	})
+	if handlers == nil {
+		handlers = make([]TransportHandler, 0, 1)
+	}
+	var dev *devProxyHandler
+	if config.EnableDevMode {
+		dev = newDevProxyHandler(cluster, registrations)
+	}
+	handlers = append(handlers, newProxyHandler(proxyHandlerOptions{
+		Signer:        runtime.Signer(),
+		Registrations: registrations,
+		Dev:           dev,
+		DeployedCh:    deployedCh,
+	}))
+	for _, handler := range handlers {
+		appendErr := h.Append(handler)
+		if appendErr != nil {
+			err = errors.Warning("fns: create proxy failed").WithCause(appendErr)
+			return
+		}
+	}
+
+	options, optionsErr := config.ConvertToTransportsOptions(runtime.RootLog().With("fns", "proxy"), mid.Handler(h))
+	if optionsErr != nil {
+		err = errors.Warning("fns: create proxy failed").WithCause(optionsErr)
+		return
+	}
+
+	buildErr := tr.Build(options)
+	if buildErr != nil {
+		err = errors.Warning("fns: create proxy failed").WithCause(buildErr)
+		return
+	}
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 type proxyHandlerOptions struct {
 	Signer        *secret.Signer
@@ -284,26 +353,90 @@ func (handler *proxyHandler) handleDocuments(w transports.ResponseWriter, r *tra
 	return
 }
 
+func (handler *proxyHandler) getDeviceId(r *transports.Request) (devId string) {
+	devId = strings.TrimSpace(r.Header().Get(httpDeviceIdHeader))
+	return
+}
+
+func (handler *proxyHandler) getDeviceIp(r *transports.Request) (devIp string) {
+	devIp = r.Header().Get(httpDeviceIpHeader)
+	return
+}
+
+func (handler *proxyHandler) getRequestId(r *transports.Request) (requestId string, has bool) {
+	requestId = strings.TrimSpace(r.Header().Get(httpRequestIdHeader))
+	has = requestId != ""
+	return
+}
+
 func (handler *proxyHandler) handleProxy(w transports.ResponseWriter, r *transports.Request) {
+	// read path
+	pathItems := strings.Split(bytex.ToString(r.Path()), "/")
+	if len(pathItems) != 3 {
+		w.Failed(errors.Warning("fns: invalid request url path"))
+		return
+	}
+	serviceName := pathItems[1]
+	fnName := pathItems[2]
+	// versions
 	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header())
-
-	registration, has := handler.registrations.Get()
-	registration.RequestSync()
-
-	// TODO
-	/*
-			just as services, but use registrations insteadof discovery
-			cause local was not served in proxy port
-		see fasthttp
-		func copyZeroAlloc(w io.Writer, r io.Reader) (int64, error) {
-			vbuf := copyBufPool.Get()
-			buf := vbuf.([]byte)
-			n, err := io.CopyBuffer(w, r, buf)
-			copyBufPool.Put(vbuf)
-			return n, err
+	if parseVersionErr != nil {
+		w.Failed(errors.Warning("fns: parse X-Fns-Request-Version failed").WithCause(parseVersionErr))
+		return
+	}
+	if !hasVersion {
+		rvs = AllowAllRequestVersions()
+	}
+	// read device
+	deviceId := handler.getDeviceId(r)
+	deviceIp := handler.getDeviceIp(r)
+	// request id
+	requestId, hasRequestId := handler.getRequestId(r)
+	if !hasRequestId {
+		requestId = uid.UID()
+	}
+	// timeout
+	ctx := r.Context()
+	var cancel context.CancelFunc
+	timeout := r.Header().Get(httpRequestTimeoutHeader)
+	if timeout != "" {
+		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
+		if parseTimeoutErr != nil {
+			w.Failed(errors.Warning("fns: X-Fns-Request-Timeout is not number").WithMeta("timeout", timeout))
+			return
 		}
-	*/
-
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMillisecond)*time.Millisecond)
+	}
+	// discovery
+	registration, has := handler.registrations.Get(serviceName, rvs)
+	if !has {
+		if cancel != nil {
+			cancel()
+		}
+		w.Failed(errors.NotFound("fns: service was not found").WithMeta("service", serviceName))
+		return
+	}
+	// request
+	result, requestErr := registration.RequestSync(ctx, NewRequest(
+		ctx,
+		serviceName,
+		fnName,
+		NewArgument(r.Body()),
+		WithRequestHeader(r.Header()),
+		WithDeviceId(deviceId),
+		WithDeviceIp(deviceIp),
+		WithRequestId(requestId),
+		WithRequestVersions(rvs),
+	))
+	if cancel != nil {
+		cancel()
+	}
+	w.Header().Set(httpRequestIdHeader, requestId)
+	if requestErr != nil {
+		w.Failed(requestErr)
+	} else {
+		w.Succeed(result)
+	}
 	return
 }
 

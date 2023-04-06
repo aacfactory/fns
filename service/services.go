@@ -36,6 +36,67 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (service transports.Transport, err error) {
+	midConfig, midConfigErr := config.MiddlewaresConfig()
+	if midConfigErr != nil {
+		err = errors.Warning("fns: create transport failed").WithCause(midConfigErr)
+		return
+	}
+	mid := newTransportMiddlewares(transportMiddlewaresOptions{
+		Runtime: runtime,
+		Cors:    config.Cors,
+		Config:  midConfig,
+	})
+	if middlewares != nil && len(middlewares) > 0 {
+		for _, middleware := range middlewares {
+			appendErr := mid.Append(middleware)
+			if appendErr != nil {
+				err = errors.Warning("fns: create transport failed").WithCause(appendErr)
+				return
+			}
+		}
+	}
+	handlersConfig, handlersConfigErr := config.HandlersConfig()
+	if handlersConfigErr != nil {
+		err = errors.Warning("fns: create transport failed").WithCause(handlersConfigErr)
+		return
+	}
+	h := newTransportHandlers(transportHandlersOptions{
+		Runtime: runtime,
+		Config:  handlersConfig,
+	})
+
+	if handlers == nil {
+		handlers = make([]TransportHandler, 0, 1)
+	}
+	handlers = append(handlers, newServicesHandler(servicesHandlerOptions{
+		Signer:     runtime.Signer(),
+		DeployedCh: deployedCh,
+	}))
+	for _, handler := range handlers {
+		appendErr := h.Append(handler)
+		if appendErr != nil {
+			err = errors.Warning("fns: create transport failed").WithCause(appendErr)
+			return
+		}
+	}
+
+	options, optionsErr := config.ConvertToTransportsOptions(runtime.RootLog().With("fns", "transport"), mid.Handler(h))
+	if optionsErr != nil {
+		err = errors.Warning("fns: create transport failed").WithCause(optionsErr)
+		return
+	}
+
+	buildErr := tr.Build(options)
+	if buildErr != nil {
+		err = errors.Warning("fns: create transport failed").WithCause(buildErr)
+		return
+	}
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type servicesHandlerOptions struct {
 	Signer     *secret.Signer
 	DeployedCh <-chan map[string]*endpoint

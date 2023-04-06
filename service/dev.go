@@ -24,6 +24,13 @@ const (
 	devProxyHandlerName = "dev"
 )
 
+func newDevProxyHandler(cluster Cluster, registrations *Registrations) *devProxyHandler {
+	return &devProxyHandler{
+		cluster:       cluster,
+		registrations: registrations,
+	}
+}
+
 // TODO: 负责集群环境下的开发方式，通过代理转发的方式实现，
 // * internal request
 // * cluster （join，leave，nodes，shared）

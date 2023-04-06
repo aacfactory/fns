@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
@@ -39,6 +40,7 @@ const (
 type proxyHandlerOptions struct {
 	Signer        *secret.Signer
 	Registrations *Registrations
+	Dev           *devProxyHandler
 	DeployedCh    <-chan map[string]*endpoint
 }
 
@@ -57,6 +59,7 @@ func newProxyHandler(options proxyHandlerOptions) (handler *proxyHandler) {
 		registrations:          options.Registrations,
 		attachments:            caches.NewLRU[string, []byte](4),
 		group:                  &singleflight.Group{},
+		dev:                    options.Dev,
 	}
 	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint) {
 		_, ok := <-deployedCh
@@ -89,6 +92,7 @@ type proxyHandler struct {
 	registrations          *Registrations
 	attachments            *caches.LRU[string, []byte]
 	group                  *singleflight.Group
+	dev                    *devProxyHandler
 }
 
 func (handler *proxyHandler) Name() (name string) {
@@ -127,17 +131,26 @@ func (handler *proxyHandler) Build(options TransportHandlerOptions) (err error) 
 	return
 }
 
-func (handler *proxyHandler) Accept(r *http.Request) (ok bool) {
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/documents"
+func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
+	if handler.dev != nil {
+		ok = handler.dev.Accept(r)
+		if ok {
+			r.Header().Set("dev", "true")
+			return
+		}
+	}
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/documents"
 	if ok {
 		return
 	}
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/openapi"
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi"
 	if ok {
 		return
 	}
-	pathItems := strings.Split(r.URL.Path, "/")
-	ok = r.Method == http.MethodPost && r.Header.Get(httpContentType) == httpContentTypeJson && len(pathItems) == 3
+	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
+	if ok {
+		return
+	}
 	return
 }
 
@@ -145,20 +158,25 @@ func (handler *proxyHandler) Close() {
 	return
 }
 
-func (handler *proxyHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+func (handler *proxyHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
 	if !handler.ready {
-		handler.failed(writer, ErrTooEarly.WithMeta("handler", handler.Name()))
+		w.Failed(ErrTooEarly.WithMeta("handler", handler.Name()))
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-		handler.handleOpenapi(writer, r)
+	if r.Header().Get("dev") == "true" {
+		r.Header().Del("dev")
+		handler.dev.Handle(w, r)
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-		handler.handleDocuments(writer, r)
+	if r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi" {
+		handler.handleOpenapi(w, r)
 		return
 	}
-	handler.handleProxy(writer, r)
+	if r.IsGet() && bytex.ToString(r.Path()) == "/services/documents" {
+		handler.handleDocuments(w, r)
+		return
+	}
+	handler.handleProxy(w, r)
 	return
 }
 
@@ -180,19 +198,20 @@ func (handler *proxyHandler) fetchDocuments() (v documents.Documents, err error)
 	return
 }
 
-func (handler *proxyHandler) handleOpenapi(w http.ResponseWriter, r *http.Request) {
+func (handler *proxyHandler) handleOpenapi(w transports.ResponseWriter, r *transports.Request) {
 	version := versions.Latest()
-	if targetVersion := r.URL.Query().Get("version"); targetVersion != "" {
+	r.Param("version")
+	if targetVersion := bytex.ToString(r.Param("version")); targetVersion != "" {
 		var err error
 		version, err = versions.Parse(targetVersion)
 		if err != nil {
-			handler.failed(w, errors.Warning("proxy: parse version failed").WithCause(err))
+			w.Failed(errors.Warning("proxy: parse version failed").WithCause(err))
 			return
 		}
 	}
 
 	key := fmt.Sprintf("openapi:%s", version.String())
-	refresh := r.URL.Query().Get("refresh") == "true"
+	refresh := bytex.ToString(r.Param("refresh")) == "true"
 	v, err, _ := handler.group.Do(fmt.Sprintf("%s:%v", key, refresh), func() (v interface{}, err error) {
 		if !refresh {
 			cached, has := handler.attachments.Get(key)
@@ -225,16 +244,16 @@ func (handler *proxyHandler) handleOpenapi(w http.ResponseWriter, r *http.Reques
 		return
 	})
 	if err != nil {
-		handler.failed(w, errors.Map(err))
+		w.Failed(errors.Map(err))
 		return
 	}
-	handler.write(w, http.StatusOK, nil, v.([]byte))
+	handler.write(w, http.StatusOK, v.([]byte))
 	return
 }
 
-func (handler *proxyHandler) handleDocuments(w http.ResponseWriter, r *http.Request) {
+func (handler *proxyHandler) handleDocuments(w transports.ResponseWriter, r *transports.Request) {
 	key := "documents"
-	refresh := r.URL.Query().Get("refresh") == "true"
+	refresh := bytex.ToString(r.Param("refresh")) == "true"
 	v, err, _ := handler.group.Do(fmt.Sprintf("%s:write:%v", key, refresh), func() (v interface{}, err error) {
 		if !refresh {
 			cached, has := handler.attachments.Get(key)
@@ -258,15 +277,15 @@ func (handler *proxyHandler) handleDocuments(w http.ResponseWriter, r *http.Requ
 		return
 	})
 	if err != nil {
-		handler.failed(w, errors.Map(err))
+		w.Failed(errors.Map(err))
 		return
 	}
-	handler.write(w, http.StatusOK, nil, v.([]byte))
+	handler.write(w, http.StatusOK, v.([]byte))
 	return
 }
 
-func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request) {
-	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header)
+func (handler *proxyHandler) handleProxy(w transports.ResponseWriter, r *transports.Request) {
+	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header())
 
 	registration, has := handler.registrations.Get()
 	registration.RequestSync()
@@ -288,34 +307,11 @@ func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request)
 	return
 }
 
-func (handler *proxyHandler) failed(writer http.ResponseWriter, cause errors.CodeError) {
-	if cause == nil {
-		handler.write(writer, 555, nil, bytex.FromString(emptyJson))
-		return
-	}
-	status := cause.Code()
-	if status == 0 {
-		status = 555
-	}
-	body, _ := json.Marshal(cause)
-	handler.write(writer, status, nil, body)
-	return
-}
-
-func (handler *proxyHandler) write(writer http.ResponseWriter, status int, header http.Header, body []byte) {
-	writer.WriteHeader(status)
-	if header != nil && len(header) > 0 {
-		for k, vv := range header {
-			if vv == nil || len(vv) == 0 {
-				continue
-			}
-			for _, v := range vv {
-				writer.Header().Add(k, v)
-			}
-		}
-	}
+func (handler *proxyHandler) write(w transports.ResponseWriter, status int, body []byte) {
+	w.SetStatus(status)
 	if body != nil {
-		_, _ = writer.Write(body)
+		w.Header().Set(httpContentType, httpContentTypeJson)
+		_, _ = w.Write(body)
 	}
 	return
 }

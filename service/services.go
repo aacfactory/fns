@@ -24,10 +24,10 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -127,46 +127,46 @@ func (handler *servicesHandler) Build(options TransportHandlerOptions) (err erro
 	return
 }
 
-func (handler *servicesHandler) Accept(r *http.Request) (ok bool) {
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/documents"
+func (handler *servicesHandler) Accept(r *transports.Request) (ok bool) {
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/documents"
 	if ok {
 		return
 	}
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/openapi"
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi"
 	if ok {
 		return
 	}
-	ok = r.Method == http.MethodGet && r.URL.Path == "/services/names"
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/names"
 	if ok {
 		return
 	}
-	ok = r.Method == http.MethodPost && r.Header.Get(httpContentType) == httpContentTypeJson && len(strings.Split(r.URL.Path, "/")) == 3
+	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
 	return
 }
 
-func (handler *servicesHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
+func (handler *servicesHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
 	if !handler.ready {
-		handler.failed(writer, "", ErrTooEarly.WithMeta("handler", handler.Name()))
+		w.Failed(ErrTooEarly.WithMeta("handler", handler.Name()))
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/services/names" {
-		handler.handleNames(writer, r)
+	if r.IsGet() && bytex.ToString(r.Path()) == "/services/names" {
+		handler.handleNames(w, r)
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/services/documents" {
-		handler.handleDocuments(writer)
+	if r.IsGet() && bytex.ToString(r.Path()) == "/services/documents" {
+		handler.handleDocuments(w)
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/services/openapi" {
-		handler.handleOpenapi(writer)
+	if r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi" {
+		handler.handleOpenapi(w)
 		return
 	}
 	// internal
-	if r.Header.Get(httpRequestInternalHeader) != "" {
-		handler.handleInternalRequest(writer, r)
+	if r.Header().Get(httpRequestInternalHeader) != "" {
+		handler.handleInternalRequest(w, r)
 		return
 	}
-	handler.handleRequest(writer, r)
+	handler.handleRequest(w, r)
 	return
 }
 
@@ -174,25 +174,25 @@ func (handler *servicesHandler) Close() {
 	return
 }
 
-func (handler *servicesHandler) getDeviceId(r *http.Request) (devId string) {
-	devId = strings.TrimSpace(r.Header.Get(httpDeviceIdHeader))
+func (handler *servicesHandler) getDeviceId(r *transports.Request) (devId string) {
+	devId = strings.TrimSpace(r.Header().Get(httpDeviceIdHeader))
 	return
 }
 
-func (handler *servicesHandler) getDeviceIp(r *http.Request) (devIp string) {
-	devIp = r.Header.Get(httpDeviceIpHeader)
+func (handler *servicesHandler) getDeviceIp(r *transports.Request) (devIp string) {
+	devIp = r.Header().Get(httpDeviceIpHeader)
 	return
 }
 
-func (handler *servicesHandler) getRequestId(r *http.Request) (requestId string, has bool) {
-	requestId = strings.TrimSpace(r.Header.Get(httpRequestIdHeader))
+func (handler *servicesHandler) getRequestId(r *transports.Request) (requestId string, has bool) {
+	requestId = strings.TrimSpace(r.Header().Get(httpRequestIdHeader))
 	has = requestId != ""
 	return
 }
 
-func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *http.Request) {
+func (handler *servicesHandler) handleRequest(writer transports.ResponseWriter, r *transports.Request) {
 	// read path
-	pathItems := strings.Split(r.URL.Path, "/")
+	pathItems := strings.Split(bytex.ToString(r.Path()), "/")
 	if len(pathItems) != 3 {
 		handler.failed(writer, "", errors.Warning("fns: invalid request url path"))
 		return
@@ -200,7 +200,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	serviceName := pathItems[1]
 	fnName := pathItems[2]
 	// check version
-	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header)
+	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header())
 	if parseVersionErr != nil {
 		handler.failed(writer, "", errors.Warning("fns: parse X-Fns-Request-Version failed").WithCause(parseVersionErr))
 		return
@@ -216,13 +216,6 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	} else {
 		rvs = AllowAllRequestVersions()
 	}
-	// read body
-	body, readBodyErr := io.ReadAll(r.Body)
-	if readBodyErr != nil {
-		handler.failed(writer, "", errors.Warning("fns: read body failed").WithCause(readBodyErr))
-		return
-	}
-	_ = r.Body.Close()
 	// read device
 	deviceId := handler.getDeviceId(r)
 	deviceIp := handler.getDeviceIp(r)
@@ -234,7 +227,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	// timeout
 	ctx := r.Context()
 	var cancel context.CancelFunc
-	timeout := r.Header.Get(httpRequestTimeoutHeader)
+	timeout := r.Header().Get(httpRequestTimeoutHeader)
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
@@ -258,8 +251,8 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 		ctx,
 		serviceName,
 		fnName,
-		NewArgument(body),
-		WithHttpRequestHeader(r.Header),
+		NewArgument(r.Body()),
+		WithRequestHeader(r.Header()),
 		WithDeviceId(deviceId),
 		WithDeviceIp(deviceIp),
 		WithRequestId(requestId),
@@ -276,7 +269,7 @@ func (handler *servicesHandler) handleRequest(writer http.ResponseWriter, r *htt
 	return
 }
 
-func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter, r *http.Request) {
+func (handler *servicesHandler) handleInternalRequest(writer transports.ResponseWriter, r *transports.Request) {
 	// reade request id
 	requestId, hasRequestId := handler.getRequestId(r)
 	if !hasRequestId {
@@ -285,23 +278,18 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	}
 
 	// read path
-	pathItems := strings.Split(r.URL.Path, "/")
+	pathItems := strings.Split(bytex.ToString(r.Path()), "/")
 	serviceName := pathItems[1]
 	fnName := pathItems[2]
 	// read body
-	body, readBodyErr := io.ReadAll(r.Body)
-	if readBodyErr != nil {
-		handler.failed(writer, requestId, errors.Warning("fns: read body failed").WithCause(readBodyErr))
-		return
-	}
-	_ = r.Body.Close()
+	body := r.Body()
 	// verify signature
-	if !handler.signer.Verify(body, bytex.FromString(r.Header.Get(httpRequestSignatureHeader))) {
+	if !handler.signer.Verify(body, bytex.FromString(r.Header().Get(httpRequestSignatureHeader))) {
 		handler.failed(writer, requestId, errors.Warning("fns: signature is invalid"))
 		return
 	}
 	// check version
-	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header)
+	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header())
 	if parseVersionErr != nil {
 		handler.failed(writer, requestId, errors.Warning("fns: parse X-Fns-Request-Version failed").WithCause(parseVersionErr))
 		return
@@ -327,7 +315,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	// timeout
 	ctx := r.Context()
 	var cancel context.CancelFunc
-	timeout := r.Header.Get(httpRequestTimeoutHeader)
+	timeout := r.Header().Get(httpRequestTimeoutHeader)
 	if timeout != "" {
 		timeoutMillisecond, parseTimeoutErr := strconv.ParseInt(timeout, 10, 64)
 		if parseTimeoutErr != nil {
@@ -356,7 +344,7 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 		serviceName,
 		fnName,
 		iReq.Argument,
-		WithHttpRequestHeader(r.Header),
+		WithRequestHeader(r.Header()),
 		WithRequestId(requestId),
 		WithDeviceId(deviceId),
 		WithDeviceIp(deviceIp),
@@ -392,9 +380,9 @@ func (handler *servicesHandler) handleInternalRequest(writer http.ResponseWriter
 	return
 }
 
-func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
+func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter) {
 	if handler.disableHandleDocuments {
-		handler.write(writer, http.StatusOK, bytex.FromString(emptyJson))
+		w.Succeed(Empty{})
 		return
 	}
 	const (
@@ -404,23 +392,23 @@ func (handler *servicesHandler) handleDocuments(writer http.ResponseWriter) {
 	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
 		p, encodeErr := json.Marshal(handler.documents)
 		if encodeErr != nil {
-			handler.failed(writer, "", errors.Warning("fns: encode documents failed").WithCause(encodeErr))
+			err = errors.Warning("fns: encode documents failed").WithCause(encodeErr)
 			return
 		}
 		v = p
 		return
 	})
 	if err != nil {
-		handler.failed(writer, "", errors.Map(err))
+		w.Failed(errors.Map(err))
 		return
 	}
-	handler.write(writer, http.StatusOK, v.([]byte))
+	handler.write(w, http.StatusOK, v.([]byte))
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
+func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter) {
 	if handler.disableHandleOpenapi {
-		handler.write(writer, http.StatusOK, bytex.FromString(emptyJson))
+		w.Succeed(Empty{})
 		return
 	}
 	const (
@@ -431,83 +419,69 @@ func (handler *servicesHandler) handleOpenapi(writer http.ResponseWriter) {
 		openapi := handler.documents.Openapi(handler.openapiVersion, handler.appId, handler.appName, handler.appVersion)
 		p, encodeErr := json.Marshal(openapi)
 		if encodeErr != nil {
-			handler.failed(writer, "", errors.Warning("fns: encode openapi failed").WithCause(encodeErr))
+			err = errors.Warning("fns: encode openapi failed").WithCause(encodeErr)
 			return
 		}
 		v = p
 		return
 	})
 	if err != nil {
-		handler.failed(writer, "", errors.Map(err))
+		w.Failed(errors.Map(err))
 		return
 	}
-	handler.write(writer, http.StatusOK, v.([]byte))
+	handler.write(w, http.StatusOK, v.([]byte))
 	return
 }
 
-func (handler *servicesHandler) handleNames(writer http.ResponseWriter, r *http.Request) {
+func (handler *servicesHandler) handleNames(w transports.ResponseWriter, r *transports.Request) {
 	const (
 		key = "names"
 	)
 	deviceId := handler.getDeviceId(r)
 	// handle
-	signature := r.Header.Get(httpRequestSignatureHeader)
+	signature := r.Header().Get(httpRequestSignatureHeader)
 	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
-		handler.failed(writer, "", errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
+		w.Failed(errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
 		return
 	}
 	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
 		p, encodeErr := json.Marshal(handler.names)
 		if encodeErr != nil {
-			handler.failed(writer, "", errors.Warning("fns: encode names failed").WithCause(encodeErr))
+			err = errors.Warning("fns: encode names failed").WithCause(encodeErr)
 			return
 		}
 		v = p
 		return
 	})
 	if err != nil {
-		handler.failed(writer, "", errors.Map(err))
+		w.Failed(errors.Map(err))
 		return
 	}
-	handler.write(writer, http.StatusOK, v.([]byte))
+	handler.write(w, http.StatusOK, v.([]byte))
 	return
 }
 
-func (handler *servicesHandler) succeed(writer http.ResponseWriter, id string, result interface{}) {
-	body, encodeErr := json.Marshal(result)
-	if encodeErr != nil {
-		cause := errors.Warning("encode result failed").WithCause(encodeErr)
-		handler.failed(writer, id, cause)
-		return
-	}
+func (handler *servicesHandler) succeed(w transports.ResponseWriter, id string, result interface{}) {
 	if id != "" {
-		writer.Header().Set(httpRequestIdHeader, id)
+		w.Header().Set(httpRequestIdHeader, id)
 	}
-	handler.write(writer, http.StatusOK, body)
+	w.Succeed(result)
 	return
 }
 
-func (handler *servicesHandler) failed(writer http.ResponseWriter, id string, cause errors.CodeError) {
+func (handler *servicesHandler) failed(w transports.ResponseWriter, id string, cause errors.CodeError) {
 	if id != "" {
-		writer.Header().Set(httpRequestIdHeader, id)
+		w.Header().Set(httpRequestIdHeader, id)
 	}
-	if cause == nil {
-		handler.write(writer, 555, bytex.FromString(emptyJson))
-		return
-	}
-	status := cause.Code()
-	if status == 0 {
-		status = 555
-	}
-	body, _ := json.Marshal(cause)
-	handler.write(writer, status, body)
+	w.Failed(cause)
 	return
 }
 
-func (handler *servicesHandler) write(writer http.ResponseWriter, status int, body []byte) {
-	writer.WriteHeader(status)
+func (handler *servicesHandler) write(w transports.ResponseWriter, status int, body []byte) {
+	w.SetStatus(status)
 	if body != nil {
-		_, _ = writer.Write(body)
+		w.Header().Set(httpContentType, httpContentTypeJson)
+		_, _ = w.Write(body)
 	}
 	return
 }

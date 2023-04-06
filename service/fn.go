@@ -51,7 +51,7 @@ func (f *fnTask) end() {
 }
 
 func (f *fnTask) Execute(ctx context.Context) {
-	rootLog := getRuntime(ctx).log
+	rootLog := GetRuntime(ctx).RootLog()
 	serviceName, fnName := f.request.Fn()
 
 	t, hasTracer := GetTracer(ctx)

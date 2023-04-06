@@ -29,6 +29,7 @@ import (
 	"github.com/aacfactory/fns/service/internal/logger"
 	"github.com/aacfactory/fns/service/internal/procs"
 	"github.com/aacfactory/fns/service/internal/secret"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"strings"
@@ -387,7 +388,7 @@ type Endpoints struct {
 	deployed                 map[string]*endpoint
 	deployedCHS              *deployed
 	registrations            *Registrations
-	transport                Transport
+	transport                transports.Transport
 	transportHandlers        *transportHandlers
 	cluster                  Cluster
 	clusterNodeFetchInterval time.Duration
@@ -516,7 +517,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	}
 	// http listen
 	httpListenErrCh := make(chan error, 1)
-	go func(srv Transport, ch chan error) {
+	go func(srv transports.Transport, ch chan error) {
 		listenErr := srv.ListenAndServe()
 		if listenErr != nil {
 			ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
@@ -549,7 +550,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 					errCh <- lnErr
 				}
 			}
-		}(e.rt.SetIntoContext(context.TODO()), ln, serviceListenErrCh)
+		}(e.rt.SetIntoContext(ctx), ln, serviceListenErrCh)
 	}
 	if lns > 0 {
 		select {

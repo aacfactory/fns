@@ -16,7 +16,9 @@
 
 package service
 
-import "net/http"
+import (
+	"github.com/aacfactory/fns/service/transports"
+)
 
 const (
 	devProxyHandlerName = "dev"
@@ -41,12 +43,12 @@ func (handler *devProxyHandler) Build(options TransportHandlerOptions) (err erro
 	return
 }
 
-func (handler *devProxyHandler) Accept(r *http.Request) (ok bool) {
+func (handler *devProxyHandler) Accept(r *transports.Request) (ok bool) {
 
 	return
 }
 
-func (handler *devProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (handler *devProxyHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
 
 	return
 }

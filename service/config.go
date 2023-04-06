@@ -36,6 +36,35 @@ type Config struct {
 	Transport *TransportConfig `json:"transport"`
 	Cluster   *ClusterConfig   `json:"cluster"`
 	Proxy     *ProxyConfig     `json:"proxy"`
+	Services  json.RawMessage  `json:"services"`
+}
+
+func (config *Config) Service(name string) (conf configures.Config, err error) {
+	if name == "" {
+		err = errors.Warning("fns: get service config failed").WithCause(errors.Warning("service name is nil"))
+		return
+	}
+	if config.Services == nil || len(config.Services) == 0 {
+		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		if err != nil {
+			err = errors.Warning("fns: get service config failed").WithCause(err).WithMeta("service", name)
+		}
+		return
+	}
+	conf, err = configures.NewJsonConfig(config.Services)
+	if err != nil {
+		err = errors.Warning("fns: get service config failed").WithCause(err).WithMeta("service", name)
+	}
+	has := false
+	conf, has = conf.Node(name)
+	if !has {
+		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		if err != nil {
+			err = errors.Warning("fns: get service config failed").WithCause(err).WithMeta("service", name)
+		}
+		return
+	}
+	return
 }
 
 type LogConfig struct {
@@ -45,6 +74,7 @@ type LogConfig struct {
 }
 
 type ProxyConfig struct {
+	TransportConfig
 	EnableDevMode bool `json:"enableDevMode"`
 }
 
@@ -72,38 +102,58 @@ type TransportConfig struct {
 }
 
 func (config *TransportConfig) MiddlewareConfig(name string) (conf configures.Config, err error) {
+	if name == "" {
+		err = errors.Warning("fns: get middleware config failed").WithCause(errors.Warning("service name is nil"))
+		return
+	}
 	if config.Middlewares == nil || len(config.Middlewares) == 0 {
 		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		if err != nil {
+			err = errors.Warning("fns: get middleware config failed").WithCause(err).WithMeta("middleware", name)
+		}
 		return
 	}
 	conf, err = configures.NewJsonConfig(config.Middlewares)
 	if err != nil {
-		err = errors.Warning(fmt.Sprintf("get %s middleware config failed", name)).WithCause(err)
+		err = errors.Warning("fns: get middleware config failed").WithCause(err).WithMeta("middleware", name)
 		return
 	}
 	has := false
 	conf, has = conf.Node(name)
 	if !has {
 		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		if err != nil {
+			err = errors.Warning("fns: get middleware config failed").WithCause(err).WithMeta("middleware", name)
+		}
 		return
 	}
 	return
 }
 
 func (config *TransportConfig) HandlerConfig(name string) (conf configures.Config, err error) {
+	if name == "" {
+		err = errors.Warning("fns: get middleware handler failed").WithCause(errors.Warning("service name is nil"))
+		return
+	}
 	if config.Handlers == nil || len(config.Handlers) == 0 {
 		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		if err != nil {
+			err = errors.Warning("fns: get handler config failed").WithCause(err).WithMeta("handler", name)
+		}
 		return
 	}
 	conf, err = configures.NewJsonConfig(config.Handlers)
 	if err != nil {
-		err = errors.Warning(fmt.Sprintf("get %s handler config failed", name)).WithCause(err)
+		err = errors.Warning("fns: get handler config failed").WithCause(err).WithMeta("handler", name)
 		return
 	}
 	has := false
 	conf, has = conf.Node(name)
 	if !has {
 		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		if err != nil {
+			err = errors.Warning("fns: get handler config failed").WithCause(err).WithMeta("handler", name)
+		}
 		return
 	}
 	return

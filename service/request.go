@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/wildcard"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"net/http"
 	"strconv"
@@ -80,7 +81,7 @@ func (rvs RequestVersions) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
 }
 
-func ParseRequestVersionFromHeader(header http.Header) (rvs RequestVersions, has bool, err error) {
+func ParseRequestVersionFromHeader(header transports.Header) (rvs RequestVersions, has bool, err error) {
 	values := header.Values(httpRequestVersionsHeader)
 	if values == nil || len(values) == 0 {
 		return
@@ -464,7 +465,7 @@ func WithRequestId(id string) RequestOption {
 	}
 }
 
-func WithHttpRequestHeader(header http.Header) RequestOption {
+func WithRequestHeader(header transports.Header) RequestOption {
 	return func(options *RequestOptions) {
 		options.header = RequestHeader(header)
 	}

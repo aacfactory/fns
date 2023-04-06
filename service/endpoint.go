@@ -414,21 +414,6 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
 			return
 		}
-
-		nodes, nodesErr := listMembers(ctx, e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
-		if nodesErr != nil {
-			e.Close(ctx)
-
-			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints get nodes from cluster failed")).WithCause(nodesErr)
-			return
-		}
-		// registrations
-		mergeErr := e.registrations.MergeNodes(nodes)
-		if mergeErr != nil {
-			e.Close(ctx)
-			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
-			return
-		}
 		e.fetchRegistrations()
 	}
 	// transport listen

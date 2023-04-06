@@ -33,7 +33,7 @@ func newDevProxyHandler(registrations *Registrations) *devProxyHandler {
 // TODO: 负责集群环境下的开发方式，通过代理转发的方式实现，
 // * internal request
 // * cluster （join，leave，nodes，shared）
-// * /services/names?nodeId
+// * nodes返回增加services
 type devProxyHandler struct {
 	registrations *Registrations
 }

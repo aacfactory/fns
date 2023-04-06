@@ -30,7 +30,6 @@ import (
 	"github.com/aacfactory/rings"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -130,6 +129,8 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		header.Add(httpRequestIdHeader, r.Id())
 		header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
 		header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
+		// todo 增加X-Fns-Dev-Host-Id 当reg 是存在proxy address时，则增加这个header，
+		// node里增加proxy address，然后同步进reg的proxy address
 
 		serviceName, fn := r.Fn()
 
@@ -351,6 +352,10 @@ func (registration *Registration) release(task *registrationTask) {
 }
 
 func newRegistrations(log logs.Logger, id string, name string, version versions.Version, cluster Cluster, worker Workers, dialer transports.Dialer, signer *secret.Signer, timeout time.Duration, refreshInterval time.Duration) *Registrations {
+	dev, ok := cluster.(*devCluster)
+	if ok {
+		dialer = dev.dialer
+	}
 	return &Registrations{
 		id:              id,
 		name:            name,
@@ -521,66 +526,18 @@ func (r *Registrations) List() (values map[string]RegistrationList) {
 	return
 }
 
-func (r *Registrations) AddNode(node Node) (err error) {
-	address := strings.TrimSpace(node.Address)
-	if address == "" {
+func (r *Registrations) AddNode(node *Node) (err error) {
+	client, clientErr := r.dialer.Dial(node.Address)
+	if clientErr != nil {
+		err = errors.Warning("registrations: add node failed").WithCause(clientErr)
 		return
 	}
-	client, dialErr := r.dialer.Dial(address)
-	if dialErr != nil {
-		err = errors.Warning("fns: registrations dial node failed").WithCause(dialErr).
-			WithMeta("address", address).
-			WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
-	defer cancel()
-
-	// todo 增加/services/names 判断是否为service
-
-	// todo 增加捕获response header，如果存在Connection=close，则关闭中
-	// todo http.StatusTooEarly
-
-	header := http.Header{}
-	header.Add(httpDeviceIdHeader, r.id)
-	header.Add(httpRequestSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
-	status, _, responseBody, getErr := client.Get(ctx, "/services/names?native=true", header)
-	if getErr != nil {
-		err = errors.Warning("fns: registrations get service names from node failed").
-			WithCause(dialErr).
-			WithMeta("address", address).
-			WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
-		return
-	}
-	if status != http.StatusOK {
-		if len(responseBody) == 0 {
-			err = errors.Warning("fns: registrations get service names from node failed").
-				WithMeta("address", address).
-				WithMeta("status", strconv.Itoa(status)).
-				WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
-			return
-		}
-		err = errors.Decode(responseBody)
-		return
-	}
-	names := make([]string, 0, 1)
-	decodeErr := json.Unmarshal(responseBody, &names)
-	if decodeErr != nil {
-		err = errors.Warning("fns: registrations get service names from node failed").
-			WithMeta("address", address).WithCause(decodeErr).
-			WithMeta("nodeId", node.Id).WithMeta("node", node.Name)
-		return
-	}
-	if len(names) == 0 {
-		r.Remove(node.Id)
-		return
-	}
-	for _, name := range names {
+	for _, name := range node.Services {
 		registration := &Registration{
 			hostId:  r.id,
 			id:      node.Name,
 			version: node.Version,
-			address: address,
+			address: node.Address,
 			name:    name,
 			client:  client,
 			signer:  r.signer,
@@ -609,7 +566,7 @@ func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
 	sort.Sort(nodes)
 	nodesLen := nodes.Len()
 	existIdsLen := len(existIds)
-	newNodes := make([]Node, 0, 1)
+	newNodes := make([]*Node, 0, 1)
 	diffNodeIds := make([]string, 0, 1)
 	for _, node := range nodes {
 		if existIdsLen != 0 && sort.SearchStrings(existIds, node.Id) < existIdsLen {
@@ -646,15 +603,12 @@ func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
 }
 
 func (r *Registrations) ListMembers(ctx context.Context) (members Nodes, err error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
 	nodes, getNodesErr := r.cluster.Nodes(ctx)
 	if getNodesErr != nil {
 		err = errors.Warning("registrations: list members failed").WithCause(getNodesErr)
 		return
 	}
-	members = make([]Node, 0, 1)
+	members = make([]*Node, 0, 1)
 	if nodes == nil || len(nodes) == 0 {
 		return
 	}
@@ -665,15 +619,30 @@ func (r *Registrations) ListMembers(ctx context.Context) (members Nodes, err err
 		if node.Name == r.name && node.Version.Equals(r.version) {
 			continue
 		}
+		if node.Services != nil && len(node.Services) > 0 {
+			members = append(members, node)
+			continue
+		}
+		names := r.GetNodeServices(node)
+		if names == nil || len(names) == 0 {
+			continue
+		}
+		node.Services = names
 		members = append(members, node)
 	}
 	sort.Sort(members)
 	return
 }
 
+func (r *Registrations) GetNodeServices(node *Node) (names []string) {
+	// 任何错误都 是返回nil
+	// 因为当tls不一样时，肯定不是这个端口
+	// 且当时dev时，其r.cluster.Nodes(ctx)返回的是有services的。
+	return
+}
+
 func (r *Registrations) Refresh(ctx context.Context) {
-	// todo
-	timer := time.NewTimer(r.refreshInterval)
+	timer := time.NewTimer(10 * time.Millisecond)
 	for {
 		stop := false
 		select {

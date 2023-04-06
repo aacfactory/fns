@@ -33,6 +33,32 @@ import (
 	"time"
 )
 
+const (
+	httpContentType            = "Content-Type"
+	httpContentTypeJson        = "application/json"
+	httpConnectionHeader       = "Connection"
+	httpUpgradeHeader          = "Upgrade"
+	httpCloseHeader            = "close"
+	httpCacheControlHeader     = "Cache-Control"
+	httpPragmaHeader           = "Pragma"
+	httpETagHeader             = "ETag"
+	httpCacheControlIfNonMatch = "If-None-Match"
+	httpClearSiteData          = "Clear-Site-Data"
+	httpTrueClientIp           = "True-Client-Ip"
+	httpXRealIp                = "X-Real-IP"
+	httpXForwardedForHeader    = "X-Forwarded-For"
+	httpRequestIdHeader        = "X-Fns-Request-Id"
+	httpRequestSignatureHeader = "X-Fns-Request-Signature"
+	httpRequestInternalHeader  = "X-Fns-Request-Internal"
+	httpRequestTimeoutHeader   = "X-Fns-Request-Timeout"
+	httpRequestVersionsHeader  = "X-Fns-Request-Version"
+	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
+	httpDeviceIdHeader         = "X-Fns-Device-Id"
+	httpDeviceIpHeader         = "X-Fns-Device-Ip"
+	httpDevModeHeader          = "X-Fns-Dev-Mode"
+	httpResponseRetryAfter     = "Retry-After"
+)
+
 type TransportMiddlewareOptions struct {
 	AppId      string
 	AppName    string
@@ -118,7 +144,29 @@ func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) tr
 	for i := len(middlewares.middlewares) - 1; i > -1; i-- {
 		handler = middlewares.middlewares[i].Handler(handler)
 	}
-	return newCorsHandler(middlewares.cors, newRuntimeMiddleware(middlewares.runtime, handler))
+	if middlewares.cors == nil {
+		middlewares.cors = &transports.CorsConfig{
+			AllowedOrigins:      []string{"*"},
+			AllowedHeaders:      []string{"*"},
+			ExposedHeaders:      make([]string, 0, 1),
+			AllowCredentials:    false,
+			MaxAge:              86400,
+			AllowPrivateNetwork: false,
+		}
+	}
+	middlewares.cors.TryFillAllowedHeaders([]string{
+		httpConnectionHeader, httpUpgradeHeader,
+		httpXForwardedForHeader, httpTrueClientIp, httpXRealIp,
+		httpDeviceIpHeader, httpDeviceIdHeader,
+		httpRequestIdHeader,
+		httpRequestSignatureHeader, httpRequestTimeoutHeader, httpRequestVersionsHeader,
+		httpETagHeader, httpCacheControlIfNonMatch, httpPragmaHeader, httpClearSiteData, httpResponseRetryAfter,
+	})
+	middlewares.cors.TryFillExposedHeaders([]string{
+		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
+		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter,
+	})
+	return middlewares.cors.Handler(newRuntimeMiddleware(middlewares.runtime, handler))
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

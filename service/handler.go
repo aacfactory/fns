@@ -50,7 +50,7 @@ type TransportHandler interface {
 	Build(options TransportHandlerOptions) (err error)
 	Accept(r *transports.Request) (ok bool)
 	transports.Handler
-	Close()
+	Close() (err error)
 }
 
 type transportHandlersOptions struct {
@@ -126,10 +126,16 @@ func (handlers *transportHandlers) Handle(w transports.ResponseWriter, r *transp
 	}
 }
 
-func (handlers *transportHandlers) Close() {
+func (handlers *transportHandlers) Close() (err error) {
+	errs := errors.MakeErrors()
 	for _, handler := range handlers.handlers {
-		handler.Close()
+		err = handler.Close()
+		if err != nil {
+			errs.Append(err)
+		}
 	}
+	err = errs.Error()
+	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -250,6 +256,6 @@ func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, 
 	return
 }
 
-func (handler *transportApplicationHandler) Close() {
+func (handler *transportApplicationHandler) Close() (err error) {
 	return
 }

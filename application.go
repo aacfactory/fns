@@ -74,16 +74,27 @@ func New(options ...Option) (app Application) {
 		return
 	}
 
+	// proxy
+	var proxyOptions *service.TransportOptions
+	if opt.proxyOptions != nil {
+		proxyOptions = &service.TransportOptions{
+			Transport:   opt.proxyOptions.transport,
+			Middlewares: opt.proxyOptions.middlewares,
+			Handlers:    opt.proxyOptions.handlers,
+		}
+	}
 	// endpoints
 	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
-		AppId:            appId,
-		AppName:          appName,
-		AppVersion:       appVersion,
-		ProxyMode:        opt.proxyMode,
-		Http:             opt.httpEngine,
-		HttpHandlers:     opt.httpHandlers,
-		HttpInterceptors: opt.httpInterceptors,
-		Config:           config,
+		AppId:      appId,
+		AppName:    appName,
+		AppVersion: appVersion,
+		Transport: &service.TransportOptions{
+			Transport:   opt.transportOptions.transport,
+			Middlewares: opt.transportOptions.middlewares,
+			Handlers:    opt.transportOptions.handlers,
+		},
+		Proxy:  proxyOptions,
+		Config: config,
 	})
 	if endpointsErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(errors.Map(endpointsErr))))

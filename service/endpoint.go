@@ -18,7 +18,6 @@ package service
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
@@ -32,6 +31,7 @@ import (
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,16 +40,19 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
+type TransportOptions struct {
+	Transport   transports.Transport
+	Middlewares []TransportMiddleware
+	Handlers    []TransportHandler
+}
+
 type EndpointsOptions struct {
-	OpenApiVersion   string
-	AppId            string
-	AppName          string
-	AppVersion       versions.Version
-	ProxyMode        bool
-	Http             Http
-	HttpHandlers     []HttpHandler
-	HttpInterceptors []HttpInterceptor
-	Config           configures.Config
+	AppId      string
+	AppName    string
+	AppVersion versions.Version
+	Transport  *TransportOptions
+	Proxy      *TransportOptions
+	Config     configures.Config
 }
 
 func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
@@ -61,8 +64,8 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		err = errors.Warning("fns: create endpoints failed").WithCause(configErr)
 		return
 	}
-	if options.Http == nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("http is required"))
+	if options.Transport == nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("transport is required"))
 		return
 	}
 
@@ -118,8 +121,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	var shared Shared
 	var barrier Barrier
 	clusterFetchMembersInterval := time.Duration(0)
-	clusterDevMode := false
-	clusterProxyAddress := ""
 	if config.Cluster != nil {
 		// cluster >>>
 		if config.Cluster.FetchMembersInterval != "" {
@@ -133,6 +134,10 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			clusterFetchMembersInterval = 10 * time.Second
 		}
 		kind := strings.TrimSpace(config.Cluster.Kind)
+		if kind == devClusterBuilderName && options.Proxy != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cannot use dev cluster in proxy transport")).WithCause(err)
+			return
+		}
 		builder, hasBuilder := getClusterBuilder(kind)
 		if !hasBuilder {
 			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
@@ -145,10 +150,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		if clusterOptionConfigErr != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
 			return
-		}
-		if config.Cluster.DevMode != nil {
-			clusterDevMode = true
-			clusterProxyAddress = config.Cluster.DevMode.ProxyAddress
 		}
 		cluster, err = builder(ClusterBuilderOptions{
 			Config:     clusterOptionConfig,
@@ -203,6 +204,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	// endpoints
 	v = &Endpoints{
+		log: log,
 		rt: &Runtime{
 			appId:      options.AppId,
 			appName:    options.AppName,
@@ -217,155 +219,68 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			shared:    shared,
 			signer:    secret.NewSigner(bytex.FromString(secretKey)),
 		},
-		config:                   options.Config,
-		autoMaxProcs:             goprocs,
-		log:                      log,
-		handleTimeout:            time.Duration(handleTimeoutSeconds) * time.Second,
-		deployed:                 make(map[string]*endpoint),
-		deployedCHS:              newDeployed(),
-		registrations:            nil,
-		http:                     options.Http,
-		httpHandlers:             nil,
-		cluster:                  cluster,
-		clusterNodeFetchInterval: clusterFetchMembersInterval,
-		clusterProxyAddress:      clusterProxyAddress,
-		closeCh:                  make(chan struct{}, 1),
+		autoMaxProcs:  goprocs,
+		handleTimeout: time.Duration(handleTimeoutSeconds) * time.Second,
+		config:        options.Config,
+		deployed:      make(map[string]*endpoint),
+		deployedCHS:   newDeployed(),
+		registrations: nil,
+		transport:     nil,
+		proxy:         nil,
+		closers:       make([]io.Closer, 0, 1),
+		cluster:       cluster,
+		closeCh:       make(chan struct{}, 1),
 	}
 	v.rt.discovery = v
-	if cluster != nil {
-		v.registrations = &Registrations{
-			id:      v.rt.appId,
-			values:  sync.Map{},
-			dialer:  v.http,
-			signer:  v.rt.signer,
-			worker:  v.rt.worker,
-			timeout: v.handleTimeout,
-		}
-	}
-	// http >>>
-	httpConfig := config.Http
-	if httpConfig == nil {
-		httpConfig = &HttpConfig{
-			Port:     80,
-			Cors:     nil,
-			TLS:      nil,
-			Options:  nil,
-			Handlers: nil,
-		}
-	}
-	handlersConfigBytes := httpConfig.Handlers
-	if handlersConfigBytes == nil || len(handlersConfigBytes) == 0 {
-		handlersConfigBytes = []byte{'{', '}'}
-	}
-	handlersConfig, handlersConfigErr := configures.NewJsonConfig(handlersConfigBytes)
-	if handlersConfigErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(handlersConfigErr)
-		return
-	}
-	handlers, handlersErr := NewHttpHandlers(HandlersOptions{
-		AppId:      v.rt.appId,
-		AppName:    v.rt.appName,
-		AppVersion: v.rt.appVersion,
-		Log:        v.rt.log.With("http", "handlers"),
-		Config:     handlersConfig,
-		Discovery:  v,
-		Status:     v.rt.status,
-	})
-	if handlersErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(handlersErr)
-		return
-	}
-	v.httpHandlers = handlers
 
-	appendHandlerErr := handlers.Append(newServicesHandler(servicesHandlerOptions{
-		Signer:     v.rt.signer,
-		DeployedCh: v.deployedCHS.acquire(),
-	}))
-	if appendHandlerErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
+	// transports >>>
+	transportClosers, transportErr := createService(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Transport, options.Transport.Middlewares, options.Transport.Handlers)
+	if transportErr != nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(transportErr)
 		return
 	}
-	if options.HttpHandlers != nil && len(options.HttpHandlers) > 0 {
-		for _, handler := range options.HttpHandlers {
-			if handler == nil {
-				continue
-			}
-			appendHandlerErr = handlers.Append(handler)
-			if appendHandlerErr != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
-				return
-			}
-			handlerWithService, ok := handler.(HttpHandlerWithServices)
-			if ok {
-				servicesOfHandler := handlerWithService.Services()
-				if servicesOfHandler != nil && len(servicesOfHandler) > 0 {
-					embeds = append(embeds, servicesOfHandler...)
-				}
-			}
+	v.closers = append(v.closers, transportClosers...)
+	v.transport = options.Transport.Transport
+	for _, middleware := range options.Transport.Middlewares {
+		v.closers = append(v.closers, middleware)
+		servicesSupplier, ok := middleware.(ServicesSupplier)
+		if ok && servicesSupplier.Services() != nil {
+			embeds = append(embeds, servicesSupplier.Services()...)
 		}
 	}
-	if options.HttpInterceptors != nil && len(options.HttpInterceptors) > 0 {
-		for _, interceptor := range options.HttpInterceptors {
-			if interceptor == nil {
-				continue
-			}
-			appendHandlerErr = handlers.AppendInterceptor(interceptor)
-			if appendHandlerErr != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(appendHandlerErr)
-				return
-			}
-			interceptorWithService, ok := interceptor.(HttpInterceptorWithServices)
-			if ok {
-				servicesOfInterceptorWithService := interceptorWithService.Services()
-				if servicesOfInterceptorWithService != nil && len(servicesOfInterceptorWithService) > 0 {
-					embeds = append(embeds, servicesOfInterceptorWithService...)
-				}
-			}
+	for _, handlers := range options.Transport.Handlers {
+		servicesSupplier, ok := handlers.(ServicesSupplier)
+		if ok && servicesSupplier.Services() != nil {
+			embeds = append(embeds, servicesSupplier.Services()...)
 		}
 	}
-	httpHandler := handlers.Build()
-	if httpConfig.Cors != nil {
-		httpHandler = newCorsHandler(httpConfig.Cors).Handler(httpHandler)
+	if cluster != nil {
+		v.registrations = newRegistrations(v.rt.log.With("discovery", "registrations"), v.rt.appId, v.rt.appName, v.rt.appVersion, cluster, v.rt.worker, v.transport, v.rt.signer, v.handleTimeout, clusterFetchMembersInterval)
 	}
-	var serverTLS *tls.Config
-	var clientTLS *tls.Config
-	if httpConfig.TLS != nil {
-		serverTLS, clientTLS, err = httpConfig.TLS.Config()
-		if err != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(err)
+	// proxy
+	if options.Proxy != nil {
+		proxyClosers, proxyErr := createProxy(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Transport, options.Proxy.Middlewares, options.Proxy.Handlers)
+		if proxyErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(proxyErr)
 			return
 		}
+		v.closers = append(v.closers, proxyClosers...)
+		v.proxy = options.Proxy.Transport
+		for _, middleware := range options.Proxy.Middlewares {
+			servicesSupplier, ok := middleware.(ServicesSupplier)
+			if ok && servicesSupplier.Services() != nil {
+				embeds = append(embeds, servicesSupplier.Services()...)
+			}
+		}
+		for _, handlers := range options.Proxy.Handlers {
+			servicesSupplier, ok := handlers.(ServicesSupplier)
+			if ok && servicesSupplier.Services() != nil {
+				embeds = append(embeds, servicesSupplier.Services()...)
+			}
+		}
 	}
-	if httpConfig.Options == nil || len(httpConfig.Options) < 2 {
-		httpConfig.Options = []byte{'{', '}'}
-	}
-	httpConfigOptions, httpConfigOptionsErr := configures.NewJsonConfig(httpConfig.Options)
-	if httpConfigOptionsErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(httpConfigOptionsErr)
-		return
-	}
-	buildErr := v.http.Build(HttpOptions{
-		Port:      httpConfig.Port,
-		ServerTLS: serverTLS,
-		ClientTLS: clientTLS,
-		Handler:   httpHandler,
-		Log:       v.rt.log.With("http", v.http.Name()),
-		Options:   httpConfigOptions,
-	})
-	if buildErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(buildErr)
-		return
-	}
-	// http <<<
-	// dev >>
-	if clusterDevMode {
-		// todo 在构建cluster的时候代理，取出cluster和http以及clusterProxyAddress参数。
-		// 因为自身http的dialer不是proxy的，所以不再proxy上开dev，而是在http上加dev handler。所以走的是非proxy的port。
-		// 实现为在services的internal handler里判断是否是dev。如果是，则discovery不带native，反之带。
-		v.cluster = newDevProxyCluster(v.rt.appId, v.cluster, v.clusterProxyAddress, v.http, bytex.FromString(secretKey))
-		// todo services 里的
-	}
-	// dev <<<
+	// transports <<<
+
 	// embeds
 	if len(embeds) > 0 {
 		for _, embed := range embeds {
@@ -380,20 +295,19 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 }
 
 type Endpoints struct {
-	log                      logs.Logger
-	rt                       *Runtime
-	autoMaxProcs             *procs.AutoMaxProcs
-	handleTimeout            time.Duration
-	config                   configures.Config
-	deployed                 map[string]*endpoint
-	deployedCHS              *deployed
-	registrations            *Registrations
-	transport                transports.Transport
-	transportHandlers        *transportHandlers
-	cluster                  Cluster
-	clusterNodeFetchInterval time.Duration
-	clusterProxyAddress      string
-	closeCh                  chan struct{}
+	log           logs.Logger
+	rt            *Runtime
+	autoMaxProcs  *procs.AutoMaxProcs
+	handleTimeout time.Duration
+	config        configures.Config
+	deployed      map[string]*endpoint
+	deployedCHS   *deployed
+	registrations *Registrations
+	transport     transports.Transport
+	proxy         transports.Transport
+	closers       []io.Closer
+	cluster       Cluster
+	closeCh       chan struct{}
 }
 
 func (e *Endpoints) Log() (log logs.Logger) {
@@ -496,42 +410,54 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	if e.cluster != nil {
 		joinErr := e.cluster.Join(ctx)
 		if joinErr != nil {
-			e.rt.status.flag.Off()
+			e.Close(ctx)
 			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
 			return
 		}
+
 		nodes, nodesErr := listMembers(ctx, e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
 		if nodesErr != nil {
-			e.rt.status.flag.Off()
+			e.Close(ctx)
+
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints get nodes from cluster failed")).WithCause(nodesErr)
 			return
 		}
 		// registrations
 		mergeErr := e.registrations.MergeNodes(nodes)
 		if mergeErr != nil {
-			e.rt.status.flag.Off()
+			e.Close(ctx)
 			err = errors.Warning("fns: endpoints listen failed").WithCause(errors.Warning("fns: endpoints merge member nodes failed")).WithCause(mergeErr)
 			return
 		}
 		e.fetchRegistrations()
 	}
-	// http listen
-	httpListenErrCh := make(chan error, 1)
+	// transport listen
+	transportListenErrCh := make(chan error, 2)
 	go func(srv transports.Transport, ch chan error) {
 		listenErr := srv.ListenAndServe()
 		if listenErr != nil {
-			ch <- errors.Warning("fns: run application failed").WithCause(listenErr)
+			ch <- errors.Warning("fns: endpoints listen failed").WithCause(listenErr)
 			close(ch)
 		}
-	}(e.transport, httpListenErrCh)
+	}(e.transport, transportListenErrCh)
+	if e.proxy != nil {
+		go func(srv transports.Transport, ch chan error) {
+			listenErr := srv.ListenAndServe()
+			if listenErr != nil {
+				ch <- errors.Warning("fns: endpoints listen failed").WithCause(listenErr)
+				close(ch)
+			}
+		}(e.proxy, transportListenErrCh)
+	}
 	select {
-	case <-time.After(1 * time.Second):
+	case <-time.After(3 * time.Second):
 		break
-	case httpErr := <-httpListenErrCh:
-		e.rt.status.flag.Off()
-		err = errors.Warning("fns: endpoints listen failed").WithCause(httpErr)
+	case transportErr := <-transportListenErrCh:
+		e.Close(ctx)
+		err = errors.Warning("fns: endpoints listen failed").WithCause(transportErr)
 		return
 	}
+
 	// listen endpoint after cluster cause the endpoint may use cluster
 	serviceListenErrCh := make(chan error, 8)
 	lns := 0
@@ -543,6 +469,9 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 		}
 		lns++
 		go func(ctx context.Context, ln Listenable, errCh chan error) {
+			if atomic.LoadInt64(&closed) == 1 {
+				return
+			}
 			lnErr := ln.Listen(ctx)
 			if lnErr != nil {
 				lnErr = errors.Warning(fmt.Sprintf("fns: %s listen falied", ln.Name())).WithCause(lnErr).WithMeta("service", ln.Name())
@@ -550,13 +479,13 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 					errCh <- lnErr
 				}
 			}
-		}(e.rt.SetIntoContext(ctx), ln, serviceListenErrCh)
+		}(e.rt.SetIntoContext(context.TODO()), ln, serviceListenErrCh)
 	}
 	if lns > 0 {
 		select {
 		case serviceListenErr := <-serviceListenErrCh:
 			atomic.AddInt64(&closed, 1)
-			e.rt.status.flag.Off()
+			e.Close(ctx)
 			err = errors.Warning("fns: endpoints listen failed").WithCause(serviceListenErr)
 			return
 		case <-time.After(time.Duration(lns) * time.Second):
@@ -575,15 +504,24 @@ func (e *Endpoints) Running() (ok bool) {
 func (e *Endpoints) Close(ctx context.Context) {
 	e.closeCh <- struct{}{}
 	close(e.closeCh)
+
 	e.rt.status.flag.Off()
+
+	for _, closer := range e.closers {
+		_ = closer.Close()
+	}
 	if e.cluster != nil {
 		_ = e.cluster.Leave(ctx)
 	}
 	if e.registrations != nil {
 		e.registrations.Close()
 	}
-	e.transportHandlers.Close()
+
 	_ = e.transport.Close()
+	if e.proxy != nil {
+		_ = e.proxy.Close()
+	}
+
 	for _, ep := range e.deployed {
 		ep.svc.Close()
 	}
@@ -591,39 +529,12 @@ func (e *Endpoints) Close(ctx context.Context) {
 }
 
 func (e *Endpoints) fetchRegistrations() {
-	go func(e *Endpoints) {
-		timer := time.NewTimer(e.clusterNodeFetchInterval)
-		for {
-			stop := false
-			select {
-			case <-e.closeCh:
-				stop = true
-				break
-			case <-timer.C:
-				// todo use registations.lister
-				nodes, nodesErr := listMembers(context.TODO(), e.cluster, e.rt.appId, e.rt.appName, e.rt.appVersion)
-				if nodesErr != nil {
-					if e.log.WarnEnabled() {
-						e.log.Warn().Cause(nodesErr).Message("fns: endpoints get nodes from cluster failed")
-					}
-					break
-				}
-				mergeErr := e.registrations.MergeNodes(nodes)
-				if mergeErr != nil {
-					if e.log.WarnEnabled() {
-						e.log.Warn().Cause(mergeErr).Message("fns: endpoints merge nodes failed")
-					}
-				}
-				break
-			}
-			if stop {
-				timer.Stop()
-				break
-			}
-			timer.Reset(e.clusterNodeFetchInterval)
-		}
-		timer.Stop()
-	}(e)
+	ctx, cancel := context.WithCancel(context.TODO())
+	go e.registrations.Refresh(ctx)
+	go func(closeCh chan struct{}, cancel context.CancelFunc) {
+		<-closeCh
+		cancel()
+	}(e.closeCh, cancel)
 	return
 }
 

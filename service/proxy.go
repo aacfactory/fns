@@ -30,6 +30,7 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -40,7 +41,8 @@ const (
 	proxyHandlerName = "proxy"
 )
 
-func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, cluster Cluster, registrations *Registrations, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (err error) {
+func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, registrations *Registrations, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (closers []io.Closer, err error) {
+	closers = make([]io.Closer, 0, 1)
 	midConfig, midConfigErr := config.MiddlewaresConfig()
 	if midConfigErr != nil {
 		err = errors.Warning("fns: create proxy failed").WithCause(midConfigErr)
@@ -51,6 +53,7 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 		Cors:    config.Cors,
 		Config:  midConfig,
 	})
+	closers = append(closers, mid)
 	if middlewares != nil && len(middlewares) > 0 {
 		for _, middleware := range middlewares {
 			appendErr := mid.Append(middleware)
@@ -69,13 +72,16 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 		Runtime: runtime,
 		Config:  handlersConfig,
 	})
+	closers = append(closers, h)
 	if handlers == nil {
 		handlers = make([]TransportHandler, 0, 1)
 	}
+
 	var dev *devProxyHandler
 	if config.EnableDevMode {
-		dev = newDevProxyHandler(cluster, registrations)
+		dev = newDevProxyHandler(registrations)
 	}
+
 	handlers = append(handlers, newProxyHandler(proxyHandlerOptions{
 		Signer:        runtime.Signer(),
 		Registrations: registrations,
@@ -113,7 +119,6 @@ type proxyHandlerOptions struct {
 	DeployedCh    <-chan map[string]*endpoint
 }
 
-// todo 只管正常代理和转发。开发由devProxy负责。且由于端口必然是services的端口，更加确凿的是，ssl如果存在，则必然是services的端口。
 func newProxyHandler(options proxyHandlerOptions) (handler *proxyHandler) {
 	handler = &proxyHandler{
 		log:                    nil,
@@ -223,7 +228,10 @@ func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
 	return
 }
 
-func (handler *proxyHandler) Close() {
+func (handler *proxyHandler) Close() (err error) {
+	if handler.dev != nil {
+		err = handler.dev.Close()
+	}
 	return
 }
 

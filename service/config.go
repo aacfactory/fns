@@ -209,7 +209,6 @@ func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config,
 type ClusterConfig struct {
 	Kind                 string          `json:"kind"`
 	FetchMembersInterval string          `json:"fetchMembersInterval"`
-	DevMode              *ClusterDevMode `json:"devMode"`
 	Shared               *SharedConfig   `json:"shared"`
 	Options              json.RawMessage `json:"options"`
 }

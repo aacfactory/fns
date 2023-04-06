@@ -24,9 +24,8 @@ const (
 	devProxyHandlerName = "dev"
 )
 
-func newDevProxyHandler(cluster Cluster, registrations *Registrations) *devProxyHandler {
+func newDevProxyHandler(registrations *Registrations) *devProxyHandler {
 	return &devProxyHandler{
-		cluster:       cluster,
 		registrations: registrations,
 	}
 }
@@ -36,7 +35,6 @@ func newDevProxyHandler(cluster Cluster, registrations *Registrations) *devProxy
 // * cluster （join，leave，nodes，shared）
 // * /services/names
 type devProxyHandler struct {
-	cluster       Cluster
 	registrations *Registrations
 }
 
@@ -60,6 +58,6 @@ func (handler *devProxyHandler) Handle(w transports.ResponseWriter, r *transport
 	return
 }
 
-func (handler *devProxyHandler) Close() {
+func (handler *devProxyHandler) Close() (err error) {
 	return
 }

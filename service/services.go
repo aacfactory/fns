@@ -28,6 +28,7 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,7 +37,8 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (service transports.Transport, err error) {
+func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (closers []io.Closer, err error) {
+	closers = make([]io.Closer, 0, 1)
 	midConfig, midConfigErr := config.MiddlewaresConfig()
 	if midConfigErr != nil {
 		err = errors.Warning("fns: create transport failed").WithCause(midConfigErr)
@@ -47,6 +49,7 @@ func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoi
 		Cors:    config.Cors,
 		Config:  midConfig,
 	})
+	closers = append(closers, mid)
 	if middlewares != nil && len(middlewares) > 0 {
 		for _, middleware := range middlewares {
 			appendErr := mid.Append(middleware)
@@ -65,7 +68,7 @@ func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoi
 		Runtime: runtime,
 		Config:  handlersConfig,
 	})
-
+	closers = append(closers, h)
 	if handlers == nil {
 		handlers = make([]TransportHandler, 0, 1)
 	}
@@ -231,7 +234,7 @@ func (handler *servicesHandler) Handle(w transports.ResponseWriter, r *transport
 	return
 }
 
-func (handler *servicesHandler) Close() {
+func (handler *servicesHandler) Close() (err error) {
 	return
 }
 

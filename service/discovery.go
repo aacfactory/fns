@@ -24,7 +24,9 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
 	"github.com/aacfactory/rings"
 	"net/http"
 	"sort"
@@ -239,7 +241,7 @@ type Registration struct {
 	version versions.Version
 	address string
 	name    string
-	client  TransportClient
+	client  transports.Client
 	signer  *secret.Signer
 	worker  Workers
 	timeout time.Duration
@@ -301,24 +303,34 @@ func (registration *Registration) release(task *registrationTask) {
 	return
 }
 
-func newRegistrations(id string, worker Workers, dialer TransportDialer, signer *secret.Signer, timeout time.Duration) *Registrations {
+func newRegistrations(log logs.Logger, id string, name string, version versions.Version, cluster Cluster, worker Workers, dialer transports.Dialer, signer *secret.Signer, timeout time.Duration, refreshInterval time.Duration) *Registrations {
 	return &Registrations{
-		id:      id,
-		values:  sync.Map{},
-		signer:  signer,
-		dialer:  dialer,
-		worker:  worker,
-		timeout: timeout,
+		id:              id,
+		name:            name,
+		version:         version,
+		log:             log,
+		cluster:         cluster,
+		values:          sync.Map{},
+		signer:          signer,
+		dialer:          dialer,
+		worker:          worker,
+		timeout:         timeout,
+		refreshInterval: refreshInterval,
 	}
 }
 
 type Registrations struct {
-	id      string
-	values  sync.Map
-	signer  *secret.Signer
-	dialer  TransportDialer
-	worker  Workers
-	timeout time.Duration
+	id              string
+	name            string
+	version         versions.Version
+	log             logs.Logger
+	cluster         Cluster
+	values          sync.Map
+	signer          *secret.Signer
+	dialer          transports.Dialer
+	worker          Workers
+	timeout         time.Duration
+	refreshInterval time.Duration
 }
 
 func (r *Registrations) Add(registration *Registration) {
@@ -578,11 +590,72 @@ func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
 		for _, node := range newNodes {
 			addErr := r.AddNode(node)
 			if addErr != nil {
-				err = errors.Warning("fns: cluster registrations merge nodes failed").WithCause(addErr)
+				err = errors.Warning("registrations: merge nodes failed").WithCause(addErr)
 				return
 			}
 		}
 	}
+	return
+}
+
+func (r *Registrations) ListMembers(ctx context.Context) (members Nodes, err error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	nodes, getNodesErr := r.cluster.Nodes(ctx)
+	if getNodesErr != nil {
+		err = errors.Warning("registrations: list members failed").WithCause(getNodesErr)
+		return
+	}
+	members = make([]Node, 0, 1)
+	if nodes == nil || len(nodes) == 0 {
+		return
+	}
+	for _, node := range nodes {
+		if node.Id == r.id {
+			continue
+		}
+		if node.Name == r.name && node.Version.Equals(r.version) {
+			continue
+		}
+		members = append(members, node)
+	}
+	sort.Sort(members)
+	return
+}
+
+func (r *Registrations) Refresh(ctx context.Context) {
+	// todo
+	timer := time.NewTimer(r.refreshInterval)
+	for {
+		stop := false
+		select {
+		case <-ctx.Done():
+			stop = true
+			break
+		case <-timer.C:
+			nodes, nodesErr := r.ListMembers(context.TODO())
+			if nodesErr != nil {
+				if r.log.WarnEnabled() {
+					r.log.Warn().Cause(nodesErr).Message("registrations: refresh failed")
+				}
+				break
+			}
+			mergeErr := r.MergeNodes(nodes)
+			if mergeErr != nil {
+				if r.log.WarnEnabled() {
+					r.log.Warn().Cause(mergeErr).Message("registrations: refresh failed")
+				}
+			}
+			break
+		}
+		if stop {
+			timer.Stop()
+			break
+		}
+		timer.Reset(r.refreshInterval)
+	}
+	timer.Stop()
 	return
 }
 

@@ -68,7 +68,9 @@ func RateLimitMiddleware() TransportMiddleware {
 }
 
 func CustomizeRateLimitMiddleware(counter RateLimitCounter) TransportMiddleware {
-	return &rateLimitMiddleware{}
+	return &rateLimitMiddleware{
+		counter: counter,
+	}
 }
 
 type rateLimitMiddleware struct {
@@ -151,7 +153,7 @@ func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transpor
 	})
 }
 
-func (middleware *rateLimitMiddleware) Close() {
+func (middleware *rateLimitMiddleware) Close() (err error) {
 	middleware.counter.Close()
 	return
 }

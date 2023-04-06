@@ -21,6 +21,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/fns/service/validators"
 	"os"
 	"strings"
@@ -36,14 +37,14 @@ var (
 		id:                    "",
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
-		proxyMode:             false,
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
-		transportOptions:      UseTransport(service.FastHttpTransport()),
+		transportOptions:      UseTransport(transports.FastHttpTransport()),
+		proxyOptions:          nil,
 		shutdownTimeout:       60 * time.Second,
 	}
 )
 
-func UseTransport(transport service.Transport) *TransportOptions {
+func UseTransport(transport transports.Transport) *TransportOptions {
 	return &TransportOptions{
 		transport:   transport,
 		handlers:    make([]service.TransportHandler, 0, 1),
@@ -52,7 +53,7 @@ func UseTransport(transport service.Transport) *TransportOptions {
 }
 
 type TransportOptions struct {
-	transport   service.Transport
+	transport   transports.Transport
 	handlers    []service.TransportHandler
 	middlewares []service.TransportMiddleware
 }
@@ -77,9 +78,9 @@ type Options struct {
 	id                    string
 	name                  string
 	version               versions.Version
-	proxyMode             bool
 	configRetrieverOption configures.RetrieverOption
 	transportOptions      *TransportOptions
+	proxyOptions          *TransportOptions
 	shutdownTimeout       time.Duration
 }
 
@@ -151,9 +152,15 @@ func Version(version string) Option {
 	}
 }
 
-func ProxyMode() Option {
+func Proxy(tr *TransportOptions) Option {
 	return func(options *Options) error {
-		options.proxyMode = true
+		if tr == nil || tr.transport == nil {
+			return fmt.Errorf("enable proxy failed for it is nil")
+		}
+		if tr.transport.Name() == "" {
+			return fmt.Errorf("enable proxy failed for name of transport is nil")
+		}
+		options.proxyOptions = tr
 		return nil
 	}
 }

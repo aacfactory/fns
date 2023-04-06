@@ -72,7 +72,7 @@ type TransportMiddleware interface {
 	Name() (name string)
 	Build(options TransportMiddlewareOptions) (err error)
 	Handler(next transports.Handler) transports.Handler
-	Close()
+	Close() (err error)
 }
 
 type transportMiddlewaresOptions struct {
@@ -134,6 +134,18 @@ func (middlewares *transportMiddlewares) Append(middleware TransportMiddleware) 
 		return
 	}
 	middlewares.middlewares = append(middlewares.middlewares, middleware)
+	return
+}
+
+func (middlewares *transportMiddlewares) Close() (err error) {
+	errs := errors.MakeErrors()
+	for _, middleware := range middlewares.middlewares {
+		err = middleware.Close()
+		if err != nil {
+			errs.Append(err)
+		}
+	}
+	err = errs.Error()
 	return
 }
 
@@ -283,8 +295,9 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 	})
 }
 
-func (middleware *transportApplicationMiddleware) Close() {
+func (middleware *transportApplicationMiddleware) Close() (err error) {
 	middleware.counter.Wait()
+	return
 }
 
 func (middleware *transportApplicationMiddleware) canonicalizeIp(ip string) string {

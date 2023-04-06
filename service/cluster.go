@@ -194,7 +194,19 @@ func RegisterClusterBuilder(name string, builder ClusterBuilder) {
 }
 
 func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
+	if name == devClusterBuilderName {
+		return devClusterBuilder, true
+	}
 	builder, has = builders[name]
+	return
+}
+
+const (
+	devClusterBuilderName = "dev"
+)
+
+func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err error) {
+
 	return
 }
 

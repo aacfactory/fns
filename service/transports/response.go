@@ -24,6 +24,7 @@ import (
 
 type ResponseWriter interface {
 	Status() int
+	SetStatus(status int)
 	Header() Header
 	Succeed(v interface{})
 	Failed(cause errors.CodeError)

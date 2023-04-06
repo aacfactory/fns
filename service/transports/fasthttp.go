@@ -488,6 +488,10 @@ func (w *fastHttpResponseWriter) Status() int {
 	return w.status
 }
 
+func (w *fastHttpResponseWriter) SetStatus(status int) {
+	w.status = status
+}
+
 func (w *fastHttpResponseWriter) Header() Header {
 	return w.header
 }

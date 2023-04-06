@@ -138,6 +138,14 @@ func (r *Request) UseTLS() {
 	r.isTLS = true
 }
 
+func (r *Request) Method() []byte {
+	return r.method
+}
+
+func (r *Request) RemoteAddr() []byte {
+	return r.remoteAddr
+}
+
 func (r *Request) Host() []byte {
 	return r.host
 }

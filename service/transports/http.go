@@ -138,6 +138,10 @@ func (w *netResponseWriter) Status() int {
 	return w.status
 }
 
+func (w *netResponseWriter) SetStatus(status int) {
+	w.status = status
+}
+
 func (w *netResponseWriter) Header() Header {
 	return w.header
 }

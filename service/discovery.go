@@ -132,20 +132,44 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
 
 		serviceName, fn := r.Fn()
-		status, responseHeader, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
+
+		req, reqErr := transports.NewRequest(ctx, bytex.FromString(http.MethodPost), bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
+		if reqErr != nil {
+			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(reqErr))
+			return
+		}
+		for name, vv := range header {
+			for _, v := range vv {
+				req.Header().Add(name, v)
+			}
+		}
+		req.SetBody(requestBody)
+		resp, postErr := registration.client.Do(ctx, req)
 		if postErr != nil {
 			// todo add error times in reg
 			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(postErr))
 			return
 		}
-		if responseHeader.Get(httpConnectionHeader) == httpCloseHeader {
+
+		if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
 			// todo mark reg is closed
 
 		}
+		if resp.Status != http.StatusOK {
+			var body errors.CodeError
+			if resp.Body == nil || len(resp.Body) == 0 {
+				body = errors.Warning("nil error")
+			} else {
+				body = errors.Decode(resp.Body)
+			}
+			fr.Failed(body)
+			return
+		}
+
 		// todo cache control
 
 		ir := &internalResponseImpl{}
-		decodeErr := json.Unmarshal(responseBody, ir)
+		decodeErr := json.Unmarshal(resp.Body, ir)
 		if decodeErr != nil {
 			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(decodeErr))
 			return
@@ -169,7 +193,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 			r.Trunk().ReadFrom(ir.Trunk)
 		}
 		// body
-		if status == http.StatusOK {
+		if ir.Succeed {
 			fr.Succeed(ir.Body)
 		} else {
 			fr.Failed(errors.Decode(ir.Body))
@@ -182,21 +206,44 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		}
 		header := r.Header()
 		serviceName, fn := r.Fn()
-		status, responseHeader, responseBody, postErr := registration.client.Post(ctx, fmt.Sprintf("/%s/%s", serviceName, fn), http.Header(header), requestBody)
+
+		req, reqErr := transports.NewRequest(ctx, bytex.FromString(http.MethodPost), bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
+		if reqErr != nil {
+			fr.Failed(errors.Warning("fns: registration request failed").WithCause(reqErr))
+			return
+		}
+		for name, vv := range header {
+			for _, v := range vv {
+				req.Header().Add(name, v)
+			}
+		}
+		req.SetBody(requestBody)
+		resp, postErr := registration.client.Do(ctx, req)
 		if postErr != nil {
 			// todo add error times in reg
 			fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
 			return
 		}
-		if responseHeader.Get(httpConnectionHeader) == httpCloseHeader {
+
+		if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
 			// todo mark reg is closed
 
 		}
-		// todo cache control
-		if status == http.StatusOK {
-			fr.Succeed(json.RawMessage(responseBody))
+		if resp.Status != http.StatusOK {
+			var body errors.CodeError
+			if resp.Body == nil || len(resp.Body) == 0 {
+				body = errors.Warning("nil error")
+			} else {
+				body = errors.Decode(resp.Body)
+			}
+			fr.Failed(body)
+			return
+		}
+		if resp.Body == nil || len(resp.Body) == 0 {
+			fr.Succeed(nil)
 		} else {
-			fr.Failed(errors.Decode(responseBody))
+			// todo cache control
+			fr.Succeed(json.RawMessage(resp.Body))
 		}
 	}
 	return

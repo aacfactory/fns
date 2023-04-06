@@ -88,6 +88,7 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 		Dev:           dev,
 		DeployedCh:    deployedCh,
 	}))
+
 	for _, handler := range handlers {
 		appendErr := h.Append(handler)
 		if appendErr != nil {

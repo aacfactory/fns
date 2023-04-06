@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/systems/cpu"
@@ -47,8 +48,8 @@ type TransportHandlerOptions struct {
 type TransportHandler interface {
 	Name() (name string)
 	Build(options TransportHandlerOptions) (err error)
-	Accept(r *http.Request) (ok bool)
-	http.Handler
+	Accept(r *transports.Request) (ok bool)
+	transports.Handler
 	Close()
 }
 
@@ -111,20 +112,17 @@ func (handlers *transportHandlers) Append(handler TransportHandler) (err error) 
 	return
 }
 
-func (handlers *transportHandlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (handlers *transportHandlers) Handle(w transports.ResponseWriter, r *transports.Request) {
 	handled := false
 	for _, handler := range handlers.handlers {
 		if accepted := handler.Accept(r); accepted {
-			handler.ServeHTTP(w, r)
+			handler.Handle(w, r)
 			handled = true
 			break
 		}
 	}
 	if !handled {
-		w.Header().Set(httpContentType, httpContentTypeJson)
-		w.WriteHeader(http.StatusNotFound)
-		p, _ := json.Marshal(ErrNotFound)
-		_, _ = w.Write(p)
+		w.Failed(ErrNotFound)
 	}
 }
 
@@ -196,29 +194,30 @@ func (handler *transportApplicationHandler) Build(options TransportHandlerOption
 	return
 }
 
-func (handler *transportApplicationHandler) Accept(r *http.Request) (ok bool) {
-	ok = r.Method == http.MethodGet && r.URL.Path == "/application/health"
+func (handler *transportApplicationHandler) Accept(r *transports.Request) (ok bool) {
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/application/health"
 	if ok {
 		return
 	}
-	ok = r.Method == http.MethodGet && r.URL.Path == "/application/stats"
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/application/stats"
 	if ok {
 		return
 	}
 	return
 }
 
-func (handler *transportApplicationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && r.URL.Path == "/application/health" {
+func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
+	if r.IsGet() && bytex.ToString(r.Path()) == "/application/health" {
 		body := fmt.Sprintf(
 			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\", \"deviceIp\":\"%s\"}",
-			handler.appName, handler.appId, handler.appVersion.String(), handler.launchAT.Format(time.RFC3339), time.Now().Format(time.RFC3339), r.Header.Get(httpDeviceIpHeader),
+			handler.appName, handler.appId, handler.appVersion.String(), handler.launchAT.Format(time.RFC3339), time.Now().Format(time.RFC3339), r.Header().Get(httpDeviceIpHeader),
 		)
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set(httpContentType, httpContentTypeJson)
+		w.SetStatus(http.StatusOK)
 		_, _ = w.Write(bytex.FromString(body))
 		return
 	}
-	if handler.statsEnabled && r.Method == http.MethodGet && r.URL.Path == "/application/stats" {
+	if handler.statsEnabled && r.IsGet() && bytex.ToString(r.Path()) == "/application/stats" {
 		v, _, _ := handler.group.Do(handler.Name(), func() (v interface{}, err error) {
 			stat := &applicationStats{
 				Id:      handler.appId,
@@ -243,7 +242,8 @@ func (handler *transportApplicationHandler) ServeHTTP(w http.ResponseWriter, r *
 			v, _ = json.Marshal(stat)
 			return
 		})
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set(httpContentType, httpContentTypeJson)
+		w.SetStatus(http.StatusOK)
 		_, _ = w.Write(v.([]byte))
 		return
 	}

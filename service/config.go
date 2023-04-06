@@ -22,18 +22,20 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/service/ssl"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 type Config struct {
-	Runtime *RuntimeConfig `json:"runtime"`
-	Log     *LogConfig     `json:"log"`
-	Http    *HttpConfig    `json:"http"`
-	Cluster *ClusterConfig `json:"cluster"`
-	Proxy   *ProxyConfig   `json:"proxy"`
+	Runtime   *RuntimeConfig   `json:"runtime"`
+	Log       *LogConfig       `json:"log"`
+	Transport *TransportConfig `json:"transport"`
+	Cluster   *ClusterConfig   `json:"cluster"`
+	Proxy     *ProxyConfig     `json:"proxy"`
 }
 
 type LogConfig struct {
@@ -60,13 +62,99 @@ type AutoMaxProcsConfig struct {
 	Max int `json:"max"`
 }
 
-type HttpConfig struct {
-	Port        int             `json:"port"`
-	Cors        *CorsConfig     `json:"cors"`
-	TLS         *TLSConfig      `json:"tls"`
-	Options     json.RawMessage `json:"options"`
-	Middlewares json.RawMessage `json:"middlewares"`
-	Handlers    json.RawMessage `json:"handlers"`
+type TransportConfig struct {
+	Port        int                    `json:"port"`
+	Cors        *transports.CorsConfig `json:"cors"`
+	TLS         *TLSConfig             `json:"tls"`
+	Options     json.RawMessage        `json:"options"`
+	Middlewares json.RawMessage        `json:"middlewares"`
+	Handlers    json.RawMessage        `json:"handlers"`
+}
+
+func (config *TransportConfig) MiddlewareConfig(name string) (conf configures.Config, err error) {
+	if config.Middlewares == nil || len(config.Middlewares) == 0 {
+		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		return
+	}
+	conf, err = configures.NewJsonConfig(config.Middlewares)
+	if err != nil {
+		err = errors.Warning(fmt.Sprintf("get %s middleware config failed", name)).WithCause(err)
+		return
+	}
+	has := false
+	conf, has = conf.Node(name)
+	if !has {
+		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		return
+	}
+	return
+}
+
+func (config *TransportConfig) HandlerConfig(name string) (conf configures.Config, err error) {
+	if config.Handlers == nil || len(config.Handlers) == 0 {
+		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		return
+	}
+	conf, err = configures.NewJsonConfig(config.Handlers)
+	if err != nil {
+		err = errors.Warning(fmt.Sprintf("get %s handler config failed", name)).WithCause(err)
+		return
+	}
+	has := false
+	conf, has = conf.Node(name)
+	if !has {
+		conf, err = configures.NewJsonConfig([]byte{'{', '}'})
+		return
+	}
+	return
+}
+
+func (config *TransportConfig) ConvertToTransportsOptions(log logs.Logger, handler transports.Handler) (options transports.Options, err error) {
+	options = transports.Options{
+		Port:      80,
+		ServerTLS: nil,
+		ClientTLS: nil,
+		Handler:   handler,
+		Log:       log.With("fns", "transport"),
+		Config:    nil,
+	}
+	if config == nil {
+		return
+	}
+	var serverTLS *tls.Config
+	var clientTLS *tls.Config
+	if config.TLS != nil {
+		var tlsErr error
+		serverTLS, clientTLS, tlsErr = config.TLS.Config()
+		if tlsErr != nil {
+			err = errors.Warning("convert to transport options failed").WithCause(tlsErr)
+			return
+		}
+	}
+	options.ServerTLS = serverTLS
+	options.ClientTLS = clientTLS
+	port := config.Port
+	if port == 0 {
+		if serverTLS == nil {
+			port = 80
+		} else {
+			port = 443
+		}
+	}
+	if port < 1 || port > 65535 {
+		err = errors.Warning("convert to transport options failed").WithCause(fmt.Errorf("port is invalid, port must great than 1024 or less than 65536"))
+		return
+	}
+	options.Port = port
+	if config.Options == nil {
+		config.Options = []byte("{}")
+	}
+	options.Config, err = configures.NewJsonConfig(config.Options)
+	if err != nil {
+		err = errors.Warning("convert to transport options failed").WithCause(fmt.Errorf("options is invalid")).WithCause(err)
+		return
+	}
+	return
 }
 
 type TLSConfig struct {
@@ -94,15 +182,6 @@ func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config,
 	return
 }
 
-type CorsConfig struct {
-	AllowedOrigins      []string `json:"allowedOrigins"`
-	AllowedHeaders      []string `json:"allowedHeaders"`
-	ExposedHeaders      []string `json:"exposedHeaders"`
-	AllowCredentials    bool     `json:"allowCredentials"`
-	MaxAge              int      `json:"maxAge"`
-	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"`
-}
-
 type ClusterConfig struct {
 	Kind                 string          `json:"kind"`
 	FetchMembersInterval string          `json:"fetchMembersInterval"`
@@ -112,7 +191,8 @@ type ClusterConfig struct {
 }
 
 type ClusterDevMode struct {
-	ProxyAddress string `json:"proxyAddress"`
+	ProxyAddress string     `json:"proxyAddress"`
+	TLS          *TLSConfig `json:"tls"`
 }
 
 type SharedConfig struct {

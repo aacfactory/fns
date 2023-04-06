@@ -273,8 +273,16 @@ func (handler *proxyHandler) handleProxy(w http.ResponseWriter, r *http.Request)
 
 	// TODO
 	/*
-		just as services, but use registrations insteadof discovery
-		cause local was not served in proxy port
+			just as services, but use registrations insteadof discovery
+			cause local was not served in proxy port
+		see fasthttp
+		func copyZeroAlloc(w io.Writer, r io.Reader) (int64, error) {
+			vbuf := copyBufPool.Get()
+			buf := vbuf.([]byte)
+			n, err := io.CopyBuffer(w, r, buf)
+			copyBufPool.Put(vbuf)
+			return n, err
+		}
 	*/
 
 	return

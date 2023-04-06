@@ -19,3 +19,9 @@ package transports
 type Handler interface {
 	Handle(w ResponseWriter, r *Request)
 }
+
+type HandlerFunc func(ResponseWriter, *Request)
+
+func (f HandlerFunc) Handle(w ResponseWriter, r *Request) {
+	f(w, r)
+}

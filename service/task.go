@@ -35,7 +35,7 @@ func TryFork(ctx context.Context, task Task) (ok bool) {
 	if task == nil {
 		return
 	}
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	nc := context.WithValue(context.TODO(), contextRuntimeKey, rt)
 	log := rt.log
 	taskName := task.Name()
@@ -56,7 +56,7 @@ func Fork(ctx context.Context, task Task) {
 	if task == nil {
 		return
 	}
-	rt := getRuntime(ctx)
+	rt := GetRuntime(ctx)
 	nc := context.WithValue(context.TODO(), contextRuntimeKey, rt)
 	log := rt.log
 	taskName := task.Name()

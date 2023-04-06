@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
@@ -126,24 +127,20 @@ func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions)
 	return
 }
 
-func (middleware *rateLimitMiddleware) Handler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		deviceId := r.Header.Get(httpDeviceIdHeader)
+func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transports.Handler {
+	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
+		deviceId := r.Header().Get(httpDeviceIdHeader)
 		ok, incrErr := middleware.counter.Incr(r.Context(), deviceId)
 		if incrErr != nil {
-			p, _ := json.Marshal(errors.Warning("fns: rate limit counter incr failed").WithCause(incrErr))
-			w.WriteHeader(555)
-			_, _ = w.Write(p)
+			w.Failed(errors.Warning("fns: rate limit counter incr failed").WithCause(incrErr))
 			return
 		}
 		if !ok {
-			p, _ := json.Marshal(ErrTooMayRequest)
 			w.Header().Set(httpResponseRetryAfter, middleware.retryAfter)
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write(p)
+			w.Failed(ErrTooMayRequest)
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.Handle(w, r)
 		repayErr := middleware.counter.Decr(r.Context(), deviceId)
 		if repayErr != nil && middleware.log.ErrorEnabled() {
 			middleware.log.Error().Cause(

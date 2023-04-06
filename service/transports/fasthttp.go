@@ -537,6 +537,15 @@ func (w *fastHttpResponseWriter) Failed(cause errors.CodeError) {
 	return
 }
 
+func (w *fastHttpResponseWriter) Write(body []byte) (int, error) {
+	if body == nil {
+		return 0, nil
+	}
+	bodyLen := len(body)
+	w.write(body, bodyLen)
+	return bodyLen, nil
+}
+
 func (w *fastHttpResponseWriter) write(body []byte, bodyLen int) {
 	n := 0
 	for n < bodyLen {

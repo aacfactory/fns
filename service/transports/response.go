@@ -28,6 +28,7 @@ type ResponseWriter interface {
 	Header() Header
 	Succeed(v interface{})
 	Failed(cause errors.CodeError)
+	Write(body []byte) (int, error)
 	Hijack(func(conn net.Conn, brw *bufio.ReadWriter, err error))
 	Hijacked() bool
 }

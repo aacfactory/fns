@@ -185,6 +185,15 @@ func (w *netResponseWriter) Failed(cause errors.CodeError) {
 	return
 }
 
+func (w *netResponseWriter) Write(body []byte) (int, error) {
+	if body == nil {
+		return 0, nil
+	}
+	bodyLen := len(body)
+	w.write(body, bodyLen)
+	return bodyLen, nil
+}
+
 func (w *netResponseWriter) write(body []byte, bodyLen int) {
 	n := 0
 	for n < bodyLen {

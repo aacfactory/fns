@@ -19,10 +19,11 @@ package service
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"github.com/rs/cors"
 	"github.com/valyala/bytebufferpool"
 	"net"
 	"net/http"
@@ -46,13 +47,13 @@ type TransportMiddlewareOptions struct {
 type TransportMiddleware interface {
 	Name() (name string)
 	Build(options TransportMiddlewareOptions) (err error)
-	Handler(next http.Handler) http.Handler
+	Handler(next transports.Handler) transports.Handler
 	Close()
 }
 
 type transportMiddlewaresOptions struct {
 	Runtime *Runtime
-	Cors    cors.Cors
+	Cors    *transports.CorsConfig
 	Config  configures.Config
 }
 
@@ -70,7 +71,7 @@ func newTransportMiddlewares(options transportMiddlewaresOptions) *transportMidd
 type transportMiddlewares struct {
 	config      configures.Config
 	runtime     *Runtime
-	cors        cors.Cors
+	cors        *transports.CorsConfig
 	middlewares []TransportMiddleware
 }
 
@@ -112,12 +113,12 @@ func (middlewares *transportMiddlewares) Append(middleware TransportMiddleware) 
 	return
 }
 
-func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) http.Handler {
-	var handler http.Handler = handlers
+func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) transports.Handler {
+	var handler transports.Handler = handlers
 	for i := len(middlewares.middlewares) - 1; i > -1; i-- {
 		handler = middlewares.middlewares[i].Handler(handler)
 	}
-	return middlewares.cors.Handler(newRuntimeMiddleware(middlewares.runtime, handler))
+	return newCorsHandler(middlewares.cors, newRuntimeMiddleware(middlewares.runtime, handler))
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -140,79 +141,21 @@ func (r *responseWriter) WriteHeader(statusCode int) {
 	r.status = statusCode
 }
 
-func newRuntimeMiddleware(runtime *Runtime, handler http.Handler) http.Handler {
+func newRuntimeMiddleware(runtime *Runtime, handler transports.Handler) transports.Handler {
 	return &runtimeMiddleware{
-		pool: sync.Pool{
-			New: func() any {
-				return &responseWriter{
-					status: http.StatusOK,
-					header: nil,
-					buf:    nil,
-				}
-			},
-		},
 		runtime: runtime,
 		next:    handler,
 	}
 }
 
 type runtimeMiddleware struct {
-	pool    sync.Pool
 	runtime *Runtime
-	next    http.Handler
+	next    transports.Handler
 }
 
-func (middleware *runtimeMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var bw *responseWriter
-	got := middleware.pool.Get()
-	if got == nil {
-		bw = &responseWriter{}
-	} else {
-		ok := false
-		bw, ok = got.(*responseWriter)
-		if !ok {
-			w.Header().Set(httpContentType, httpContentTypeJson)
-			w.WriteHeader(555)
-			p, _ := json.Marshal(errors.NotFound("fns: get buffer response writer from pool failed").
-				WithCause(errors.Warning("type was not matched")).
-				WithMeta("fns", "handlers"))
-			_, _ = w.Write(p)
-			return
-		}
-	}
-	bw.header = http.Header{}
-	bw.buf = bytebufferpool.Get()
-	r = r.WithContext(middleware.runtime.SetIntoContext(r.Context()))
-	middleware.next.ServeHTTP(bw, r)
-	if bw.header != nil && len(bw.header) > 0 {
-		for k, vv := range bw.header {
-			if vv == nil || len(vv) == 0 {
-				continue
-			}
-			for _, v := range vv {
-				w.Header().Add(k, v)
-			}
-		}
-	}
-	w.Header().Set(httpContentType, httpContentTypeJson)
-	w.WriteHeader(bw.status)
-	bodyLen := bw.buf.Len()
-	if bodyLen == 0 {
-		bytebufferpool.Put(bw.buf)
-		middleware.pool.Put(bw)
-		return
-	}
-	body := bw.buf.Bytes()
-	n := 0
-	for n < bodyLen {
-		nn, writeErr := w.Write(body[n:])
-		if writeErr != nil {
-			break
-		}
-		n += nn
-	}
-	bytebufferpool.Put(bw.buf)
-	middleware.pool.Put(bw)
+func (middleware *runtimeMiddleware) Handle(w transports.ResponseWriter, r *transports.Request) {
+	r.WithContext(middleware.runtime.SetIntoContext(r.Context()))
+	middleware.next.Handle(w, r)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -268,20 +211,15 @@ func (middleware *transportApplicationMiddleware) Build(options TransportMiddlew
 	return
 }
 
-func (middleware *transportApplicationMiddleware) Handler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (middleware *transportApplicationMiddleware) Handler(next transports.Handler) transports.Handler {
+	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
 		if middleware.appStatus.Closed() {
-			w.Header().Set(httpConnectionHeader, httpCloseHeader)
-			w.WriteHeader(http.StatusServiceUnavailable)
-			p, _ := json.Marshal(ErrUnavailable)
-			_, _ = w.Write(p)
+			w.Failed(ErrUnavailable)
 			return
 		}
 		if middleware.appStatus.Starting() {
 			w.Header().Set(httpResponseRetryAfter, "10")
-			w.WriteHeader(http.StatusTooEarly)
-			p, _ := json.Marshal(ErrTooEarly)
-			_, _ = w.Write(p)
+			w.Failed(ErrTooEarly)
 			return
 		}
 		middleware.counter.Add(1)
@@ -291,14 +229,14 @@ func (middleware *transportApplicationMiddleware) Handler(next http.Handler) htt
 			handleBeg = time.Now()
 		}
 		// deviceId
-		deviceId := strings.TrimSpace(r.Header.Get(httpDeviceIdHeader))
+		deviceId := strings.TrimSpace(r.Header().Get(httpDeviceIdHeader))
 		if deviceId == "" {
-			deviceId = strings.TrimSpace(r.URL.Query().Get("deviceId"))
+			deviceId = strings.TrimSpace(bytex.ToString(r.Param("deviceId")))
 			if deviceId == "" {
 				if middleware.latencyEnabled {
 					w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 				}
-				w.WriteHeader(555)
+				w.SetStatus(555)
 				p, _ := json.Marshal(ErrDeviceId)
 				_, _ = w.Write(p)
 				middleware.counter.Done()
@@ -306,37 +244,37 @@ func (middleware *transportApplicationMiddleware) Handler(next http.Handler) htt
 			}
 		}
 		// device ip
-		deviceIp := r.Header.Get(httpDeviceIpHeader)
+		deviceIp := r.Header().Get(httpDeviceIpHeader)
 		if deviceIp == "" {
-			if trueClientIp := r.Header.Get(httpTrueClientIp); trueClientIp != "" {
+			if trueClientIp := r.Header().Get(httpTrueClientIp); trueClientIp != "" {
 				deviceIp = trueClientIp
-			} else if realIp := r.Header.Get(httpXRealIp); realIp != "" {
+			} else if realIp := r.Header().Get(httpXRealIp); realIp != "" {
 				deviceIp = realIp
-			} else if forwarded := r.Header.Get(httpXForwardedForHeader); forwarded != "" {
+			} else if forwarded := r.Header().Get(httpXForwardedForHeader); forwarded != "" {
 				i := strings.Index(forwarded, ", ")
 				if i == -1 {
 					i = len(forwarded)
 				}
 				deviceIp = forwarded[:i]
 			} else {
-				remoteIp, _, remoteIpErr := net.SplitHostPort(r.RemoteAddr)
+				remoteIp, _, remoteIpErr := net.SplitHostPort(bytex.ToString(r.RemoteAddr()))
 				if remoteIpErr != nil {
-					remoteIp = r.RemoteAddr
+					remoteIp = bytex.ToString(r.RemoteAddr())
 				}
 				deviceIp = remoteIp
 			}
 		}
 		deviceIp = middleware.canonicalizeIp(deviceIp)
-		r.Header.Set(httpDeviceIpHeader, deviceIp)
+		r.Header().Set(httpDeviceIpHeader, deviceIp)
 		// requestId
-		requestId := strings.TrimSpace(r.Header.Get(httpRequestIdHeader))
+		requestId := strings.TrimSpace(r.Header().Get(httpRequestIdHeader))
 		if requestId == "" {
-			requestId = strings.TrimSpace(r.URL.Query().Get("requestId"))
+			requestId = strings.TrimSpace(bytex.ToString(r.Param("requestId")))
 			if requestId != "" {
-				r.Header.Set(httpRequestIdHeader, requestId)
+				r.Header().Set(httpRequestIdHeader, requestId)
 			}
 		}
-		next.ServeHTTP(w, r)
+		next.Handle(w, r)
 		if middleware.latencyEnabled {
 			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 		}

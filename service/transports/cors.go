@@ -19,6 +19,7 @@ package transports
 import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -32,18 +33,31 @@ type CorsConfig struct {
 	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"`
 }
 
-func Cors(config *CorsConfig, handler Handler) Handler {
-	if config == nil {
-		config = &CorsConfig{
-			AllowedOrigins:      []string{"*"},
-			AllowedHeaders:      []string{"*"},
-			ExposedHeaders:      make([]string, 0, 1),
-			AllowCredentials:    false,
-			MaxAge:              86400,
-			AllowPrivateNetwork: false,
+func (config *CorsConfig) TryFillAllowedHeaders(headers []string) {
+	if config.AllowedHeaders == nil {
+		config.AllowedHeaders = make([]string, 0, 1)
+	}
+	if config.AllowedHeaders[0] != "*" {
+		for _, header := range headers {
+			if sort.SearchStrings(config.AllowedHeaders, header) < 0 {
+				config.AllowedHeaders = append(config.AllowedHeaders, header)
+			}
 		}
 	}
+}
 
+func (config *CorsConfig) TryFillExposedHeaders(headers []string) {
+	if config.ExposedHeaders == nil {
+		config.ExposedHeaders = make([]string, 0, 1)
+	}
+	for _, header := range headers {
+		if sort.SearchStrings(config.ExposedHeaders, header) < 0 {
+			config.ExposedHeaders = append(config.ExposedHeaders, header)
+		}
+	}
+}
+
+func (config *CorsConfig) Handler(handler Handler) Handler {
 	allowedOrigins := make([]string, 0, 1)
 	allowedWOrigins := make([]wildcard, 0, 1)
 	allowedOriginsAll := false

@@ -17,88 +17,58 @@
 package service
 
 import (
-	"github.com/rs/cors"
-	"net/http"
-	"sort"
+	"github.com/aacfactory/fns/service/transports"
 )
 
-func newCorsHandler(config *CorsConfig) (h *cors.Cors) {
+const (
+	httpContentType            = "Content-Type"
+	httpContentTypeJson        = "application/json"
+	httpConnectionHeader       = "Connection"
+	httpUpgradeHeader          = "Upgrade"
+	httpCloseHeader            = "close"
+	httpCacheControlHeader     = "Cache-Control"
+	httpPragmaHeader           = "Pragma"
+	httpETagHeader             = "ETag"
+	httpCacheControlIfNonMatch = "If-None-Match"
+	httpClearSiteData          = "Clear-Site-Data"
+	httpTrueClientIp           = "True-Client-Ip"
+	httpXRealIp                = "X-Real-IP"
+	httpXForwardedForHeader    = "X-Forwarded-For"
+	httpRequestIdHeader        = "X-Fns-Request-Id"
+	httpRequestSignatureHeader = "X-Fns-Request-Signature"
+	httpRequestInternalHeader  = "X-Fns-Request-Internal"
+	httpRequestTimeoutHeader   = "X-Fns-Request-Timeout"
+	httpRequestVersionsHeader  = "X-Fns-Request-Version"
+	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
+	httpDeviceIdHeader         = "X-Fns-Device-Id"
+	httpDeviceIpHeader         = "X-Fns-Device-Ip"
+	httpDevModeHeader          = "X-Fns-Dev-Mode"
+	httpResponseRetryAfter     = "Retry-After"
+)
+
+func newCorsHandler(config *transports.CorsConfig, handler transports.Handler) (cors transports.Handler) {
 	if config == nil {
-		config = &CorsConfig{
-			AllowedOrigins:   []string{"*"},
-			AllowedHeaders:   []string{"*"},
-			ExposedHeaders:   nil,
-			AllowCredentials: false,
-			MaxAge:           0,
+		config = &transports.CorsConfig{
+			AllowedOrigins:      []string{"*"},
+			AllowedHeaders:      []string{"*"},
+			ExposedHeaders:      make([]string, 0, 1),
+			AllowCredentials:    false,
+			MaxAge:              86400,
+			AllowPrivateNetwork: false,
 		}
 	}
-	if config.AllowedOrigins == nil || len(config.AllowedOrigins) == 0 {
-		config.AllowedOrigins = []string{"*"}
-	}
-	if config.AllowedHeaders == nil || len(config.AllowedHeaders) == 0 {
-		config.AllowedHeaders = make([]string, 0, 1)
-		config.AllowedHeaders = append(config.AllowedHeaders, "*")
-	}
-	if config.AllowedHeaders[0] != "*" {
-		if sort.SearchStrings(config.AllowedHeaders, httpConnectionHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpConnectionHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpUpgradeHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpUpgradeHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpXForwardedForHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpXForwardedForHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpDeviceIpHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpDeviceIpHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpDeviceIdHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpDeviceIdHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpRequestIdHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestIdHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpRequestSignatureHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestSignatureHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpRequestTimeoutHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestTimeoutHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpRequestVersionsHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpRequestVersionsHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpDevModeHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpDevModeHeader)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpCacheControlIfNonMatch) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpCacheControlIfNonMatch)
-		}
-		if sort.SearchStrings(config.AllowedHeaders, httpPragmaHeader) < 0 {
-			config.AllowedHeaders = append(config.AllowedHeaders, httpPragmaHeader)
-		}
-	}
-	if config.ExposedHeaders == nil {
-		config.ExposedHeaders = make([]string, 0, 1)
-	}
-	config.ExposedHeaders = append(
-		config.ExposedHeaders,
-		httpAppIdHeader, httpAppNameHeader, httpAppVersionHeader,
+	config.TryFillAllowedHeaders([]string{
+		httpConnectionHeader, httpUpgradeHeader,
+		httpXForwardedForHeader, httpTrueClientIp, httpXRealIp,
+		httpDeviceIpHeader, httpDeviceIdHeader,
+		httpRequestIdHeader,
+		httpRequestSignatureHeader, httpRequestTimeoutHeader, httpRequestVersionsHeader,
+		httpETagHeader, httpCacheControlIfNonMatch, httpPragmaHeader, httpClearSiteData, httpResponseRetryAfter,
+	})
+	config.TryFillExposedHeaders([]string{
 		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
 		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter,
-	)
-	h = cors.New(cors.Options{
-		AllowedOrigins:         config.AllowedOrigins,
-		AllowOriginFunc:        nil,
-		AllowOriginRequestFunc: nil,
-		AllowedMethods:         []string{http.MethodGet, http.MethodPost},
-		AllowedHeaders:         config.AllowedHeaders,
-		ExposedHeaders:         config.ExposedHeaders,
-		MaxAge:                 config.MaxAge,
-		AllowCredentials:       config.AllowCredentials,
-		AllowPrivateNetwork:    config.AllowPrivateNetwork,
-		OptionsPassthrough:     false,
-		OptionsSuccessStatus:   204,
-		Debug:                  false,
 	})
+	cors = config.Handler(handler)
 	return
 }

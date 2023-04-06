@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/valyala/bytebufferpool"
+	"net/http"
 	"net/url"
 	"sort"
 )
@@ -126,6 +127,10 @@ type Request struct {
 	body       []byte
 }
 
+func (r *Request) WithContext(ctx context.Context) {
+	r.ctx = ctx
+}
+
 func (r *Request) Context() context.Context {
 	return r.ctx
 }
@@ -140,6 +145,14 @@ func (r *Request) UseTLS() {
 
 func (r *Request) Method() []byte {
 	return r.method
+}
+
+func (r *Request) IsGet() bool {
+	return bytex.ToString(r.method) == http.MethodGet
+}
+
+func (r *Request) IsPost() bool {
+	return bytex.ToString(r.method) == http.MethodPost
 }
 
 func (r *Request) RemoteAddr() []byte {

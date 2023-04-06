@@ -24,9 +24,7 @@ import (
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"github.com/valyala/bytebufferpool"
 	"net"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -85,7 +83,7 @@ type transportMiddlewaresOptions struct {
 
 func newTransportMiddlewares(options transportMiddlewaresOptions) *transportMiddlewares {
 	middlewares := make([]TransportMiddleware, 0, 1)
-	middlewares = append(middlewares, newTransportApplicationMiddleware(options.Runtime.status))
+	middlewares = append(middlewares, newTransportApplicationMiddleware(options.Runtime))
 	return &transportMiddlewares{
 		config:      options.Config,
 		runtime:     options.Runtime,
@@ -166,44 +164,7 @@ func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) tr
 		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
 		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter,
 	})
-	return middlewares.cors.Handler(newRuntimeMiddleware(middlewares.runtime, handler))
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type responseWriter struct {
-	status int
-	header http.Header
-	buf    *bytebufferpool.ByteBuffer
-}
-
-func (r *responseWriter) Header() http.Header {
-	return r.header
-}
-
-func (r *responseWriter) Write(p []byte) (int, error) {
-	return r.buf.Write(p)
-}
-
-func (r *responseWriter) WriteHeader(statusCode int) {
-	r.status = statusCode
-}
-
-func newRuntimeMiddleware(runtime *Runtime, handler transports.Handler) transports.Handler {
-	return &runtimeMiddleware{
-		runtime: runtime,
-		next:    handler,
-	}
-}
-
-type runtimeMiddleware struct {
-	runtime *Runtime
-	next    transports.Handler
-}
-
-func (middleware *runtimeMiddleware) Handle(w transports.ResponseWriter, r *transports.Request) {
-	r.WithContext(middleware.runtime.SetIntoContext(r.Context()))
-	middleware.next.Handle(w, r)
+	return middlewares.cors.Handler(handler)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -212,12 +173,9 @@ const (
 	transportApplicationMiddlewareName = "application"
 )
 
-func newTransportApplicationMiddleware(status *Status) *transportApplicationMiddleware {
+func newTransportApplicationMiddleware(runtime *Runtime) *transportApplicationMiddleware {
 	return &transportApplicationMiddleware{
-		appId:        "",
-		appName:      "",
-		appVersion:   versions.Version{},
-		appStatus:    status,
+		runtime:      runtime,
 		launchAT:     time.Time{},
 		statsEnabled: false,
 		counter:      sync.WaitGroup{},
@@ -225,10 +183,7 @@ func newTransportApplicationMiddleware(status *Status) *transportApplicationMidd
 }
 
 type transportApplicationMiddleware struct {
-	appId          string
-	appName        string
-	appVersion     versions.Version
-	appStatus      *Status
+	runtime        *Runtime
 	launchAT       time.Time
 	statsEnabled   bool
 	latencyEnabled bool
@@ -241,9 +196,6 @@ func (middleware *transportApplicationMiddleware) Name() (name string) {
 }
 
 func (middleware *transportApplicationMiddleware) Build(options TransportMiddlewareOptions) (err error) {
-	middleware.appId = options.AppId
-	middleware.appName = options.AppName
-	middleware.appVersion = options.AppVersion
 	middleware.launchAT = time.Now()
 	_, statsErr := options.Config.Get("statsEnable", &middleware.statsEnabled)
 	if statsErr != nil {
@@ -261,11 +213,11 @@ func (middleware *transportApplicationMiddleware) Build(options TransportMiddlew
 
 func (middleware *transportApplicationMiddleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
-		if middleware.appStatus.Closed() {
+		if middleware.runtime.status.Closed() {
 			w.Failed(ErrUnavailable)
 			return
 		}
-		if middleware.appStatus.Starting() {
+		if middleware.runtime.status.Starting() {
 			w.Header().Set(httpResponseRetryAfter, "10")
 			w.Failed(ErrTooEarly)
 			return
@@ -322,8 +274,8 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 				r.Header().Set(httpRequestIdHeader, requestId)
 			}
 		}
-		next.Handle(w, r)
-		if middleware.latencyEnabled {
+		next.Handle(w, r.WithContext(middleware.runtime.SetIntoContext(r.Context())))
+		if !w.Hijacked() && middleware.latencyEnabled {
 			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 		}
 		middleware.counter.Done()

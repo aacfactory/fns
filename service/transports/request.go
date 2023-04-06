@@ -127,8 +127,9 @@ type Request struct {
 	body       []byte
 }
 
-func (r *Request) WithContext(ctx context.Context) {
+func (r *Request) WithContext(ctx context.Context) *Request {
 	r.ctx = ctx
+	return r
 }
 
 func (r *Request) Context() context.Context {

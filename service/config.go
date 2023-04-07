@@ -214,11 +214,6 @@ type ClusterConfig struct {
 	Options              json.RawMessage `json:"options"`
 }
 
-type ClusterDevMode struct {
-	ProxyAddress string     `json:"proxyAddress"`
-	TLS          *TLSConfig `json:"tls"`
-}
-
 type SharedConfig struct {
 	BarrierDisabled        bool   `json:"barrierDisabled"`
 	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds"`

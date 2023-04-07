@@ -133,42 +133,30 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			clusterFetchMembersInterval = 10 * time.Second
 		}
 		kind := strings.TrimSpace(config.Cluster.Kind)
-		if kind == devClusterBuilderName {
-			if options.Proxy != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cannot use dev cluster in proxy transport")).WithCause(err)
-				return
-			}
-			if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
-				config.Cluster.Options = []byte{'{', '}'}
-			}
-			clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
-			if clusterOptionConfigErr != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
-				return
-			}
-			cluster, err = newDevProxyCluster(options.AppId, clusterOptionConfig)
-		} else {
-			builder, hasBuilder := getClusterBuilder(kind)
-			if !hasBuilder {
-				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
-				return
-			}
-			if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
-				config.Cluster.Options = []byte{'{', '}'}
-			}
-			clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
-			if clusterOptionConfigErr != nil {
-				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
-				return
-			}
-			cluster, err = builder(ClusterBuilderOptions{
-				Config:     clusterOptionConfig,
-				Log:        log.With("cluster", kind),
-				AppId:      options.AppId,
-				AppName:    options.AppName,
-				AppVersion: options.AppVersion,
-			})
+		if kind == devClusterBuilderName && options.Proxy != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cannot use dev cluster in proxy transport")).WithCause(err)
+			return
 		}
+		builder, hasBuilder := getClusterBuilder(kind)
+		if !hasBuilder {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
+			return
+		}
+		if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
+			config.Cluster.Options = []byte{'{', '}'}
+		}
+		clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
+		if clusterOptionConfigErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
+			return
+		}
+		cluster, err = builder(ClusterBuilderOptions{
+			Config:     clusterOptionConfig,
+			Log:        log.With("cluster", kind),
+			AppId:      options.AppId,
+			AppName:    options.AppName,
+			AppVersion: options.AppVersion,
+		})
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
 			return

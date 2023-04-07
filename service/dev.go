@@ -113,7 +113,7 @@ func (handler *devProxyHandler) handleClusterNodes(w transports.ResponseWriter, 
 	return
 }
 
-type devShardRequest struct {
+type devShardParam struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
 }
@@ -124,33 +124,36 @@ func (handler *devProxyHandler) handleShared(w transports.ResponseWriter, r *tra
 		w.Failed(errors.Warning("dev: handle shared failed").WithCause(errors.Warning("body is nil")))
 		return
 	}
-	req := devShardRequest{}
-	decodeErr := json.Unmarshal(body, &req)
+	param := devShardParam{}
+	decodeErr := json.Unmarshal(body, &param)
 	if decodeErr != nil {
 		w.Failed(errors.Warning("dev: handle shared failed").WithCause(decodeErr))
 		return
 	}
-	switch req.Type {
+	switch param.Type {
+	case "locker:acquire":
+		handler.handleSharedLockerAcquire(w, r, param.Payload)
+		break
 	case "locker:lock":
-		handler.handleSharedLock(w, r, req.Payload)
+		handler.handleSharedLock(w, r, param.Payload)
 		break
 	case "locker:unlock":
-		handler.handleSharedUnLock(w, r, req.Payload)
+		handler.handleSharedUnLock(w, r, param.Payload)
 		break
 	case "store:get":
-		handler.handleSharedStoreGet(w, r, req.Payload)
+		handler.handleSharedStoreGet(w, r, param.Payload)
 		break
 	case "store:set":
-		handler.handleSharedStoreSet(w, r, req.Payload)
+		handler.handleSharedStoreSet(w, r, param.Payload)
 		break
 	case "store:incr":
-		handler.handleSharedStoreIncr(w, r, req.Payload)
+		handler.handleSharedStoreIncr(w, r, param.Payload)
 		break
 	case "store:expireKey":
-		handler.handleSharedStoreExpireKey(w, r, req.Payload)
+		handler.handleSharedStoreExpireKey(w, r, param.Payload)
 		break
 	case "store:remove":
-		handler.handleSharedStoreRemove(w, r, req.Payload)
+		handler.handleSharedStoreRemove(w, r, param.Payload)
 		break
 	default:
 		w.Failed(errors.Warning("dev: handle shared failed").WithCause(errors.Warning("type is not match")))
@@ -159,9 +162,31 @@ func (handler *devProxyHandler) handleShared(w transports.ResponseWriter, r *tra
 	return
 }
 
-type devLockParam struct {
+type devAcquireLockerParam struct {
 	Key string        `json:"key"`
 	TTL time.Duration `json:"ttl"`
+}
+
+func (handler *devProxyHandler) handleSharedLockerAcquire(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
+	param := devAcquireLockerParam{}
+	decodeErr := json.Unmarshal(payload, &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("dev: locker acquire failed").WithCause(decodeErr))
+		return
+	}
+	lockers := handler.registrations.cluster.Shared().Lockers()
+	locker, lockerErr := lockers.Acquire(r.Context(), bytex.FromString(param.Key), param.TTL)
+	if lockerErr != nil {
+		w.Failed(errors.Warning("dev: locker acquire failed").WithCause(lockerErr))
+		return
+	}
+	handler.lockers.Store(param.Key, locker)
+	w.Succeed(map[string]string{"appId": handler.registrations.id})
+	return
+}
+
+type devLockParam struct {
+	Key string `json:"key"`
 }
 
 func (handler *devProxyHandler) handleSharedLock(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -171,12 +196,12 @@ func (handler *devProxyHandler) handleSharedLock(w transports.ResponseWriter, r 
 		w.Failed(errors.Warning("dev: locker lock failed").WithCause(decodeErr))
 		return
 	}
-	lockers := handler.registrations.cluster.Shared().Lockers()
-	locker, lockerErr := lockers.Acquire(r.Context(), bytex.FromString(param.Key), param.TTL)
-	if lockerErr != nil {
-		w.Failed(errors.Warning("dev: locker lock failed").WithCause(lockerErr))
+	x, has := handler.lockers.Load(param.Key)
+	if !has {
+		w.Failed(errors.Warning("dev: locker lock failed").WithCause(errors.Warning("locker may be released")))
 		return
 	}
+	locker := x.(shareds.Locker)
 	lockErr := locker.Lock(r.Context())
 	if lockErr != nil {
 		w.Failed(errors.Warning("dev: locker lock failed").WithCause(lockErr))

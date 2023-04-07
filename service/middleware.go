@@ -32,30 +32,30 @@ import (
 )
 
 const (
-	httpContentType            = "Content-Type"
-	httpContentTypeJson        = "application/json"
-	httpConnectionHeader       = "Connection"
-	httpUpgradeHeader          = "Upgrade"
-	httpCloseHeader            = "close"
-	httpCacheControlHeader     = "Cache-Control"
-	httpPragmaHeader           = "Pragma"
-	httpETagHeader             = "ETag"
-	httpCacheControlIfNonMatch = "If-None-Match"
-	httpClearSiteData          = "Clear-Site-Data"
-	httpTrueClientIp           = "True-Client-Ip"
-	httpXRealIp                = "X-Real-IP"
-	httpXForwardedForHeader    = "X-Forwarded-For"
-	httpRequestIdHeader        = "X-Fns-Request-Id"
-	httpRequestSignatureHeader = "X-Fns-Request-Signature"
-	httpRequestInternalHeader  = "X-Fns-Request-Internal"
-	httpRequestTimeoutHeader   = "X-Fns-Request-Timeout"
-	httpRequestVersionsHeader  = "X-Fns-Request-Version"
-	httpHandleLatencyHeader    = "X-Fns-Handle-Latency"
-	httpDeviceIdHeader         = "X-Fns-Device-Id"
-	httpDeviceIpHeader         = "X-Fns-Device-Ip"
-	httpDevModeHeader          = "X-Fns-Dev-Mode"
-	httpResponseRetryAfter     = "Retry-After"
-	httpResponseCacheTTL       = "X-Fns-Cache-TTL"
+	httpContentType                    = "Content-Type"
+	httpContentTypeJson                = "application/json"
+	httpConnectionHeader               = "Connection"
+	httpUpgradeHeader                  = "Upgrade"
+	httpCloseHeader                    = "close"
+	httpCacheControlHeader             = "Cache-Control"
+	httpPragmaHeader                   = "Pragma"
+	httpETagHeader                     = "ETag"
+	httpCacheControlIfNonMatch         = "If-None-Match"
+	httpClearSiteData                  = "Clear-Site-Data"
+	httpTrueClientIp                   = "True-Client-Ip"
+	httpXRealIp                        = "X-Real-IP"
+	httpXForwardedForHeader            = "X-Forwarded-For"
+	httpRequestIdHeader                = "X-Fns-Request-Id"
+	httpRequestInternalSignatureHeader = "X-Fns-Request-Internal-Signature"
+	httpRequestInternalHeader          = "X-Fns-Request-Internal"
+	httpRequestTimeoutHeader           = "X-Fns-Request-Timeout"
+	httpRequestVersionsHeader          = "X-Fns-Request-Version"
+	httpHandleLatencyHeader            = "X-Fns-Handle-Latency"
+	httpDeviceIdHeader                 = "X-Fns-Device-Id"
+	httpDeviceIpHeader                 = "X-Fns-Device-Ip"
+	httpDevModeHeader                  = "X-Fns-Dev-Mode"
+	httpResponseRetryAfter             = "Retry-After"
+	httpResponseCacheTTL               = "X-Fns-Cache-TTL"
 )
 
 type TransportMiddlewareOptions struct {
@@ -170,11 +170,11 @@ func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) tr
 		httpXForwardedForHeader, httpTrueClientIp, httpXRealIp,
 		httpDeviceIpHeader, httpDeviceIdHeader,
 		httpRequestIdHeader,
-		httpRequestSignatureHeader, httpRequestTimeoutHeader, httpRequestVersionsHeader,
+		httpRequestInternalSignatureHeader, httpRequestTimeoutHeader, httpRequestVersionsHeader,
 		httpETagHeader, httpCacheControlIfNonMatch, httpPragmaHeader, httpClearSiteData, httpResponseRetryAfter,
 	})
 	middlewares.cors.TryFillExposedHeaders([]string{
-		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
+		httpRequestIdHeader, httpRequestInternalSignatureHeader, httpHandleLatencyHeader,
 		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter, httpResponseCacheTTL,
 	})
 	return middlewares.cors.Handler(handler)

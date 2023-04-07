@@ -219,7 +219,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		header.SetAcceptVersions(r.AcceptedVersions())
 		header.Set(httpRequestInternalHeader, "true")
 		header.Set(httpRequestIdHeader, r.Id())
-		header.Set(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
+		header.Set(httpRequestInternalSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
 		header.Set(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
 		if task.registration.devMode {
 			header.Set(httpDevModeHeader, task.registration.id)
@@ -838,7 +838,7 @@ func (r *Registrations) GetNodeServices(ctx context.Context, node *Node) (names 
 	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, bytex.FromString("/services/names"))
 	req.Header().Set(httpDeviceIdHeader, r.id)
-	req.Header().Set(httpRequestSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
+	req.Header().Set(httpRequestInternalSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
 
 	resp, doErr := client.Do(ctx, req)
 	if doErr != nil {

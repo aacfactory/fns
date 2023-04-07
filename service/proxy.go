@@ -216,7 +216,7 @@ func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
 	if ok {
 		return
 	}
-	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && r.Header().Get(httpRequestSignatureHeader) == "" && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
+	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && r.Header().Get(httpRequestInternalSignatureHeader) == "" && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
 	if ok {
 		return
 	}

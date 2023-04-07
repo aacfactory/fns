@@ -354,7 +354,7 @@ func (handler *servicesHandler) handleInternalRequest(writer transports.Response
 	// read body
 	body := r.Body()
 	// verify signature
-	if !handler.signer.Verify(body, bytex.FromString(r.Header().Get(httpRequestSignatureHeader))) {
+	if !handler.signer.Verify(body, bytex.FromString(r.Header().Get(httpRequestInternalSignatureHeader))) {
 		handler.failed(writer, requestId, errors.Warning("fns: signature is invalid"))
 		return
 	}
@@ -509,7 +509,7 @@ func (handler *servicesHandler) handleNames(w transports.ResponseWriter, r *tran
 	)
 	deviceId := handler.getDeviceId(r)
 	// handle
-	signature := r.Header().Get(httpRequestSignatureHeader)
+	signature := r.Header().Get(httpRequestInternalSignatureHeader)
 	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
 		w.Failed(errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
 		return

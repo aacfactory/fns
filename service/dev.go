@@ -75,7 +75,7 @@ func (handler *devProxyHandler) Accept(r *transports.Request) (ok bool) {
 		return
 	}
 	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson &&
-		r.Header().Get(httpRequestSignatureHeader) != "" && r.Header().Get(httpDevModeHeader) != "" &&
+		r.Header().Get(httpRequestInternalSignatureHeader) != "" && r.Header().Get(httpDevModeHeader) != "" &&
 		len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
 	if ok {
 		return
@@ -93,7 +93,7 @@ func (handler *devProxyHandler) Handle(w transports.ResponseWriter, r *transport
 		return
 	}
 	if r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson &&
-		r.Header().Get(httpRequestSignatureHeader) != "" && r.Header().Get(httpDevModeHeader) != "" &&
+		r.Header().Get(httpRequestInternalSignatureHeader) != "" && r.Header().Get(httpDevModeHeader) != "" &&
 		len(strings.Split(bytex.ToString(r.Path()), "/")) == 3 {
 		handler.handleServiceFn(w, r)
 		return
@@ -381,7 +381,7 @@ func (handler *devProxyHandler) handleServiceFn(w transports.ResponseWriter, r *
 	// read body
 	body := r.Body()
 	// verify signature
-	if !handler.signer.Verify(body, bytex.FromString(r.Header().Get(httpRequestSignatureHeader))) {
+	if !handler.signer.Verify(body, bytex.FromString(r.Header().Get(httpRequestInternalSignatureHeader))) {
 		w.Failed(errors.Warning("dev: signature is invalid"))
 		return
 	}

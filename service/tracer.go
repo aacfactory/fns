@@ -173,15 +173,15 @@ func newSpan(traceId string, service string, fn string, parent *Span) *Span {
 }
 
 type Span struct {
-	Id_         string    `json:"id"`
-	Service_    string    `json:"service"`
-	Fn_         string    `json:"fn"`
-	TracerId_   string    `json:"tracerId"`
-	StartAT_    time.Time `json:"startAt"`
-	FinishedAT_ time.Time `json:"finishedAt"`
-	parent      *Span
+	Id_         string            `json:"id"`
+	Service_    string            `json:"service"`
+	Fn_         string            `json:"fn"`
+	TracerId_   string            `json:"tracerId"`
+	StartAT_    time.Time         `json:"startAt"`
+	FinishedAT_ time.Time         `json:"finishedAt"`
 	Children_   []*Span           `json:"children"`
 	Tags_       map[string]string `json:"tags"`
+	parent      *Span
 }
 
 func (s *Span) Id() (v string) {

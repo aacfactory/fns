@@ -127,6 +127,29 @@ func (documents Documents) Add(doc *Document) (ok bool) {
 	return
 }
 
+func (documents Documents) Remove(name string, version versions.Version) {
+	list, has := documents[name]
+	if !has {
+		return
+	}
+	target, exist := list.Get(version)
+	if !exist {
+		return
+	}
+	newList := make(VersionSortedDocuments, 0, len(list))
+	for _, doc := range list {
+		if doc.Version == target.Version {
+			continue
+		}
+		newList = append(newList, doc)
+	}
+	if len(newList) == 0 {
+		delete(documents, name)
+	} else {
+		documents[name] = newList
+	}
+}
+
 func (documents Documents) Len() int {
 	return len(documents)
 }

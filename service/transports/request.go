@@ -36,7 +36,16 @@ const (
 	httpsSchema = "https"
 )
 
+var (
+	MethodGET  = []byte(http.MethodGet)
+	MethodPost = []byte(http.MethodPost)
+)
+
 type RequestParams map[string][]byte
+
+func (params RequestParams) Len() int {
+	return len(params)
+}
 
 func (params RequestParams) Add(name []byte, value []byte) {
 	if name == nil || value == nil {
@@ -111,7 +120,16 @@ func NewRequest(ctx context.Context, method []byte, uri []byte) (r *Request, err
 		params:     make(RequestParams),
 		body:       nil,
 	}
+	return
+}
 
+func NewUnsafeRequest(ctx context.Context, method []byte, uri []byte) (r *Request) {
+	var err error
+	r, err = NewRequest(ctx, method, uri)
+	if err != nil {
+		panic(fmt.Sprintf("%+v", err))
+		return
+	}
 	return
 }
 

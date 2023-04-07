@@ -17,16 +17,21 @@
 package service
 
 import (
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/logs"
+	"strings"
 )
 
 const (
 	devProxyHandlerName = "dev"
 )
 
-func newDevProxyHandler(registrations *Registrations) *devProxyHandler {
+func newDevProxyHandler(registrations *Registrations, signer *secret.Signer) *devProxyHandler {
 	return &devProxyHandler{
 		registrations: registrations,
+		signer:        signer,
 	}
 }
 
@@ -36,6 +41,8 @@ func newDevProxyHandler(registrations *Registrations) *devProxyHandler {
 // * nodes返回增加services
 type devProxyHandler struct {
 	registrations *Registrations
+	signer        *secret.Signer
+	log           logs.Logger
 }
 
 func (handler *devProxyHandler) Name() (name string) {
@@ -44,12 +51,36 @@ func (handler *devProxyHandler) Name() (name string) {
 }
 
 func (handler *devProxyHandler) Build(options TransportHandlerOptions) (err error) {
-
+	handler.log = options.Log
 	return
 }
 
 func (handler *devProxyHandler) Accept(r *transports.Request) (ok bool) {
-
+	if r.Header().Get(httpDevModeHeader) == "" {
+		return
+	}
+	ok = r.IsPost() && bytex.ToString(r.Path()) == "/cluster/join"
+	if ok {
+		return
+	}
+	ok = r.IsPost() && bytex.ToString(r.Path()) == "/cluster/leave"
+	if ok {
+		return
+	}
+	ok = r.IsGet() && bytex.ToString(r.Path()) == "/cluster/nodes"
+	if ok {
+		return
+	}
+	ok = r.IsPost() && bytex.ToString(r.Path()) == "/cluster/shared"
+	if ok {
+		return
+	}
+	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson &&
+		r.Header().Get(httpRequestSignatureHeader) != "" && r.Header().Get(httpDevModeHeader) != "" &&
+		len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
+	if ok {
+		return
+	}
 	return
 }
 

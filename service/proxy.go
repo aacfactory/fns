@@ -72,20 +72,18 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 		Runtime: runtime,
 		Config:  handlersConfig,
 	})
+
 	closers = append(closers, h)
 	if handlers == nil {
 		handlers = make([]TransportHandler, 0, 1)
 	}
-
-	var dev *devProxyHandler
 	if config.EnableDevMode {
-		dev = newDevProxyHandler(registrations)
+		handlers = append(handlers, newDevProxyHandler(registrations, runtime.signer))
 	}
 
 	handlers = append(handlers, newProxyHandler(proxyHandlerOptions{
 		Signer:        runtime.Signer(),
 		Registrations: registrations,
-		Dev:           dev,
 		DeployedCh:    deployedCh,
 	}))
 
@@ -116,7 +114,6 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 type proxyHandlerOptions struct {
 	Signer        *secret.Signer
 	Registrations *Registrations
-	Dev           *devProxyHandler
 	DeployedCh    <-chan map[string]*endpoint
 }
 
@@ -134,7 +131,6 @@ func newProxyHandler(options proxyHandlerOptions) (handler *proxyHandler) {
 		registrations:          options.Registrations,
 		attachments:            caches.NewLRU[string, []byte](4),
 		group:                  &singleflight.Group{},
-		dev:                    options.Dev,
 	}
 	go func(handler *proxyHandler, deployedCh <-chan map[string]*endpoint) {
 		_, ok := <-deployedCh
@@ -167,7 +163,6 @@ type proxyHandler struct {
 	registrations          *Registrations
 	attachments            *caches.LRU[string, []byte]
 	group                  *singleflight.Group
-	dev                    *devProxyHandler
 }
 
 func (handler *proxyHandler) Name() (name string) {
@@ -207,13 +202,6 @@ func (handler *proxyHandler) Build(options TransportHandlerOptions) (err error) 
 }
 
 func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
-	if handler.dev != nil {
-		ok = handler.dev.Accept(r)
-		if ok {
-			r.Header().Set("dev", "true")
-			return
-		}
-	}
 	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/documents"
 	if ok {
 		return
@@ -222,7 +210,7 @@ func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
 	if ok {
 		return
 	}
-	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
+	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && r.Header().Get(httpRequestSignatureHeader) == "" && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
 	if ok {
 		return
 	}
@@ -230,20 +218,12 @@ func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
 }
 
 func (handler *proxyHandler) Close() (err error) {
-	if handler.dev != nil {
-		err = handler.dev.Close()
-	}
 	return
 }
 
 func (handler *proxyHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
 	if !handler.ready {
 		w.Failed(ErrTooEarly.WithMeta("handler", handler.Name()))
-		return
-	}
-	if r.Header().Get("dev") == "true" {
-		r.Header().Del("dev")
-		handler.dev.Handle(w, r)
 		return
 	}
 	if r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi" {
@@ -258,9 +238,9 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r *transports.R
 	return
 }
 
-func (handler *proxyHandler) fetchDocuments() (v documents.Documents, err error) {
+func (handler *proxyHandler) fetchDocuments(ctx context.Context) (v documents.Documents, err error) {
 	value, fetchErr, _ := handler.group.Do("documents:fetch", func() (v interface{}, err error) {
-		doc, fetchErr := handler.registrations.FetchDocuments()
+		doc, fetchErr := handler.registrations.FetchDocuments(ctx)
 		if fetchErr != nil {
 			err = fetchErr
 			return
@@ -305,7 +285,7 @@ func (handler *proxyHandler) handleOpenapi(w transports.ResponseWriter, r *trans
 			doc = documents.Documents{}
 			docErr = json.Unmarshal(cachedDoc, &doc)
 		} else {
-			doc, docErr = handler.fetchDocuments()
+			doc, docErr = handler.fetchDocuments(r.Context())
 		}
 		if docErr != nil {
 			err = errors.Warning("proxy: fetch backend documents failed").WithCause(docErr)
@@ -340,7 +320,7 @@ func (handler *proxyHandler) handleDocuments(w transports.ResponseWriter, r *tra
 				return
 			}
 		}
-		doc, fetchDocumentsErr := handler.fetchDocuments()
+		doc, fetchDocumentsErr := handler.fetchDocuments(r.Context())
 		if fetchDocumentsErr != nil {
 			err = errors.Warning("proxy: fetch backend documents failed").WithCause(fetchDocumentsErr)
 			return

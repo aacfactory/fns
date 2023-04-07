@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
+	"github.com/aacfactory/fns/service/internal/commons/window"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
@@ -32,6 +33,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -129,32 +131,32 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		header.Add(httpRequestIdHeader, r.Id())
 		header.Add(httpRequestSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
 		header.Add(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
-		// todo 增加X-Fns-Dev-Host-Id 当reg 是存在proxy address时，则增加这个header，
-		// node里增加proxy address，然后同步进reg的proxy address
+		if task.registration.devMode {
+			header.Add(httpDevModeHeader, task.registration.id)
+		}
 
 		serviceName, fn := r.Fn()
 
-		req, reqErr := transports.NewRequest(ctx, bytex.FromString(http.MethodPost), bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
-		if reqErr != nil {
-			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(reqErr))
-			return
-		}
+		req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
+
 		for name, vv := range header {
 			for _, v := range vv {
 				req.Header().Add(name, v)
 			}
 		}
+
 		req.SetBody(requestBody)
 		resp, postErr := registration.client.Do(ctx, req)
 		if postErr != nil {
-			// todo add error times in reg
+			task.registration.errs.Incr()
 			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(postErr))
 			return
 		}
 
 		if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
-			// todo mark reg is closed
-
+			task.registration.closed.Store(false)
+			fr.Failed(ErrUnavailable)
+			return
 		}
 		if resp.Status != http.StatusOK {
 			var body errors.CodeError
@@ -163,6 +165,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 			} else {
 				body = errors.Decode(resp.Body)
 			}
+			task.registration.errs.Incr()
 			fr.Failed(body)
 			return
 		}
@@ -208,11 +211,8 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		header := r.Header()
 		serviceName, fn := r.Fn()
 
-		req, reqErr := transports.NewRequest(ctx, bytex.FromString(http.MethodPost), bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
-		if reqErr != nil {
-			fr.Failed(errors.Warning("fns: registration request failed").WithCause(reqErr))
-			return
-		}
+		req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
+
 		for name, vv := range header {
 			for _, v := range vv {
 				req.Header().Add(name, v)
@@ -221,14 +221,15 @@ func (task *registrationTask) Execute(ctx context.Context) {
 		req.SetBody(requestBody)
 		resp, postErr := registration.client.Do(ctx, req)
 		if postErr != nil {
-			// todo add error times in reg
+			task.registration.errs.Incr()
 			fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
 			return
 		}
 
 		if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
-			// todo mark reg is closed
-
+			task.registration.closed.Store(false)
+			fr.Failed(ErrUnavailable)
+			return
 		}
 		if resp.Status != http.StatusOK {
 			var body errors.CodeError
@@ -237,6 +238,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 			} else {
 				body = errors.Decode(resp.Body)
 			}
+			task.registration.errs.Incr()
 			fr.Failed(body)
 			return
 		}
@@ -289,11 +291,14 @@ type Registration struct {
 	version versions.Version
 	address string
 	name    string
+	devMode bool
 	client  transports.Client
 	signer  *secret.Signer
 	worker  Workers
 	timeout time.Duration
 	pool    sync.Pool
+	closed  *atomic.Bool
+	errs    *window.Times
 }
 
 func (registration *Registration) Key() (key string) {
@@ -362,7 +367,9 @@ func newRegistrations(log logs.Logger, id string, name string, version versions.
 		version:         version,
 		log:             log,
 		cluster:         cluster,
+		devMode:         ok,
 		values:          sync.Map{},
+		nodes:           make(map[string]*Node),
 		signer:          signer,
 		dialer:          dialer,
 		worker:          worker,
@@ -377,7 +384,9 @@ type Registrations struct {
 	version         versions.Version
 	log             logs.Logger
 	cluster         Cluster
+	devMode         bool
 	values          sync.Map
+	nodes           map[string]*Node
 	signer          *secret.Signer
 	dialer          transports.Dialer
 	worker          Workers
@@ -426,7 +435,17 @@ func (r *Registrations) GetExact(name string, id string) (registration *Registra
 	if !has || registration == nil {
 		return
 	}
-	// todo check closed and error times
+	if registration.closed.Load() {
+		r.Remove(registration.id)
+		registration = nil
+		has = false
+		return
+	}
+	if registration.errs.Value() > 10 {
+		registration = nil
+		has = false
+		return
+	}
 	return
 }
 
@@ -445,7 +464,13 @@ func (r *Registrations) Get(name string, rvs RequestVersions) (registration *Reg
 		if registration == nil {
 			continue
 		}
-		// todo check closed and error times
+		if registration.closed.Load() {
+			r.Remove(registration.id)
+			continue
+		}
+		if registration.errs.Value() > 10 {
+			continue
+		}
 		if rvs == nil || len(rvs) == 0 {
 			has = true
 			return
@@ -473,25 +498,6 @@ func (r *Registrations) Close() {
 	return
 }
 
-func (r *Registrations) Ids() (ids []string) {
-	ids = make([]string, 0, 1)
-	r.values.Range(func(key, value any) bool {
-		ring, _ := value.(*rings.Ring[*Registration])
-		size := ring.Len()
-		for i := 0; i < size; i++ {
-			registration := ring.Next()
-			if registration == nil {
-				continue
-			}
-			id := registration.id
-			ids = append(ids, id)
-		}
-		return true
-	})
-	sort.Strings(ids)
-	return
-}
-
 func (r *Registrations) List() (values map[string]RegistrationList) {
 	values = make(map[string]RegistrationList)
 	r.values.Range(func(key, value any) bool {
@@ -506,6 +512,9 @@ func (r *Registrations) List() (values map[string]RegistrationList) {
 		for i := 0; i < size; i++ {
 			registration := ring.Next()
 			if registration == nil {
+				continue
+			}
+			if registration.closed.Load() {
 				continue
 			}
 			group = append(group, registration)
@@ -526,24 +535,66 @@ func (r *Registrations) List() (values map[string]RegistrationList) {
 	return
 }
 
+func (r *Registrations) FetchNodeDocuments(ctx context.Context, node *Node) (v documents.Documents, err error) {
+	client, clientErr := r.dialer.Dial(node.Address)
+	if clientErr != nil {
+		err = errors.Warning("registrations: fetch node documents failed").WithCause(clientErr)
+		return
+	}
+
+	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, bytex.FromString("/services/documents"))
+	req.Header().Set(httpDeviceIdHeader, r.id)
+
+	for i := 0; i < 5; i++ {
+		resp, doErr := client.Do(ctx, req)
+		if doErr != nil {
+			err = errors.Warning("registrations: fetch node documents failed").WithCause(doErr)
+			return
+		}
+		if resp.Status == http.StatusServiceUnavailable {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		if resp.Status != http.StatusOK {
+			err = errors.Warning("registrations: fetch node documents failed")
+			return
+		}
+		if resp.Body == nil || len(resp.Body) == 0 {
+			return
+		}
+		v = documents.NewDocuments()
+		decodeErr := json.Unmarshal(resp.Body, &v)
+		if decodeErr != nil {
+			err = errors.Warning("registrations: fetch node documents failed").WithCause(decodeErr)
+			return
+		}
+		break
+	}
+	return
+}
+
 func (r *Registrations) AddNode(node *Node) (err error) {
 	client, clientErr := r.dialer.Dial(node.Address)
 	if clientErr != nil {
 		err = errors.Warning("registrations: add node failed").WithCause(clientErr)
 		return
 	}
+
 	for _, name := range node.Services {
 		registration := &Registration{
 			hostId:  r.id,
 			id:      node.Name,
 			version: node.Version,
 			address: node.Address,
+			devMode: r.devMode,
 			name:    name,
 			client:  client,
 			signer:  r.signer,
 			worker:  r.worker,
 			timeout: r.timeout,
 			pool:    sync.Pool{},
+			closed:  &atomic.Bool{},
+			errs:    window.NewTimes(10 * time.Second),
 		}
 		registration.pool.New = func() any {
 			return newRegistrationTask(registration, registration.timeout, func(task *registrationTask) {
@@ -552,42 +603,44 @@ func (r *Registrations) AddNode(node *Node) (err error) {
 		}
 		r.Add(registration)
 	}
+	r.nodes[node.Id] = node
 	return
 }
 
 func (r *Registrations) MergeNodes(nodes Nodes) (err error) {
-	existIds := r.Ids()
+	existNodes := r.nodes
 	if nodes == nil || len(nodes) == 0 {
-		for _, id := range existIds {
-			r.Remove(id)
+		for _, existNode := range existNodes {
+			r.Remove(existNode.Id)
 		}
+		r.nodes = make(map[string]*Node)
 		return
 	}
 	sort.Sort(nodes)
 	nodesLen := nodes.Len()
-	existIdsLen := len(existIds)
 	newNodes := make([]*Node, 0, 1)
-	diffNodeIds := make([]string, 0, 1)
+	diffNodes := make([]*Node, 0, 1)
 	for _, node := range nodes {
-		if existIdsLen != 0 && sort.SearchStrings(existIds, node.Id) < existIdsLen {
+		_, exist := r.nodes[node.Id]
+		if exist {
 			continue
 		}
 		newNodes = append(newNodes, node)
 	}
-	if existIdsLen > 0 {
-		for _, id := range existIds {
-			exist := sort.Search(nodesLen, func(i int) bool {
-				return nodes[i].Id == id
-			}) < nodesLen
-			if exist {
-				continue
-			}
-			diffNodeIds = append(diffNodeIds, id)
+	for _, existNode := range r.nodes {
+		exist := sort.Search(nodesLen, func(i int) bool {
+			return nodes[i].Id == existNode.Id
+		}) < nodesLen
+		if exist {
+			continue
 		}
+		diffNodes = append(diffNodes)
 	}
-	if len(diffNodeIds) > 0 {
-		for _, id := range diffNodeIds {
-			r.Remove(id)
+
+	if len(diffNodes) > 0 {
+		for _, node := range diffNodes {
+			r.Remove(node.Id)
+			delete(r.nodes, node.Id)
 		}
 	}
 	if len(newNodes) > 0 {
@@ -623,7 +676,10 @@ func (r *Registrations) ListMembers(ctx context.Context) (members Nodes, err err
 			members = append(members, node)
 			continue
 		}
-		names := r.GetNodeServices(node)
+		names, nameErr := r.GetNodeServices(ctx, node)
+		if nameErr != nil {
+			continue
+		}
 		if names == nil || len(names) == 0 {
 			continue
 		}
@@ -634,10 +690,26 @@ func (r *Registrations) ListMembers(ctx context.Context) (members Nodes, err err
 	return
 }
 
-func (r *Registrations) GetNodeServices(node *Node) (names []string) {
-	// 任何错误都 是返回nil
-	// 因为当tls不一样时，肯定不是这个端口
-	// 且当时dev时，其r.cluster.Nodes(ctx)返回的是有services的。
+func (r *Registrations) GetNodeServices(ctx context.Context, node *Node) (names []string, err error) {
+	client, clientErr := r.dialer.Dial(node.Address)
+	if clientErr != nil {
+		err = clientErr
+		return
+	}
+	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, bytex.FromString("/services/names"))
+	req.Header().Set(httpDeviceIdHeader, r.id)
+	req.Header().Set(httpRequestSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
+
+	resp, doErr := client.Do(ctx, req)
+	if doErr != nil {
+		err = doErr
+		return
+	}
+	if resp.Status != http.StatusOK {
+		return
+	}
+	names = make([]string, 0, 1)
+	_ = json.Unmarshal(resp.Body, names)
 	return
 }
 
@@ -675,7 +747,20 @@ func (r *Registrations) Refresh(ctx context.Context) {
 	return
 }
 
-func (r *Registrations) FetchDocuments() (v documents.Documents, err error) {
-	// todo
+func (r *Registrations) FetchDocuments(ctx context.Context) (v documents.Documents, err error) {
+	v = documents.NewDocuments()
+	if r.nodes == nil || len(r.nodes) == 0 {
+		return
+	}
+	for _, node := range r.nodes {
+		doc, docErr := r.FetchNodeDocuments(ctx, node)
+		if docErr != nil {
+			continue
+		}
+		if doc == nil || doc.Len() == 0 {
+			continue
+		}
+		v = v.Merge(doc)
+	}
 	return
 }

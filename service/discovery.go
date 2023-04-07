@@ -551,7 +551,7 @@ func (r *Registrations) FetchNodeDocuments(ctx context.Context, node *Node) (v d
 			err = errors.Warning("registrations: fetch node documents failed").WithCause(doErr)
 			return
 		}
-		if resp.Status == http.StatusServiceUnavailable {
+		if resp.Status == http.StatusTooEarly {
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -580,10 +580,12 @@ func (r *Registrations) AddNode(node *Node) (err error) {
 		return
 	}
 
+	// todo get node services
+
 	for _, name := range node.Services {
 		registration := &Registration{
 			hostId:  r.id,
-			id:      node.Name,
+			id:      node.Id,
 			version: node.Version,
 			address: node.Address,
 			devMode: r.devMode,

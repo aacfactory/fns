@@ -55,6 +55,7 @@ const (
 	httpDeviceIpHeader         = "X-Fns-Device-Ip"
 	httpDevModeHeader          = "X-Fns-Dev-Mode"
 	httpResponseRetryAfter     = "Retry-After"
+	httpResponseCacheTTL       = "X-Fns-Cache-TTL"
 )
 
 type TransportMiddlewareOptions struct {
@@ -174,7 +175,7 @@ func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) tr
 	})
 	middlewares.cors.TryFillExposedHeaders([]string{
 		httpRequestIdHeader, httpRequestSignatureHeader, httpHandleLatencyHeader,
-		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter,
+		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter, httpResponseCacheTTL,
 	})
 	return middlewares.cors.Handler(handler)
 }
@@ -286,6 +287,12 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 				r.Header().Set(httpRequestIdHeader, requestId)
 			}
 		}
+		// body
+		body := r.Body()
+		if body == nil || len(body) == 0 {
+			r.SetBody(bytex.FromString(emptyJson))
+		}
+		// next
 		next.Handle(w, r.WithContext(middleware.runtime.SetIntoContext(r.Context())))
 		if !w.Hijacked() && middleware.latencyEnabled {
 			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())

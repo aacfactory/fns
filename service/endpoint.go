@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/caches"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/commons/flags"
@@ -117,6 +118,8 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 
 	// cluster
 	var cluster Cluster
+	var clusterCache *caches.Cache
+	var clusterCacheDefaultTTL time.Duration
 	var shared Shared
 	var barrier Barrier
 	clusterFetchMembersInterval := time.Duration(0)
@@ -132,6 +135,29 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		if clusterFetchMembersInterval < 1*time.Second {
 			clusterFetchMembersInterval = 10 * time.Second
 		}
+		maxCacheSize := uint64(0)
+		if config.Cluster.MaxCacheSize != "" {
+			maxCacheSize, err = bytex.ParseBytes(strings.TrimSpace(config.Cluster.MaxCacheSize))
+			if err != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("maxCacheSize must be bytes format")).WithCause(err)
+				return
+			}
+		}
+		if maxCacheSize == 0 {
+			maxCacheSize = 64 * bytex.MEGABYTE
+		}
+		clusterCache = caches.New(maxCacheSize)
+		if config.Cluster.CacheDefaultTTL != "" {
+			clusterCacheDefaultTTL, err = time.ParseDuration(strings.TrimSpace(config.Cluster.CacheDefaultTTL))
+			if err != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cacheDefaultTTL must be time.Duration format")).WithCause(err)
+				return
+			}
+		}
+		if clusterCacheDefaultTTL < 1 {
+			clusterCacheDefaultTTL = 30 * time.Minute
+		}
+
 		kind := strings.TrimSpace(config.Cluster.Kind)
 		if kind == devClusterBuilderName && options.Proxy != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cannot use dev cluster in proxy transport")).WithCause(err)
@@ -253,7 +279,12 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		}
 	}
 	if cluster != nil {
-		v.registrations = newRegistrations(v.rt.log.With("discovery", "registrations"), v.rt.appId, v.rt.appName, v.rt.appVersion, cluster, v.rt.worker, v.transport, v.rt.signer, v.handleTimeout, clusterFetchMembersInterval)
+		v.registrations = newRegistrations(
+			v.rt.log.With("discovery", "registrations"),
+			v.rt.appId, v.rt.appName, v.rt.appVersion,
+			cluster, v.rt.worker, v.transport, v.rt.signer, v.handleTimeout,
+			clusterFetchMembersInterval, clusterCache, clusterCacheDefaultTTL,
+		)
 	}
 	// proxy
 	if options.Proxy != nil {

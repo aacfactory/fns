@@ -43,6 +43,10 @@ type cacheControlMiddlewareConfig struct {
 	TTL string `json:"ttl"`
 }
 
+func CacheControlMiddleware() TransportMiddleware {
+	return &cacheControlMiddleware{}
+}
+
 type cacheControlMiddleware struct {
 	log   logs.Logger
 	store shareds.Store
@@ -112,6 +116,7 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 		}
 		w.Header().Set(httpETagHeader, etag)
 		w.Header().Set(httpCacheControlHeader, "public, max-age=0")
+		w.Header().Set(httpResponseCacheTTL, ttl.String())
 	})
 }
 

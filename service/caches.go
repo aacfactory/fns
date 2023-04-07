@@ -103,7 +103,7 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 		cc := ccx.(*cacheControl)
 		r.WithContext(context.WithValue(r.Context(), cacheControlContextKey, cc))
 		next.Handle(w, r)
-		if !cc.used {
+		if !cc.used || w.Hijacked() {
 			return
 		}
 		ttl := cc.ttl

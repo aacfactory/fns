@@ -574,13 +574,14 @@ func (r *Registrations) FetchNodeDocuments(ctx context.Context, node *Node) (v d
 }
 
 func (r *Registrations) AddNode(node *Node) (err error) {
+	if node.Services == nil || len(node.Services) == 0 {
+		return
+	}
 	client, clientErr := r.dialer.Dial(node.Address)
 	if clientErr != nil {
 		err = errors.Warning("registrations: add node failed").WithCause(clientErr)
 		return
 	}
-
-	// todo get node services
 
 	for _, name := range node.Services {
 		registration := &Registration{

@@ -41,7 +41,6 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type TransportOptions struct {
-	Transport   transports.Transport
 	Middlewares []TransportMiddleware
 	Handlers    []TransportHandler
 }
@@ -134,31 +133,42 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			clusterFetchMembersInterval = 10 * time.Second
 		}
 		kind := strings.TrimSpace(config.Cluster.Kind)
-		if kind == devClusterBuilderName && options.Proxy != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cannot use dev cluster in proxy transport")).WithCause(err)
-			return
+		if kind == devClusterBuilderName {
+			if options.Proxy != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cannot use dev cluster in proxy transport")).WithCause(err)
+				return
+			}
+			if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
+				config.Cluster.Options = []byte{'{', '}'}
+			}
+			clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
+			if clusterOptionConfigErr != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
+				return
+			}
+			cluster, err = newDevProxyCluster(options.AppId, clusterOptionConfig)
+		} else {
+			builder, hasBuilder := getClusterBuilder(kind)
+			if !hasBuilder {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
+				return
+			}
+			if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
+				config.Cluster.Options = []byte{'{', '}'}
+			}
+			clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
+			if clusterOptionConfigErr != nil {
+				err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
+				return
+			}
+			cluster, err = builder(ClusterBuilderOptions{
+				Config:     clusterOptionConfig,
+				Log:        log.With("cluster", kind),
+				AppId:      options.AppId,
+				AppName:    options.AppName,
+				AppVersion: options.AppVersion,
+			})
 		}
-		builder, hasBuilder := getClusterBuilder(kind)
-		if !hasBuilder {
-			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("kind of cluster is not found").WithMeta("kind", kind))
-			return
-		}
-		if config.Cluster.Options == nil || len(config.Cluster.Options) == 0 {
-			config.Cluster.Options = []byte{'{', '}'}
-		}
-		clusterOptionConfig, clusterOptionConfigErr := configures.NewJsonConfig(config.Cluster.Options)
-		if clusterOptionConfigErr != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(errors.Warning("cluster: build cluster options config failed")).WithCause(clusterOptionConfigErr).WithMeta("kind", kind)
-			return
-		}
-		cluster, err = builder(ClusterBuilderOptions{
-			Config:     clusterOptionConfig,
-			Log:        log.With("cluster", kind),
-			AppId:      options.AppId,
-			AppName:    options.AppName,
-			AppVersion: options.AppVersion,
-		})
-
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err).WithMeta("kind", kind)
 			return
@@ -234,13 +244,13 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	v.rt.discovery = v
 
 	// transports >>>
-	transportClosers, transportErr := createService(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Transport, options.Transport.Middlewares, options.Transport.Handlers)
+	transport, transportClosers, transportErr := createService(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Middlewares, options.Transport.Handlers)
 	if transportErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(transportErr)
 		return
 	}
 	v.closers = append(v.closers, transportClosers...)
-	v.transport = options.Transport.Transport
+	v.transport = transport
 	for _, middleware := range options.Transport.Middlewares {
 		v.closers = append(v.closers, middleware)
 		servicesSupplier, ok := middleware.(ServicesSupplier)
@@ -259,13 +269,13 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	// proxy
 	if options.Proxy != nil {
-		proxyClosers, proxyErr := createProxy(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Transport, options.Proxy.Middlewares, options.Proxy.Handlers)
+		proxy, proxyClosers, proxyErr := createProxy(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
 		if proxyErr != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(proxyErr)
 			return
 		}
 		v.closers = append(v.closers, proxyClosers...)
-		v.proxy = options.Proxy.Transport
+		v.proxy = proxy
 		for _, middleware := range options.Proxy.Middlewares {
 			servicesSupplier, ok := middleware.(ServicesSupplier)
 			if ok && servicesSupplier.Services() != nil {

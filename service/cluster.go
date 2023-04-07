@@ -20,7 +20,6 @@ import (
 	"context"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/logs"
 )
@@ -77,9 +76,6 @@ func RegisterClusterBuilder(name string, builder ClusterBuilder) {
 }
 
 func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
-	if name == devClusterBuilderName {
-		return devClusterBuilder, true
-	}
 	builder, has = builders[name]
 	return
 }
@@ -88,27 +84,15 @@ const (
 	devClusterBuilderName = "dev"
 )
 
-func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err error) {
-	// todo add dialer builder
-	return
-}
+func newDevProxyCluster(appId string, config configures.Config) (cluster Cluster, err error) {
 
-func newDevProxyCluster(appId string, cluster Cluster, proxyAddress string, dialer transports.Dialer, secretKey []byte) Cluster {
-	return &devCluster{
-		appId:        appId,
-		proxyAddress: proxyAddress,
-		dialer:       dialer,
-		proxy:        cluster,
-		signer:       secret.NewSigner(secretKey),
-	}
+	return
 }
 
 type devCluster struct {
 	appId        string
 	proxyAddress string
 	dialer       transports.Dialer
-	proxy        Cluster
-	signer       *secret.Signer
 }
 
 func (cluster *devCluster) Dialer() transports.Dialer {
@@ -129,7 +113,5 @@ func (cluster *devCluster) Nodes(ctx context.Context) (nodes Nodes, err error) {
 }
 
 func (cluster *devCluster) Shared() (shared Shared) {
-	// todo 也proxy
-	shared = cluster.proxy.Shared()
 	return
 }

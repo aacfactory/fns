@@ -93,6 +93,7 @@ type AutoMaxProcsConfig struct {
 }
 
 type TransportConfig struct {
+	Name        string                 `json:"name"`
 	Port        int                    `json:"port"`
 	Cors        *transports.CorsConfig `json:"cors"`
 	TLS         *TLSConfig             `json:"tls"`

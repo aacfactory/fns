@@ -78,7 +78,6 @@ func New(options ...Option) (app Application) {
 	var proxyOptions *service.TransportOptions
 	if opt.proxyOptions != nil {
 		proxyOptions = &service.TransportOptions{
-			Transport:   opt.proxyOptions.transport,
 			Middlewares: opt.proxyOptions.middlewares,
 			Handlers:    opt.proxyOptions.handlers,
 		}
@@ -89,7 +88,6 @@ func New(options ...Option) (app Application) {
 		AppName:    appName,
 		AppVersion: appVersion,
 		Transport: &service.TransportOptions{
-			Transport:   opt.transportOptions.transport,
 			Middlewares: opt.transportOptions.middlewares,
 			Handlers:    opt.transportOptions.handlers,
 		},

@@ -21,7 +21,6 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/fns/service/validators"
 	"os"
 	"strings"
@@ -38,22 +37,20 @@ var (
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
-		transportOptions:      UseTransport(transports.FastHttpTransport()),
+		transportOptions:      TransportOption(),
 		proxyOptions:          nil,
 		shutdownTimeout:       60 * time.Second,
 	}
 )
 
-func UseTransport(transport transports.Transport) *TransportOptions {
+func TransportOption() *TransportOptions {
 	return &TransportOptions{
-		transport:   transport,
 		handlers:    make([]service.TransportHandler, 0, 1),
 		middlewares: make([]service.TransportMiddleware, 0, 1),
 	}
 }
 
 type TransportOptions struct {
-	transport   transports.Transport
 	handlers    []service.TransportHandler
 	middlewares []service.TransportMiddleware
 }
@@ -73,6 +70,8 @@ func (options *TransportOptions) Use(middlewares ...service.TransportMiddleware)
 	options.middlewares = append(options.middlewares, middlewares...)
 	return options
 }
+
+// +-------------------------------------------------------------------------------------------------------------------+
 
 type Options struct {
 	id                    string
@@ -119,7 +118,7 @@ func Id(id string) Option {
 	return func(options *Options) error {
 		id = strings.TrimSpace(id)
 		if id == "" {
-			return fmt.Errorf("set id failed for empty")
+			return fmt.Errorf("customize id failed for empty")
 		}
 		options.id = id
 		return nil
@@ -130,7 +129,7 @@ func Name(name string) Option {
 	return func(options *Options) error {
 		name = strings.TrimSpace(name)
 		if name == "" {
-			return fmt.Errorf("set name failed for empty")
+			return fmt.Errorf("customize name failed for empty")
 		}
 		options.name = name
 		return nil
@@ -141,26 +140,13 @@ func Version(version string) Option {
 	return func(options *Options) error {
 		version = strings.TrimSpace(version)
 		if version == "" {
-			return fmt.Errorf("set version failed for empty")
+			return fmt.Errorf("customize version failed for empty")
 		}
 		ver, parseErr := versions.Parse(version)
 		if parseErr != nil {
 			return parseErr
 		}
 		options.version = ver
-		return nil
-	}
-}
-
-func Proxy(tr *TransportOptions) Option {
-	return func(options *Options) error {
-		if tr == nil || tr.transport == nil {
-			return fmt.Errorf("enable proxy failed for it is nil")
-		}
-		if tr.transport.Name() == "" {
-			return fmt.Errorf("enable proxy failed for name of transport is nil")
-		}
-		options.proxyOptions = tr
 		return nil
 	}
 }
@@ -182,7 +168,7 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 func ShutdownTimeout(timeout time.Duration) Option {
 	return func(options *Options) error {
 		if timeout < 1 {
-			return fmt.Errorf("set application shutdown timeout failed for nil")
+			return fmt.Errorf("customize application shutdown timeout failed for nil")
 		}
 		options.shutdownTimeout = timeout
 		return nil
@@ -193,35 +179,20 @@ func ShutdownTimeout(timeout time.Duration) Option {
 
 func Transport(tr *TransportOptions) Option {
 	return func(options *Options) error {
-		if tr == nil || tr.transport == nil {
-			return fmt.Errorf("customize transport failed for it is nil")
-		}
-		if tr.transport.Name() == "" {
-			return fmt.Errorf("customize transport failed for name of transport is nil")
+		if options == nil {
+			return fmt.Errorf("customize transport options failed for nil")
 		}
 		options.transportOptions = tr
 		return nil
 	}
 }
 
-func Handlers(handlers ...service.TransportHandler) Option {
+func Proxy(tr *TransportOptions) Option {
 	return func(options *Options) error {
-		if handlers == nil || len(handlers) == 0 {
-			return nil
+		if options == nil {
+			return fmt.Errorf("customize proxy transport options failed for nil")
 		}
-		options.transportOptions.Append(handlers...)
+		options.proxyOptions = tr
 		return nil
 	}
 }
-
-func Middlewares(middlewares ...service.TransportMiddleware) Option {
-	return func(options *Options) error {
-		if middlewares == nil || len(middlewares) == 0 {
-			return nil
-		}
-		options.transportOptions.Use(middlewares...)
-		return nil
-	}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+

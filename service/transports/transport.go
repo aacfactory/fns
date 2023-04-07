@@ -23,6 +23,24 @@ import (
 	"io"
 )
 
+var (
+	registered = make(map[string]Transport)
+)
+
+func Register(transport Transport) {
+	registered[transport.Name()] = transport
+}
+
+func Registered(name string) (transport Transport, has bool) {
+	if name == "" {
+		transport = &fastHttpTransport{}
+		has = true
+		return
+	}
+	transport, has = registered[name]
+	return
+}
+
 type Options struct {
 	Port      int
 	ServerTLS *tls.Config

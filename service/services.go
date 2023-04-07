@@ -37,7 +37,13 @@ import (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (closers []io.Closer, err error) {
+func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, closers []io.Closer, err error) {
+	registered := false
+	tr, registered = transports.Registered(strings.TrimSpace(config.Name))
+	if !registered {
+		err = errors.Warning("fns: create transport failed").WithCause(errors.Warning("transport was not registered")).WithMeta("name", config.Name)
+		return
+	}
 	closers = make([]io.Closer, 0, 1)
 	midConfig, midConfigErr := config.MiddlewaresConfig()
 	if midConfigErr != nil {

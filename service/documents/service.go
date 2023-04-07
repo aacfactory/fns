@@ -21,7 +21,6 @@ import (
 	"sort"
 )
 
-// NewDocument todo change with fnc(forg was changed)
 func NewDocument(name string, description string, ver versions.Version) *Document {
 	return &Document{
 		Name:        name,

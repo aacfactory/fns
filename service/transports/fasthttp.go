@@ -39,12 +39,6 @@ const (
 	fastHttpTransportName = "fasthttp"
 )
 
-func FastHttpTransport() Transport {
-	return &fastHttpTransport{}
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 type fastHttpClientOptions struct {
 	DialDualStack             bool   `json:"dialDualStack"`
 	MaxConnsPerHost           int    `json:"maxConnsPerHost"`

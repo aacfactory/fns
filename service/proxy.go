@@ -41,7 +41,13 @@ const (
 	proxyHandlerName = "proxy"
 )
 
-func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, registrations *Registrations, tr transports.Transport, middlewares []TransportMiddleware, handlers []TransportHandler) (closers []io.Closer, err error) {
+func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, registrations *Registrations, middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, closers []io.Closer, err error) {
+	registered := false
+	tr, registered = transports.Registered(strings.TrimSpace(config.Name))
+	if !registered {
+		err = errors.Warning("fns: create proxy failed").WithCause(errors.Warning("transport was not registered")).WithMeta("name", config.Name)
+		return
+	}
 	closers = make([]io.Closer, 0, 1)
 	midConfig, midConfigErr := config.MiddlewaresConfig()
 	if midConfigErr != nil {

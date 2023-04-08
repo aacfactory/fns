@@ -14,7 +14,6 @@ require (
 	github.com/aacfactory/workers v1.8.1
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/go-playground/validator/v10 v10.12.0
-	github.com/rs/cors v1.8.3
 	github.com/rs/xid v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.45.0

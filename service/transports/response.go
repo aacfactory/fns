@@ -19,6 +19,7 @@ package transports
 import (
 	"bufio"
 	"github.com/aacfactory/errors"
+	"io"
 	"net"
 )
 
@@ -29,6 +30,7 @@ type ResponseWriter interface {
 	Succeed(v interface{})
 	Failed(cause errors.CodeError)
 	Write(body []byte) (int, error)
+	Body() []byte
 	Hijack(func(conn net.Conn, brw *bufio.ReadWriter, err error))
 	Hijacked() bool
 }
@@ -37,4 +39,9 @@ type Response struct {
 	Status int
 	Header Header
 	Body   []byte
+}
+
+type WriteBuffer interface {
+	io.Writer
+	Bytes() []byte
 }

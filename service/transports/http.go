@@ -116,7 +116,7 @@ func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *Request, 
 	return
 }
 
-func convertHttpResponseWriterToResponseWriter(w http.ResponseWriter, buf io.Writer) ResponseWriter {
+func convertHttpResponseWriterToResponseWriter(w http.ResponseWriter, buf WriteBuffer) ResponseWriter {
 	return &netResponseWriter{
 		writer:   w,
 		status:   0,
@@ -130,7 +130,7 @@ type netResponseWriter struct {
 	writer   http.ResponseWriter
 	status   int
 	header   Header
-	body     io.Writer
+	body     WriteBuffer
 	hijacked bool
 }
 
@@ -192,6 +192,10 @@ func (w *netResponseWriter) Write(body []byte) (int, error) {
 	bodyLen := len(body)
 	w.write(body, bodyLen)
 	return bodyLen, nil
+}
+
+func (w *netResponseWriter) Body() []byte {
+	return w.body.Bytes()
 }
 
 func (w *netResponseWriter) write(body []byte, bodyLen int) {

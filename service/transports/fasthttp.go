@@ -27,7 +27,6 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
-	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -461,7 +460,7 @@ func convertFastHttpRequestCtxToRequest(ctx *fasthttp.RequestCtx) (r *Request, e
 	return
 }
 
-func convertFastHttpRequestCtxToResponseWriter(ctx *fasthttp.RequestCtx, writer io.Writer) (w ResponseWriter) {
+func convertFastHttpRequestCtxToResponseWriter(ctx *fasthttp.RequestCtx, writer WriteBuffer) (w ResponseWriter) {
 	w = &fastHttpResponseWriter{
 		ctx:    ctx,
 		status: 0,
@@ -475,7 +474,7 @@ type fastHttpResponseWriter struct {
 	ctx    *fasthttp.RequestCtx
 	status int
 	header Header
-	body   io.Writer
+	body   WriteBuffer
 }
 
 func (w *fastHttpResponseWriter) Status() int {
@@ -538,6 +537,10 @@ func (w *fastHttpResponseWriter) Write(body []byte) (int, error) {
 	bodyLen := len(body)
 	w.write(body, bodyLen)
 	return bodyLen, nil
+}
+
+func (w *fastHttpResponseWriter) Body() []byte {
+	return w.body.Bytes()
 }
 
 func (w *fastHttpResponseWriter) write(body []byte, bodyLen int) {

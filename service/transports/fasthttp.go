@@ -38,7 +38,7 @@ const (
 	fastHttpTransportName = "fasthttp"
 )
 
-type fastHttpClientOptions struct {
+type FastHttpClientOptions struct {
 	DialDualStack             bool   `json:"dialDualStack"`
 	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
 	MaxIdleConnDuration       string `json:"maxIdleConnDuration"`
@@ -52,7 +52,7 @@ type fastHttpClientOptions struct {
 	MaxConnWaitTimeout        string `json:"maxConnWaitTimeout"`
 }
 
-type fastHttpTransportOptions struct {
+type FastHttpTransportOptions struct {
 	ReadBufferSize        string                `json:"readBufferSize"`
 	ReadTimeout           string                `json:"readTimeout"`
 	WriteBufferSize       string                `json:"writeBufferSize"`
@@ -65,7 +65,7 @@ type fastHttpTransportOptions struct {
 	MaxRequestsPerConn    int                   `json:"maxRequestsPerConn"`
 	KeepHijackedConns     bool                  `json:"keepHijackedConns"`
 	StreamRequestBody     bool                  `json:"streamRequestBody"`
-	Client                fastHttpClientOptions `json:"client"`
+	Client                FastHttpClientOptions `json:"client"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -161,7 +161,7 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 	srv.address = fmt.Sprintf(":%d", options.Port)
 	srv.ssl = options.ServerTLS != nil
 
-	opt := &fastHttpTransportOptions{}
+	opt := &FastHttpTransportOptions{}
 	optErr := options.Config.As(opt)
 	if optErr != nil {
 		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("transport", fastHttpTransportName)
@@ -269,7 +269,7 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 	return
 }
 
-func (srv *fastHttpTransport) buildClient(opt fastHttpClientOptions, cliConfig *tls.Config) (err error) {
+func (srv *fastHttpTransport) buildClient(opt FastHttpClientOptions, cliConfig *tls.Config) (err error) {
 	maxIdleWorkerDuration := time.Duration(0)
 	if opt.MaxIdleConnDuration != "" {
 		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxIdleConnDuration))

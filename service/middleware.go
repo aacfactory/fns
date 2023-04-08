@@ -46,6 +46,7 @@ const (
 	httpXRealIp                        = "X-Real-IP"
 	httpXForwardedForHeader            = "X-Forwarded-For"
 	httpRequestIdHeader                = "X-Fns-Request-Id"
+	httpSignatureHeader                = "X-Fns-Signature"
 	httpRequestInternalSignatureHeader = "X-Fns-Request-Internal-Signature"
 	httpRequestInternalHeader          = "X-Fns-Request-Internal"
 	httpRequestTimeoutHeader           = "X-Fns-Request-Timeout"
@@ -171,11 +172,11 @@ func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) tr
 		httpDeviceIpHeader, httpDeviceIdHeader,
 		httpRequestIdHeader,
 		httpRequestInternalSignatureHeader, httpRequestTimeoutHeader, httpRequestVersionsHeader,
-		httpETagHeader, httpCacheControlIfNonMatch, httpPragmaHeader, httpClearSiteData, httpResponseRetryAfter,
+		httpETagHeader, httpCacheControlIfNonMatch, httpPragmaHeader, httpClearSiteData, httpResponseRetryAfter, httpSignatureHeader,
 	})
 	middlewares.cors.TryFillExposedHeaders([]string{
 		httpRequestIdHeader, httpRequestInternalSignatureHeader, httpHandleLatencyHeader,
-		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter, httpResponseCacheTTL,
+		httpCacheControlHeader, httpETagHeader, httpClearSiteData, httpResponseRetryAfter, httpResponseCacheTTL, httpSignatureHeader,
 	})
 	return middlewares.cors.Handler(handler)
 }
@@ -287,11 +288,14 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 				r.Header().Set(httpRequestIdHeader, requestId)
 			}
 		}
-		// body
-		body := r.Body()
-		if body == nil || len(body) == 0 {
-			r.SetBody(bytex.FromString(emptyJson))
+		if r.Header().Get(httpUpgradeHeader) != "" {
+			// body
+			body := r.Body()
+			if body == nil || len(body) == 0 {
+				r.SetBody(bytex.FromString(emptyJson))
+			}
 		}
+
 		// next
 		next.Handle(w, r.WithContext(middleware.runtime.SetIntoContext(r.Context())))
 		if !w.Hijacked() && middleware.latencyEnabled {

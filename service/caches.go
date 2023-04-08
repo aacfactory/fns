@@ -88,6 +88,10 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 
 func (middleware *cacheControlMiddleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
+		if r.Header().Get(httpUpgradeHeader) != "" {
+			next.Handle(w, r)
+			return
+		}
 		ifNonMatch := r.Header().Get(httpCacheControlIfNonMatch)
 		if ifNonMatch != "" {
 			exist := middleware.existETag(r.Context(), ifNonMatch)

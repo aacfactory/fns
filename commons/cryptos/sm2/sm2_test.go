@@ -62,3 +62,30 @@ func TestSM2(t *testing.T) {
 	fmt.Println(len(v), len(base64.URLEncoding.EncodeToString(v)))
 	fmt.Println(pub.Verify(p, v))
 }
+
+func TestExchange(t *testing.T) {
+	ida := []byte("A")
+	priA, priAErr := sm2.GenerateKey(rand.Reader)
+	if priAErr != nil {
+		t.Error(priAErr)
+		return
+	}
+	priB, priBErr := sm2.GenerateKey(rand.Reader)
+	if priBErr != nil {
+		t.Error(priBErr)
+		return
+	}
+	idb := []byte("B")
+
+	k1, _, _, e1 := sm2.KeyExchangeB(64, ida, idb, priB, &priA.PublicKey, priB, &priA.PublicKey)
+	if e1 != nil {
+		t.Error(e1)
+		return
+	}
+	k2, _, _, e2 := sm2.KeyExchangeA(64, ida, idb, priA, &priB.PublicKey, priA, &priB.PublicKey)
+	if e2 != nil {
+		t.Error(e2)
+		return
+	}
+	fmt.Println(bytes.Equal(k1, k2), base64.StdEncoding.EncodeToString(k1))
+}

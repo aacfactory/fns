@@ -30,11 +30,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/aacfactory/fns/commons/cryptos/sm3"
-	"io"
-	"math/big"
-
 	"golang.org/x/crypto/cryptobyte"
 	cbasn1 "golang.org/x/crypto/cryptobyte/asn1"
+	"io"
+	"math/big"
 )
 
 var (
@@ -454,8 +453,9 @@ func keyExchange(klen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpr
 	if thisISA {
 		pza = &pri.PublicKey
 	}
-	za, err := ZA(pza, ida)
-	if err != nil {
+	za, zaErr := ZA(pza, ida)
+	if zaErr != nil {
+		err = zaErr
 		return
 	}
 	zero := new(big.Int)
@@ -466,22 +466,27 @@ func keyExchange(klen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpr
 	if !thisISA {
 		pzb = &pri.PublicKey
 	}
-	zb, err := ZA(pzb, idb)
-	k, ok := kdf(klen, vx.Bytes(), vy.Bytes(), za, zb)
+	zb, zbErr := ZA(pzb, idb)
+	if zbErr != nil {
+		err = zbErr
+		return
+	}
+	kk, ok := kdf(klen, vx.Bytes(), vy.Bytes(), za, zb)
 	if !ok {
 		err = errors.New("sm2: zero key")
 		return
 	}
+	k = kk
 	h1 := BytesCombine(vx.Bytes(), za, zb, rpub.X.Bytes(), rpub.Y.Bytes(), rpri.X.Bytes(), rpri.Y.Bytes())
 	if !thisISA {
 		h1 = BytesCombine(vx.Bytes(), za, zb, rpri.X.Bytes(), rpri.Y.Bytes(), rpub.X.Bytes(), rpub.Y.Bytes())
 	}
 	hash := sm3.Sm3Sum(h1)
 	h2 := BytesCombine([]byte{0x02}, vy.Bytes(), hash)
-	S1 := sm3.Sm3Sum(h2)
+	s1 = sm3.Sm3Sum(h2)
 	h3 := BytesCombine([]byte{0x03}, vy.Bytes(), hash)
-	S2 := sm3.Sm3Sum(h3)
-	return k, S1, S2, nil
+	s2 = sm3.Sm3Sum(h3)
+	return
 }
 
 func msgHash(za, msg []byte) (*big.Int, error) {

@@ -17,7 +17,6 @@
 package transports
 
 import (
-	"bufio"
 	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -222,26 +221,29 @@ func (w *netResponseWriter) write(body []byte, bodyLen int) {
 	return
 }
 
-func (w *netResponseWriter) Hijack(f func(conn net.Conn, brw *bufio.ReadWriter, err error)) {
+func (w *netResponseWriter) Hijack(f func(conn net.Conn)) (err error) {
 	if f == nil {
-		return
-	}
-	if w.hijacked {
-		f(nil, nil, errors.Warning("fns: connection was hijacked"))
+		err = errors.Warning("fns: hijack function is nil")
 		return
 	}
 	h, ok := w.writer.(http.Hijacker)
 	if !ok {
-		f(nil, nil, errors.Warning("fns: connection can not be hijacked"))
+		err = errors.Warning("fns: connection can not be hijacked")
 		return
 	}
-	conn, brw, err := h.Hijack()
-	if err != nil {
-		f(nil, nil, errors.Warning("fns: connection hijack failed").WithCause(err))
+	conn, brw, hijackErr := h.Hijack()
+	if hijackErr != nil {
+		err = errors.Warning("fns: connection hijack failed").WithCause(hijackErr)
+		return
+	}
+	if brw.Reader.Buffered() > 0 {
+		_ = conn.Close()
+		err = errors.Warning("fns: connection hijack failed").WithCause(errors.Warning("connection has more data to be read"))
 		return
 	}
 	w.hijacked = true
-	f(conn, brw, nil)
+	f(conn)
+	return
 }
 
 func (w *netResponseWriter) Hijacked() bool {

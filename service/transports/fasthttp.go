@@ -456,6 +456,8 @@ func convertFastHttpRequestCtxToRequest(ctx *fasthttp.RequestCtx) (r *Request, e
 
 	r.SetProto(ctx.Request.Header.Protocol())
 
+	r.remoteAddr = bytex.FromString(ctx.RemoteAddr().String())
+
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
 		sk := bytex.ToString(key)
 		sv := bytex.ToString(value)

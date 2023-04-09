@@ -26,6 +26,7 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/prefork"
 	"net"
 	"net/http"
 	"strconv"
@@ -64,6 +65,7 @@ type FastHttpTransportOptions struct {
 	MaxRequestsPerConn    int                   `json:"maxRequestsPerConn"`
 	KeepHijackedConns     bool                  `json:"keepHijackedConns"`
 	StreamRequestBody     bool                  `json:"streamRequestBody"`
+	Prefork               bool                  `json:"prefork"`
 	Client                FastHttpClientOptions `json:"client"`
 }
 
@@ -143,11 +145,12 @@ func (client *fastClient) Close() {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type fastHttpTransport struct {
-	log     logs.Logger
-	ssl     bool
-	address string
-	client  *fasthttp.Client
-	server  *fasthttp.Server
+	log       logs.Logger
+	ssl       bool
+	address   string
+	preforked bool
+	client    *fasthttp.Client
+	server    *fasthttp.Server
 }
 
 func (srv *fastHttpTransport) Name() (name string) {
@@ -225,6 +228,8 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 	}
 
 	reduceMemoryUsage := opt.ReduceMemoryUsage
+
+	srv.preforked = opt.Prefork
 
 	srv.server = &fasthttp.Server{
 		Handler:                            FastHttpTransportHandlerAdaptor(options.Handler),
@@ -368,6 +373,15 @@ func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
 }
 
 func (srv *fastHttpTransport) ListenAndServe() (err error) {
+	if srv.preforked {
+		pf := prefork.New(srv.server)
+		if srv.ssl {
+			err = pf.ListenAndServeTLS(srv.address, "", "")
+		} else {
+			err = pf.ListenAndServe(srv.address)
+		}
+		return
+	}
 	if srv.ssl {
 		err = srv.server.ListenAndServeTLS(srv.address, "", "")
 	} else {

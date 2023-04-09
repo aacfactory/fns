@@ -202,16 +202,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		}
 	} else {
 		// shared >>>
-		sharedMemSizeStr := strings.TrimSpace(runtimeConfig.LocalSharedStoreCacheSize)
-		if sharedMemSizeStr == "" {
-			sharedMemSizeStr = "64M"
-		}
-		sharedMemSize, sharedMemSizeErr := bytex.ParseBytes(sharedMemSizeStr)
-		if sharedMemSizeErr != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(sharedMemSizeErr)
-			return
-		}
-		shared, err = newLocalShared(int64(sharedMemSize))
+		shared, err = newLocalShared()
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err)
 			return

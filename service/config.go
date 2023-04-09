@@ -79,12 +79,11 @@ type ProxyConfig struct {
 }
 
 type RuntimeConfig struct {
-	MaxWorkers                int                `json:"maxWorkers"`
-	WorkerMaxIdleSeconds      int                `json:"workerMaxIdleSeconds"`
-	HandleTimeoutSeconds      int                `json:"handleTimeoutSeconds"`
-	LocalSharedStoreCacheSize string             `json:"localSharedStoreCacheSize"`
-	AutoMaxProcs              AutoMaxProcsConfig `json:"autoMaxProcs"`
-	SecretKey                 string             `json:"secretKey"`
+	MaxWorkers           int                `json:"maxWorkers"`
+	WorkerMaxIdleSeconds int                `json:"workerMaxIdleSeconds"`
+	HandleTimeoutSeconds int                `json:"handleTimeoutSeconds"`
+	AutoMaxProcs         AutoMaxProcsConfig `json:"autoMaxProcs"`
+	SecretKey            string             `json:"secretKey"`
 }
 
 type AutoMaxProcsConfig struct {

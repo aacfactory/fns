@@ -18,9 +18,10 @@ package shareds
 
 import (
 	"context"
+	"encoding/binary"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/caches"
+	"sync"
 	"time"
 )
 
@@ -34,64 +35,112 @@ type Store interface {
 	Close()
 }
 
-func LocalStore(memSize int64) (store Store, err error) {
-	if memSize < 1 {
-		memSize = 64 * bytex.MEGABYTE
-	}
+func LocalStore() (store Store) {
 	store = &localStore{
-		cache: caches.New(uint64(memSize)),
+		values: sync.Map{},
 	}
 	return
 }
 
+type entry struct {
+	lock     *sync.Mutex
+	value    []byte
+	deadline time.Time
+}
+
 type localStore struct {
-	cache *caches.Cache
+	values sync.Map
 }
 
 func (store *localStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {
-	setErr := store.cache.Set(key, value)
-	if setErr != nil {
-		err = errors.Warning("fns: shared store set failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store set failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
+	store.values.Store(bytex.ToString(key), &entry{
+		lock:     new(sync.Mutex),
+		value:    value,
+		deadline: time.Time{},
+	})
 	return
 }
 
 func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
-	setErr := store.cache.SetWithTTL(key, value, ttl)
-	if setErr != nil {
-		err = errors.Warning("fns: shared store set failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store set failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
+	store.values.Store(bytex.ToString(key), &entry{
+		value:    value,
+		deadline: time.Now().Add(ttl),
+	})
 	return
 }
 
 func (store *localStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError) {
-	setErr := store.cache.Expire(key, ttl)
-	if setErr != nil {
-		err = errors.Warning("fns: shared store expire key failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store expire key failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
+	k := bytex.ToString(key)
+	x, loaded := store.values.Load(k)
+	if !loaded {
+		err = errors.Warning("fns: shared store expire key failed").WithCause(errors.Warning("key was not found")).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
+	e := x.(*entry)
+	e.deadline = time.Now().Add(ttl)
+	store.values.Store(k, e)
 	return
 }
 
 func (store *localStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError) {
-	n, setErr := store.cache.Incr(key, delta)
-	if setErr != nil {
-		err = errors.Warning("fns: shared incr failed").WithCause(setErr).WithMeta("shared", "local").WithMeta("key", string(key))
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store incr failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
+	k := bytex.ToString(key)
+	x, _ := store.values.LoadOrStore(k, &entry{value: make([]byte, 10)})
+	e := x.(*entry)
+	e.lock.Lock()
+	n, _ := binary.Varint(e.value)
+	if !e.deadline.IsZero() && e.deadline.Before(time.Now()) {
+		n = 0
+	}
+	n += delta
+	binary.PutVarint(e.value, n)
+	e.lock.Unlock()
 	v = n
 	return
 }
 
 func (store *localStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError) {
-	value, has = store.cache.Get(key)
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store get failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
+	k := bytex.ToString(key)
+	x, loaded := store.values.Load(k)
+	if !loaded {
+		return
+	}
+	e := x.(*entry)
+	if !e.deadline.IsZero() && e.deadline.Before(time.Now()) {
+		store.values.Delete(k)
+		return
+	}
+	value = e.value
+	has = true
 	return
 }
 
 func (store *localStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
-	store.cache.Remove(key)
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store remove failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
+	k := bytex.ToString(key)
+	store.values.Delete(k)
 	return
 }
 

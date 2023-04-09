@@ -25,11 +25,8 @@ type Shared interface {
 	Store() (store shareds.Store)
 }
 
-func newLocalShared(sharedMemSize int64) (Shared, error) {
-	sharedStore, err := shareds.LocalStore(sharedMemSize)
-	if err != nil {
-		return nil, err
-	}
+func newLocalShared() (Shared, error) {
+	sharedStore := shareds.LocalStore()
 	return &localShared{
 		lockers: shareds.LocalLockers(),
 		store:   sharedStore,

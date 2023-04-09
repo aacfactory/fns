@@ -25,7 +25,9 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net"
+	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,6 +35,7 @@ import (
 )
 
 const (
+	httpContentLength                  = "Content-Length"
 	httpContentType                    = "Content-Type"
 	httpContentTypeJson                = "application/json"
 	httpConnectionHeader               = "Connection"
@@ -328,8 +331,24 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 		}
 		// next
 		next.Handle(w, r.WithContext(middleware.runtime.SetIntoContext(r.Context())))
-		if !w.Hijacked() && middleware.latencyEnabled {
-			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
+		if !w.Hijacked() {
+			if middleware.latencyEnabled {
+				w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
+			}
+			body := w.Body()
+			bodyLen := len(body)
+			if bodyLen > 0 {
+				if w.Header().Get(httpContentType) == "" {
+					l := 512
+					if bodyLen < 512 {
+						l = bodyLen
+					}
+					w.Header().Set(httpContentType, http.DetectContentType(body[:l]))
+				}
+				if w.Header().Get(httpContentLength) == "" {
+					w.Header().Set(httpContentLength, strconv.Itoa(bodyLen))
+				}
+			}
 		}
 		middleware.counter.Done()
 		middleware.requests.Add(-1)

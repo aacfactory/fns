@@ -508,13 +508,7 @@ func (w *fastHttpResponseWriter) Succeed(v interface{}) {
 	bodyLen := len(body)
 	if bodyLen > 0 {
 		w.Header().Set(contentLengthHeaderName, strconv.Itoa(bodyLen))
-		if w.header.Get(contentTypeHeaderName) == "" {
-			l := 512
-			if bodyLen < 512 {
-				l = bodyLen
-			}
-			w.Header().Set(contentTypeHeaderName, http.DetectContentType(body[:l]))
-		}
+		w.Header().Set(contentTypeHeaderName, contentTypeJsonHeaderValue)
 		w.write(body, bodyLen)
 	}
 	return

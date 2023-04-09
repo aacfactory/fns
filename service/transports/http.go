@@ -51,19 +51,11 @@ func HttpTransportHandlerAdaptor(h Handler, maxRequestBody int) http.Handler {
 			}
 		}
 
-		bodyLen := buf.Len()
-		body := buf.Bytes()
-		if writer.Header().Get(contentTypeHeaderName) == "" && bodyLen > 0 {
-			l := 512
-			if bodyLen < 512 {
-				l = bodyLen
-			}
-			w.Header().Set(contentTypeHeaderName, http.DetectContentType(body[:l]))
-		}
-
 		writer.WriteHeader(w.Status())
 
+		bodyLen := buf.Len()
 		if bodyLen > 0 {
+			body := buf.Bytes()
 			n := 0
 			for n < bodyLen {
 				nn, writeErr := writer.Write(body[n:])
@@ -81,7 +73,7 @@ func HttpTransportHandlerAdaptor(h Handler, maxRequestBody int) http.Handler {
 func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *Request, err error) {
 	r = &Request{
 		ctx:                req.Context(),
-		isTLS:              req.URL.Scheme == "https",
+		isTLS:              req.URL.Scheme == httpsSchema,
 		tlsConnectionState: req.TLS,
 		method:             bytex.FromString(req.Method),
 		host:               bytex.FromString(req.Host),

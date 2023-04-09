@@ -457,9 +457,16 @@ func convertFastHttpRequestCtxToRequest(ctx *fasthttp.RequestCtx) (r *Request, e
 
 	r.SetProto(ctx.Request.Header.Protocol())
 
+	ctx.Request.Header.VisitAll(func(key, value []byte) {
+		sk := bytex.ToString(key)
+		sv := bytex.ToString(value)
+		r.Header().Set(sk, sv)
+	})
+
 	if ctx.IsPost() || ctx.IsPut() {
 		r.SetBody(ctx.PostBody())
 	}
+
 	return
 }
 

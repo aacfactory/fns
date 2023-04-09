@@ -93,6 +93,12 @@ func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *Request, 
 			r.params.Add(bytex.FromString(name), bytex.FromString(values[0]))
 		}
 	}
+	if req.TransferEncoding != nil && len(req.TransferEncoding) > 0 {
+		delete(r.header, "Transfer-Encoding")
+		for _, te := range req.TransferEncoding {
+			r.header.Add("Transfer-Encoding", te)
+		}
+	}
 
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
@@ -268,6 +274,10 @@ func ConvertRequestToHttpRequest(req *Request) (r *http.Request, err error) {
 	r.ProtoMinor = 1
 
 	r.Header = http.Header(req.header)
+	tes, hasTE := req.header["Transfer-Encoding"]
+	if hasTE {
+		r.TransferEncoding = append(r.TransferEncoding, tes...)
+	}
 
 	r.TLS = req.TLSConnectionState()
 
@@ -279,12 +289,6 @@ func ConvertResponseWriterToHttpResponseWriter(writer ResponseWriter) (w http.Re
 		response: writer,
 	}
 	return
-}
-
-type hijackResult struct {
-	conn net.Conn
-	rw   *bufio.ReadWriter
-	err  error
 }
 
 type httpResponseWriter struct {
@@ -301,49 +305,4 @@ func (w *httpResponseWriter) Write(bytes []byte) (int, error) {
 
 func (w *httpResponseWriter) WriteHeader(statusCode int) {
 	w.response.SetStatus(statusCode)
-}
-
-func (w *httpResponseWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err error) {
-	if w.response.Hijacked() {
-		err = errors.Warning("fns: can not hijack again")
-		return
-	}
-	netResp, isNet := w.response.(*netResponseWriter)
-	if isNet {
-		hijacker, canHijacker := netResp.writer.(http.Hijacker)
-		if canHijacker {
-			conn, rw, err = hijacker.Hijack()
-			if err == nil {
-				netResp.hijacked = true
-			}
-			return
-		}
-		err = errors.Warning("fns: hijack failed")
-		return
-	}
-	fastResp, isFast := w.response.(*fastHttpResponseWriter)
-	if isFast {
-		if fastResp.Hijacked() {
-			err = errors.Warning("fns: can not hijack again")
-			return
-		}
-		ch := make(chan *hijackResult, 1)
-		go func(fastResp *fastHttpResponseWriter, ch chan *hijackResult) {
-			fastResp.ctx.Hijack(func(c net.Conn) {
-				ch <- &hijackResult{
-					conn: c,
-					rw:   bufio.NewReadWriter(bufio.NewReader(c), bufio.NewWriter(c)),
-					err:  nil,
-				}
-				close(ch)
-			})
-		}(fastResp, ch)
-		result := <-ch
-		conn = result.conn
-		rw = result.rw
-		err = result.err
-		return
-	}
-	err = errors.Warning("fns: hijack failed").WithCause(errors.Warning("not supported"))
-	return
 }

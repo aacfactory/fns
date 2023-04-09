@@ -222,7 +222,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		// barrier <<<
 	}
 	// timeout
-	handleTimeoutSeconds := config.Runtime.HandleTimeoutSeconds
+	handleTimeoutSeconds := runtimeConfig.HandleTimeoutSeconds
 	if handleTimeoutSeconds < 1 {
 		handleTimeoutSeconds = 10
 	}

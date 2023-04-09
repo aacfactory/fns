@@ -18,6 +18,7 @@ package transports
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -134,15 +135,17 @@ func NewUnsafeRequest(ctx context.Context, method []byte, uri []byte) (r *Reques
 }
 
 type Request struct {
-	ctx        context.Context
-	isTLS      bool
-	method     []byte
-	host       []byte
-	remoteAddr []byte
-	header     Header
-	path       []byte
-	params     RequestParams
-	body       []byte
+	ctx                context.Context
+	isTLS              bool
+	tlsConnectionState *tls.ConnectionState
+	method             []byte
+	host               []byte
+	remoteAddr         []byte
+	proto              []byte
+	header             Header
+	path               []byte
+	params             RequestParams
+	body               []byte
 }
 
 func (r *Request) WithContext(ctx context.Context) *Request {
@@ -162,6 +165,10 @@ func (r *Request) UseTLS() {
 	r.isTLS = true
 }
 
+func (r *Request) TLSConnectionState() *tls.ConnectionState {
+	return r.tlsConnectionState
+}
+
 func (r *Request) Method() []byte {
 	return r.method
 }
@@ -176,6 +183,14 @@ func (r *Request) IsPost() bool {
 
 func (r *Request) RemoteAddr() []byte {
 	return r.remoteAddr
+}
+
+func (r *Request) Proto() []byte {
+	return r.proto
+}
+
+func (r *Request) SetProto(proto []byte) {
+	r.proto = proto
 }
 
 func (r *Request) Host() []byte {

@@ -80,14 +80,17 @@ func HttpTransportHandlerAdaptor(h Handler, maxRequestBody int) http.Handler {
 
 func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *Request, err error) {
 	r = &Request{
-		ctx:        req.Context(),
-		method:     bytex.FromString(req.Method),
-		host:       bytex.FromString(req.Host),
-		remoteAddr: bytex.FromString(req.RemoteAddr),
-		header:     make(Header),
-		path:       bytex.FromString(req.URL.Path),
-		params:     make(RequestParams),
-		body:       nil,
+		ctx:                req.Context(),
+		isTLS:              req.URL.Scheme == "https",
+		tlsConnectionState: req.TLS,
+		method:             bytex.FromString(req.Method),
+		host:               bytex.FromString(req.Host),
+		remoteAddr:         bytex.FromString(req.RemoteAddr),
+		proto:              bytex.FromString(req.Proto),
+		header:             Header(req.Header),
+		path:               bytex.FromString(req.URL.Path),
+		params:             make(RequestParams),
+		body:               nil,
 	}
 	params := req.URL.Query()
 	if params != nil && len(params) > 0 {
@@ -98,6 +101,7 @@ func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *Request, 
 			r.params.Add(bytex.FromString(name), bytex.FromString(values[0]))
 		}
 	}
+
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
 	b := acquireBuf()
@@ -261,6 +265,20 @@ func ConvertRequestToHttpRequest(req *Request) (r *http.Request, err error) {
 		err = errors.Warning("fns: convert request to http request failed").WithCause(err)
 		return
 	}
+	r.Proto = bytex.ToString(req.proto)
+	if r.Proto == "HTTP/2" || r.Proto == "HTTP/2.0" {
+		r.ProtoMajor = 2
+	} else if r.Proto == "HTTP/3" || r.Proto == "HTTP/3.0" {
+		r.ProtoMajor = 3
+	} else {
+		r.ProtoMajor = 1
+	}
+	r.ProtoMinor = 1
+
+	r.Header = http.Header(req.header)
+
+	r.TLS = req.TLSConnectionState()
+
 	return
 }
 

@@ -452,7 +452,10 @@ func convertFastHttpRequestCtxToRequest(ctx *fasthttp.RequestCtx) (r *Request, e
 
 	if ctx.IsTLS() {
 		r.UseTLS()
+		r.tlsConnectionState = ctx.TLSConnectionState()
 	}
+
+	r.SetProto(ctx.Request.Header.Protocol())
 
 	if ctx.IsPost() || ctx.IsPut() {
 		r.SetBody(ctx.PostBody())

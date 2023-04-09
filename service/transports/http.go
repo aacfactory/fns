@@ -242,7 +242,7 @@ func (w *netResponseWriter) Hijack(f func(conn net.Conn)) (err error) {
 		return
 	}
 	w.hijacked = true
-	f(conn)
+	go f(conn)
 	return
 }
 

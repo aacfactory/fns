@@ -19,6 +19,7 @@ package caches_test
 import (
 	"fmt"
 	"github.com/aacfactory/fns/commons/caches"
+	"github.com/aacfactory/fns/commons/uid"
 	"testing"
 	"time"
 )
@@ -72,4 +73,11 @@ func TestIncr(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		fmt.Println(cache.Decr(key, 1))
 	}
+}
+
+func TestCache_Set(t *testing.T) {
+	cache := caches.New(32 * 1024 * 1024)
+	key := []byte("a")
+	val := []byte(uid.UID())
+	fmt.Println(cache.Set(key, val))
 }

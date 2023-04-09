@@ -38,9 +38,8 @@ const (
 )
 
 var (
-	ErrTooBigKey    = fmt.Errorf("key was too big, must not be greater than 63k")
-	ErrInvalidKey   = fmt.Errorf("key is invalid")
-	ErrInvalidValue = fmt.Errorf("value content is invalid")
+	ErrTooBigKey  = fmt.Errorf("key was too big, must not be greater than 63k")
+	ErrInvalidKey = fmt.Errorf("key is invalid")
 )
 
 func New(maxBytes uint64) (cache *Cache) {
@@ -95,10 +94,6 @@ func (c *Cache) SetWithTTL(k []byte, v []byte, ttl time.Duration) (err error) {
 	}
 	if v == nil {
 		v = []byte{}
-	}
-	if len(v) >= 16 && unmarshalUint64(v[8:16]) > 0 {
-		err = ErrInvalidValue
-		return
 	}
 	deadline := uint64(0)
 	if ttl > 0 {

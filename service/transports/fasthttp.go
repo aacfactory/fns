@@ -17,6 +17,7 @@
 package transports
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -584,14 +585,15 @@ func (w *fastHttpResponseWriter) write(body []byte, bodyLen int) {
 	return
 }
 
-func (w *fastHttpResponseWriter) Hijack(f func(conn net.Conn)) (err error) {
+func (w *fastHttpResponseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
 	if f == nil {
 		err = errors.Warning("fns: hijack function is nil")
 		return
 	}
 	w.ctx.Hijack(func(c net.Conn) {
-		f(c)
+		_ = f(c, nil)
 	})
+	async = true
 	return
 }
 

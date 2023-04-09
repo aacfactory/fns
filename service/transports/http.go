@@ -17,6 +17,7 @@
 package transports
 
 import (
+	"bufio"
 	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -221,7 +222,7 @@ func (w *netResponseWriter) write(body []byte, bodyLen int) {
 	return
 }
 
-func (w *netResponseWriter) Hijack(f func(conn net.Conn)) (err error) {
+func (w *netResponseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
 	if f == nil {
 		err = errors.Warning("fns: hijack function is nil")
 		return
@@ -236,13 +237,8 @@ func (w *netResponseWriter) Hijack(f func(conn net.Conn)) (err error) {
 		err = errors.Warning("fns: connection hijack failed").WithCause(hijackErr)
 		return
 	}
-	if brw.Reader.Buffered() > 0 {
-		_ = conn.Close()
-		err = errors.Warning("fns: connection hijack failed").WithCause(errors.Warning("connection has more data to be read"))
-		return
-	}
 	w.hijacked = true
-	go f(conn)
+	err = f(conn, brw)
 	return
 }
 

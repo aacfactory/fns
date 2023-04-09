@@ -17,6 +17,7 @@
 package transports
 
 import (
+	"bufio"
 	"github.com/aacfactory/errors"
 	"io"
 	"net"
@@ -30,7 +31,7 @@ type ResponseWriter interface {
 	Failed(cause errors.CodeError)
 	Write(body []byte) (int, error)
 	Body() []byte
-	Hijack(func(conn net.Conn)) (err error)
+	Hijack(func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error)
 	Hijacked() bool
 }
 

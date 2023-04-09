@@ -94,7 +94,7 @@ func newTransportMiddlewares(options transportMiddlewaresOptions) *transportMidd
 		config:      options.Config,
 		runtime:     options.Runtime,
 		cors:        options.Cors,
-		middlewares: make([]TransportMiddleware, 0, 1),
+		middlewares: middlewares,
 	}
 }
 
@@ -261,6 +261,8 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 		}
 		middleware.requests.Add(1)
 		middleware.counter.Add(1)
+		// runtime
+		r = r.WithContext(middleware.runtime.SetIntoContext(r.Context()))
 		// latency
 		handleBeg := time.Time{}
 		if middleware.latencyEnabled {
@@ -330,7 +332,7 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 			return
 		}
 		// next
-		next.Handle(w, r.WithContext(middleware.runtime.SetIntoContext(r.Context())))
+		next.Handle(w, r)
 		if !w.Hijacked() {
 			if middleware.latencyEnabled {
 				w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())

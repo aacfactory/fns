@@ -380,6 +380,10 @@ func (srv *fastHttpTransport) ListenAndServe() (err error) {
 		} else {
 			err = pf.ListenAndServe(srv.address)
 		}
+		if err != nil {
+			err = errors.Warning("fns: transport perfork listen and serve failed").WithCause(err)
+			return
+		}
 		return
 	}
 	if srv.ssl {
@@ -388,7 +392,7 @@ func (srv *fastHttpTransport) ListenAndServe() (err error) {
 		err = srv.server.ListenAndServe(srv.address)
 	}
 	if err != nil {
-		err = errors.Warning("fns: server listen and serve failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+		err = errors.Warning("fns: transport listen and serve failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
 		return
 	}
 	return
@@ -397,7 +401,7 @@ func (srv *fastHttpTransport) ListenAndServe() (err error) {
 func (srv *fastHttpTransport) Close() (err error) {
 	err = srv.server.Shutdown()
 	if err != nil {
-		err = errors.Warning("fns: server close failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+		err = errors.Warning("fns: transport close failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
 	}
 	return
 }

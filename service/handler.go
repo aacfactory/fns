@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -60,7 +61,6 @@ type transportHandlersOptions struct {
 
 func newTransportHandlers(options transportHandlersOptions) *transportHandlers {
 	handlers := make([]TransportHandler, 0, 1)
-	handlers = append(handlers, newTransportApplicationHandler())
 	return &transportHandlers{
 		runtime:  options.Runtime,
 		config:   options.Config,
@@ -145,40 +145,49 @@ const (
 )
 
 type applicationStats struct {
-	Id      string         `json:"id"`
-	Name    string         `json:"name"`
-	Running bool           `json:"running"`
-	Mem     *memory.Memory `json:"mem"`
-	CPU     *cpuOccupancy  `json:"cpu"`
+	Id       string        `json:"id"`
+	Name     string        `json:"name"`
+	Running  bool          `json:"running"`
+	Requests int64         `json:"requests"`
+	Mem      *memoryInfo   `json:"mem"`
+	CPU      *cpuOccupancy `json:"cpu"`
 }
 
 type cpuOccupancy struct {
-	Max   cpu.Core `json:"max"`
-	Min   cpu.Core `json:"min"`
-	Avg   float64  `json:"avg"`
-	Cores cpu.CPU  `json:"cores"`
+	Max   cpu.Core         `json:"max"`
+	Min   cpu.Core         `json:"min"`
+	Avg   float64          `json:"avg"`
+	Cores cpu.CPU          `json:"cores"`
+	Error errors.CodeError `json:"error,omitempty"`
 }
 
-func newTransportApplicationHandler() *transportApplicationHandler {
+type memoryInfo struct {
+	memory.Memory
+	Error errors.CodeError `json:"error,omitempty"`
+}
+
+func newTransportApplicationHandler(requestCounts *atomic.Int64) *transportApplicationHandler {
 	return &transportApplicationHandler{
-		appId:        "",
-		appName:      "",
-		appVersion:   versions.Version{},
-		appStatus:    nil,
-		launchAT:     time.Time{},
-		statsEnabled: false,
-		group:        singleflight.Group{},
+		appId:         "",
+		appName:       "",
+		appVersion:    versions.Version{},
+		appStatus:     nil,
+		requestCounts: requestCounts,
+		launchAT:      time.Time{},
+		statsEnabled:  false,
+		group:         singleflight.Group{},
 	}
 }
 
 type transportApplicationHandler struct {
-	appId        string
-	appName      string
-	appVersion   versions.Version
-	appStatus    *Status
-	launchAT     time.Time
-	statsEnabled bool
-	group        singleflight.Group
+	appId         string
+	appName       string
+	appVersion    versions.Version
+	appStatus     *Status
+	requestCounts *atomic.Int64
+	launchAT      time.Time
+	statsEnabled  bool
+	group         singleflight.Group
 }
 
 func (handler *transportApplicationHandler) Name() (name string) {
@@ -192,11 +201,13 @@ func (handler *transportApplicationHandler) Build(options TransportHandlerOption
 	handler.appVersion = options.AppVersion
 	handler.appStatus = options.AppStatus
 	handler.launchAT = time.Now()
-	_, statsErr := options.Config.Get("statsEnable", &handler.statsEnabled)
-	if statsErr != nil {
-		err = errors.Warning("fns: application handler build failed").WithCause(statsErr).WithMeta("handler", handler.Name())
+	config := transportApplicationMiddlewareConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: build application middleware handler failed").WithCause(configErr).WithMeta("middleware", handler.Name())
 		return
 	}
+	handler.statsEnabled = config.EnableReadStats
 	return
 }
 
@@ -226,16 +237,24 @@ func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, 
 	if handler.statsEnabled && r.IsGet() && bytex.ToString(r.Path()) == "/application/stats" {
 		v, _, _ := handler.group.Do(handler.Name(), func() (v interface{}, err error) {
 			stat := &applicationStats{
-				Id:      handler.appId,
-				Name:    handler.appName,
-				Running: handler.appStatus.Starting() || handler.appStatus.Serving(),
-				Mem:     nil,
-				CPU:     nil,
+				Id:       handler.appId,
+				Name:     handler.appName,
+				Running:  handler.appStatus.Starting() || handler.appStatus.Serving(),
+				Requests: handler.requestCounts.Load(),
+				Mem:      nil,
+				CPU:      nil,
 			}
 			mem, memErr := memory.Stats()
-			if memErr == nil {
-				stat.Mem = mem
+			memInfo := &memoryInfo{
+				Memory: memory.Memory{},
+				Error:  nil,
 			}
+			if memErr == nil {
+				memInfo.Memory = *mem
+			} else {
+				memInfo.Error = errors.Warning("fns: read system memory failed").WithCause(memErr)
+			}
+			stat.Mem = memInfo
 			cpus, cpuErr := cpu.Occupancy()
 			if cpuErr == nil {
 				stat.CPU = &cpuOccupancy{
@@ -243,6 +262,10 @@ func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, 
 					Min:   cpus.Min(),
 					Avg:   cpus.AVG(),
 					Cores: cpus,
+				}
+			} else {
+				stat.CPU = &cpuOccupancy{
+					Error: errors.Warning("fns: read system cpu failed").WithCause(cpuErr),
 				}
 			}
 			v, _ = json.Marshal(stat)

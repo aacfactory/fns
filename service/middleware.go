@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -187,21 +188,30 @@ const (
 	transportApplicationMiddlewareName = "application"
 )
 
+type transportApplicationMiddlewareConfig struct {
+	EnableReadStats     bool `json:"enableReadStats"`
+	EnableRecordLatency bool `json:"enableRecordLatency"`
+}
+
 func newTransportApplicationMiddleware(runtime *Runtime) *transportApplicationMiddleware {
+	requests := new(atomic.Int64)
 	return &transportApplicationMiddleware{
-		runtime:      runtime,
-		launchAT:     time.Time{},
-		statsEnabled: false,
-		counter:      sync.WaitGroup{},
+		runtime:        runtime,
+		launchAT:       time.Time{},
+		latencyEnabled: false,
+		counter:        sync.WaitGroup{},
+		requests:       requests,
+		handler:        newTransportApplicationHandler(requests),
 	}
 }
 
 type transportApplicationMiddleware struct {
 	runtime        *Runtime
 	launchAT       time.Time
-	statsEnabled   bool
 	latencyEnabled bool
 	counter        sync.WaitGroup
+	requests       *atomic.Int64
+	handler        *transportApplicationHandler
 }
 
 func (middleware *transportApplicationMiddleware) Name() (name string) {
@@ -211,14 +221,24 @@ func (middleware *transportApplicationMiddleware) Name() (name string) {
 
 func (middleware *transportApplicationMiddleware) Build(options TransportMiddlewareOptions) (err error) {
 	middleware.launchAT = time.Now()
-	_, statsErr := options.Config.Get("statsEnable", &middleware.statsEnabled)
-	if statsErr != nil {
-		err = errors.Warning("fns: application middleware handler build failed").WithCause(statsErr).WithMeta("middleware", middleware.Name())
+	config := transportApplicationMiddlewareConfig{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: build application middleware failed").WithCause(configErr).WithMeta("middleware", middleware.Name())
 		return
 	}
-	_, latencyErr := options.Config.Get("latencyEnabled", &middleware.latencyEnabled)
-	if latencyErr != nil {
-		err = errors.Warning("fns: application middleware handler build failed").WithCause(latencyErr).WithMeta("middleware", middleware.Name())
+	middleware.latencyEnabled = config.EnableRecordLatency
+	err = middleware.handler.Build(TransportHandlerOptions{
+		AppId:      options.AppId,
+		AppName:    options.AppName,
+		AppVersion: options.AppVersion,
+		AppStatus:  options.AppStatus,
+		Log:        options.Log,
+		Config:     options.Config,
+		Discovery:  options.Discovery,
+		Shared:     options.Shared,
+	})
+	if err != nil {
 		return
 	}
 	middleware.counter = sync.WaitGroup{}
@@ -236,6 +256,7 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 			w.Failed(ErrTooEarly)
 			return
 		}
+		middleware.requests.Add(1)
 		middleware.counter.Add(1)
 		// latency
 		handleBeg := time.Time{}
@@ -254,6 +275,7 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 				p, _ := json.Marshal(ErrDeviceId)
 				_, _ = w.Write(p)
 				middleware.counter.Done()
+				middleware.requests.Add(-1)
 				return
 			}
 		}
@@ -295,13 +317,22 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 				r.SetBody(bytex.FromString(emptyJson))
 			}
 		}
-
+		if middleware.handler.Accept(r) {
+			middleware.handler.Handle(w, r)
+			if middleware.latencyEnabled {
+				w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
+			}
+			middleware.counter.Done()
+			middleware.requests.Add(-1)
+			return
+		}
 		// next
 		next.Handle(w, r.WithContext(middleware.runtime.SetIntoContext(r.Context())))
 		if !w.Hijacked() && middleware.latencyEnabled {
 			w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 		}
 		middleware.counter.Done()
+		middleware.requests.Add(-1)
 		return
 	})
 }

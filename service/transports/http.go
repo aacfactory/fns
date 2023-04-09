@@ -18,6 +18,7 @@ package transports
 
 import (
 	"bufio"
+	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/json"
@@ -50,10 +51,19 @@ func HttpTransportHandlerAdaptor(h Handler, maxRequestBody int) http.Handler {
 			}
 		}
 
+		bodyLen := buf.Len()
+		body := buf.Bytes()
+		if writer.Header().Get(contentTypeHeaderName) == "" && bodyLen > 0 {
+			l := 512
+			if bodyLen < 512 {
+				l = bodyLen
+			}
+			w.Header().Set(contentTypeHeaderName, http.DetectContentType(body[:l]))
+		}
+
 		writer.WriteHeader(w.Status())
 
-		if bodyLen := buf.Len(); bodyLen > 0 {
-			body := buf.Bytes()
+		if bodyLen > 0 {
 			n := 0
 			for n < bodyLen {
 				nn, writeErr := writer.Write(body[n:])
@@ -234,4 +244,96 @@ func (w *netResponseWriter) Hijack(f func(conn net.Conn, brw *bufio.ReadWriter, 
 
 func (w *netResponseWriter) Hijacked() bool {
 	return w.hijacked
+}
+
+func ConvertRequestToHttpRequest(req *Request) (r *http.Request, err error) {
+	url, urlErr := req.URL()
+	if urlErr != nil {
+		err = errors.Warning("fns: convert request to http request failed").WithCause(urlErr)
+		return
+	}
+	body := req.body
+	if body == nil {
+		body = make([]byte, 0, 1)
+	}
+	r, err = http.NewRequestWithContext(req.Context(), bytex.ToString(req.method), bytex.ToString(url), bytes.NewReader(body))
+	if err != nil {
+		err = errors.Warning("fns: convert request to http request failed").WithCause(err)
+		return
+	}
+	return
+}
+
+func ConvertResponseWriterToHttpResponseWriter(writer ResponseWriter) (w http.ResponseWriter) {
+	w = &httpResponseWriter{
+		response: writer,
+	}
+	return
+}
+
+type hijackResult struct {
+	conn net.Conn
+	rw   *bufio.ReadWriter
+	err  error
+}
+
+type httpResponseWriter struct {
+	response ResponseWriter
+}
+
+func (w *httpResponseWriter) Header() http.Header {
+	return http.Header(w.response.Header())
+}
+
+func (w *httpResponseWriter) Write(bytes []byte) (int, error) {
+	return w.response.Write(bytes)
+}
+
+func (w *httpResponseWriter) WriteHeader(statusCode int) {
+	w.response.SetStatus(statusCode)
+}
+
+func (w *httpResponseWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err error) {
+	if w.response.Hijacked() {
+		err = errors.Warning("fns: can not hijack again")
+		return
+	}
+	netResp, isNet := w.response.(*netResponseWriter)
+	if isNet {
+		hijacker, canHijacker := netResp.writer.(http.Hijacker)
+		if canHijacker {
+			conn, rw, err = hijacker.Hijack()
+			if err == nil {
+				netResp.hijacked = true
+			}
+			return
+		}
+		err = errors.Warning("fns: hijack failed")
+		return
+	}
+	fastResp, isFast := w.response.(*fastHttpResponseWriter)
+	if isFast {
+		if fastResp.Hijacked() {
+			err = errors.Warning("fns: can not hijack again")
+			return
+		}
+		ch := make(chan *hijackResult, 1)
+		go func(fastResp *fastHttpResponseWriter, ch chan *hijackResult) {
+			fastResp.ctx.Hijack(func(c net.Conn) {
+				ch <- &hijackResult{
+					conn: c,
+					rw:   bufio.NewReadWriter(bufio.NewReader(c), bufio.NewWriter(c)),
+					err:  nil,
+				}
+				close(ch)
+			})
+		}(fastResp, ch)
+		result := <-ch
+		conn = result.conn
+		rw = result.rw
+		err = result.err
+		return
+	}
+	err = errors.Warning("fns: hijack failed").WithCause(errors.Warning("not supported"))
+	return
 }

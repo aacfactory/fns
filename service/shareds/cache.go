@@ -25,7 +25,8 @@ import (
 type Caches interface {
 	Get(ctx context.Context, key []byte) (value []byte, has bool)
 	Exist(ctx context.Context, key []byte) (has bool)
-	Set(ctx context.Context, key []byte, value []byte, ttl time.Duration)
+	Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (ok bool)
+	Remove(ctx context.Context, key []byte)
 }
 
 func LocalCaches(maxCacheSize uint64) Caches {
@@ -48,7 +49,12 @@ func (cache *localCaches) Exist(ctx context.Context, key []byte) (has bool) {
 	return
 }
 
-func (cache *localCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) {
-	//TODO implement me
-	panic("implement me")
+func (cache *localCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (ok bool) {
+	ok = cache.store.SetWithTTL(key, value, ttl) == nil
+	return
+}
+
+func (cache *localCaches) Remove(ctx context.Context, key []byte) {
+	cache.store.Remove(key)
+	return
 }

@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/caches"
-	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/commons/window"
@@ -31,11 +29,8 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/rings"
-	"github.com/cespare/xxhash/v2"
-	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -103,281 +98,319 @@ func (task *registrationTask) end() {
 	task.result = nil
 }
 
-func (task *registrationTask) getCached(r Request) (v []byte, has bool) {
-	buf := bytebufferpool.Get()
-	// deviceId
-	deviceId := r.Header().DeviceId()
-	_, _ = buf.Write(bytex.FromString(deviceId))
-	// path
-	service, fn := r.Fn()
-	_, _ = buf.Write(bytex.FromString(fmt.Sprintf("/%s/%s", service, fn)))
-	// body
-	body, bodyErr := json.Marshal(r.Argument())
-	if bodyErr != nil {
-		bytebufferpool.Put(buf)
-		return
-	}
-	_, _ = buf.Write(body)
-	k := bytex.FromString(strconv.FormatUint(xxhash.Sum64(buf.Bytes()), 10))
-	bytebufferpool.Put(buf)
-	v, has = task.registration.cache.Get(k)
-	return
-}
-
-func (task *registrationTask) setCached(k []byte, v []byte, ttl time.Duration) {
-	// no error cause k is etag and v is json
-	_ = task.registration.cache.SetWithTTL(k, v, ttl)
-	return
-}
-
 func (task *registrationTask) Execute(ctx context.Context) {
 	defer task.hook(task)
+	if task.r.Internal() {
+		task.executeInternal(ctx)
+		return
+	}
+	// non-internal is called by proxy
+	// and its cache control was handled by middleware
+	// also cache was update by remote endpoint
+	// so just call
+	registration := task.registration
+	r := task.r
+	fr := task.result
 
+	// make request
+	// request timeout
 	timeout := task.timeout
 	deadline, hasDeadline := ctx.Deadline()
 	if hasDeadline {
 		timeout = deadline.Sub(time.Now())
 	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, timeout)
+	defer cancel()
+	// request body
+	requestBody, encodeErr := json.Marshal(r.Argument())
+	if encodeErr != nil {
+		fr.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
+		return
+	}
+	// request path
+	header := r.Header()
+	serviceName, fn := r.Fn()
+	path := bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn))
+	// request
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, path)
+	// request set header
+	for name, vv := range header {
+		for _, v := range vv {
+			req.Header().Add(name, v)
+		}
+	}
+	// request set body
+	req.SetBody(requestBody)
+	// do
+	resp, postErr := registration.client.Do(ctx, req)
+	if postErr != nil {
+		task.registration.errs.Incr()
+		fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
+		return
+	}
+	// handle response
+	// remote endpoint was closed
+	if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
+		task.registration.closed.Store(false)
+		fr.Failed(ErrUnavailable)
+		return
+	}
+	// failed response
+	if resp.Status != http.StatusOK {
+		var body errors.CodeError
+		if resp.Body == nil || len(resp.Body) == 0 {
+			body = errors.Warning("nil error")
+		} else {
+			body = errors.Decode(resp.Body)
+		}
+		task.registration.errs.Incr()
+		fr.Failed(body)
+		return
+	}
+	// succeed response
+	if resp.Body == nil || len(resp.Body) == 0 {
+		fr.Succeed(nil)
+	} else {
+		fr.Succeed(json.RawMessage(resp.Body))
+	}
+	return
+}
 
+func (task *registrationTask) executeInternal(ctx context.Context) {
+	// internal is called by service function
+	// so check cache first
+	// when cache exists and was not out of date, then use cache
+	// when cache not exist, then call with cache control disabled
+	// when cache exist but was out of date, then call with if non match
 	registration := task.registration
 	r := task.r
 	fr := task.result
+	service, fn := r.Fn()
+	trace, hasTracer := GetTracer(ctx)
+	var span *Span
+	if hasTracer {
+		span = trace.StartSpan(service, fn)
+		span.AddTag("kind", "remote")
+	}
 
-	cachedResult, cached := task.getCached(r)
-
-	if r.Internal() {
-		if cached {
-			ir := &internalResponseImpl{}
-			decodeErr := json.Unmarshal(cachedResult, ir)
-			if decodeErr != nil {
-				fr.Failed(errors.Warning("fn: registration request internal failed").WithCause(decodeErr))
-				return
-			}
-			var resultErr errors.CodeError
-			if !ir.Succeed {
-				resultErr = errors.Decode(ir.Body)
-			}
-			// span
-			trace, hasTracer := GetTracer(ctx)
-			if hasTracer {
-				service, fn := r.Fn()
-				span := &Span{
-					Id_:         uid.UID(),
-					Service_:    service,
-					Fn_:         fn,
-					TracerId_:   trace.Id(),
-					StartAT_:    time.Now(),
-					FinishedAT_: time.Now(),
-					Children_:   make([]*Span, 0, 1),
-					Tags_:       make(map[string]string),
-					parent:      nil,
-				}
-				if ir.Succeed {
-					span.AddTag("status", "OK")
-					span.AddTag("handled", "succeed")
-					span.AddTag("cached", "true")
-				} else {
-					span.AddTag("status", resultErr.Name())
-					span.AddTag("handled", "failed")
-					span.AddTag("cached", "true")
-				}
-				trace.Span().AppendChild(span)
-			}
-			// user
-			if ir.User != nil {
-				if !r.User().Authenticated() && ir.User.Authenticated() {
-					r.User().SetId(ir.User.Id())
-				}
-				if r.User().Authenticated() && ir.User.Authenticated() {
-					r.User().SetAttributes(ir.User.Attributes())
-				}
-			}
-			// trunk
-			if ir.Trunk != nil {
-				r.Trunk().ReadFrom(ir.Trunk)
-			}
-			// body
-			if ir.Succeed {
-				fr.Succeed(ir.Body)
+	ifNonMatch := ""
+	var cachedBody []byte // is not internal response, cause cache was set in service, not in handler
+	var cachedErr errors.CodeError
+	if !r.Header().CacheControlDisabled() { // try cache control
+		etag, status, _, _, deadline, body, exist := CacheControlFetch(ctx, r)
+		if exist {
+			// cache exists
+			if status != http.StatusOK {
+				cachedErr = errors.Decode(body)
 			} else {
-				fr.Failed(resultErr)
+				cachedBody = body
 			}
-			return
-		}
-		// body
-		requestBody, encodeErr := json.Marshal(internalRequest{
-			User:     r.User(),
-			Trunk:    r.Trunk(),
-			Argument: r.Argument(),
-		})
-		if encodeErr != nil {
-			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(encodeErr))
-			return
-		}
-		// header
-		header := r.Header().Clone()
-		header.SetAcceptVersions(r.AcceptedVersions())
-		header.Set(httpRequestInternalHeader, "true")
-		header.Set(httpRequestIdHeader, r.Id())
-		header.Set(httpRequestInternalSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
-		header.Set(httpRequestTimeoutHeader, fmt.Sprintf("%d", uint64(timeout/time.Millisecond)))
-		if task.registration.devMode {
-			header.Set(httpDevModeHeader, task.registration.id)
-		}
-
-		serviceName, fn := r.Fn()
-		req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
-
-		for name, vv := range header {
-			for _, v := range vv {
-				req.Header().Add(name, v)
+			// check deadline
+			if deadline.After(time.Now()) {
+				// not out of date
+				if span != nil {
+					span.Finish()
+					span.AddTag("cached", "hit")
+					span.AddTag("etag", etag)
+					if cachedErr == nil {
+						span.AddTag("status", "OK")
+						span.AddTag("handled", "succeed")
+					} else {
+						span.AddTag("status", cachedErr.Name())
+						span.AddTag("handled", "failed")
+					}
+				}
+				if cachedErr == nil {
+					fr.Succeed(body)
+				} else {
+					fr.Failed(cachedErr)
+				}
+				return
+			} else {
+				// out of date
+				ifNonMatch = etag
 			}
 		}
-
-		req.SetBody(requestBody)
-		resp, postErr := registration.client.Do(ctx, req)
-		if postErr != nil {
-			task.registration.errs.Incr()
-			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(postErr))
-			return
+	}
+	// make request
+	// request timeout
+	timeout := task.timeout
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		timeout = deadline.Sub(time.Now())
+	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, timeout)
+	defer cancel()
+	// request body
+	ir := internalRequest{
+		User:     r.User(),
+		Trunk:    r.Trunk(),
+		Argument: r.Argument(),
+	}
+	requestBody, encodeErr := json.Marshal(&ir)
+	if encodeErr != nil {
+		// finish span
+		err := errors.Warning("fns: registration request internal failed").WithCause(encodeErr)
+		if span != nil {
+			span.Finish()
+			span.AddTag("status", err.Name())
+			span.AddTag("handled", "failed")
 		}
+		fr.Failed(err)
+		return
+	}
+	// request path
+	header := r.Header()
+	path := bytex.FromString(fmt.Sprintf("/%s/%s", service, fn))
+	// request
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, path)
+	// request set header
+	for name, vv := range header {
+		for _, v := range vv {
+			req.Header().Add(name, v)
+		}
+	}
+	// internal sign header
+	req.Header().Set(httpRequestInternalSignatureHeader, bytex.ToString(registration.signer.Sign(requestBody)))
+	// if non match header
+	if ifNonMatch != "" {
+		req.Header().Set(httpCacheControlHeader, httpCacheControlEnabled)
+		req.Header().Set(httpCacheControlIfNonMatch, ifNonMatch)
+	}
 
+	// request set body
+	req.SetBody(requestBody)
+	// do
+	resp, postErr := registration.client.Do(ctx, req)
+	if postErr != nil {
+		task.registration.errs.Incr()
+		// finish span
+		err := errors.Warning("fns: registration request failed").WithCause(postErr)
+		if span != nil {
+			span.Finish()
+			span.AddTag("status", err.Name())
+			span.AddTag("handled", "failed")
+		}
+		fr.Failed(err)
+		return
+	}
+	// handle response
+	if resp.Status != 200 && resp.Status != 304 && resp.Status >= 400 {
+		// undefined error
+		// remote endpoint was closed
 		if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
 			task.registration.closed.Store(false)
+			if span != nil {
+				span.Finish()
+				span.AddTag("status", ErrUnavailable.Name())
+				span.AddTag("handled", "failed")
+			}
 			fr.Failed(ErrUnavailable)
 			return
 		}
+		if resp.Status == 404 {
+			err := errors.NotFound("fns: not found").WithMeta("path", bytex.ToString(path))
+			// finish span
+			if span != nil {
+				span.Finish()
+				span.AddTag("status", err.Name())
+				span.AddTag("handled", "failed")
+			}
+			fr.Failed(err)
+			return
+		}
+		task.registration.errs.Incr()
+		err := errors.Warning("fns: registration request failed").WithCause(errors.Warning(fmt.Sprintf("unknonw error, status is %d, %s", resp.Status, string(resp.Body))))
+		// finish span
+		if span != nil {
+			span.Finish()
+			span.AddTag("status", err.Name())
+			span.AddTag("handled", "failed")
+		}
+		fr.Failed(err)
+		return
+	}
 
-		if resp.Status != http.StatusOK {
-			var body errors.CodeError
-			if resp.Body == nil || len(resp.Body) == 0 {
-				body = errors.Warning("nil error")
+	// check 304
+	if resp.Status == http.StatusNotModified {
+		// use cached
+		if span != nil {
+			span.Finish()
+			span.AddTag("cached", "hit")
+			span.AddTag("etag", ifNonMatch)
+			if cachedErr == nil {
+				span.AddTag("status", "OK")
+				span.AddTag("handled", "succeed")
 			} else {
-				body = errors.Decode(resp.Body)
+				span.AddTag("status", cachedErr.Name())
+				span.AddTag("handled", "failed")
 			}
-			task.registration.errs.Incr()
-			fr.Failed(body)
-			return
 		}
-
-		ir := &internalResponseImpl{}
-		decodeErr := json.Unmarshal(resp.Body, ir)
-		if decodeErr != nil {
-			fr.Failed(errors.Warning("fns: registration request internal failed").WithCause(decodeErr))
-			return
+		if cachedErr == nil {
+			fr.Succeed(cachedBody)
+		} else {
+			fr.Failed(cachedErr)
 		}
-		// span
-		trace, hasTracer := GetTracer(ctx)
-		if hasTracer && ir.Span != nil {
-			trace.Span().AppendChild(ir.Span)
+		return
+	}
+	// 200
+	iresp := internalResponseImpl{}
+	decodeErr := json.Unmarshal(resp.Body, &iresp)
+	if decodeErr != nil {
+		err := errors.Warning("fns: registration request failed").WithCause(errors.Warning("decode internal response failed")).WithCause(decodeErr)
+		// finish span
+		if span != nil {
+			span.Finish()
+			span.AddTag("status", err.Name())
+			span.AddTag("handled", "failed")
 		}
+		fr.Failed(err)
+		return
+	}
+	var err errors.CodeError
+	if !iresp.Succeed {
+		err = errors.Decode(iresp.Body)
+	} else {
 		// user
-		if ir.User != nil {
-			if !r.User().Authenticated() && ir.User.Authenticated() {
-				r.User().SetId(ir.User.Id())
-			}
-			if r.User().Authenticated() && ir.User.Authenticated() {
-				r.User().SetAttributes(ir.User.Attributes())
+		if iresp.User != nil && iresp.User.id != "" {
+			r.User().SetId(iresp.User.id)
+			if iresp.User.attributes != nil {
+				r.User().SetAttributes(iresp.User.attributes)
 			}
 		}
 		// trunk
-		if ir.Trunk != nil {
-			r.Trunk().ReadFrom(ir.Trunk)
+		if iresp.Trunk != nil {
+			iresp.Trunk.ForEach(func(key string, value []byte) (next bool) {
+				r.Trunk().Put(key, value)
+				next = true
+				return
+			})
 		}
-		// body
-		if ir.Succeed {
-			fr.Succeed(ir.Body)
-		} else {
-			fr.Failed(errors.Decode(ir.Body))
-		}
-		// cache
-		etag := resp.Header.Get(httpETagHeader)
-		if etag != "" {
-			etagTTL := time.Duration(0)
-			if ttl := resp.Header.Get(httpResponseCacheTTL); ttl != "" {
-				etagTTL, _ = time.ParseDuration(ttl)
-			}
-			if etagTTL < 1 {
-				etagTTL = registration.cacheDefaultTTL
-			}
-			task.setCached(bytex.FromString(etag), resp.Body, etagTTL)
-		}
-	} else {
-		if cached {
-			cachedResultDataLen := len(cachedResult) - 1
-			if cachedResult[cachedResultDataLen] == '1' {
-				if cachedResultDataLen == 0 {
-					fr.Succeed(nil)
-				} else {
-					fr.Succeed(cachedResult[0:cachedResultDataLen])
-				}
-			} else {
-				fr.Failed(errors.Decode(cachedResult[0:cachedResultDataLen]))
-			}
-			return
-		}
-
-		requestBody, encodeErr := json.Marshal(r.Argument())
-		if encodeErr != nil {
-			fr.Failed(errors.Warning("fns: registration request failed").WithCause(encodeErr))
-			return
-		}
-		header := r.Header()
-		serviceName, fn := r.Fn()
-
-		req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn)))
-
-		for name, vv := range header {
-			for _, v := range vv {
-				req.Header().Add(name, v)
-			}
-		}
-		req.SetBody(requestBody)
-		resp, postErr := registration.client.Do(ctx, req)
-		if postErr != nil {
-			task.registration.errs.Incr()
-			fr.Failed(errors.Warning("fns: registration request failed").WithCause(postErr))
-			return
-		}
-
-		if resp.Header.Get(httpConnectionHeader) == httpCloseHeader {
-			task.registration.closed.Store(false)
-			fr.Failed(ErrUnavailable)
-			return
-		}
-		if resp.Status != http.StatusOK {
-			var body errors.CodeError
-			if resp.Body == nil || len(resp.Body) == 0 {
-				body = errors.Warning("nil error")
-			} else {
-				body = errors.Decode(resp.Body)
-			}
-			task.registration.errs.Incr()
-			fr.Failed(body)
-			return
-		}
-		if resp.Body == nil || len(resp.Body) == 0 {
-			fr.Succeed(nil)
-		} else {
-			fr.Succeed(json.RawMessage(resp.Body))
-		}
-		// cache
-		etag := resp.Header.Get(httpETagHeader)
-		if etag != "" {
-			etagTTL := time.Duration(0)
-			if ttl := resp.Header.Get(httpResponseCacheTTL); ttl != "" {
-				etagTTL, _ = time.ParseDuration(ttl)
-			}
-			if etagTTL < 1 {
-				etagTTL = registration.cacheDefaultTTL
-			}
-			body := resp.Body
-			if resp.Body == nil {
-				body = make([]byte, 0, 1)
-			}
-			task.setCached(bytex.FromString(etag), body, etagTTL)
+		// span
+		if span != nil && iresp.Span != nil {
+			span.AppendChild(iresp.Span)
 		}
 	}
+	// finish span
+	if span != nil {
+		span.Finish()
+		if err == nil {
+			span.AddTag("status", "OK")
+			span.AddTag("handled", "succeed")
+		} else {
+			span.AddTag("status", err.Name())
+			span.AddTag("handled", "failed")
+		}
+	}
+
+	if err == nil {
+		fr.Succeed(iresp.Body)
+	} else {
+		fr.Failed(err)
+	}
+
 	return
 }
 
@@ -415,21 +448,19 @@ func (list RegistrationList) MaxVersion() (r *Registration) {
 }
 
 type Registration struct {
-	hostId          string
-	id              string
-	version         versions.Version
-	address         string
-	name            string
-	devMode         bool
-	client          transports.Client
-	signer          *secret.Signer
-	worker          Workers
-	timeout         time.Duration
-	pool            sync.Pool
-	closed          *atomic.Bool
-	errs            *window.Times
-	cache           *caches.Cache
-	cacheDefaultTTL time.Duration
+	hostId  string
+	id      string
+	version versions.Version
+	address string
+	name    string
+	devMode bool
+	client  transports.Client
+	signer  *secret.Signer
+	worker  Workers
+	timeout time.Duration
+	pool    sync.Pool
+	closed  *atomic.Bool
+	errs    *window.Times
 }
 
 func (registration *Registration) Key() (key string) {
@@ -487,7 +518,7 @@ func (registration *Registration) release(task *registrationTask) {
 	return
 }
 
-func newRegistrations(log logs.Logger, id string, name string, version versions.Version, cluster Cluster, worker Workers, dialer transports.Dialer, signer *secret.Signer, timeout time.Duration, refreshInterval time.Duration, clusterCache *caches.Cache, cacheDefaultTTL time.Duration) *Registrations {
+func newRegistrations(log logs.Logger, id string, name string, version versions.Version, cluster Cluster, worker Workers, dialer transports.Dialer, signer *secret.Signer, timeout time.Duration, refreshInterval time.Duration) *Registrations {
 	dev, ok := cluster.(*devCluster)
 	if ok {
 		dialer = dev.dialer
@@ -506,8 +537,6 @@ func newRegistrations(log logs.Logger, id string, name string, version versions.
 		worker:          worker,
 		timeout:         timeout,
 		refreshInterval: refreshInterval,
-		cache:           clusterCache,
-		cacheDefaultTTL: cacheDefaultTTL,
 	}
 }
 
@@ -525,8 +554,6 @@ type Registrations struct {
 	worker          Workers
 	timeout         time.Duration
 	refreshInterval time.Duration
-	cache           *caches.Cache
-	cacheDefaultTTL time.Duration
 }
 
 func (r *Registrations) Add(registration *Registration) {
@@ -720,21 +747,19 @@ func (r *Registrations) AddNode(node *Node) (err error) {
 
 	for _, name := range node.Services {
 		registration := &Registration{
-			hostId:          r.id,
-			id:              node.Id,
-			version:         node.Version,
-			address:         node.Address,
-			devMode:         r.devMode,
-			name:            name,
-			client:          client,
-			signer:          r.signer,
-			worker:          r.worker,
-			timeout:         r.timeout,
-			pool:            sync.Pool{},
-			closed:          &atomic.Bool{},
-			errs:            window.NewTimes(10 * time.Second),
-			cache:           r.cache,
-			cacheDefaultTTL: r.cacheDefaultTTL,
+			hostId:  r.id,
+			id:      node.Id,
+			version: node.Version,
+			address: node.Address,
+			devMode: r.devMode,
+			name:    name,
+			client:  client,
+			signer:  r.signer,
+			worker:  r.worker,
+			timeout: r.timeout,
+			pool:    sync.Pool{},
+			closed:  &atomic.Bool{},
+			errs:    window.NewTimes(10 * time.Second),
 		}
 		registration.pool.New = func() any {
 			return newRegistrationTask(registration, registration.timeout, func(task *registrationTask) {

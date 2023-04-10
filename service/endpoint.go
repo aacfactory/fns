@@ -245,18 +245,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		}
 	}
 	if cluster != nil {
-		requestCacheDefaultTTL, hasRequestCacheDefaultTTL := config.Transport.GetRequestCache()
-		if !hasRequestCacheDefaultTTL {
-			requestCacheDefaultTTL = -1
-		}
-		if requestCacheDefaultTTL < 1 {
-			requestCacheDefaultTTL = 30 * time.Minute
-		}
 		v.registrations = newRegistrations(
 			v.rt.log.With("discovery", "registrations"),
 			v.rt.appId, v.rt.appName, v.rt.appVersion,
 			cluster, v.rt.worker, v.transport, v.rt.signer, v.handleTimeout,
-			clusterFetchMembersInterval, requestCacheDefaultTTL,
+			clusterFetchMembersInterval,
 		)
 	}
 	// proxy
@@ -573,7 +566,6 @@ func (e *endpoint) Request(ctx context.Context, r Request) (future Future) {
 		e.release(task)
 	}
 	future = fr
-	tryReportTracer(ctx)
 	return
 }
 

@@ -40,7 +40,7 @@ const (
 )
 
 type cacheControlMiddlewareConfig struct {
-	TTL string `json:"ttl"`
+	RequestCacheDefaultTTL string `json:"requestCacheDefaultTTL"`
 }
 
 func CacheControlMiddleware() TransportMiddleware {
@@ -68,10 +68,10 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 		return
 	}
 	ttl := time.Duration(0)
-	if config.TTL != "" {
-		ttl, err = time.ParseDuration(strings.TrimSpace(config.TTL))
+	if config.RequestCacheDefaultTTL != "" {
+		ttl, err = time.ParseDuration(strings.TrimSpace(config.RequestCacheDefaultTTL))
 		if err != nil {
-			err = errors.Warning("fns: build cache control middleware failed").WithCause(errors.Warning("fns: ttl must be time.Duration format")).WithCause(err)
+			err = errors.Warning("fns: build cache control middleware failed").WithCause(errors.Warning("fns: requestCacheDefaultTTL must be time.Duration format")).WithCause(err)
 			return
 		}
 	}
@@ -112,10 +112,10 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 
 		// 2. check cached
 		etag := middleware.tags.create(r.Path(), r.Body())
-		value, etagTTL, status, contentType, contentLength, cached := middleware.tags.get(ctx, etag)
+		status, contentType, contentLength, value, etagTTL, cached := middleware.tags.get(ctx, etag)
 		if cached {
-			w.Header().Set(httpContentType, contentType)
-			w.Header().Set(httpContentLength, contentLength)
+			w.Header().Set(httpContentType, bytex.ToString(contentType))
+			w.Header().Set(httpContentLength, bytex.ToString(contentLength))
 			w.Header().Set(httpETagHeader, bytex.ToString(etag))
 			w.Header().Set(httpCacheControlHeader, "public, max-age=0")
 			w.Header().Set(httpResponseCacheTTL, etagTTL.String())
@@ -140,7 +140,7 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 		if ttl < 1 {
 			ttl = middleware.tags.defaultTTL
 		}
-		if middleware.tags.save(ctx, etag, w.Status(), w.Body(), ttl, w.Header().Get(httpContentType)) {
+		if middleware.tags.save(ctx, etag, w.Status(), bytex.FromString(w.Header().Get(httpContentType)), w.Body(), ttl) {
 			w.Header().Set(httpETagHeader, bytex.ToString(etag))
 			w.Header().Set(httpCacheControlHeader, "public, max-age=0")
 			w.Header().Set(httpResponseCacheTTL, ttl.String())
@@ -160,12 +160,16 @@ type ETags struct {
 	store      shareds.Caches
 }
 
+func (tags *ETags) enabled() bool {
+	return tags.defaultTTL > 0
+}
+
 func (tags *ETags) exist(ctx context.Context, etag []byte) (has bool) {
 	has = tags.store.Exist(ctx, etag)
 	return
 }
 
-func (tags *ETags) get(ctx context.Context, etag []byte) (value []byte, ttl time.Duration, status int, ct string, cl string, has bool) {
+func (tags *ETags) get(ctx context.Context, etag []byte) (status int, ct []byte, cl []byte, value []byte, ttl time.Duration, has bool) {
 	value, has = tags.store.Get(ctx, tags.makeCacheKey(etag))
 	if !has {
 		return
@@ -184,30 +188,31 @@ func (tags *ETags) get(ctx context.Context, etag []byte) (value []byte, ttl time
 	value = e.Data
 	ttl = e.TTL
 	status = e.Status
-	ct = e.ContentType
-	cl = e.ContentLength
+	ct = bytex.FromString(e.ContentType)
+	cl = bytex.FromString(e.ContentLength)
 	has = true
 	return
 }
 
-func (tags *ETags) save(ctx context.Context, etag []byte, status int, value []byte, ttl time.Duration, contentType string) (ok bool) {
+func (tags *ETags) save(ctx context.Context, etag []byte, status int, contentType []byte, value []byte, ttl time.Duration) (ok bool) {
 	if ttl < 1 {
 		ttl = tags.defaultTTL
 	}
 	contentLength := len(value)
-	if contentType == "" {
+	ct := bytex.ToString(contentType)
+	if ct == "" {
 		if json.Validate(value) {
-			contentType = httpContentTypeJson
+			ct = httpContentTypeJson
 		} else {
 			l := 512
 			if contentLength < 512 {
 				l = contentLength
 			}
-			contentType = http.DetectContentType(value[:l])
+			ct = http.DetectContentType(value[:l])
 		}
 	}
 	if status == 0 {
-		if contentType == httpContentTypeJson {
+		if ct == httpContentTypeJson {
 			obj := json.NewObjectFromBytes(value)
 			if obj.Contains("id") && obj.Contains("message") && obj.Contains("stacktrace") {
 				status = 555
@@ -222,7 +227,7 @@ func (tags *ETags) save(ctx context.Context, etag []byte, status int, value []by
 		Data:          value,
 		TTL:           ttl,
 		Status:        status,
-		ContentType:   contentType,
+		ContentType:   ct,
 		ContentLength: strconv.Itoa(contentLength),
 	}
 	p, encodeErr := json.Marshal(&e)

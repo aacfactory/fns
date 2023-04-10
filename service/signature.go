@@ -56,6 +56,7 @@ func SignatureMiddleware() TransportMiddleware {
 
 // signatureMiddleware
 // 使用SM2进行共享密钥交换，交换成功后客户都使用hmac来签名，服务端来验证
+// todo 提供service，处理client app的公钥合法性，包含签发和验证。
 // errors:
 // * 458: 签名错误，session key 不是共享的
 // * 468: session 超时
@@ -200,6 +201,7 @@ type signatureSessionCreateParam struct {
 	PublicKey string `json:"publicKey"`
 }
 
+// todo 返回app的公钥，
 type signatureSessionCreateResult struct {
 	SessionKey string    `json:"sessionKey"`
 	Deadline   time.Time `json:"deadline"`

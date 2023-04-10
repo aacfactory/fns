@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -99,6 +100,34 @@ type TransportConfig struct {
 	Options     json.RawMessage        `json:"options"`
 	Middlewares json.RawMessage        `json:"middlewares"`
 	Handlers    json.RawMessage        `json:"handlers"`
+}
+
+func (config *TransportConfig) GetRequestCache() (defaultTTL time.Duration, has bool) {
+	mid, midErr := config.MiddlewaresConfig()
+	if midErr != nil {
+		return
+	}
+	v, hasCache := mid.Node(cacheControlMiddlewareName)
+	if !hasCache {
+		return
+	}
+	cc := cacheControlMiddlewareConfig{}
+	ccErr := v.As(&cc)
+	if ccErr != nil {
+		return
+	}
+	defaultTTL = time.Duration(0)
+	if cc.RequestCacheDefaultTTL != "" {
+		defaultTTL, ccErr = time.ParseDuration(strings.TrimSpace(cc.RequestCacheDefaultTTL))
+		if ccErr != nil {
+			return
+		}
+	}
+	if defaultTTL < 1 {
+		defaultTTL = 30 * time.Minute
+	}
+	has = true
+	return
 }
 
 func (config *TransportConfig) MiddlewaresConfig() (conf configures.Config, err error) {
@@ -209,8 +238,6 @@ func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config,
 type ClusterConfig struct {
 	Kind                 string          `json:"kind"`
 	FetchMembersInterval string          `json:"fetchMembersInterval"`
-	MaxCacheSize         string          `json:"maxCacheSize"`
-	CacheDefaultTTL      string          `json:"cacheDefaultTTL"`
 	Shared               *SharedConfig   `json:"shared"`
 	Options              json.RawMessage `json:"options"`
 }

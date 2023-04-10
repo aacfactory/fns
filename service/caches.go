@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
@@ -88,25 +88,45 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 
 func (middleware *cacheControlMiddleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
-		if r.Header().Get(httpUpgradeHeader) != "" {
+		// 0. discard upgrade and internal(cache by caller endpoint)
+		if r.Header().Get(httpUpgradeHeader) != "" || r.Header().Get(httpRequestInternalHeader) == "true" {
 			next.Handle(w, r)
 			return
 		}
+		// 1. check if no match
 		ifNonMatch := r.Header().Get(httpCacheControlIfNonMatch)
 		if ifNonMatch != "" {
-			exist := middleware.existETag(r.Context(), ifNonMatch)
+			etag := bytex.FromString(ifNonMatch)
+			exist := middleware.existETag(r.Context(), etag)
 			if exist {
 				w.SetStatus(http.StatusNotModified)
 				return
 			}
 		}
+		ctx := r.Context()
+		// 2. check cached
+		etag := middleware.createETag(r)
+		value, etagTTL, status, contentType, contentLength, cached := middleware.getETag(ctx, etag)
+		if cached {
+			w.Header().Set(httpContentType, contentType)
+			w.Header().Set(httpContentLength, contentLength)
+			w.Header().Set(httpETagHeader, bytex.ToString(etag))
+			w.Header().Set(httpCacheControlHeader, "public, max-age=0")
+			w.Header().Set(httpResponseCacheTTL, etagTTL.String())
+			w.SetStatus(status)
+			_, _ = w.Write(value)
+			return
+		}
+		// 2. check cached request result, key = hash request, value = etag, when exists, get result by etag
 		ccx := middleware.pool.Get()
 		if ccx == nil {
 			ccx = &cacheControl{}
 		}
 		cc := ccx.(*cacheControl)
-		r.WithContext(context.WithValue(r.Context(), cacheControlContextKey, cc))
+		r.WithContext(context.WithValue(ctx, cacheControlContextKey, cc))
+		// 3. next
 		next.Handle(w, r)
+		// 4. cache used
 		if !cc.used || w.Hijacked() {
 			return
 		}
@@ -114,23 +134,24 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 		if ttl < 1 {
 			ttl = middleware.ttl
 		}
-		etag, etagErr := middleware.makeETag(r.Context(), r, ttl)
-		if etagErr != nil {
-			return
+		saveErr := middleware.saveETag(ctx, etag, w.Status(), w.Body(), ttl, w.Header().Get(httpContentType))
+		if saveErr != nil {
+			w.Header().Set(httpCacheControlHeader, "public, no-store, x-fns-failed")
+		} else {
+			w.Header().Set(httpETagHeader, bytex.ToString(etag))
+			w.Header().Set(httpCacheControlHeader, "public, max-age=0")
+			w.Header().Set(httpResponseCacheTTL, ttl.String())
 		}
-		w.Header().Set(httpETagHeader, etag)
-		w.Header().Set(httpCacheControlHeader, "public, max-age=0")
-		w.Header().Set(httpResponseCacheTTL, ttl.String())
 	})
 }
 
-func (middleware *cacheControlMiddleware) makeEtagKey(etag string) string {
-	return fmt.Sprintf("fns/etags/%s", etag)
+func (middleware *cacheControlMiddleware) makeEtagStoreKey(etag []byte) []byte {
+	return bytex.FromString(fmt.Sprintf("fns/etags/%s", bytex.ToString(etag)))
 }
 
-func (middleware *cacheControlMiddleware) existETag(ctx context.Context, etag string) (ok bool) {
+func (middleware *cacheControlMiddleware) existETag(ctx context.Context, etag []byte) (ok bool) {
 	var err error
-	_, ok, err = middleware.store.Get(ctx, bytex.FromString(middleware.makeEtagKey(etag)))
+	ok, err = middleware.store.Exists(ctx, middleware.makeEtagStoreKey(etag))
 	if err != nil && middleware.log.ErrorEnabled() {
 		middleware.log.Error().Cause(
 			errors.Warning("fns: get etag from shared store failed").WithMeta("middleware", middleware.Name()).WithCause(err),
@@ -139,34 +160,96 @@ func (middleware *cacheControlMiddleware) existETag(ctx context.Context, etag st
 	return
 }
 
-func (middleware *cacheControlMiddleware) makeETag(ctx context.Context, r *transports.Request, ttl time.Duration) (etag string, err error) {
+func (middleware *cacheControlMiddleware) getETag(ctx context.Context, etag []byte) (value []byte, ttl time.Duration, status int, ct string, cl string, ok bool) {
+	var err error
+	value, ok, err = middleware.store.Get(ctx, middleware.makeEtagStoreKey(etag))
+	if err != nil {
+		if middleware.log.ErrorEnabled() {
+			middleware.log.Error().Cause(
+				errors.Warning("fns: get etag from shared store failed").WithMeta("middleware", middleware.Name()).WithCause(err),
+			).Message("fns: get etag from shared store failed")
+		}
+		ok = false
+		return
+	}
+	e := cachedEntry{}
+	err = json.Unmarshal(value, &e)
+	if err != nil {
+		if middleware.log.ErrorEnabled() {
+			middleware.log.Error().Cause(
+				errors.Warning("fns: decode etag value failed").WithMeta("middleware", middleware.Name()).WithCause(err),
+			).Message("fns: decode etag value failed")
+		}
+		ok = false
+		return
+	}
+	value = e.Data
+	ttl = e.TTL
+	status = e.Status
+	ct = e.ContentType
+	cl = e.ContentLength
+	ok = true
+	return
+}
+
+func (middleware *cacheControlMiddleware) createETag(r *transports.Request) (etag []byte) {
 	buf := bytebufferpool.Get()
-	// deviceId
-	deviceId := r.Header().Get(httpDeviceIdHeader)
-	if deviceId == "" {
-		deviceIdInQuery := r.Param("deviceId")
-		deviceId = bytex.ToString(deviceIdInQuery)
-	}
-	if deviceId == "" {
-		deviceId = uid.UID()
-	}
-	_, _ = buf.Write(bytex.FromString(deviceId))
 	// path
 	_, _ = buf.Write(r.Path())
 	// body
 	if r.Body() != nil {
 		_, _ = buf.Write(r.Body())
 	}
-	etag = strconv.FormatUint(xxhash.Sum64(buf.Bytes()), 10)
+	etag = bytex.FromString(strconv.FormatUint(xxhash.Sum64(buf.Bytes()), 10))
 	bytebufferpool.Put(buf)
+	return
+}
 
-	setErr := middleware.store.SetWithTTL(ctx, bytex.FromString(middleware.makeEtagKey(etag)), bytex.FromString(ttl.String()), ttl)
-	if setErr != nil {
-		err = errors.Warning("fns: set etag into shared store failed").WithCause(setErr)
+func (middleware *cacheControlMiddleware) saveETag(ctx context.Context, etag []byte, status int, value []byte, ttl time.Duration, contentType string) (err error) {
+	contentLength := len(value)
+	if contentType == "" {
+		if json.Validate(value) {
+			contentType = httpContentTypeJson
+		} else {
+			l := 512
+			if contentLength < 512 {
+				l = contentLength
+			}
+			contentType = http.DetectContentType(value[:l])
+		}
+	}
+	if status == 0 {
+		if contentType == httpContentTypeJson {
+			obj := json.NewObjectFromBytes(value)
+			if obj.Contains("id") && obj.Contains("message") && obj.Contains("stacktrace") {
+				status = 555
+			} else {
+				status = http.StatusOK
+			}
+		} else {
+			status = http.StatusOK
+		}
+	}
+	e := cachedEntry{
+		Data:          value,
+		TTL:           ttl,
+		Status:        status,
+		ContentType:   contentType,
+		ContentLength: strconv.Itoa(contentLength),
+	}
+	p, encodeErr := json.Marshal(&e)
+	if encodeErr != nil {
+		err = errors.Warning("fns: encode etag value failed").WithMeta("middleware", middleware.Name()).WithCause(encodeErr)
 		if middleware.log.ErrorEnabled() {
-			middleware.log.Error().Cause(
-				errors.Warning("fns: set etag into shared store failed").WithMeta("middleware", middleware.Name()).WithCause(setErr),
-			).Message("fns: set etag into shared store failed")
+			middleware.log.Error().Cause(err).Message("fns: encode etag value failed")
+		}
+		return
+	}
+	setErr := middleware.store.SetWithTTL(ctx, middleware.makeEtagStoreKey(etag), p, ttl)
+	if setErr != nil {
+		err = errors.Warning("fns: set etag into shared store failed").WithMeta("middleware", middleware.Name()).WithCause(setErr)
+		if middleware.log.ErrorEnabled() {
+			middleware.log.Error().Cause(err).Message("fns: set etag into shared store failed")
 		}
 		return
 	}
@@ -175,6 +258,14 @@ func (middleware *cacheControlMiddleware) makeETag(ctx context.Context, r *trans
 
 func (middleware *cacheControlMiddleware) Close() (err error) {
 	return
+}
+
+type cachedEntry struct {
+	Data          []byte        `json:"data"`
+	TTL           time.Duration `json:"ttl"`
+	Status        int           `json:"status"`
+	ContentType   string        `json:"contentType"`
+	ContentLength string        `json:"contentLength"`
 }
 
 type cacheControl struct {

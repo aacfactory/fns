@@ -17,14 +17,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/wildcard"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
+	"github.com/cespare/xxhash/v2"
+	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"strconv"
 	"strings"
@@ -257,6 +261,23 @@ func (header RequestHeader) SetAcceptVersions(rvs RequestVersions) {
 	return
 }
 
+func (header RequestHeader) CacheControlDisabled() (ok bool) {
+	cc := bytex.FromString(http.Header(header).Get(httpCacheControlHeader))
+	ok = bytes.Contains(cc, bytex.FromString(httpCacheControlNoStore)) || bytes.Contains(cc, bytex.FromString(httpCacheControlNoCache))
+	return
+}
+
+func (header RequestHeader) DisableCacheControl() {
+	header.Set(httpCacheControlHeader, httpCacheControlNoStore)
+	return
+}
+
+func (header RequestHeader) EnableCacheControl(etag []byte) {
+	header.Set(httpCacheControlHeader, httpCacheControlEnabled)
+	header.Set(httpCacheControlIfNonMatch, bytex.ToString(etag))
+	return
+}
+
 func (header RequestHeader) ForEach(fn func(key string, values []string) (next bool)) {
 	if fn == nil {
 		return
@@ -455,6 +476,7 @@ type Request interface {
 	Internal() (ok bool)
 	User() (user RequestUser)
 	Trunk() (trunk RequestTrunk)
+	Hash() (p []byte)
 }
 
 type RequestOption func(*RequestOptions)
@@ -507,27 +529,35 @@ func WithRequestVersions(acceptedVersions RequestVersions) RequestOption {
 	}
 }
 
+func DisableRequestCacheControl() RequestOption {
+	return func(options *RequestOptions) {
+		options.disableCacheControl = true
+	}
+}
+
 type RequestOptions struct {
-	id               string
-	header           RequestHeader
-	acceptedVersions RequestVersions
-	deviceId         string
-	deviceIp         string
-	internal         bool
-	user             RequestUser
-	trunk            RequestTrunk
+	id                  string
+	header              RequestHeader
+	acceptedVersions    RequestVersions
+	deviceId            string
+	deviceIp            string
+	internal            bool
+	user                RequestUser
+	trunk               RequestTrunk
+	disableCacheControl bool
 }
 
 func NewRequest(ctx context.Context, service string, fn string, arg Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
-		id:               "",
-		header:           RequestHeader{},
-		acceptedVersions: nil,
-		deviceId:         "",
-		deviceIp:         "",
-		user:             nil,
-		internal:         false,
-		trunk:            nil,
+		id:                  "",
+		header:              RequestHeader{},
+		acceptedVersions:    nil,
+		deviceId:            "",
+		deviceIp:            "",
+		user:                nil,
+		internal:            false,
+		trunk:               nil,
+		disableCacheControl: false,
 	}
 	if options != nil && len(options) > 0 {
 		for _, option := range options {
@@ -543,15 +573,23 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 		if opt.id != "" {
 			id = opt.id
 		}
-		header := prev.Header()
+		var header RequestHeader
 		if !opt.header.Empty() {
 			header = opt.header
+		} else {
+			header = prev.Header().Clone()
+			header.Del(httpRequestVersionsHeader)
+			header.Del(httpCacheControlHeader)
+			header.Del(httpCacheControlIfNonMatch)
 		}
 		if opt.deviceId != "" {
 			header.SetDeviceId(opt.deviceId)
 		}
 		if opt.deviceIp != "" {
 			header.SetDeviceIp(opt.deviceIp)
+		}
+		if opt.disableCacheControl {
+			header.DisableCacheControl()
 		}
 		user := prev.User()
 		if opt.user != nil {
@@ -637,6 +675,7 @@ type request struct {
 	service          string
 	fn               string
 	argument         Argument
+	hash             []byte
 }
 
 func (r *request) Id() (id string) {
@@ -676,6 +715,28 @@ func (r *request) Fn() (service string, fn string) {
 
 func (r *request) Argument() (argument Argument) {
 	argument = r.argument
+	return
+}
+
+func (r *request) Hash() (p []byte) {
+	if len(r.hash) > 0 {
+		p = r.hash
+		return
+	}
+	path := bytex.FromString(fmt.Sprintf("/%s/%s", r.service, r.fn))
+	body, _ := json.Marshal(r.argument)
+	r.hash = requestHash(path, body)
+	p = r.hash
+	return
+}
+
+func requestHash(path []byte, body []byte) (v []byte) {
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write(path)
+	_, _ = buf.Write(body)
+	p := buf.Bytes()
+	bytebufferpool.Put(buf)
+	v = bytex.FromString(strconv.FormatUint(xxhash.Sum64(p), 10))
 	return
 }
 

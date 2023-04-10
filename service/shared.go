@@ -18,24 +18,32 @@ package service
 
 import (
 	"github.com/aacfactory/fns/service/shareds"
+	"github.com/aacfactory/systems/memory"
 )
 
 type Shared interface {
 	Lockers() (lockers shareds.Lockers)
 	Store() (store shareds.Store)
+	Caches() (cache shareds.Caches)
 }
 
 func newLocalShared() (Shared, error) {
-	sharedStore := shareds.LocalStore()
+	maxCacheSize := uint64(0)
+	mem, _ := memory.Stats()
+	if mem != nil {
+		maxCacheSize = mem.Available / 4
+	}
 	return &localShared{
 		lockers: shareds.LocalLockers(),
-		store:   sharedStore,
+		store:   shareds.LocalStore(),
+		cache:   shareds.LocalCaches(maxCacheSize),
 	}, nil
 }
 
 type localShared struct {
 	lockers shareds.Lockers
 	store   shareds.Store
+	cache   shareds.Caches
 }
 
 func (s localShared) Lockers() (lockers shareds.Lockers) {
@@ -44,4 +52,8 @@ func (s localShared) Lockers() (lockers shareds.Lockers) {
 
 func (s localShared) Store() (store shareds.Store) {
 	return s.store
+}
+
+func (s localShared) Caches() (cache shareds.Caches) {
+	return s.cache
 }

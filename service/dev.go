@@ -155,6 +155,18 @@ func (handler *devProxyHandler) handleShared(w transports.ResponseWriter, r *tra
 	case "store:remove":
 		handler.handleSharedStoreRemove(w, r, param.Payload)
 		break
+	case "cache:get":
+		handler.handleSharedCacheGet(w, r, param.Payload)
+		break
+	case "cache:exist":
+		handler.handleSharedCacheExist(w, r, param.Payload)
+		break
+	case "cache:set":
+		handler.handleSharedCacheSet(w, r, param.Payload)
+		break
+	case "cache:remove":
+		handler.handleSharedCacheRemove(w, r, param.Payload)
+		break
 	default:
 		w.Failed(errors.Warning("dev: handle shared failed").WithCause(errors.Warning("type is not match")))
 		return
@@ -365,6 +377,92 @@ func (handler *devProxyHandler) handleSharedStoreRemove(w transports.ResponseWri
 	}
 	w.Succeed(&Empty{})
 	return
+}
+
+type devCacheGetParam struct {
+	Key string `json:"key"`
+}
+
+type devCacheGetResult struct {
+	Has   bool   `json:"has"`
+	Value []byte `json:"value"`
+}
+
+func (handler *devProxyHandler) handleSharedCacheGet(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
+	param := devCacheGetParam{}
+	decodeErr := json.Unmarshal(payload, &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("dev: cache get failed").WithCause(decodeErr))
+		return
+	}
+	cache := handler.registrations.cluster.Shared().Caches()
+	value, has := cache.Get(r.Context(), bytex.FromString(param.Key))
+	w.Succeed(&devCacheGetResult{
+		Has:   has,
+		Value: value,
+	})
+}
+
+type devCacheExistParam struct {
+	Key string `json:"key"`
+}
+
+type devCacheExistResult struct {
+	Has bool `json:"has"`
+}
+
+func (handler *devProxyHandler) handleSharedCacheExist(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
+	param := devCacheExistParam{}
+	decodeErr := json.Unmarshal(payload, &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("dev: cache exist failed").WithCause(decodeErr))
+		return
+	}
+	cache := handler.registrations.cluster.Shared().Caches()
+	has := cache.Exist(r.Context(), bytex.FromString(param.Key))
+	w.Succeed(&devCacheExistResult{
+		Has: has,
+	})
+}
+
+type devCacheSetParam struct {
+	Key   string        `json:"key"`
+	Value []byte        `json:"value"`
+	TTL   time.Duration `json:"ttl"`
+}
+
+type devCacheSetResult struct {
+	Ok bool `json:"ok"`
+}
+
+func (handler *devProxyHandler) handleSharedCacheSet(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
+	param := devCacheSetParam{}
+	decodeErr := json.Unmarshal(payload, &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("dev: cache exist failed").WithCause(decodeErr))
+		return
+	}
+	cache := handler.registrations.cluster.Shared().Caches()
+	ok := cache.Set(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL)
+	w.Succeed(&devCacheSetResult{
+		Ok: ok,
+	})
+}
+
+type devCacheRemoveParam struct {
+	Key string `json:"key"`
+}
+
+func (handler *devProxyHandler) handleSharedCacheRemove(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
+	param := devCacheRemoveParam{}
+	decodeErr := json.Unmarshal(payload, &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("dev: cache exist failed").WithCause(decodeErr))
+		return
+	}
+	cache := handler.registrations.cluster.Shared().Caches()
+	cache.Remove(r.Context(), bytex.FromString(param.Key))
+	w.Succeed(Empty{})
 }
 
 func (handler *devProxyHandler) handleServiceFn(w transports.ResponseWriter, r *transports.Request) {

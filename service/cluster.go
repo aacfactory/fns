@@ -80,19 +80,18 @@ func RegisterClusterBuilder(name string, builder ClusterBuilder) {
 	builders[name] = builder
 }
 
+func initRegisterDevClusterBuilder() {
+	RegisterClusterBuilder(devClusterBuilderName, devClusterBuilder)
+}
+
 func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
-	if name == devClusterBuilderName {
-		builder = devClusterBuilder
-		has = true
-		return
-	}
 	builder, has = builders[name]
 	return
 }
 
 type fakeTransportHandler struct{}
 
-func (handler fakeTransportHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
+func (handler fakeTransportHandler) Handle(w transports.ResponseWriter, _ *transports.Request) {
 	w.Succeed(&Empty{})
 }
 
@@ -170,6 +169,10 @@ func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err erro
 				appId:  options.AppId,
 				client: client,
 			},
+			caches: &devSharedCaches{
+				appId:  options.AppId,
+				client: client,
+			},
 		},
 	}
 	return
@@ -183,11 +186,11 @@ type devCluster struct {
 	shared       *devShared
 }
 
-func (cluster *devCluster) Join(ctx context.Context) (err error) {
+func (cluster *devCluster) Join(_ context.Context) (err error) {
 	return
 }
 
-func (cluster *devCluster) Leave(ctx context.Context) (err error) {
+func (cluster *devCluster) Leave(_ context.Context) (err error) {
 	return
 }
 
@@ -220,6 +223,7 @@ func (cluster *devCluster) Shared() (shared Shared) {
 type devShared struct {
 	lockers *devSharedLockers
 	store   *devSharedStore
+	caches  *devSharedCaches
 }
 
 func (dev *devShared) Lockers() (lockers shareds.Lockers) {
@@ -229,6 +233,11 @@ func (dev *devShared) Lockers() (lockers shareds.Lockers) {
 
 func (dev *devShared) Store() (store shareds.Store) {
 	store = dev.store
+	return
+}
+
+func (dev *devShared) Caches() (store shareds.Caches) {
+	store = dev.caches
 	return
 }
 
@@ -477,6 +486,120 @@ func (dev *devSharedStore) Remove(ctx context.Context, key []byte) (err errors.C
 		err = errors.Warning("dev: store remove failed")
 		return
 	}
+	return
+}
+
+type devSharedCaches struct {
+	appId  string
+	client transports.Client
+}
+
+func (dev *devSharedCaches) Get(ctx context.Context, key []byte) (value []byte, has bool) {
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req.Header().Set(httpDevModeHeader, "*")
+	subParam := devCacheGetParam{
+		Key: bytex.ToString(key),
+	}
+	subParamBytes, _ := json.Marshal(subParam)
+	param := &devShardParam{
+		Type:    "cache:get",
+		Payload: subParamBytes,
+	}
+	paramBytes, _ := json.Marshal(param)
+	req.SetBody(paramBytes)
+	resp, doErr := dev.client.Do(ctx, req)
+	if doErr != nil {
+		return
+	}
+	if resp.Status != http.StatusOK {
+		return
+	}
+	result := devCacheGetResult{}
+	decodeErr := json.Unmarshal(resp.Body, &result)
+	if decodeErr != nil {
+		return
+	}
+	has = result.Has
+	if has {
+		value = result.Value
+	}
+	return
+}
+
+func (dev *devSharedCaches) Exist(ctx context.Context, key []byte) (has bool) {
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req.Header().Set(httpDevModeHeader, "*")
+	subParam := devCacheExistParam{
+		Key: bytex.ToString(key),
+	}
+	subParamBytes, _ := json.Marshal(subParam)
+	param := &devShardParam{
+		Type:    "cache:exist",
+		Payload: subParamBytes,
+	}
+	paramBytes, _ := json.Marshal(param)
+	req.SetBody(paramBytes)
+	resp, doErr := dev.client.Do(ctx, req)
+	if doErr != nil {
+		return
+	}
+	if resp.Status != http.StatusOK {
+		return
+	}
+	result := devCacheExistResult{}
+	decodeErr := json.Unmarshal(resp.Body, &result)
+	if decodeErr != nil {
+		return
+	}
+	has = result.Has
+	return
+}
+
+func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (ok bool) {
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req.Header().Set(httpDevModeHeader, "*")
+	subParam := devCacheSetParam{
+		Key:   bytex.ToString(key),
+		Value: value,
+		TTL:   ttl,
+	}
+	subParamBytes, _ := json.Marshal(subParam)
+	param := &devShardParam{
+		Type:    "cache:set",
+		Payload: subParamBytes,
+	}
+	paramBytes, _ := json.Marshal(param)
+	req.SetBody(paramBytes)
+	resp, doErr := dev.client.Do(ctx, req)
+	if doErr != nil {
+		return
+	}
+	if resp.Status != http.StatusOK {
+		return
+	}
+	result := devCacheSetResult{}
+	decodeErr := json.Unmarshal(resp.Body, &result)
+	if decodeErr != nil {
+		return
+	}
+	ok = result.Ok
+	return
+}
+
+func (dev *devSharedCaches) Remove(ctx context.Context, key []byte) {
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req.Header().Set(httpDevModeHeader, "*")
+	subParam := devCacheRemoveParam{
+		Key: bytex.ToString(key),
+	}
+	subParamBytes, _ := json.Marshal(subParam)
+	param := &devShardParam{
+		Type:    "cache:remove",
+		Payload: subParamBytes,
+	}
+	paramBytes, _ := json.Marshal(param)
+	req.SetBody(paramBytes)
+	_, _ = dev.client.Do(ctx, req)
 	return
 }
 

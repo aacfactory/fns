@@ -29,7 +29,6 @@ type Store interface {
 	Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError)
 	Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError)
 	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError)
-	Exists(ctx context.Context, key []byte) (exist bool, err errors.CodeError)
 	Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError)
 	ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError)
 	Remove(ctx context.Context, key []byte) (err errors.CodeError)
@@ -75,25 +74,6 @@ func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byt
 		value:    value,
 		deadline: time.Now().Add(ttl),
 	})
-	return
-}
-
-func (store *localStore) Exists(ctx context.Context, key []byte) (exist bool, err errors.CodeError) {
-	if key == nil || len(key) == 0 {
-		err = errors.Warning("fns: shared store exist key failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
-		return
-	}
-	k := bytex.ToString(key)
-	x, loaded := store.values.Load(k)
-	if !loaded {
-		return
-	}
-	e := x.(*entry)
-	if !e.deadline.IsZero() && e.deadline.Before(time.Now()) {
-		store.values.Delete(k)
-		return
-	}
-	exist = true
 	return
 }
 

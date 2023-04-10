@@ -179,6 +179,7 @@ type Span struct {
 	TracerId_   string            `json:"tracerId"`
 	StartAT_    time.Time         `json:"startAt"`
 	FinishedAT_ time.Time         `json:"finishedAt"`
+	Latency_    string            `json:"latency"`
 	Children_   []*Span           `json:"children"`
 	Tags_       map[string]string `json:"tags"`
 	parent      *Span
@@ -196,6 +197,7 @@ func (s *Span) TracerId() (v string) {
 
 func (s *Span) Finish() {
 	s.FinishedAT_ = time.Now()
+	s.Latency_ = s.FinishedAT_.Sub(s.StartAT_).String()
 }
 
 func (s *Span) AddTag(key string, value string) {
@@ -218,7 +220,12 @@ func (s *Span) FinishedAT() (v time.Time) {
 }
 
 func (s *Span) Latency() (v time.Duration) {
-	v = s.FinishedAT_.Sub(s.StartAT_)
+	if s.Latency_ != "" {
+		v, _ = time.ParseDuration(s.Latency_)
+	} else {
+		v = s.FinishedAT_.Sub(s.StartAT_)
+		s.Latency_ = v.String()
+	}
 	return
 }
 

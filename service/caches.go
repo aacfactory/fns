@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -60,7 +61,6 @@ func (middleware *cacheControlMiddleware) Name() (name string) {
 
 func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptions) (err error) {
 	middleware.log = options.Log
-
 	config := cacheControlMiddlewareConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
@@ -85,7 +85,7 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 	}
 	middleware.pool = sync.Pool{
 		New: func() any {
-			return &cacheControl{}
+			return newCacheControl(middleware.log.With("cachecontrol", "etag"), middleware.tags)
 		},
 	}
 	return
@@ -93,65 +93,98 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 
 func (middleware *cacheControlMiddleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
-		// 0. discard upgrade and internal(cache by caller endpoint)
+		// discard upgrade and internal(cache by caller endpoint)
 		if r.Header().Get(httpUpgradeHeader) != "" || r.Header().Get(httpRequestInternalHeader) == "true" {
 			next.Handle(w, r)
 			return
 		}
+		// set cache control into request context
 		ctx := r.Context()
-		// 1. check if no match
-		ifNonMatch := r.Header().Get(httpCacheControlIfNonMatch)
-		if ifNonMatch != "" {
-			etag := bytex.FromString(ifNonMatch)
-			exist := middleware.tags.exist(ctx, etag)
-			if exist {
-				w.SetStatus(http.StatusNotModified)
-				return
-			}
-		}
-
-		// 2. check cached
-		etag := middleware.tags.create(r.Path(), r.Body())
-		status, contentType, contentLength, value, etagTTL, cached := middleware.tags.get(ctx, etag)
-		if cached {
-			w.Header().Set(httpContentType, bytex.ToString(contentType))
-			w.Header().Set(httpContentLength, bytex.ToString(contentLength))
-			w.Header().Set(httpETagHeader, bytex.ToString(etag))
-			w.Header().Set(httpCacheControlHeader, "public, max-age=0")
-			w.Header().Set(httpResponseCacheTTL, etagTTL.String())
-			w.SetStatus(status)
-			_, _ = w.Write(value)
-			return
-		}
-		// 2. check cached request result, key = hash request, value = etag, when exists, get result by etag
 		ccx := middleware.pool.Get()
 		if ccx == nil {
-			ccx = &cacheControl{}
+			ccx = newCacheControl(middleware.log.With("cachecontrol", "etag"), middleware.tags)
 		}
 		cc := ccx.(*cacheControl)
 		r.WithContext(context.WithValue(ctx, cacheControlContextKey, cc))
-		// 3. next
-		next.Handle(w, r)
-		// 4. cache used
-		if !cc.used || w.Hijacked() {
+		// handle
+		var rk []byte
+		ccv := bytex.FromString(r.Header().Get(httpCacheControlHeader))
+		if bytes.Contains(ccv, bytex.FromString(httpCacheControlNoStore)) || bytes.Contains(ccv, bytex.FromString(httpCacheControlNoCache)) {
+			// no-store or no-cache
+			next.Handle(w, r)
+		} else {
+			// load cache
+			rk = requestHash(r.Path(), r.Body())
+			tag, cached := middleware.tags.get(ctx, rk)
+			if !cached {
+				// no cache
+				next.Handle(w, r)
+			} else {
+				// check if no match
+				ifNonMatch := r.Header().Get(httpCacheControlIfNonMatch)
+				if ifNonMatch != "" {
+					if ifNonMatch == tag.Etag {
+						// not modified
+						w.SetStatus(http.StatusNotModified)
+						cc.reset()
+						middleware.pool.Put(cc)
+						return
+					}
+				}
+				// not out of date
+				if ttl := tag.Deadline.Sub(time.Now()); ttl > 0 {
+					maxAge := int(ttl / time.Second)
+					w.Header().Set(httpContentType, tag.ContentType)
+					w.Header().Set(httpContentLength, tag.ContentLength)
+					w.Header().Set(httpETagHeader, tag.Etag)
+					w.Header().Set(httpCacheControlHeader, fmt.Sprintf("public, max-age=%d", maxAge))
+					w.Header().Set(httpResponseCacheTTL, strconv.Itoa(int(ttl/time.Second)))
+					w.SetStatus(tag.Status)
+					_, _ = w.Write(tag.Data)
+					cc.reset()
+					middleware.pool.Put(cc)
+					return
+				}
+				// out of date
+				next.Handle(w, r)
+			}
+		}
+		// discard when hijacked
+		if w.Hijacked() {
+			cc.reset()
+			middleware.pool.Put(cc)
 			return
 		}
-		ttl := cc.ttl
-		if ttl < 1 {
-			ttl = middleware.tags.defaultTTL
+		if rk == nil {
+			rk = requestHash(r.Path(), r.Body())
 		}
-		if middleware.tags.save(ctx, etag, w.Status(), bytex.FromString(w.Header().Get(httpContentType)), w.Body(), ttl) {
-			w.Header().Set(httpETagHeader, bytex.ToString(etag))
-			w.Header().Set(httpCacheControlHeader, "public, max-age=0")
-			w.Header().Set(httpResponseCacheTTL, ttl.String())
+		// write header
+		etag, ttl, enabled := cc.Enabled(rk)
+		if enabled {
+			maxAge := int(ttl / time.Second)
+			w.Header().Set(httpETagHeader, etag)
+			w.Header().Set(httpCacheControlHeader, fmt.Sprintf("public, max-age=%d", maxAge))
+			w.Header().Set(httpResponseCacheTTL, strconv.Itoa(maxAge))
 		} else {
-			w.Header().Set(httpCacheControlHeader, "public, no-store, x-fns-failed")
+			w.Header().Set(httpCacheControlHeader, "public, no-store")
 		}
+		cc.reset()
+		middleware.pool.Put(cc)
+		return
 	})
 }
 
 func (middleware *cacheControlMiddleware) Close() (err error) {
 	return
+}
+
+type tagValue struct {
+	Etag          string    `json:"etag"`
+	Deadline      time.Time `json:"deadline"`
+	Status        int       `json:"status"`
+	Data          []byte    `json:"data"`
+	ContentType   string    `json:"contentType"`
+	ContentLength string    `json:"contentLength"`
 }
 
 type ETags struct {
@@ -160,22 +193,13 @@ type ETags struct {
 	store      shareds.Caches
 }
 
-func (tags *ETags) enabled() bool {
-	return tags.defaultTTL > 0
-}
-
-func (tags *ETags) exist(ctx context.Context, etag []byte) (has bool) {
-	has = tags.store.Exist(ctx, etag)
-	return
-}
-
-func (tags *ETags) get(ctx context.Context, etag []byte) (status int, ct []byte, cl []byte, value []byte, ttl time.Duration, has bool) {
-	value, has = tags.store.Get(ctx, tags.makeCacheKey(etag))
-	if !has {
+func (tags *ETags) get(ctx context.Context, rk []byte) (tag *tagValue, has bool) {
+	value, exist := tags.store.Get(ctx, tags.makeCacheKey(rk))
+	if !exist {
 		return
 	}
-	e := cachedEntry{}
-	err := json.Unmarshal(value, &e)
+	tag = &tagValue{}
+	err := json.Unmarshal(value, tag)
 	if err != nil {
 		if tags.log.ErrorEnabled() {
 			tags.log.Error().Cause(
@@ -185,52 +209,12 @@ func (tags *ETags) get(ctx context.Context, etag []byte) (status int, ct []byte,
 		has = false
 		return
 	}
-	value = e.Data
-	ttl = e.TTL
-	status = e.Status
-	ct = bytex.FromString(e.ContentType)
-	cl = bytex.FromString(e.ContentLength)
 	has = true
 	return
 }
 
-func (tags *ETags) save(ctx context.Context, etag []byte, status int, contentType []byte, value []byte, ttl time.Duration) (ok bool) {
-	if ttl < 1 {
-		ttl = tags.defaultTTL
-	}
-	contentLength := len(value)
-	ct := bytex.ToString(contentType)
-	if ct == "" {
-		if json.Validate(value) {
-			ct = httpContentTypeJson
-		} else {
-			l := 512
-			if contentLength < 512 {
-				l = contentLength
-			}
-			ct = http.DetectContentType(value[:l])
-		}
-	}
-	if status == 0 {
-		if ct == httpContentTypeJson {
-			obj := json.NewObjectFromBytes(value)
-			if obj.Contains("id") && obj.Contains("message") && obj.Contains("stacktrace") {
-				status = 555
-			} else {
-				status = http.StatusOK
-			}
-		} else {
-			status = http.StatusOK
-		}
-	}
-	e := cachedEntry{
-		Data:          value,
-		TTL:           ttl,
-		Status:        status,
-		ContentType:   ct,
-		ContentLength: strconv.Itoa(contentLength),
-	}
-	p, encodeErr := json.Marshal(&e)
+func (tags *ETags) save(ctx context.Context, rk []byte, value *tagValue, ttl time.Duration) {
+	p, encodeErr := json.Marshal(value)
 	if encodeErr != nil {
 		err := errors.Warning("fns: encode etag value failed").WithCause(encodeErr)
 		if tags.log.ErrorEnabled() {
@@ -238,13 +222,17 @@ func (tags *ETags) save(ctx context.Context, etag []byte, status int, contentTyp
 		}
 		return
 	}
-	tags.store.Set(ctx, tags.makeCacheKey(etag), p, ttl)
-	ok = true
+	tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl)
 	return
 }
 
-func (tags *ETags) makeCacheKey(etag []byte) []byte {
-	return bytex.FromString(fmt.Sprintf("fns/etags/%s", bytex.ToString(etag)))
+func (tags *ETags) remove(ctx context.Context, rk []byte) {
+	tags.store.Remove(ctx, tags.makeCacheKey(rk))
+	return
+}
+
+func (tags *ETags) makeCacheKey(rk []byte) []byte {
+	return bytex.FromString(fmt.Sprintf("fns/etags/%s", bytex.ToString(rk)))
 }
 
 func (tags *ETags) create(path []byte, body []byte) (etag []byte) {
@@ -260,27 +248,100 @@ func (tags *ETags) create(path []byte, body []byte) (etag []byte) {
 	return
 }
 
-type cachedEntry struct {
-	Data          []byte        `json:"data"`
-	TTL           time.Duration `json:"ttl"`
-	Status        int           `json:"status"`
-	ContentType   string        `json:"contentType"`
-	ContentLength string        `json:"contentLength"`
+func newCacheControl(log logs.Logger, tags *ETags) *cacheControl {
+	return &cacheControl{
+		log:     log,
+		locker:  new(sync.Mutex),
+		tags:    tags,
+		entries: make(map[string]*tagValue),
+	}
 }
 
 type cacheControl struct {
-	used bool
-	ttl  time.Duration
+	log     logs.Logger
+	locker  sync.Locker
+	tags    *ETags
+	entries map[string]*tagValue
 }
 
-func (cc *cacheControl) Enable(ttl time.Duration) {
-	cc.used = true
-	cc.ttl = ttl
+func (cc *cacheControl) reset() {
+	if len(cc.entries) > 0 {
+		cc.entries = make(map[string]*tagValue)
+	}
+	return
 }
 
-// EnableCacheControl
+func (cc *cacheControl) Enabled(rk []byte) (tag string, ttl time.Duration, ok bool) {
+	cc.locker.Lock()
+	e, has := cc.entries[bytex.ToString(rk)]
+	cc.locker.Unlock()
+	if !has {
+		return
+	}
+	ttl = e.Deadline.Sub(time.Now())
+	if ttl < 1 {
+		return
+	}
+	tag = e.Etag
+	ok = true
+	return
+}
+
+func (cc *cacheControl) Enable(ctx context.Context, rk []byte, result interface{}, ttl time.Duration) {
+	cc.locker.Lock()
+
+	if ttl < 1 {
+		ttl = cc.tags.defaultTTL
+	}
+
+	value := tagValue{
+		Etag:          "",
+		Data:          nil,
+		Deadline:      time.Now().Add(ttl),
+		Status:        0,
+		ContentType:   httpContentTypeJson,
+		ContentLength: "",
+	}
+	if failed, ok := result.(error); ok {
+		cr := errors.Map(failed)
+		value.Status = cr.Code()
+		value.Data, _ = json.Marshal(cr)
+	} else {
+		value.Status = http.StatusOK
+		if result != nil {
+			p, encodeErr := json.Marshal(result)
+			if encodeErr != nil {
+				if cc.log.WarnEnabled() {
+					cc.log.Warn().Cause(errors.Warning("fns: cache control encode result failed").WithCause(encodeErr)).Message("fns: cache control enable failed")
+				}
+				cc.locker.Unlock()
+				return
+			}
+			value.Data = p
+		}
+	}
+	value.ContentLength = strconv.Itoa(len(value.Data))
+	value.Etag = strconv.FormatUint(xxhash.Sum64(value.Data), 10)
+
+	cc.tags.save(ctx, rk, &value, ttl)
+
+	cc.entries[bytex.ToString(rk)] = &value
+
+	cc.locker.Unlock()
+	return
+}
+
+func (cc *cacheControl) Disable(ctx context.Context, rk []byte) {
+	cc.locker.Lock()
+	delete(cc.entries, bytex.ToString(rk))
+	cc.tags.remove(ctx, rk)
+	cc.locker.Unlock()
+	return
+}
+
+// CacheControlUpdate
 // use `@cache {ttl}` in service function
-func EnableCacheControl(ctx context.Context, ttl time.Duration) {
+func CacheControlUpdate(ctx context.Context, r Request, result interface{}, ttl time.Duration) {
 	x := ctx.Value(cacheControlContextKey)
 	if x == nil {
 		return
@@ -289,5 +350,55 @@ func EnableCacheControl(ctx context.Context, ttl time.Duration) {
 	if !ok {
 		return
 	}
-	cc.Enable(ttl)
+	cc.Enable(ctx, r.Hash(), result, ttl)
+}
+
+func CacheControlRemove(ctx context.Context, r Request) {
+	x := ctx.Value(cacheControlContextKey)
+	if x == nil {
+		return
+	}
+	cc, ok := x.(*cacheControl)
+	if !ok {
+		return
+	}
+	cc.Disable(ctx, r.Hash())
+}
+
+func CacheControlFetch(ctx context.Context, r Request) (etag string, status int, contentType string, contentLength string, deadline time.Time, body []byte, has bool) {
+	x := ctx.Value(cacheControlContextKey)
+	if x == nil {
+		return
+	}
+	cc, ok := x.(*cacheControl)
+	if !ok {
+		return
+	}
+	cc.locker.Lock()
+	rk := r.Hash()
+	value, cached := cc.entries[bytex.ToString(rk)]
+	if cached {
+		etag = value.Etag
+		status = value.Status
+		contentType = value.ContentType
+		contentLength = value.ContentLength
+		deadline = value.Deadline
+		body = value.Data
+		has = true
+		cc.locker.Unlock()
+		return
+	}
+	value, cached = cc.tags.get(ctx, rk)
+	if cached {
+		cc.entries[bytex.ToString(rk)] = value
+		etag = value.Etag
+		status = value.Status
+		contentType = value.ContentType
+		contentLength = value.ContentLength
+		deadline = value.Deadline
+		body = value.Data
+		has = true
+	}
+	cc.locker.Unlock()
+	return
 }

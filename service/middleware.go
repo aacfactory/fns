@@ -341,11 +341,15 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 			bodyLen := len(body)
 			if bodyLen > 0 {
 				if w.Header().Get(httpContentType) == "" {
-					l := 512
-					if bodyLen < 512 {
-						l = bodyLen
+					if json.Validate(body) {
+						w.Header().Set(httpContentType, httpContentTypeJson)
+					} else {
+						l := 512
+						if bodyLen < 512 {
+							l = bodyLen
+						}
+						w.Header().Set(httpContentType, http.DetectContentType(body[:l]))
 					}
-					w.Header().Set(httpContentType, http.DetectContentType(body[:l]))
 				}
 				if w.Header().Get(httpContentLength) == "" {
 					w.Header().Set(httpContentLength, strconv.Itoa(bodyLen))

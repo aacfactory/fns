@@ -21,9 +21,10 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
+	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -53,30 +54,73 @@ func (f *fnTask) end() {
 func (f *fnTask) Execute(ctx context.Context) {
 	rootLog := GetRuntime(ctx).RootLog()
 	serviceName, fnName := f.request.Fn()
+	fnLog := rootLog.With("service", serviceName).With("fn", fnName).With("requestId", f.request.Id())
 
 	t, hasTracer := GetTracer(ctx)
 	var sp *Span = nil
 	if hasTracer {
 		sp = t.StartSpan(f.svc.Name(), fnName)
+		sp.AddTag("kind", "local")
 	}
+	// check cache when request is internal
+	if f.request.Internal() && !f.request.Header().CacheControlDisabled() {
+		etag, status, _, _, deadline, body, cached := CacheControlFetch(ctx, f.request)
+		if cached && deadline.After(time.Now()) {
+			if sp != nil {
+				sp.AddTag("cached", "hit")
+				sp.AddTag("etag", etag)
+			}
 
-	arg := f.request.Argument()
-	buf := bytebufferpool.Get()
-	_, _ = buf.Write([]byte(serviceName + fnName))
-	if arg != nil {
-		p, _ := json.Marshal(arg)
-		if p != nil && len(p) > 0 {
-			_, _ = buf.Write(p)
+			var err errors.CodeError
+			if status != http.StatusOK {
+				err = errors.Decode(body)
+			}
+
+			if sp != nil {
+				sp.Finish()
+				if err == nil {
+					sp.AddTag("status", "OK")
+					sp.AddTag("handled", "succeed")
+				} else {
+					sp.AddTag("status", err.Name())
+					sp.AddTag("handled", "failed")
+				}
+			}
+
+			if err == nil {
+				f.promise.Succeed(body)
+			} else {
+				f.promise.Failed(err)
+			}
+
+			// cause internal, so do not report tracer, but report stats
+			tryReportStats(ctx, serviceName, fnName, err, sp)
+			if fnLog.DebugEnabled() {
+				latency := time.Duration(0)
+				if sp != nil {
+					latency = sp.Latency()
+				}
+				handled := "succeed"
+				if err != nil {
+					handled = "failed"
+				}
+				fnLog.Debug().Caller().With("cache", "hit").With("latency", latency).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", serviceName, fnName, handled, latency))
+			}
+			f.hook(f)
+			return
 		}
 	}
+
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write(f.request.Hash())
 	_, _ = buf.Write(bytex.FromString(f.request.Header().DeviceId()))
-	barrierKey := fmt.Sprintf("%d", xxhash.Sum64(buf.Bytes()))
+	barrierKey := strconv.FormatUint(xxhash.Sum64(buf.Bytes()), 10)
 	bytebufferpool.Put(buf)
 
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
 		ctx = withComponents(ctx, f.svc.Components())
 	}
-	fnLog := rootLog.With("service", serviceName).With("fn", fnName).With("requestId", f.request.Id())
+
 	ctx = withLog(ctx, fnLog)
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, f.handleTimeout)
@@ -88,6 +132,7 @@ func (f *fnTask) Execute(ctx context.Context) {
 		return
 	})
 	cancel()
+
 	if sp != nil {
 		sp.Finish()
 		if err == nil {
@@ -98,11 +143,14 @@ func (f *fnTask) Execute(ctx context.Context) {
 			sp.AddTag("handled", "failed")
 		}
 	}
-	if err != nil {
-		f.promise.Failed(err)
-	} else {
+
+	if err == nil {
 		f.promise.Succeed(v)
+	} else {
+		f.promise.Failed(err)
 	}
+
+	tryReportTracer(ctx)
 	tryReportStats(ctx, serviceName, fnName, err, sp)
 	if fnLog.DebugEnabled() {
 		latency := time.Duration(0)

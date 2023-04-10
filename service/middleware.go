@@ -42,7 +42,9 @@ const (
 	httpUpgradeHeader                  = "Upgrade"
 	httpCloseHeader                    = "close"
 	httpCacheControlHeader             = "Cache-Control"
-	httpPragmaHeader                   = "Pragma"
+	httpCacheControlEnabled            = "public, max-age=0"
+	httpCacheControlNoStore            = "no-store"
+	httpCacheControlNoCache            = "no-cache"
 	httpETagHeader                     = "ETag"
 	httpCacheControlIfNonMatch         = "If-None-Match"
 	httpClearSiteData                  = "Clear-Site-Data"
@@ -176,7 +178,7 @@ func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) tr
 		httpDeviceIpHeader, httpDeviceIdHeader,
 		httpRequestIdHeader,
 		httpRequestInternalSignatureHeader, httpRequestTimeoutHeader, httpRequestVersionsHeader,
-		httpETagHeader, httpCacheControlIfNonMatch, httpPragmaHeader, httpClearSiteData, httpResponseRetryAfter, httpSignatureHeader,
+		httpETagHeader, httpCacheControlIfNonMatch, httpClearSiteData, httpResponseRetryAfter, httpSignatureHeader,
 	})
 	middlewares.cors.TryFillExposedHeaders([]string{
 		httpRequestIdHeader, httpRequestInternalSignatureHeader, httpHandleLatencyHeader,

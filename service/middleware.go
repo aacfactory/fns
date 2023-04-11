@@ -36,35 +36,38 @@ import (
 )
 
 const (
-	httpContentLength                  = "Content-Length"
-	httpContentType                    = "Content-Type"
-	httpContentTypeJson                = "application/json"
-	httpConnectionHeader               = "Connection"
-	httpUpgradeHeader                  = "Upgrade"
-	httpCloseHeader                    = "close"
-	httpCacheControlHeader             = "Cache-Control"
-	httpCacheControlEnabled            = "public, max-age=0"
-	httpCacheControlNoStore            = "no-store"
-	httpCacheControlNoCache            = "no-cache"
-	httpETagHeader                     = "ETag"
-	httpCacheControlIfNonMatch         = "If-None-Match"
-	httpVaryHeader                     = "Vary"
-	httpClearSiteData                  = "Clear-Site-Data"
-	httpTrueClientIp                   = "True-Client-Ip"
-	httpXRealIp                        = "X-Real-IP"
-	httpXForwardedForHeader            = "X-Forwarded-For"
-	httpRequestIdHeader                = "X-Fns-Request-Id"
-	httpSignatureHeader                = "X-Fns-Signature"
-	httpRequestInternalSignatureHeader = "X-Fns-Request-Internal-Signature"
-	httpRequestInternalHeader          = "X-Fns-Request-Internal"
-	httpRequestTimeoutHeader           = "X-Fns-Request-Timeout"
-	httpRequestVersionsHeader          = "X-Fns-Request-Version"
-	httpHandleLatencyHeader            = "X-Fns-Handle-Latency"
-	httpDeviceIdHeader                 = "X-Fns-Device-Id"
-	httpDeviceIpHeader                 = "X-Fns-Device-Ip"
-	httpDevModeHeader                  = "X-Fns-Dev-Mode"
-	httpResponseRetryAfter             = "Retry-After"
-	httpResponseCacheTTL               = "X-Fns-Cache-TTL"
+	httpContentLength                   = "Content-Length"
+	httpContentType                     = "Content-Type"
+	httpContentTypeJson                 = "application/json"
+	httpConnectionHeader                = "Connection"
+	httpUpgradeHeader                   = "Upgrade"
+	httpCloseHeader                     = "close"
+	httpCacheControlHeader              = "Cache-Control"
+	httpCacheControlEnabled             = "public, max-age=0"
+	httpCacheControlNoStore             = "no-store"
+	httpCacheControlNoCache             = "no-cache"
+	httpETagHeader                      = "ETag"
+	httpCacheControlIfNonMatch          = "If-None-Match"
+	httpVaryHeader                      = "Vary"
+	httpClearSiteData                   = "Clear-Site-Data"
+	httpTrueClientIp                    = "True-Client-Ip"
+	httpXRealIp                         = "X-Real-IP"
+	httpXForwardedForHeader             = "X-Forwarded-For"
+	httpRequestIdHeader                 = "X-Fns-Request-Id"
+	httpSignatureHeader                 = "X-Fns-Signature"
+	httpRequestInternalSignatureHeader  = "X-Fns-Request-Internal-Signature"
+	httpRequestInternalHeader           = "X-Fns-Request-Internal"
+	httpRequestTimeoutHeader            = "X-Fns-Request-Timeout"
+	httpRequestVersionsHeader           = "X-Fns-Request-Version"
+	httpHandleLatencyHeader             = "X-Fns-Handle-Latency"
+	httpDeviceIdHeader                  = "X-Fns-Device-Id"
+	httpDeviceIpHeader                  = "X-Fns-Device-Ip"
+	httpDevModeHeader                   = "X-Fns-Dev-Mode"
+	httpResponseRetryAfter              = "Retry-After"
+	httpResponseCacheTTL                = "X-Fns-Cache-TTL"
+	httpResponseTimingAllowOrigin       = "Timing-Allow-Origin"
+	httpResponseXFrameOptions           = "X-Frame-Options"
+	httpResponseXFrameOptionsSameOrigin = "SAMEORIGIN"
 )
 
 const (
@@ -356,6 +359,8 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 			if middleware.latencyEnabled {
 				w.Header().Set(httpHandleLatencyHeader, time.Now().Sub(handleBeg).String())
 			}
+			w.Header().Set(httpResponseTimingAllowOrigin, "*")
+			w.Header().Set(httpResponseXFrameOptions, httpResponseXFrameOptionsSameOrigin)
 			body := w.Body()
 			bodyLen := len(body)
 			if bodyLen > 0 {

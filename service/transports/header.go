@@ -19,6 +19,7 @@ package transports
 import (
 	"net/http"
 	"net/textproto"
+	"strings"
 )
 
 const (
@@ -29,6 +30,7 @@ const (
 	connectionHeaderName       = "Connection"
 	upgradeHeaderName          = "Upgrade"
 	closeHeaderValue           = "close"
+	clearSiteDataHeaderName    = "Clear-Site-Data"
 )
 
 type Header http.Header
@@ -71,6 +73,14 @@ func (h Header) SetConnectionClose() {
 
 func (h Header) Upgrade() string {
 	return textproto.MIMEHeader(h).Get(upgradeHeaderName)
+}
+
+func (h Header) ClearSiteData(scopes ...string) {
+	if scopes == nil || len(scopes) == 0 {
+		textproto.MIMEHeader(h).Set(clearSiteDataHeaderName, "*")
+	} else {
+		textproto.MIMEHeader(h).Set(clearSiteDataHeaderName, `"`+strings.Join(scopes, `", "`)+`"`)
+	}
 }
 
 func (h Header) Clone() Header {

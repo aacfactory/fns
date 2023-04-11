@@ -17,6 +17,7 @@
 package service
 
 import (
+	"context"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -47,6 +48,7 @@ const (
 	httpCacheControlNoCache            = "no-cache"
 	httpETagHeader                     = "ETag"
 	httpCacheControlIfNonMatch         = "If-None-Match"
+	httpVaryHeader                     = "Vary"
 	httpClearSiteData                  = "Clear-Site-Data"
 	httpTrueClientIp                   = "True-Client-Ip"
 	httpXRealIp                        = "X-Real-IP"
@@ -64,6 +66,19 @@ const (
 	httpResponseRetryAfter             = "Retry-After"
 	httpResponseCacheTTL               = "X-Fns-Cache-TTL"
 )
+
+const (
+	transportResponseWriterCtxKey = "@fns_transport_response_writer"
+)
+
+func TransportResponseWriter(ctx context.Context) (w transports.ResponseWriter, has bool) {
+	x := ctx.Value(transportResponseWriterCtxKey)
+	if x == nil {
+		return
+	}
+	w, has = x.(transports.ResponseWriter)
+	return
+}
 
 type TransportMiddlewareOptions struct {
 	AppId      string
@@ -333,6 +348,8 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 			middleware.requests.Add(-1)
 			return
 		}
+		// set response writer
+		r = r.WithContext(context.WithValue(r.Context(), transportResponseWriterCtxKey, w))
 		// next
 		next.Handle(w, r)
 		if !w.Hijacked() {

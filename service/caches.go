@@ -40,6 +40,12 @@ const (
 	cacheControlContextKey     = "@fns_cachecontrol"
 )
 
+var (
+	cacheVaryHeaderValue = strings.Join([]string{
+		httpRequestIdHeader,
+	}, ",")
+)
+
 type cacheControlMiddlewareConfig struct {
 	RequestCacheDefaultTTL string `json:"requestCacheDefaultTTL"`
 }
@@ -124,6 +130,7 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 				ifNonMatch := r.Header().Get(httpCacheControlIfNonMatch)
 				if ifNonMatch != "" {
 					if ifNonMatch == tag.Etag {
+						w.Header().Set(httpVaryHeader, cacheVaryHeaderValue)
 						// not modified
 						w.SetStatus(http.StatusNotModified)
 						cc.reset()

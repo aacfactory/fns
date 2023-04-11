@@ -17,6 +17,7 @@
 package service
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -27,6 +28,7 @@ import (
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -42,32 +44,26 @@ var (
 	ErrSessionOutOfDate    = errors.New(468, "***SESSION OUT OF DATE***", "need to create session")
 )
 
-type signatureMiddlewareConfig struct {
-	Issuer             string `json:"issuer"`
-	PublicKey          string `json:"publicKey"`
-	PrivateKey         string `json:"privateKey"`
-	PrivateKeyPassword string `json:"privateKeyPassword"`
-	SessionKeyTTL      string `json:"sessionKeyTTL"`
-}
-
-func SignatureMiddleware() TransportMiddleware {
-	return &signatureMiddleware{}
-}
-
-// signatureMiddleware
-// 使用SM2进行共享密钥交换，交换成功后客户都使用hmac来签名，服务端来验证
-// todo 提供service，处理client app的公钥合法性，包含签发和验证。
-// errors:
+// SignatureMiddleware
+//
+// 使用SM2进行共享密钥交换，交换成功后双方使用共享密钥进行对签名与验证
+// 签名方式为使用HMAC+XXHASH对path+body签名，使用HEX对签名编码。最终将签名赋值于X-Fns-Signature头
+// 错误:
 // * 458: 签名错误，session key 不是共享的
 // * 468: session 超时
 // * 488: 签名丢失
+//
+// certificates : 证书仓库，签名用的类型为`signatures`
+func SignatureMiddleware(certificates Certificates) TransportMiddleware {
+	return &signatureMiddleware{
+		certificates: certificates,
+	}
+}
+
 type signatureMiddleware struct {
-	store         shareds.Store
-	sigs          sync.Map
-	pub           *sm2.PublicKey
-	pri           *sm2.PrivateKey
-	issuer        string
-	sessionKeyTTL time.Duration
+	store        shareds.Store
+	sigs         sync.Map
+	certificates Certificates
 }
 
 func (middleware *signatureMiddleware) Name() (name string) {
@@ -78,40 +74,6 @@ func (middleware *signatureMiddleware) Name() (name string) {
 func (middleware *signatureMiddleware) Build(options TransportMiddlewareOptions) (err error) {
 	middleware.store = options.Shared.Store()
 	middleware.sigs = sync.Map{}
-	config := signatureMiddlewareConfig{}
-	configErr := options.Config.As(&config)
-	if configErr != nil {
-		err = errors.Warning("fns: signature middleware build failed").WithCause(configErr)
-		return
-	}
-	middleware.issuer = strings.TrimSpace(config.Issuer)
-	if middleware.issuer == "" {
-		middleware.issuer = "FNS"
-	}
-	middleware.pub, err = sm2.ParsePublicKey([]byte(strings.TrimSpace(config.PublicKey)))
-	if err != nil {
-		err = errors.Warning("fns: signature middleware build failed").WithCause(errors.Warning("parse public key failed")).WithCause(err)
-		return
-	}
-	if config.PrivateKeyPassword == "" {
-		middleware.pri, err = sm2.ParsePrivateKey([]byte(strings.TrimSpace(config.PrivateKey)))
-	} else {
-		middleware.pri, err = sm2.ParsePrivateKeyWithPassword([]byte(strings.TrimSpace(config.PrivateKey)), []byte(strings.TrimSpace(config.PrivateKeyPassword)))
-	}
-	if err != nil {
-		err = errors.Warning("fns: signature middleware build failed").WithCause(errors.Warning("parse private key failed")).WithCause(err)
-		return
-	}
-	if config.SessionKeyTTL != "" {
-		middleware.sessionKeyTTL, err = time.ParseDuration(strings.TrimSpace(config.SessionKeyTTL))
-		if err != nil {
-			err = errors.Warning("fns: signature middleware build failed").WithCause(errors.Warning("sessionKeyTTL must be time.Duration format")).WithCause(err)
-			return
-		}
-	}
-	if middleware.sessionKeyTTL < 1 {
-		middleware.sessionKeyTTL = 24 * time.Hour
-	}
 	return
 }
 
@@ -138,7 +100,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			return
 		}
 		if r.IsPost() && bytex.ToString(r.Path()) == "/signatures/session" {
-			middleware.handleCreateSession(w, r)
+			middleware.handleExchangeKey(w, r)
 			return
 		}
 
@@ -147,6 +109,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			w.Failed(ErrSignatureLost)
 			return
 		}
+		// get signer
 		deviceId := r.Header().Get(httpDeviceIdHeader)
 		x, loaded := middleware.sigs.Load(deviceId)
 		if !loaded {
@@ -181,6 +144,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			w.Failed(ErrSessionOutOfDate)
 			return
 		}
+		// verify
 		buf := bytebufferpool.Get()
 		_, _ = buf.Write(r.Path())
 		if r.Body() != nil && len(r.Body()) > 0 {
@@ -192,59 +156,96 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			w.Failed(ErrSignatureUnverified)
 			return
 		}
+		// next
 		next.Handle(w, r)
-		w.Header().Set(httpSignatureHeader, bytex.ToString(sess.sig.Sign(w.Body())))
+		// write signature
+		buf = bytebufferpool.Get()
+		_, _ = buf.Write(r.Path())
+		_, _ = buf.Write(w.Body())
+		respSignature := sess.sig.Sign(buf.Bytes())
+		bytebufferpool.Put(buf)
+		w.Header().Set(httpSignatureHeader, bytex.ToString(respSignature))
 	})
 }
 
-type signatureSessionCreateParam struct {
+type signatureExchangeKeyParam struct {
 	PublicKey string `json:"publicKey"`
 }
 
-// todo 返回app的公钥，
-type signatureSessionCreateResult struct {
-	SessionKey string    `json:"sessionKey"`
-	Deadline   time.Time `json:"deadline"`
+type signatureExchangeKeyResult struct {
+	PublicPEM []byte    `json:"publicPem"`
+	Deadline  time.Time `json:"deadline"`
 }
 
-func (middleware *signatureMiddleware) handleCreateSession(w transports.ResponseWriter, r *transports.Request) {
-	param := signatureSessionCreateParam{}
+func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWriter, r *transports.Request) {
+	// device
+	param := signatureExchangeKeyParam{}
 	decodeErr := json.Unmarshal(r.Body(), &param)
 	if decodeErr != nil {
-		w.Failed(errors.Warning("fns: create session failed").WithCause(errors.Warning("param is invalid").WithCause(decodeErr)))
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("param is invalid").WithCause(decodeErr)))
 		return
 	}
-	pub, pubErr := sm2.ParsePublicKey(bytex.FromString(strings.TrimSpace(param.PublicKey)))
-	if pubErr != nil {
-		w.Failed(errors.Warning("fns: create session failed").WithCause(errors.Warning("publicKey is invalid").WithCause(pubErr)))
+	devPub, parseDevPubErr := sm2.ParsePublicKey(bytex.FromString(strings.TrimSpace(param.PublicKey)))
+	if parseDevPubErr != nil {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("parse device public key failed").WithCause(parseDevPubErr)))
 		return
 	}
 	deviceId := r.Header().Get(httpDeviceIdHeader)
+	// get root
+	appId, pubPEM, priPEM, passwd, exTTL, has, getErr := middleware.certificates.Root(r.Context(), signatureCertificateKind)
+	if getErr != nil {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("get root certificate failed")).WithCause(getErr))
+		return
+	}
+	if !has {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("root certificate was not exists")))
+		return
+	}
+	if appId == "" {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("app id of root certificate was not exists")))
+		return
+	}
+	if exTTL < 1 {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("exchange key ttl of root certificate was not exists")))
+		return
+	}
+	var parsePriEr error
+	var pri *sm2.PrivateKey
+	if passwd != nil && len(passwd) > 0 {
+		pri, parsePriEr = sm2.ParsePrivateKeyWithPassword(priPEM, passwd)
+	} else {
+		pri, parsePriEr = sm2.ParsePrivateKey(priPEM)
+	}
+	if parsePriEr != nil {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("parse private key of root certificate failed").WithCause(parsePriEr)))
+		return
+	}
 
-	sessionKey, _, _, exchangeErr := sm2.KeyExchangeB(20, bytex.FromString(deviceId), bytex.FromString(middleware.issuer), middleware.pri, pub, middleware.pri, pub)
+	// exchange
+	sessionKey, _, _, exchangeErr := sm2.KeyExchangeB(20, bytex.FromString(deviceId), bytex.FromString(appId), pri, devPub, pri, devPub)
 	if exchangeErr != nil {
-		w.Failed(errors.Warning("fns: create session failed").WithCause(errors.Warning("exchange key failed").WithCause(exchangeErr)))
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("exchange key failed").WithCause(exchangeErr)))
 		return
 	}
 	sessionKey = bytex.FromString(base64.URLEncoding.EncodeToString(sessionKey))
 	sess := session{
 		Key:      sessionKey,
-		Deadline: time.Now().Add(middleware.sessionKeyTTL),
+		Deadline: time.Now().Add(exTTL),
 		sig:      nil,
 	}
 	sessBytes, _ := json.Marshal(&sess)
 
-	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)), sessBytes, middleware.sessionKeyTTL)
+	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)), sessBytes, exTTL)
 	if setErr != nil {
-		w.Failed(errors.Warning("fns: create session failed").WithCause(errors.Warning("save session failed").WithCause(setErr)))
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("save session failed").WithCause(setErr)))
 		return
 	}
 	sess.sig = signatures.HMAC(sess.Key)
 	middleware.sigs.Store(deviceId, &sess)
 
-	w.Succeed(&signatureSessionCreateResult{
-		SessionKey: bytex.ToString(sess.Key),
-		Deadline:   sess.Deadline,
+	w.Succeed(&signatureExchangeKeyResult{
+		PublicPEM: pubPEM,
+		Deadline:  sess.Deadline,
 	})
 
 	return
@@ -254,8 +255,216 @@ func (middleware *signatureMiddleware) Close() (err error) {
 	return
 }
 
+func (middleware *signatureMiddleware) Services() (v []Service) {
+	if middleware.certificates == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: certificates of signature middleware is required")))
+		return
+	}
+	if reflect.TypeOf(middleware.certificates).Kind() != reflect.Pointer {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: certificates of signature middleware must be pointer")))
+		return
+	}
+	v = []Service{
+		&certificatesService{
+			Abstract:     NewAbstract(certificatesServiceName, true, middleware.certificates),
+			certificates: middleware.certificates,
+		},
+	}
+	return
+}
+
 type session struct {
 	Key      []byte    `json:"key"`
 	Deadline time.Time `json:"deadline"`
 	sig      signatures.Signer
+}
+
+const (
+	certificatesServiceName  = "certificates"
+	signatureCertificateKind = "signatures"
+)
+
+type Certificates interface {
+	Component
+	Root(ctx context.Context, kind string) (appId string, publicPEM []byte, privatePEM []byte, password []byte, exchangeKeyTTL time.Duration, has bool, err errors.CodeError)
+	SaveRoot(ctx context.Context, kind string, appId string, publicPEM []byte, privatePEM []byte, password []byte, exchangeKeyTTL time.Duration) (err errors.CodeError)
+	Issue(ctx context.Context, appId string, appName string, expirations time.Duration) (publicPEM []byte, privatePEM []byte, err errors.CodeError)
+	Revoke(ctx context.Context, appId string) (err errors.CodeError)
+	Verify(ctx context.Context, publicPEM []byte) (ok bool, err errors.CodeError)
+	SaveExchangeKey(ctx context.Context, appId string, exchangeKey []byte, ttl time.Duration) (err errors.CodeError)
+	GetExchangeKey(ctx context.Context, appId string) (exchangeKey []byte, has bool, err errors.CodeError)
+}
+
+type certificatesRootParam struct {
+	Kind string `json:"kind"`
+}
+
+type certificatesRootResult struct {
+	Has            bool          `json:"has"`
+	Kind           string        `json:"kind"`
+	AppId          string        `json:"appId"`
+	PublicPEM      []byte        `json:"publicPem"`
+	PrivatePEM     []byte        `json:"privatePem"`
+	Password       []byte        `json:"password"`
+	ExchangeKeyTTL time.Duration `json:"exchangeKeyTtl"`
+}
+
+type certificatesSaveRootParam struct {
+	Kind           string        `json:"kind"`
+	AppId          string        `json:"appId"`
+	PublicPEM      []byte        `json:"publicPem"`
+	PrivatePEM     []byte        `json:"privatePem"`
+	Password       []byte        `json:"password"`
+	ExchangeKeyTTL time.Duration `json:"exchangeKeyTtl"`
+}
+
+type certificatesIssueParam struct {
+	AppId      string `json:"appId"`
+	AppName    string `json:"appName"`
+	ExpireDays int    `json:"expireDays"`
+}
+
+type certificatesIssueResult struct {
+	PublicPEM  []byte `json:"publicPem"`
+	PrivatePEM []byte `json:"privatePem"`
+}
+
+type certificatesRevokeParam struct {
+	AppId string `json:"appId"`
+}
+
+type certificatesVerifyParam struct {
+	PublicPEM []byte `json:"publicPem"`
+}
+
+type certificatesVerifyResult struct {
+	Ok bool `json:"ok"`
+}
+
+type certificatesSaveExchangeKeyParam struct {
+	AppId       string        `json:"appId"`
+	ExchangeKey []byte        `json:"exchangeKey"`
+	TTL         time.Duration `json:"ttl"`
+}
+
+type certificatesGetExchangeKeyParam struct {
+	AppId string `json:"appId"`
+}
+
+type certificatesGetExchangeKeyResult struct {
+	Has         bool   `json:"has"`
+	ExchangeKey []byte `json:"exchangeKey"`
+}
+
+type certificatesService struct {
+	Abstract
+	certificates Certificates
+}
+
+func (svc *certificatesService) Handle(ctx context.Context, fn string, arg Argument) (v interface{}, err errors.CodeError) {
+	switch fn {
+	case "root":
+		param := certificatesRootParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode get root param failed").WithCause(paramErr)
+			return
+		}
+		appId, publicPEM, privatePEM, password, exchangeKeyTTL, has, rootErr := svc.certificates.Root(ctx, param.Kind)
+		if rootErr != nil {
+			err = rootErr
+			return
+		}
+		v = certificatesRootResult{
+			Has:            has,
+			Kind:           param.Kind,
+			AppId:          appId,
+			PublicPEM:      publicPEM,
+			PrivatePEM:     privatePEM,
+			Password:       password,
+			ExchangeKeyTTL: exchangeKeyTTL,
+		}
+		break
+	case "save_root":
+		param := certificatesSaveRootParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode save root param failed").WithCause(paramErr)
+			return
+		}
+		err = svc.certificates.SaveRoot(ctx, param.Kind, param.AppId, param.PublicPEM, param.PrivatePEM, param.Password, param.ExchangeKeyTTL)
+		break
+	case "issue":
+		param := certificatesIssueParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode issue param failed").WithCause(paramErr)
+			return
+		}
+		pub, pri, issueErr := svc.certificates.Issue(ctx, param.AppId, param.AppName, time.Duration(param.ExpireDays*24)*time.Hour)
+		if issueErr != nil {
+			err = issueErr
+			return
+		}
+		v = certificatesIssueResult{
+			PublicPEM:  pub,
+			PrivatePEM: pri,
+		}
+		break
+	case "revoke":
+		param := certificatesRevokeParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode revoke param failed").WithCause(paramErr)
+			return
+		}
+		err = svc.certificates.Revoke(ctx, param.AppId)
+		break
+	case "verify":
+		param := certificatesVerifyParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode verify param failed").WithCause(paramErr)
+			return
+		}
+		ok, verifyErr := svc.certificates.Verify(ctx, param.PublicPEM)
+		if verifyErr != nil {
+			err = verifyErr
+			return
+		}
+		v = certificatesVerifyResult{
+			Ok: ok,
+		}
+		break
+	case "save_exchange_key":
+		param := certificatesSaveExchangeKeyParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode save exchange key param failed").WithCause(paramErr)
+			return
+		}
+		err = svc.certificates.SaveExchangeKey(ctx, param.AppId, param.ExchangeKey, param.TTL)
+		break
+	case "get_exchage_key":
+		param := certificatesGetExchangeKeyParam{}
+		paramErr := arg.As(&param)
+		if paramErr != nil {
+			err = errors.Warning("fns: decode get exchange key param failed").WithCause(paramErr)
+			return
+		}
+		key, has, getErr := svc.certificates.GetExchangeKey(ctx, param.AppId)
+		if getErr != nil {
+			err = getErr
+			return
+		}
+		v = certificatesGetExchangeKeyResult{
+			Has:         has,
+			ExchangeKey: key,
+		}
+		break
+	default:
+		err = errors.NotFound("fns: not found")
+		break
+	}
+	return
 }

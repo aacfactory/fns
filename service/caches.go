@@ -42,7 +42,7 @@ const (
 
 var (
 	cacheVaryHeaderValue = strings.Join([]string{
-		httpRequestIdHeader,
+		httpRequestIdHeader, httpHandleLatencyHeader, httpSignatureHeader, httpResponseCacheTTL,
 	}, ",")
 )
 

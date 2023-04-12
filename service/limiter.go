@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/configures"
@@ -27,6 +28,7 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,8 +51,8 @@ type RateLimitCounterOptions struct {
 type RateLimitCounter interface {
 	Name() (name string)
 	Build(options RateLimitCounterOptions) (err error)
-	Incr(ctx context.Context, key string) (ok bool, err error)
-	Decr(ctx context.Context, key string) (err error)
+	Incr(ctx context.Context, key []byte) (ok bool, err error)
+	Decr(ctx context.Context, key []byte) (err error)
 	Close()
 }
 
@@ -132,7 +134,7 @@ func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions)
 func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
 		deviceId := r.Header().Get(httpDeviceIdHeader)
-		ok, incrErr := middleware.counter.Incr(r.Context(), deviceId)
+		ok, incrErr := middleware.counter.Incr(r.Context(), bytex.FromString(deviceId))
 		if incrErr != nil {
 			w.Failed(errors.Warning("fns: rate limit counter incr failed").WithCause(incrErr))
 			return
@@ -143,7 +145,7 @@ func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transpor
 			return
 		}
 		next.Handle(w, r)
-		repayErr := middleware.counter.Decr(r.Context(), deviceId)
+		repayErr := middleware.counter.Decr(r.Context(), bytex.FromString(deviceId))
 		if repayErr != nil && middleware.log.ErrorEnabled() {
 			middleware.log.Error().Cause(
 				errors.Warning("fns: rate limit counter decr failed").WithCause(repayErr),
@@ -206,13 +208,13 @@ func (counter *rateLimitCounter) Build(options RateLimitCounterOptions) (err err
 	return err
 }
 
-func (counter *rateLimitCounter) Incr(ctx context.Context, key string) (ok bool, err error) {
-	if key == "" {
+func (counter *rateLimitCounter) Incr(ctx context.Context, key []byte) (ok bool, err error) {
+	if len(key) == 0 {
 		err = errors.Warning("fns: incr failed").WithCause(errors.Warning("key is nil")).WithMeta("counter", counter.Name())
 		return
 	}
 	key = counter.preflight(key)
-	n, incrErr := counter.shared.Store().Incr(ctx, bytex.FromString(key), 1)
+	n, incrErr := counter.shared.Store().Incr(ctx, key, 1)
 	if incrErr != nil {
 		err = errors.Warning("fns: incr failed").WithCause(incrErr).WithMeta("counter", counter.Name())
 		return
@@ -222,7 +224,7 @@ func (counter *rateLimitCounter) Incr(ctx context.Context, key string) (ok bool,
 		return
 	}
 	if n == 1 && counter.window > 0 {
-		expireErr := counter.shared.Store().ExpireKey(ctx, bytex.FromString(key), counter.window)
+		expireErr := counter.shared.Store().ExpireKey(ctx, key, counter.window)
 		if expireErr != nil {
 			err = errors.Warning("fns: incr failed").WithCause(expireErr).WithMeta("counter", counter.Name())
 			return
@@ -231,28 +233,33 @@ func (counter *rateLimitCounter) Incr(ctx context.Context, key string) (ok bool,
 	return
 }
 
-func (counter *rateLimitCounter) Decr(ctx context.Context, key string) (err error) {
-	if key == "" {
+func (counter *rateLimitCounter) Decr(ctx context.Context, key []byte) (err error) {
+	if len(key) == 0 {
 		err = errors.Warning("fns: decr failed").WithCause(errors.Warning("key is nil")).WithMeta("counter", counter.Name())
 		return
 	}
 	key = counter.preflight(key)
-	n, incrErr := counter.shared.Store().Incr(ctx, bytex.FromString(key), -1)
+	n, incrErr := counter.shared.Store().Incr(ctx, key, -1)
 	if incrErr != nil {
 		err = errors.Warning("fns: decr failed").WithCause(incrErr).WithMeta("counter", counter.Name())
 		return
 	}
 	if n < 0 {
-		_ = counter.shared.Store().Remove(ctx, bytex.FromString(key))
+		_ = counter.shared.Store().Remove(ctx, key)
 	}
 	return
 }
 
-func (counter *rateLimitCounter) preflight(key string) string {
+var (
+	rateLimitCounterKeySep = []byte{':'}
+)
+
+func (counter *rateLimitCounter) preflight(key []byte) []byte {
 	if counter.window == 0 {
 		return key
 	}
-	return fmt.Sprintf("%s:%d", key, time.Now().Truncate(counter.window).Unix())
+	window := bytex.FromString(strconv.FormatInt(time.Now().Truncate(counter.window).Unix(), 10))
+	return bytes.Join([][]byte{key, window}, rateLimitCounterKeySep)
 }
 
 func (counter *rateLimitCounter) Close() {}

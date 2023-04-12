@@ -704,7 +704,7 @@ func (r *Registrations) FetchNodeDocuments(ctx context.Context, node *Node) (v d
 		return
 	}
 
-	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, bytex.FromString("/services/documents"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, servicesDocumentsPath)
 	req.Header().Set(httpDeviceIdHeader, r.id)
 
 	for i := 0; i < 5; i++ {
@@ -861,7 +861,7 @@ func (r *Registrations) GetNodeServices(ctx context.Context, node *Node) (names 
 		err = clientErr
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, bytex.FromString("/services/names"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, servicesNamesPath)
 	req.Header().Set(httpDeviceIdHeader, r.id)
 	req.Header().Set(httpRequestInternalSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
 

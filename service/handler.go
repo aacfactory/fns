@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
@@ -144,6 +145,11 @@ const (
 	transportApplicationHandlerName = "application"
 )
 
+var (
+	transportApplicationHealthPath = []byte("/application/health")
+	transportApplicationStatusPath = []byte("/application/status")
+)
+
 type applicationStats struct {
 	Id       string        `json:"id"`
 	Name     string        `json:"name"`
@@ -212,11 +218,11 @@ func (handler *transportApplicationHandler) Build(options TransportHandlerOption
 }
 
 func (handler *transportApplicationHandler) Accept(r *transports.Request) (ok bool) {
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/application/health"
+	ok = r.IsGet() && bytes.Compare(r.Path(), transportApplicationHealthPath) == 0
 	if ok {
 		return
 	}
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/application/stats"
+	ok = r.IsGet() && bytes.Compare(r.Path(), transportApplicationStatusPath) == 0
 	if ok {
 		return
 	}
@@ -224,7 +230,7 @@ func (handler *transportApplicationHandler) Accept(r *transports.Request) (ok bo
 }
 
 func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
-	if r.IsGet() && bytex.ToString(r.Path()) == "/application/health" {
+	if r.IsGet() && bytes.Compare(r.Path(), transportApplicationHealthPath) == 0 {
 		body := fmt.Sprintf(
 			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\", \"deviceIp\":\"%s\"}",
 			handler.appName, handler.appId, handler.appVersion.String(), handler.launchAT.Format(time.RFC3339), time.Now().Format(time.RFC3339), r.Header().Get(httpDeviceIpHeader),
@@ -234,7 +240,7 @@ func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, 
 		_, _ = w.Write(bytex.FromString(body))
 		return
 	}
-	if handler.statsEnabled && r.IsGet() && bytex.ToString(r.Path()) == "/application/stats" {
+	if handler.statsEnabled && r.IsGet() && bytes.Compare(r.Path(), transportApplicationStatusPath) == 0 {
 		v, _, _ := handler.group.Do(handler.Name(), func() (v interface{}, err error) {
 			stat := &applicationStats{
 				Id:       handler.appId,

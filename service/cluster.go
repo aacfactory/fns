@@ -195,7 +195,7 @@ func (cluster *devCluster) Leave(_ context.Context) (err error) {
 }
 
 func (cluster *devCluster) Nodes(ctx context.Context) (nodes Nodes, err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, bytex.FromString("/cluster/nodes"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, devClusterNodesPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	resp, doErr := cluster.client.Do(ctx, req)
 	if doErr != nil {
@@ -247,7 +247,7 @@ type devSharedLockers struct {
 }
 
 func (dev *devSharedLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devAcquireLockerParam{
 		Key: bytex.ToString(key),
@@ -282,7 +282,7 @@ type devSharedLocker struct {
 }
 
 func (dev *devSharedLocker) Lock(ctx context.Context) (err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devLockParam{
 		Key: bytex.ToString(dev.key),
@@ -307,7 +307,7 @@ func (dev *devSharedLocker) Lock(ctx context.Context) (err error) {
 }
 
 func (dev *devSharedLocker) Unlock(ctx context.Context) (err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devUnLockParam{
 		Key: bytex.ToString(dev.key),
@@ -337,7 +337,7 @@ type devSharedStore struct {
 }
 
 func (dev *devSharedStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreGetParam{
 		Key: bytex.ToString(key),
@@ -379,7 +379,7 @@ func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte) (e
 }
 
 func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreSetParam{
 		Key:   bytex.ToString(key),
@@ -406,7 +406,7 @@ func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []b
 }
 
 func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreIncrParam{
 		Key:   bytex.ToString(key),
@@ -439,7 +439,7 @@ func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64) (v
 }
 
 func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreExprParam{
 		Key: bytex.ToString(key),
@@ -465,7 +465,7 @@ func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.D
 }
 
 func (dev *devSharedStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreRemoveParam{
 		Key: bytex.ToString(key),
@@ -495,7 +495,7 @@ type devSharedCaches struct {
 }
 
 func (dev *devSharedCaches) Get(ctx context.Context, key []byte) (value []byte, has bool) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheGetParam{
 		Key: bytex.ToString(key),
@@ -527,7 +527,7 @@ func (dev *devSharedCaches) Get(ctx context.Context, key []byte) (value []byte, 
 }
 
 func (dev *devSharedCaches) Exist(ctx context.Context, key []byte) (has bool) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheExistParam{
 		Key: bytex.ToString(key),
@@ -556,7 +556,7 @@ func (dev *devSharedCaches) Exist(ctx context.Context, key []byte) (has bool) {
 }
 
 func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (ok bool) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheSetParam{
 		Key:   bytex.ToString(key),
@@ -587,7 +587,7 @@ func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, t
 }
 
 func (dev *devSharedCaches) Remove(ctx context.Context, key []byte) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, bytex.FromString("/cluster/shared"))
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheRemoveParam{
 		Key: bytex.ToString(key),

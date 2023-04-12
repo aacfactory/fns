@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -208,11 +209,11 @@ func (handler *proxyHandler) Build(options TransportHandlerOptions) (err error) 
 }
 
 func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/documents"
+	ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0
 	if ok {
 		return
 	}
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi"
+	ok = r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0
 	if ok {
 		return
 	}
@@ -232,11 +233,11 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r *transports.R
 		w.Failed(ErrTooEarly.WithMeta("handler", handler.Name()))
 		return
 	}
-	if r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi" {
+	if r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0 {
 		handler.handleOpenapi(w, r)
 		return
 	}
-	if r.IsGet() && bytex.ToString(r.Path()) == "/services/documents" {
+	if r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0 {
 		handler.handleDocuments(w, r)
 		return
 	}

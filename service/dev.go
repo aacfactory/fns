@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -34,6 +35,11 @@ import (
 
 const (
 	devProxyHandlerName = "dev"
+)
+
+var (
+	devClusterNodesPath  = []byte("/cluster/nodes")
+	devClusterSharedPath = []byte("/cluster/shared")
 )
 
 func newDevProxyHandler(registrations *Registrations, signer *secret.Signer) *devProxyHandler {
@@ -66,11 +72,11 @@ func (handler *devProxyHandler) Accept(r *transports.Request) (ok bool) {
 	if r.Header().Get(httpDevModeHeader) == "" {
 		return
 	}
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/cluster/nodes"
+	ok = r.IsGet() && bytes.Compare(r.Path(), devClusterNodesPath) == 0
 	if ok {
 		return
 	}
-	ok = r.IsPost() && bytex.ToString(r.Path()) == "/cluster/shared"
+	ok = r.IsPost() && bytes.Compare(r.Path(), devClusterSharedPath) == 0
 	if ok {
 		return
 	}
@@ -84,11 +90,11 @@ func (handler *devProxyHandler) Accept(r *transports.Request) (ok bool) {
 }
 
 func (handler *devProxyHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
-	if r.IsGet() && bytex.ToString(r.Path()) == "/cluster/nodes" {
+	if r.IsGet() && bytes.Compare(r.Path(), devClusterNodesPath) == 0 {
 		handler.handleClusterNodes(w, r)
 		return
 	}
-	if r.IsPost() && bytex.ToString(r.Path()) == "/cluster/shared" {
+	if r.IsPost() && bytes.Compare(r.Path(), devClusterSharedPath) == 0 {
 		handler.handleShared(w, r)
 		return
 	}

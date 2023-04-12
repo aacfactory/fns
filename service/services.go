@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -33,6 +34,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+)
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+var (
+	servicesDocumentsPath = []byte("/services/documents")
+	servicesOpenapiPath   = []byte("/services/openapi")
+	servicesNamesPath     = []byte("/services/names")
 )
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -198,15 +207,15 @@ func (handler *servicesHandler) Build(options TransportHandlerOptions) (err erro
 }
 
 func (handler *servicesHandler) Accept(r *transports.Request) (ok bool) {
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/documents"
+	ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0
 	if ok {
 		return
 	}
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi"
+	ok = r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0
 	if ok {
 		return
 	}
-	ok = r.IsGet() && bytex.ToString(r.Path()) == "/services/names"
+	ok = r.IsGet() && bytes.Compare(r.Path(), servicesNamesPath) == 0
 	if ok {
 		return
 	}
@@ -219,15 +228,15 @@ func (handler *servicesHandler) Handle(w transports.ResponseWriter, r *transport
 		w.Failed(ErrTooEarly.WithMeta("handler", handler.Name()))
 		return
 	}
-	if r.IsGet() && bytex.ToString(r.Path()) == "/services/names" {
+	if r.IsGet() && bytes.Compare(r.Path(), servicesNamesPath) == 0 {
 		handler.handleNames(w, r)
 		return
 	}
-	if r.IsGet() && bytex.ToString(r.Path()) == "/services/documents" {
+	if r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0 {
 		handler.handleDocuments(w)
 		return
 	}
-	if r.IsGet() && bytex.ToString(r.Path()) == "/services/openapi" {
+	if r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0 {
 		handler.handleOpenapi(w)
 		return
 	}

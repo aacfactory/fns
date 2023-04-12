@@ -40,12 +40,6 @@ const (
 )
 
 var (
-	ErrSignatureLost            = errors.New(488, "***SIGNATURE LOST***", "X-Fns-Signature was required")
-	ErrSignatureUnverified      = errors.New(458, "***SIGNATURE INVALID***", "X-Fns-Signature was invalid")
-	ErrSharedSecretKeyOutOfDate = errors.New(468, "***SHARED SECRET KEY OUT OF DATE***", "need to recreate shared secret key")
-)
-
-var (
 	signaturesExchangeKeyPath = []byte("/signatures/exchange_key")
 )
 

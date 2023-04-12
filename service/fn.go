@@ -111,6 +111,7 @@ func (f *fnTask) Execute(ctx context.Context) {
 		}
 	}
 
+	// prepare context
 	buf := bytebufferpool.Get()
 	_, _ = buf.Write(f.request.Hash())
 	_, _ = buf.Write(bytex.FromString(f.request.Header().DeviceId()))
@@ -120,10 +121,10 @@ func (f *fnTask) Execute(ctx context.Context) {
 	if f.svc.Components() != nil && len(f.svc.Components()) > 0 {
 		ctx = withComponents(ctx, f.svc.Components())
 	}
-
 	ctx = withLog(ctx, fnLog)
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, f.handleTimeout)
+	// handle
 	v, err := f.barrier.Do(ctx, barrierKey, func() (result interface{}, err errors.CodeError) {
 		result, err = f.svc.Handle(ctx, fnName, f.request.Argument())
 		if err != nil {
@@ -132,7 +133,7 @@ func (f *fnTask) Execute(ctx context.Context) {
 		return
 	})
 	cancel()
-
+	// finish span
 	if sp != nil {
 		sp.Finish()
 		if err == nil {
@@ -143,15 +144,14 @@ func (f *fnTask) Execute(ctx context.Context) {
 			sp.AddTag("handled", "failed")
 		}
 	}
-
+	// promise
 	if err == nil {
 		f.promise.Succeed(v)
 	} else {
 		f.promise.Failed(err)
 	}
 
-	tryReportTracer(ctx)
-	tryReportStats(ctx, serviceName, fnName, err, sp)
+	// debug
 	if fnLog.DebugEnabled() {
 		latency := time.Duration(0)
 		if sp != nil {
@@ -163,5 +163,10 @@ func (f *fnTask) Execute(ctx context.Context) {
 		}
 		fnLog.Debug().Caller().With("latency", latency).Message(fmt.Sprintf("%s:%s was handled %s, cost %s", serviceName, fnName, handled, latency))
 	}
+
+	// try report
+	tryReportTracer(ctx)
+	tryReportStats(ctx, serviceName, fnName, err, sp)
+	// task finish hook
 	f.hook(f)
 }

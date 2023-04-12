@@ -22,9 +22,13 @@ import (
 )
 
 var (
-	ErrServiceOverload = errors.Unavailable("fns: service is overload").WithMeta("fns", "overload")
-	ErrTooEarly        = errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: service is not ready, try later again")
-	ErrUnavailable     = errors.Unavailable("fns: service is closed")
-	ErrDeviceId        = errors.Warning("fns: device id was required")
-	ErrNotFound        = errors.NotFound("fns: no handlers accept request")
+	ErrServiceOverload          = errors.Unavailable("fns: service is overload").WithMeta("fns", "overload")
+	ErrTooEarly                 = errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: service is not ready, try later again")
+	ErrUnavailable              = errors.Unavailable("fns: service is closed")
+	ErrDeviceId                 = errors.Warning("fns: device id was required")
+	ErrNotFound                 = errors.NotFound("fns: no handlers accept request")
+	ErrTooMayRequest            = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.")
+	ErrSignatureLost            = errors.New(488, "***SIGNATURE LOST***", "X-Fns-Signature was required")
+	ErrSignatureUnverified      = errors.New(458, "***SIGNATURE INVALID***", "X-Fns-Signature was invalid")
+	ErrSharedSecretKeyOutOfDate = errors.New(468, "***SHARED SECRET KEY OUT OF DATE***", "need to recreate shared secret key")
 )

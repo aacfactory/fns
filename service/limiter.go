@@ -27,14 +27,9 @@ import (
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
-)
-
-var (
-	ErrTooMayRequest = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.")
 )
 
 type RateLimitCounterOptions struct {

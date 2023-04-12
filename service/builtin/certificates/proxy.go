@@ -31,7 +31,7 @@ const (
 	revokeFn          = "revoke"
 	verifyFn          = "verify"
 	saveExchangeKeyFn = "save_exchange_key"
-	getExchangeKeyFn  = "get_exchage_key"
+	getExchangeKeyFn  = "get_exchange_key"
 )
 
 type RootParam struct {

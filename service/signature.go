@@ -17,6 +17,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -39,19 +40,30 @@ const (
 )
 
 var (
-	ErrSignatureLost       = errors.New(488, "***SIGNATURE LOST***", "X-Fns-Signature was required")
-	ErrSignatureUnverified = errors.New(458, "***SIGNATURE INVALID***", "X-Fns-Signature was invalid")
-	ErrSessionOutOfDate    = errors.New(468, "***SESSION OUT OF DATE***", "need to create session")
+	ErrSignatureLost            = errors.New(488, "***SIGNATURE LOST***", "X-Fns-Signature was required")
+	ErrSignatureUnverified      = errors.New(458, "***SIGNATURE INVALID***", "X-Fns-Signature was invalid")
+	ErrSharedSecretKeyOutOfDate = errors.New(468, "***SHARED SECRET KEY OUT OF DATE***", "need to recreate shared secret key")
+)
+
+var (
+	signaturesExchangeKeyPath = []byte("/signatures/exchange_key")
 )
 
 // SignatureMiddleware
 //
 // 使用SM2进行共享密钥交换，交换成功后双方使用共享密钥进行对签名与验证
-// 签名方式为使用HMAC+XXHASH对path+body签名，使用HEX对签名编码。最终将签名赋值于X-Fns-Signature头
+// 签名方式为使用HMAC+XXHASH对path+body签名，使用HEX对签名编码。最终将签名赋值于X-Fns-Signature头。
 // 错误:
-// * 458: 签名错误，session key 不是共享的
-// * 468: session 超时
+// * 458: 验证签名错误
+// * 468: 共享密钥超时
 // * 488: 签名丢失
+//
+// 交换共享密钥:
+// 发起方进行发起交换共享密钥请求
+// curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{"publicKey":"pem string", "keyLength": 20}' http://ip:port/signatures/exchange_key
+// 响应方收到请求后，创建共享密钥，如果成功，则返回响应方的公钥，共享密钥有效期，响应方的共享密钥hash，发起方的共享密钥hash。
+// 成功结果结果: `{"publicPem":"pem string", "deadline": "RFC3339", "responderExchangeKeyHash": []byte, "initiatorExchangeKeyHash": []byte}`
+// 发起方拿到响应方的公钥，进行创建共享密钥，然后比对hash。
 //
 // certificates : 证书仓库，签名用的类型为`signatures`
 func SignatureMiddleware(certificates Certificates) TransportMiddleware {
@@ -99,7 +111,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			next.Handle(w, r)
 			return
 		}
-		if r.IsPost() && bytex.ToString(r.Path()) == "/signatures/session" {
+		if r.IsPost() && bytes.Compare(r.Path(), signaturesExchangeKeyPath) == 0 {
 			middleware.handleExchangeKey(w, r)
 			return
 		}
@@ -119,18 +131,18 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 				return
 			}
 			if !hasExchanged {
-				w.Failed(ErrSessionOutOfDate)
+				w.Failed(ErrSharedSecretKeyOutOfDate)
 				return
 			}
 			sess := session{}
 			decodeErr := json.Unmarshal(sessionBytes, &sess)
 			if decodeErr != nil {
-				w.Failed(ErrSessionOutOfDate.WithCause(decodeErr))
+				w.Failed(ErrSharedSecretKeyOutOfDate.WithCause(decodeErr))
 				return
 			}
 			if sess.Deadline.Before(time.Now()) || sess.Key == nil || len(sess.Key) == 0 {
 				_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
-				w.Failed(ErrSessionOutOfDate)
+				w.Failed(ErrSharedSecretKeyOutOfDate)
 				return
 			}
 			sess.sig = signatures.HMAC(sess.Key)
@@ -141,7 +153,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 		if sess.Deadline.Before(time.Now()) {
 			_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
 			middleware.sigs.Delete(deviceId)
-			w.Failed(ErrSessionOutOfDate)
+			w.Failed(ErrSharedSecretKeyOutOfDate)
 			return
 		}
 		// verify
@@ -170,11 +182,14 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 
 type signatureExchangeKeyParam struct {
 	PublicKey string `json:"publicKey"`
+	KeyLength int    `json:"keyLength"`
 }
 
 type signatureExchangeKeyResult struct {
-	PublicPEM []byte    `json:"publicPem"`
-	Deadline  time.Time `json:"deadline"`
+	PublicPEM                string    `json:"publicPem"`
+	Deadline                 time.Time `json:"deadline"`
+	ResponderExchangeKeyHash []byte    `json:"responderExchangeKeyHash"`
+	InitiatorExchangeKeyHash []byte    `json:"initiatorExchangeKeyHash"`
 }
 
 func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWriter, r *transports.Request) {
@@ -183,6 +198,11 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 	decodeErr := json.Unmarshal(r.Body(), &param)
 	if decodeErr != nil {
 		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("param is invalid").WithCause(decodeErr)))
+		return
+	}
+	keyLength := param.KeyLength
+	if keyLength < 20 || keyLength > 64 {
+		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("key length is invalid, must greater than 19 and less than 65")))
 		return
 	}
 	devPub, parseDevPubErr := sm2.ParsePublicKey(bytex.FromString(strings.TrimSpace(param.PublicKey)))
@@ -222,7 +242,7 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 	}
 
 	// exchange
-	sessionKey, _, _, exchangeErr := sm2.KeyExchangeB(20, bytex.FromString(deviceId), bytex.FromString(appId), pri, devPub, pri, devPub)
+	sessionKey, responderExchangeKeyHash, initiatorExchangeKeyHash, exchangeErr := sm2.KeyExchangeResponder(keyLength, bytex.FromString(deviceId), bytex.FromString(appId), pri, devPub, pri, devPub)
 	if exchangeErr != nil {
 		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("exchange key failed").WithCause(exchangeErr)))
 		return
@@ -244,8 +264,10 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 	middleware.sigs.Store(deviceId, &sess)
 
 	w.Succeed(&signatureExchangeKeyResult{
-		PublicPEM: pubPEM,
-		Deadline:  sess.Deadline,
+		PublicPEM:                bytex.ToString(pubPEM),
+		Deadline:                 sess.Deadline,
+		ResponderExchangeKeyHash: responderExchangeKeyHash,
+		InitiatorExchangeKeyHash: initiatorExchangeKeyHash,
 	})
 
 	return
@@ -445,7 +467,7 @@ func (svc *certificatesService) Handle(ctx context.Context, fn string, arg Argum
 		}
 		err = svc.certificates.SaveExchangeKey(ctx, param.AppId, param.ExchangeKey, param.TTL)
 		break
-	case "get_exchage_key":
+	case "get_exchange_key":
 		param := certificatesGetExchangeKeyParam{}
 		paramErr := arg.As(&param)
 		if paramErr != nil {

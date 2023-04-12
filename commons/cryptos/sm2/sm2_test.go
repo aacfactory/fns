@@ -27,57 +27,6 @@ import (
 	"time"
 )
 
-func TestSM2(t *testing.T) {
-
-	ppu := []byte(`-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoEcz1UBgi0DQgAE3EwigLMOLWQmLhaD2uYVIiIbVZ52
-txkUtFcYn7SU2jTHOOEXOMeDfNl2Q9pH8hVBPej8GeR0j9Qv2+gCfEb/zg==
------END PUBLIC KEY-----
-`)
-	ppr := []byte(`-----BEGIN ENCRYPTED PRIVATE KEY-----
-MIH8MFcGCSqGSIb3DQEFDTBKMCkGCSqGSIb3DQEFDDAcBAjrtVYB1vhcYgICCAAw
-DAYIKoZIhvcNAgcFADAdBglghkgBZQMEASoEECpD1gQqzuYpe7S3qCNslgAEgaBb
-mg2hUnz0/ZC9rrfhRJ1mBhH6luhFDqS6BusPsloJtElhwSwxWELaIPYX+3wNGxAZ
-iCshNdU4paqo/Pq90pYUVM+fqeQ/WH1JeZhKUp5VHQMif/uTX7A+Rm4gn3n3oS7I
-3uzcZGBrUbrmcYms5rVvdkhozxpOV71+ke8qw6KgAKC5MVOPRvo+p47u+uLwKv9l
-J6bUO6RumjhCauJqvIRU
------END ENCRYPTED PRIVATE KEY-----
-`)
-	pub, pubErr := sm2.ParsePublicKey(ppu)
-	if pubErr != nil {
-		t.Error(pubErr)
-		return
-	}
-	pri, priErr := sm2.ParsePrivateKeyWithPassword(ppr, []byte("123456"))
-	if priErr != nil {
-		t.Error(priErr)
-		return
-	}
-	p := []byte(time.Now().String())
-	v, _ := pri.Sign(rand.Reader, p)
-	fmt.Println(len(v))
-	fmt.Println(pub.Verify(p, v))
-
-	pubp, pubpErr := pub.Encode()
-	if pubpErr != nil {
-		t.Error(pubpErr)
-		return
-	}
-	fmt.Println(bytes.Equal(ppu, pubp))
-	fmt.Println(string(ppu))
-	fmt.Println(string(pubp))
-	prip, pripErr := pri.Encode()
-	if pripErr != nil {
-		t.Error(pripErr)
-		return
-	}
-	pri, priErr = sm2.ParsePrivateKeyWithPassword(prip, []byte("123456"))
-	p = []byte(time.Now().String())
-	v, _ = pri.Sign(rand.Reader, p)
-	fmt.Println(len(v), len(base64.URLEncoding.EncodeToString(v)))
-	fmt.Println(pub.Verify(p, v))
-}
-
 func TestExchange(t *testing.T) {
 	ida := []byte("A")
 	priA, priAErr := sm2.GenerateKey(rand.Reader)

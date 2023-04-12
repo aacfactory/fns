@@ -26,8 +26,8 @@ import (
 	"crypto/sha1"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"encoding/base64"
 	"encoding/binary"
+	"encoding/pem"
 	"errors"
 	"github.com/aacfactory/fns/commons/cryptos/sm3"
 	"golang.org/x/crypto/cryptobyte"
@@ -66,7 +66,13 @@ func (pub *PublicKey) Encode() ([]byte, error) {
 	if encodeErr != nil {
 		return nil, encodeErr
 	}
-	return []byte(base64.StdEncoding.EncodeToString(p)), nil
+	pemBlock := pem.Block{
+		Type:    "PUBLIC KEY",
+		Headers: nil,
+		Bytes:   p,
+	}
+
+	return pem.EncodeToMemory(&pemBlock), nil
 }
 
 func (pub *PublicKey) Verify(msg []byte, sig []byte) bool {
@@ -134,7 +140,12 @@ func (pri *PrivateKey) Encode() ([]byte, error) {
 		return nil, encodeErr
 	}
 	if pri.password == nil || len(pri.password) == 0 {
-		return []byte(base64.StdEncoding.EncodeToString(p)), nil
+		pemBlock := pem.Block{
+			Type:    "PRIVATE KEY",
+			Headers: nil,
+			Bytes:   p,
+		}
+		return pem.EncodeToMemory(&pemBlock), nil
 	}
 
 	iter := 2048
@@ -192,7 +203,13 @@ func (pri *PrivateKey) Encode() ([]byte, error) {
 		return nil, encodeErr
 	}
 
-	return []byte(base64.StdEncoding.EncodeToString(p)), nil
+	pemBlock := pem.Block{
+		Type:    "ENCRYPTED PRIVATE KEY",
+		Headers: nil,
+		Bytes:   p,
+	}
+
+	return pem.EncodeToMemory(&pemBlock), nil
 }
 
 func (pri *PrivateKey) Sign(random io.Reader, msg []byte) ([]byte, error) {
@@ -231,12 +248,12 @@ var errZeroParam = errors.New("sm2: zero parameter")
 var one = new(big.Int).SetInt64(1)
 var two = new(big.Int).SetInt64(2)
 
-func KeyExchangeB(kLen int, ida, idb []byte, priB *PrivateKey, pubA *PublicKey, priBTemp *PrivateKey, pubATemp *PublicKey) (k, s1, s2 []byte, err error) {
+func KeyExchangeResponder(kLen int, ida, idb []byte, priB *PrivateKey, pubA *PublicKey, priBTemp *PrivateKey, pubATemp *PublicKey) (k, s1, s2 []byte, err error) {
 	return keyExchange(kLen, ida, idb, priB, pubA, priBTemp, pubATemp, false)
 }
 
-func KeyExchangeA(kLen int, ida, idb []byte, priA *PrivateKey, pubB *PublicKey, priATemp *PrivateKey, pubBTemp *PublicKey) (k, s1, s2 []byte, err error) {
-	return keyExchange(kLen, ida, idb, priA, pubB, priATemp, pubBTemp, true)
+func KeyExchangeViaInitiator(keyLen int, initiatorId, responderId []byte, initiatorPrivateKey *PrivateKey, responderPublicKey *PublicKey, initiatorTempPrivateKey *PrivateKey, responderTempPublicKey *PublicKey) (k, s1, s2 []byte, err error) {
+	return keyExchange(keyLen, initiatorId, responderId, initiatorPrivateKey, responderPublicKey, initiatorTempPrivateKey, responderTempPublicKey, true)
 }
 
 func Sign(pri *PrivateKey, msg, uid []byte, random io.Reader) (r, s *big.Int, err error) {
@@ -433,7 +450,7 @@ func Decrypt(pri *PrivateKey, data []byte, mode int) ([]byte, error) {
 	return c, nil
 }
 
-func keyExchange(klen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpri *PrivateKey, rpub *PublicKey, thisISA bool) (k, s1, s2 []byte, err error) {
+func keyExchange(keyLen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpri *PrivateKey, rpub *PublicKey, isInitiator bool) (k, s1, s2 []byte, err error) {
 	curve := P256Sm2()
 	N := curve.Params().N
 	x2hat := keXHat(rpri.PublicKey.X)
@@ -450,7 +467,7 @@ func keyExchange(klen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpr
 
 	vx, vy := curve.ScalarMult(vxt, vyt, tb.Bytes())
 	pza := pub
-	if thisISA {
+	if isInitiator {
 		pza = &pri.PublicKey
 	}
 	za, zaErr := ZA(pza, ida)
@@ -463,7 +480,7 @@ func keyExchange(klen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpr
 		err = errors.New("sm2: v is infinite")
 	}
 	pzb := pub
-	if !thisISA {
+	if !isInitiator {
 		pzb = &pri.PublicKey
 	}
 	zb, zbErr := ZA(pzb, idb)
@@ -471,14 +488,16 @@ func keyExchange(klen int, ida, idb []byte, pri *PrivateKey, pub *PublicKey, rpr
 		err = zbErr
 		return
 	}
-	kk, ok := kdf(klen, vx.Bytes(), vy.Bytes(), za, zb)
+	kk, ok := kdf(keyLen, vx.Bytes(), vy.Bytes(), za, zb)
 	if !ok {
 		err = errors.New("sm2: zero key")
 		return
 	}
 	k = kk
-	h1 := BytesCombine(vx.Bytes(), za, zb, rpub.X.Bytes(), rpub.Y.Bytes(), rpri.X.Bytes(), rpri.Y.Bytes())
-	if !thisISA {
+	var h1 []byte
+	if isInitiator {
+		h1 = BytesCombine(vx.Bytes(), za, zb, rpub.X.Bytes(), rpub.Y.Bytes(), rpri.X.Bytes(), rpri.Y.Bytes())
+	} else {
 		h1 = BytesCombine(vx.Bytes(), za, zb, rpri.X.Bytes(), rpri.Y.Bytes(), rpub.X.Bytes(), rpub.Y.Bytes())
 	}
 	hash := sm3.Sm3Sum(h1)

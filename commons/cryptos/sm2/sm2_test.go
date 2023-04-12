@@ -22,13 +22,27 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/aacfactory/fns/commons/cryptos/sm2"
+	"github.com/aacfactory/json"
 	"testing"
 	"time"
 )
 
 func TestSM2(t *testing.T) {
-	ppu := []byte(`MFkwEwYHKoZIzj0CAQYIKoEcz1UBgi0DQgAEBSBsxc9x0b4INJ56Slqd0//Uj61tdntnA7A2mbXJlK7067MODxloEszWBdxAG48i0BOM1FglrosgIyTlLMyD8A==`)
-	ppr := []byte(`MIH8MFcGCSqGSIb3DQEFDTBKMCkGCSqGSIb3DQEFDDAcBAjZnhKmWZifAwICCAAwDAYIKoZIhvcNAgcFADAdBglghkgBZQMEASoEEGJOmZt+D+ubFEwGj9UHZ+IEgaCBXuGuckH5/POTEc5oeejuX5nMz8+rrqZv3s0CgRsavD8mUJYBEWfxS8u5D7EwMdU77KeOfbGY7AhIjmLWW+5AGS3TAWZJOIEHSQ/VYki0HFXtFpr7rk+NWOYbZBtEJK5Ec6iFNjS27LtDJ25zzmrfz4GifwHjtsCBt9RXzzPzDAV+Gbb73CcYS+dnciTelxQcxB7MwImDWLM2aTkWSAuv`)
+
+	ppu := []byte(`-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoEcz1UBgi0DQgAE3EwigLMOLWQmLhaD2uYVIiIbVZ52
+txkUtFcYn7SU2jTHOOEXOMeDfNl2Q9pH8hVBPej8GeR0j9Qv2+gCfEb/zg==
+-----END PUBLIC KEY-----
+`)
+	ppr := []byte(`-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIH8MFcGCSqGSIb3DQEFDTBKMCkGCSqGSIb3DQEFDDAcBAjrtVYB1vhcYgICCAAw
+DAYIKoZIhvcNAgcFADAdBglghkgBZQMEASoEECpD1gQqzuYpe7S3qCNslgAEgaBb
+mg2hUnz0/ZC9rrfhRJ1mBhH6luhFDqS6BusPsloJtElhwSwxWELaIPYX+3wNGxAZ
+iCshNdU4paqo/Pq90pYUVM+fqeQ/WH1JeZhKUp5VHQMif/uTX7A+Rm4gn3n3oS7I
+3uzcZGBrUbrmcYms5rVvdkhozxpOV71+ke8qw6KgAKC5MVOPRvo+p47u+uLwKv9l
+J6bUO6RumjhCauJqvIRU
+-----END ENCRYPTED PRIVATE KEY-----
+`)
 	pub, pubErr := sm2.ParsePublicKey(ppu)
 	if pubErr != nil {
 		t.Error(pubErr)
@@ -50,7 +64,8 @@ func TestSM2(t *testing.T) {
 		return
 	}
 	fmt.Println(bytes.Equal(ppu, pubp))
-
+	fmt.Println(string(ppu))
+	fmt.Println(string(pubp))
 	prip, pripErr := pri.Encode()
 	if pripErr != nil {
 		t.Error(pripErr)
@@ -70,22 +85,31 @@ func TestExchange(t *testing.T) {
 		t.Error(priAErr)
 		return
 	}
+	priATemp, _ := sm2.GenerateKey(rand.Reader)
 	priB, priBErr := sm2.GenerateKey(rand.Reader)
 	if priBErr != nil {
 		t.Error(priBErr)
 		return
 	}
+	priBTemp, _ := sm2.GenerateKey(rand.Reader)
 	idb := []byte("B")
 
-	k1, _, _, e1 := sm2.KeyExchangeB(64, ida, idb, priB, &priA.PublicKey, priB, &priA.PublicKey)
+	k1, k1s1, k1s2, e1 := sm2.KeyExchangeResponder(64, ida, idb, priB, &priA.PublicKey, priBTemp, &priATemp.PublicKey)
 	if e1 != nil {
 		t.Error(e1)
 		return
 	}
-	k2, _, _, e2 := sm2.KeyExchangeA(64, ida, idb, priA, &priB.PublicKey, priA, &priB.PublicKey)
+	k2, k2s1, k2s2, e2 := sm2.KeyExchangeViaInitiator(64, ida, idb, priA, &priB.PublicKey, priATemp, &priBTemp.PublicKey)
 	if e2 != nil {
 		t.Error(e2)
 		return
 	}
 	fmt.Println(bytes.Equal(k1, k2), base64.StdEncoding.EncodeToString(k1))
+	fmt.Println(bytes.Equal(k1s1, k2s1), bytes.Equal(k1s2, k2s2))
+	fmt.Println(len(k1s1))
+	fmt.Println(base64.StdEncoding.EncodeToString(k1s1))
+	p, encodeErr := json.Marshal(map[string][]byte{"r": k1s1, "v": k1s2})
+	fmt.Println(string(p), encodeErr)
+	p, encodeErr = json.Marshal(time.Now())
+	fmt.Println(string(p), encodeErr)
 }

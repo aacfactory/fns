@@ -219,7 +219,11 @@ func (handler *servicesHandler) Accept(r *transports.Request) (ok bool) {
 	if ok {
 		return
 	}
-	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && len(strings.Split(bytex.ToString(r.Path()), "/")) == 3
+	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson
+	if !ok {
+		return
+	}
+	_, _, ok = parseServiceRequestPath(r.Path())
 	return
 }
 
@@ -271,13 +275,13 @@ func (handler *servicesHandler) getRequestId(r *transports.Request) (requestId s
 
 func (handler *servicesHandler) handleRequest(writer transports.ResponseWriter, r *transports.Request) {
 	// read path
-	pathItems := strings.Split(bytex.ToString(r.Path()), "/")
-	if len(pathItems) != 3 {
+	serviceNameBytes, fnNameBytes, invalidPath := parseServiceRequestPath(r.Path())
+	if !invalidPath {
 		handler.failed(writer, "", errors.Warning("fns: invalid request url path"))
 		return
 	}
-	serviceName := pathItems[1]
-	fnName := pathItems[2]
+	serviceName := bytex.ToString(serviceNameBytes)
+	fnName := bytex.ToString(fnNameBytes)
 	// check version
 	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header())
 	if parseVersionErr != nil {
@@ -562,5 +566,30 @@ func (handler *servicesHandler) write(w transports.ResponseWriter, status int, b
 		w.Header().Set(httpContentType, httpContentTypeJson)
 		_, _ = w.Write(body)
 	}
+	return
+}
+
+func parseServiceRequestPath(path []byte) (service []byte, fn []byte, ok bool) {
+	pLen := len(path)
+	if pLen < 1 {
+		return
+	}
+	if path[0] != '/' {
+		return
+	}
+	slashIdx := bytes.IndexByte(path[1:], '/')
+	if slashIdx < 1 {
+		return
+	}
+	slashIdx++
+	if pLen == slashIdx+1 {
+		return
+	}
+	if bytes.IndexByte(path[slashIdx+1:], '/') > -1 {
+		return
+	}
+	service = path[1:slashIdx]
+	fn = path[slashIdx+1:]
+	ok = true
 	return
 }

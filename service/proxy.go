@@ -367,13 +367,13 @@ func (handler *proxyHandler) getRequestId(r *transports.Request) (requestId stri
 
 func (handler *proxyHandler) handleProxy(w transports.ResponseWriter, r *transports.Request) {
 	// read path
-	pathItems := strings.Split(bytex.ToString(r.Path()), "/")
-	if len(pathItems) != 3 {
+	serviceNameBytes, fnNameBytes, invalidPath := parseServiceRequestPath(r.Path())
+	if !invalidPath {
 		w.Failed(errors.Warning("fns: invalid request url path"))
 		return
 	}
-	serviceName := pathItems[1]
-	fnName := pathItems[2]
+	serviceName := bytex.ToString(serviceNameBytes)
+	fnName := bytex.ToString(fnNameBytes)
 	// versions
 	rvs, hasVersion, parseVersionErr := ParseRequestVersionFromHeader(r.Header())
 	if parseVersionErr != nil {

@@ -28,7 +28,7 @@ import (
 	"crypto/sha512"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"hash"
 	"io"
@@ -72,12 +72,15 @@ func GenerateKey(random io.Reader) (*PrivateKey, error) {
 	return pri, nil
 }
 
-func ParsePublicKey(p []byte) (key *PublicKey, err error) {
-	pp, ppErr := base64.StdEncoding.DecodeString(string(p))
-	if ppErr != nil {
-		return nil, errors.New("sm2: key is not std base64")
+func ParsePublicKey(pemBytes []byte) (key *PublicKey, err error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("sm2: pem is invalid")
 	}
-	p = pp
+	if block.Type != "PUBLIC KEY" {
+		return nil, errors.New("sm2: block type is not PUBLIC KEY")
+	}
+	p := block.Bytes
 
 	var ppk pkixPublicKey
 
@@ -97,12 +100,15 @@ func ParsePublicKey(p []byte) (key *PublicKey, err error) {
 	return
 }
 
-func ParsePrivateKey(p []byte) (key *PrivateKey, err error) {
-	pp, ppErr := base64.StdEncoding.DecodeString(string(p))
-	if ppErr != nil {
-		return nil, errors.New("sm2: key is not std base64")
+func ParsePrivateKey(pemBytes []byte) (key *PrivateKey, err error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("sm2: pem is invalid")
 	}
-	p = pp
+	if block.Type != "PRIVATE KEY" {
+		return nil, errors.New("sm2: block type is not PRIVATE KEY")
+	}
+	p := block.Bytes
 
 	var priKey pkcs8
 	if _, err = asn1.Unmarshal(p, &priKey); err != nil {
@@ -136,12 +142,15 @@ func ParsePrivateKey(p []byte) (key *PrivateKey, err error) {
 	return
 }
 
-func ParsePrivateKeyWithPassword(p []byte, passwd []byte) (key *PrivateKey, err error) {
-	pp, ppErr := base64.StdEncoding.DecodeString(string(p))
-	if ppErr != nil {
-		return nil, errors.New("sm2: key is not std base64")
+func ParsePrivateKeyWithPassword(pemBytes []byte, passwd []byte) (key *PrivateKey, err error) {
+	pemBlock, _ := pem.Decode(pemBytes)
+	if pemBlock == nil {
+		return nil, errors.New("sm2: pem is invalid")
 	}
-	p = pp
+	if pemBlock.Type != "ENCRYPTED PRIVATE KEY" {
+		return nil, errors.New("sm2: block type is not ENCRYPTED PRIVATE KEY")
+	}
+	p := pemBlock.Bytes
 
 	var keyInfo encryptedPrivateKeyInfo
 	_, err = asn1.Unmarshal(p, &keyInfo)

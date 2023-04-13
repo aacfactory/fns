@@ -236,6 +236,16 @@ func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shar
 	return
 }
 
+func SharedCache(ctx context.Context) (store shareds.Caches) {
+	rt := GetRuntime(ctx)
+	if rt == nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: shared cache was not found")))
+		return
+	}
+	store = rt.shared.Caches()
+	return
+}
+
 func Abort() {
 	os.Exit(9)
 }

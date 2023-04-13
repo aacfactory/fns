@@ -56,7 +56,7 @@ var (
 // 发起方进行发起交换共享密钥请求
 // curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{"publicKey":"pem string", "keyLength": 20}' http://ip:port/signatures/exchange_key
 // 响应方收到请求后，创建共享密钥，如果成功，则返回响应方的公钥，共享密钥有效期，响应方的共享密钥hash，发起方的共享密钥hash。
-// 成功结果结果: `{"publicPem":"pem string", "deadline": "RFC3339", "responderExchangeKeyHash": []byte, "initiatorExchangeKeyHash": []byte}`
+// 成功结果结果: `{"publicKey":"pem string", "expireAT": "RFC3339", "responderExchangeKeyHash": []byte, "initiatorExchangeKeyHash": []byte}`
 // 发起方拿到响应方的公钥，进行创建共享密钥，然后比对hash。
 //
 // certificates : 证书仓库，签名用的类型为`signatures`
@@ -180,8 +180,8 @@ type signatureExchangeKeyParam struct {
 }
 
 type signatureExchangeKeyResult struct {
-	PublicPEM                string    `json:"publicPem"`
-	Deadline                 time.Time `json:"deadline"`
+	PublicKey                string    `json:"publicKey"`
+	ExpireAT                 time.Time `json:"expireAT"`
 	ResponderExchangeKeyHash []byte    `json:"responderExchangeKeyHash"`
 	InitiatorExchangeKeyHash []byte    `json:"initiatorExchangeKeyHash"`
 }
@@ -258,8 +258,8 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 	middleware.sigs.Store(deviceId, &sess)
 
 	w.Succeed(&signatureExchangeKeyResult{
-		PublicPEM:                bytex.ToString(pubPEM),
-		Deadline:                 sess.Deadline,
+		PublicKey:                bytex.ToString(pubPEM),
+		ExpireAT:                 sess.Deadline,
 		ResponderExchangeKeyHash: responderExchangeKeyHash,
 		InitiatorExchangeKeyHash: initiatorExchangeKeyHash,
 	})

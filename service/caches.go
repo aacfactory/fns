@@ -346,11 +346,15 @@ func (cc *cacheControl) Disable(ctx context.Context, rk []byte) {
 	return
 }
 
-// CacheControlUpdate
+// CacheControl
 // use `@cache {ttl}` in service function
-func CacheControlUpdate(ctx context.Context, r Request, result interface{}, ttl time.Duration) {
+func CacheControl(ctx context.Context, result interface{}, ttl time.Duration) {
 	x := ctx.Value(cacheControlContextKey)
 	if x == nil {
+		return
+	}
+	r, hasRequest := GetRequest(ctx)
+	if !hasRequest {
 		return
 	}
 	cc, ok := x.(*cacheControl)
@@ -360,7 +364,7 @@ func CacheControlUpdate(ctx context.Context, r Request, result interface{}, ttl 
 	cc.Enable(ctx, r.Hash(), result, ttl)
 }
 
-func CacheControlRemove(ctx context.Context, r Request) {
+func RemoveCacheControl(ctx context.Context, service string, fn string, arg Argument) {
 	x := ctx.Value(cacheControlContextKey)
 	if x == nil {
 		return
@@ -369,10 +373,15 @@ func CacheControlRemove(ctx context.Context, r Request) {
 	if !ok {
 		return
 	}
-	cc.Disable(ctx, r.Hash())
+	if arg == nil {
+		arg = EmptyArgument()
+	}
+	body, _ := json.Marshal(arg)
+	rk := requestHash(bytes.Join([][]byte{emptyBytes, bytex.FromString(service), bytex.FromString(fn)}, slashBytes), body)
+	cc.Disable(ctx, rk)
 }
 
-func CacheControlFetch(ctx context.Context, r Request) (etag string, status int, contentType string, contentLength string, deadline time.Time, body []byte, has bool) {
+func FetchCacheControl(ctx context.Context, service string, fn string, arg Argument) (etag string, status int, contentType string, contentLength string, deadline time.Time, body []byte, has bool) {
 	x := ctx.Value(cacheControlContextKey)
 	if x == nil {
 		return
@@ -382,7 +391,11 @@ func CacheControlFetch(ctx context.Context, r Request) (etag string, status int,
 		return
 	}
 	cc.locker.Lock()
-	rk := r.Hash()
+	if arg == nil {
+		arg = EmptyArgument()
+	}
+	reqBody, _ := json.Marshal(arg)
+	rk := requestHash(bytes.Join([][]byte{emptyBytes, bytex.FromString(service), bytex.FromString(fn)}, slashBytes), reqBody)
 	value, cached := cc.entries[bytex.ToString(rk)]
 	if cached {
 		etag = value.Etag
@@ -407,5 +420,11 @@ func CacheControlFetch(ctx context.Context, r Request) (etag string, status int,
 		has = true
 	}
 	cc.locker.Unlock()
+	return
+}
+
+func cacheControlFetch(ctx context.Context, r Request) (etag string, status int, deadline time.Time, body []byte, has bool) {
+	service, fn := r.Fn()
+	etag, status, _, _, deadline, body, has = FetchCacheControl(ctx, service, fn, r.Argument())
 	return
 }

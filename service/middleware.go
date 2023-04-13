@@ -70,6 +70,10 @@ const (
 	httpResponseXFrameOptionsSameOrigin = "SAMEORIGIN"
 )
 
+var (
+	slashBytes = []byte{'/'}
+)
+
 const (
 	transportResponseWriterCtxKey = "@fns_transport_response_writer"
 )

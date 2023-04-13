@@ -22,6 +22,10 @@ const (
 	emptyArrayJson = "[]"
 )
 
+var (
+	emptyBytes = make([]byte, 0, 1)
+)
+
 // Empty
 // @name Empty
 // @description Empty object

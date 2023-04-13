@@ -504,7 +504,21 @@ func (s *ServiceFile) serviceHandleCode(ctx context.Context) (code gcg.Code, err
 				functionExecCode.Tab().Token("}").Line()
 				functionExecCode.Token("}").Line()
 			}
-			// todo @cache
+			// cache
+			// cache control
+			cacheControlTTL, hasCacheControl, parseCacheControlErr := function.Cache()
+			if parseCacheControlErr != nil {
+				cacheValue := function.Annotations["cache"]
+				err = errors.Warning("sources: make service handle function code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(errors.Warning("value of @cache is invalid").WithMeta("cache", cacheValue).WithCause(parseCacheControlErr))
+				return
+			}
+			if hasCacheControl {
+				functionExecCode.Token("// cache control").Line()
+				functionExecCode.Token(fmt.Sprintf("service.CacheControl(ctx, v, time.Duration(%d))", cacheControlTTL)).Line()
+			}
 
 			// barrier
 			if function.Barrier() {

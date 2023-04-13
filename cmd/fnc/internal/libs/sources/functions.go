@@ -191,6 +191,15 @@ func (f *Function) Transactional() (has bool) {
 	return
 }
 
+func (f *Function) Cache() (ttl time.Duration, has bool, err error) {
+	s := ""
+	s, has = f.Annotations["cache"]
+	if has {
+		ttl, err = time.ParseDuration(s)
+	}
+	return
+}
+
 func (f *Function) FieldImports() (v Imports) {
 	v = Imports{}
 	paths := make([]string, 0, 1)

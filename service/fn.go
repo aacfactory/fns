@@ -64,7 +64,7 @@ func (f *fnTask) Execute(ctx context.Context) {
 	}
 	// check cache when request is internal
 	if f.request.Internal() && !f.request.Header().CacheControlDisabled() {
-		etag, status, _, _, deadline, body, cached := CacheControlFetch(ctx, f.request)
+		etag, status, deadline, body, cached := cacheControlFetch(ctx, f.request)
 		if cached && deadline.After(time.Now()) {
 			if sp != nil {
 				sp.AddTag("cached", "hit")

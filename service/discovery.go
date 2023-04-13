@@ -198,7 +198,7 @@ func (task *registrationTask) executeInternal(ctx context.Context) {
 	var cachedBody []byte // is not internal response, cause cache was set in service, not in handler
 	var cachedErr errors.CodeError
 	if !r.Header().CacheControlDisabled() { // try cache control
-		etag, status, _, _, deadline, body, exist := CacheControlFetch(ctx, r)
+		etag, status, deadline, body, exist := cacheControlFetch(ctx, r)
 		if exist {
 			// cache exists
 			if status != http.StatusOK {

@@ -28,6 +28,7 @@ import (
 
 const (
 	Name      = "FNC"
+	Version   = "v1.0.24"
 	Usage     = "see COMMANDS"
 	Copyright = `Copyright 2021 Wang Min Xiang
 
@@ -47,6 +48,7 @@ limitations under the License.`
 func main() {
 	app := cli.NewApp()
 	app.Name = Name
+	app.Version = Version
 	app.Usage = Usage
 	app.Authors = []*cli.Author{
 		{

@@ -30,9 +30,10 @@ var Command = &cli.Command{
 	Name: "codes",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
-			Name:     "debug",
-			EnvVars:  []string{"FNC_DEBUG"},
-			Usage:    "print debug infos",
+			Name:     "verbose",
+			EnvVars:  []string{"FNC_VERBOSE"},
+			Aliases:  []string{"v"},
+			Usage:    "verbose output",
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -50,7 +51,7 @@ var Command = &cli.Command{
 	ArgsUsage:   "",
 	Category:    "",
 	Action: func(ctx *cli.Context) (err error) {
-		debug := ctx.Bool("debug")
+		verbose := ctx.Bool("verbose")
 		projectDir := strings.TrimSpace(ctx.Args().First())
 		if projectDir == "" {
 			projectDir = "."
@@ -78,12 +79,12 @@ var Command = &cli.Command{
 		for {
 			result, ok := <-results
 			if !ok {
-				if debug {
+				if verbose {
 					fmt.Println("fnc: codes finished")
 				}
 				break
 			}
-			if debug {
+			if verbose {
 				fmt.Println(result, "->", fmt.Sprintf("[%d/%d]", result.UnitNo, result.UnitNum), result.Data)
 			}
 			if result.Error != nil {

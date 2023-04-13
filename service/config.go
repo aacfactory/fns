@@ -31,12 +31,12 @@ import (
 )
 
 type Config struct {
-	Runtime   *RuntimeConfig   `json:"runtime"`
-	Log       *LogConfig       `json:"log"`
-	Transport *TransportConfig `json:"transport"`
-	Cluster   *ClusterConfig   `json:"cluster"`
-	Proxy     *ProxyConfig     `json:"proxy"`
-	Services  json.RawMessage  `json:"services"`
+	Runtime   *RuntimeConfig   `json:"runtime" yaml:"runtime,omitempty"`
+	Log       *LogConfig       `json:"log" yaml:"log,omitempty"`
+	Transport *TransportConfig `json:"transport" yaml:"transport,omitempty"`
+	Cluster   *ClusterConfig   `json:"cluster" yaml:"cluster,omitempty"`
+	Proxy     *ProxyConfig     `json:"proxy" yaml:"proxy,omitempty"`
+	Services  json.RawMessage  `json:"services" yaml:"services,omitempty"`
 }
 
 func (config *Config) Service(name string) (conf configures.Config, err error) {
@@ -68,37 +68,37 @@ func (config *Config) Service(name string) (conf configures.Config, err error) {
 }
 
 type LogConfig struct {
-	Level     string `json:"level"`
-	Formatter string `json:"formatter"`
-	Color     bool   `json:"color"`
+	Level     string `json:"level" yaml:"level,omitempty"`
+	Formatter string `json:"formatter" yaml:"formatter,omitempty"`
+	Color     bool   `json:"color" yaml:"color,omitempty"`
 }
 
 type ProxyConfig struct {
 	TransportConfig
-	EnableDevMode bool `json:"enableDevMode"`
+	EnableDevMode bool `json:"enableDevMode" yaml:"enableDevMode,omitempty"`
 }
 
 type RuntimeConfig struct {
-	MaxWorkers           int                `json:"maxWorkers"`
-	WorkerMaxIdleSeconds int                `json:"workerMaxIdleSeconds"`
-	HandleTimeoutSeconds int                `json:"handleTimeoutSeconds"`
-	AutoMaxProcs         AutoMaxProcsConfig `json:"autoMaxProcs"`
-	SecretKey            string             `json:"secretKey"`
+	MaxWorkers           int                `json:"maxWorkers" yaml:"maxWorkers,omitempty"`
+	WorkerMaxIdleSeconds int                `json:"workerMaxIdleSeconds" yaml:"workerMaxIdleSeconds,omitempty"`
+	HandleTimeoutSeconds int                `json:"handleTimeoutSeconds" yaml:"handleTimeoutSeconds,omitempty"`
+	AutoMaxProcs         AutoMaxProcsConfig `json:"autoMaxProcs" yaml:"autoMaxProcs,omitempty"`
+	SecretKey            string             `json:"secretKey" yaml:"secretKey,omitempty"`
 }
 
 type AutoMaxProcsConfig struct {
-	Min int `json:"min"`
-	Max int `json:"max"`
+	Min int `json:"min" yaml:"min,omitempty"`
+	Max int `json:"max" yaml:"max,omitempty"`
 }
 
 type TransportConfig struct {
-	Name        string                 `json:"name"`
-	Port        int                    `json:"port"`
-	Cors        *transports.CorsConfig `json:"cors"`
-	TLS         *TLSConfig             `json:"tls"`
-	Options     json.RawMessage        `json:"options"`
-	Middlewares json.RawMessage        `json:"middlewares"`
-	Handlers    json.RawMessage        `json:"handlers"`
+	Name        string                 `json:"name" yaml:"name,omitempty"`
+	Port        int                    `json:"port" yaml:"port,omitempty"`
+	Cors        *transports.CorsConfig `json:"cors" yaml:"cors,omitempty"`
+	TLS         *TLSConfig             `json:"tls" yaml:"tls,omitempty"`
+	Options     json.RawMessage        `json:"options" yaml:"options,omitempty"`
+	Middlewares json.RawMessage        `json:"middlewares" yaml:"middlewares,omitempty"`
+	Handlers    json.RawMessage        `json:"handlers" yaml:"handlers,omitempty"`
 }
 
 func (config *TransportConfig) MiddlewaresConfig() (conf configures.Config, err error) {
@@ -186,8 +186,8 @@ type TLSConfig struct {
 	// ACME
 	// SSC(SELF-SIGN-CERT)
 	// DEFAULT
-	Kind    string          `json:"kind"`
-	Options json.RawMessage `json:"options"`
+	Kind    string          `json:"kind" yaml:"kind,omitempty"`
+	Options json.RawMessage `json:"options" yaml:"options,omitempty"`
 }
 
 func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
@@ -207,20 +207,15 @@ func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config,
 }
 
 type ClusterConfig struct {
-	Kind                 string          `json:"kind"`
-	FetchMembersInterval string          `json:"fetchMembersInterval"`
-	Shared               *SharedConfig   `json:"shared"`
-	Options              json.RawMessage `json:"options"`
+	Kind                 string          `json:"kind" yaml:"kind,omitempty"`
+	FetchMembersInterval string          `json:"fetchMembersInterval" yaml:"fetchMembersInterval,omitempty"`
+	Shared               *SharedConfig   `json:"shared" yaml:"shared,omitempty"`
+	Options              json.RawMessage `json:"options" yaml:"options,omitempty"`
 }
 
 type SharedConfig struct {
-	BarrierDisabled        bool   `json:"barrierDisabled"`
-	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds"`
-}
-
-type RequestLimiterConfig struct {
-	MaxPerDeviceRequest int64  `json:"maxPerDeviceRequest"`
-	RetryAfter          string `json:"retryAfter"`
+	BarrierDisabled        bool   `json:"barrierDisabled" yaml:"barrierDisabled,omitempty"`
+	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds" yaml:"barrierTTLMilliseconds,omitempty"`
 }
 
 const (

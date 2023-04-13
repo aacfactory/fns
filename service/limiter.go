@@ -56,8 +56,8 @@ const (
 )
 
 type rateLimitMiddlewareConfig struct {
-	RetryAfter int             `json:"retryAfter"`
-	Counter    json.RawMessage `json:"counter"`
+	RetryAfter int             `json:"retryAfter" yaml:"retryAfter,omitempty"`
+	Counter    json.RawMessage `json:"counter" yaml:"counter,omitempty"`
 }
 
 func RateLimitMiddleware() TransportMiddleware {

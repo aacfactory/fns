@@ -21,7 +21,7 @@ import (
 	"sort"
 )
 
-func NewDocument(name string, description string, ver versions.Version) *Document {
+func New(name string, description string, ver versions.Version) *Document {
 	return &Document{
 		Name:        name,
 		Description: description,

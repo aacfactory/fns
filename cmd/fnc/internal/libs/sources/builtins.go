@@ -32,7 +32,7 @@ func tryGetBuiltinType(path string, name string) (typ *Type, has bool) {
 	return
 }
 
-func init() {
+func registerBuiltinTypes() {
 	// password
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,

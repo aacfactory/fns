@@ -30,5 +30,6 @@ var (
 	ErrTooMayRequest            = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.")
 	ErrSignatureLost            = errors.New(488, "***SIGNATURE LOST***", "X-Fns-Signature was required")
 	ErrSignatureUnverified      = errors.New(458, "***SIGNATURE INVALID***", "X-Fns-Signature was invalid")
+	ErrSharedSecretKeyNotAgreed = errors.New(448, "***SHARED SECRET NOT AGREED***", "shared secret key was not agreed")
 	ErrSharedSecretKeyOutOfDate = errors.New(468, "***SHARED SECRET KEY OUT OF DATE***", "need to recreate shared secret key")
 )

@@ -29,17 +29,20 @@ import (
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
+	"golang.org/x/sync/singleflight"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	signaturesMiddlewareName = "signatures"
+	signaturesMiddlewareName               = "signatures"
+	signaturesMiddlewareLoadKeyBarrierName = "loading"
 )
 
 var (
-	signaturesExchangeKeyPath = []byte("/signatures/exchange_key")
+	signaturesExchangeKeyPath        = []byte("/signatures/exchange_key")
+	signaturesConfirmExchangeKeyPath = []byte("/signatures/confirm_exchange_key")
 )
 
 // SignatureMiddleware
@@ -50,14 +53,17 @@ var (
 // * 458: 验证签名错误
 // * 468: 共享密钥超时
 // * 488: 签名丢失
+// * 448: 因发起方的秘密哈希不匹配而不同意密钥交换
 //
 // 交换共享密钥:
 // 发起方进行发起交换共享密钥请求
 // curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{"publicKey":"pem string", "keyLength": 20}' http://ip:port/signatures/exchange_key
 // 其中`X-Fns-Device-Id`的值是证书的编号，即证书必须是由响应方签发的。
 // 响应方收到请求后，创建共享密钥，如果成功，则返回响应方的公钥，共享密钥有效期，响应方的共享密钥hash，发起方的共享密钥hash。
-// 成功结果结果: `{"publicKey":"pem string", "expireAT": "RFC3339", "responderExchangeKeyHash": []byte, "initiatorExchangeKeyHash": []byte}`
-// 发起方拿到响应方的公钥，进行创建共享密钥，然后比对hash。
+// 成功结果结果: `{"publicKey":"pem string", "expireAT": "RFC3339", "responderExchangeKeyHash": []byte}`
+// 发起方拿到响应方的公钥，进行创建共享密钥，然后比对响应方的密钥hash，如果成功，则发起确认请求。
+// curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{"initiatorExchangeKeyHash":[]byte}' http://ip:port/signatures/confirm_exchange_key
+// 响应方收到确认请求后，比对发起方的密钥HASH，如果成功，则同意协商结果。返回{"ok": true}
 //
 // certificates : 证书仓库
 func SignatureMiddleware(certificates Certificates) TransportMiddleware {
@@ -69,7 +75,7 @@ func SignatureMiddleware(certificates Certificates) TransportMiddleware {
 		store:          nil,
 		sigs:           sync.Map{},
 		certificates:   certificates,
-		locker:         new(sync.Mutex),
+		group:          new(singleflight.Group),
 		certificateId:  "",
 		exchangeKeyTTL: 0,
 		publicPEM:      nil,
@@ -83,19 +89,22 @@ type signatureMiddlewareConfig struct {
 	CertificateId string `json:"certificateId"`
 	// ExchangeKeyTTL 共享密钥的有效时长
 	ExchangeKeyTTL string `json:"exchangeKeyTTL"`
+	// DisableConfirm 是否关闭密钥交换确认过程
+	DisableConfirm bool `json:"disableConfirm"`
 }
 
 type signatureMiddleware struct {
-	store          shareds.Store
-	sigs           sync.Map
-	certificates   Certificates
-	locker         sync.Locker
-	certificateId  string
-	exchangeKeyTTL time.Duration
-	publicPEM      []byte
-	publicKey      *sm2.PublicKey
-	privateKey     *sm2.PrivateKey
-	expireAT       time.Time
+	store                     shareds.Store
+	sigs                      sync.Map
+	certificates              Certificates
+	group                     *singleflight.Group
+	certificateId             string
+	exchangeKeyTTL            time.Duration
+	publicPEM                 []byte
+	publicKey                 *sm2.PublicKey
+	privateKey                *sm2.PrivateKey
+	expireAT                  time.Time
+	exchangeKeyConfirmEnabled bool
 }
 
 func (middleware *signatureMiddleware) Name() (name string) {
@@ -126,6 +135,7 @@ func (middleware *signatureMiddleware) Build(options TransportMiddlewareOptions)
 	if middleware.exchangeKeyTTL < 1 {
 		middleware.exchangeKeyTTL = 24 * time.Hour
 	}
+	middleware.exchangeKeyConfirmEnabled = !config.DisableConfirm
 	return
 }
 
@@ -205,6 +215,12 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			middleware.handleExchangeKey(w, r)
 			return
 		}
+		if middleware.exchangeKeyConfirmEnabled {
+			if r.IsPost() && bytes.Compare(r.Path(), signaturesConfirmExchangeKeyPath) == 0 {
+				middleware.handleConfirmExchangeKey(w, r)
+				return
+			}
+		}
 
 		signature := r.Header().Get(httpSignatureHeader)
 		if signature == "" {
@@ -230,6 +246,10 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 				w.Failed(ErrSharedSecretKeyOutOfDate.WithCause(decodeErr))
 				return
 			}
+			if !sess.Agreed {
+				w.Failed(ErrSharedSecretKeyNotAgreed)
+				return
+			}
 			if sess.ExpireAT.Before(time.Now()) || sess.Key == nil || len(sess.Key) == 0 {
 				_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
 				w.Failed(ErrSharedSecretKeyOutOfDate)
@@ -240,6 +260,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 			x = &sess
 		}
 		sess := x.(*session)
+
 		if sess.ExpireAT.Before(time.Now()) {
 			_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
 			middleware.sigs.Delete(deviceId)
@@ -279,13 +300,12 @@ type signatureExchangeKeyResult struct {
 	PublicKey                string    `json:"publicKey"`
 	ExpireAT                 time.Time `json:"expireAT"`
 	ResponderExchangeKeyHash []byte    `json:"responderExchangeKeyHash"`
-	InitiatorExchangeKeyHash []byte    `json:"initiatorExchangeKeyHash"`
 }
 
 func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWriter, r *transports.Request) {
-	middleware.locker.Lock()
-	loadErr := middleware.loadSecretKey(r.Context())
-	middleware.locker.Unlock()
+	_, loadErr, _ := middleware.group.Do(signaturesMiddlewareLoadKeyBarrierName, func() (interface{}, error) {
+		return nil, middleware.loadSecretKey(r.Context())
+	})
 	if loadErr != nil {
 		w.Failed(errors.Warning("fns: exchange key failed").WithCause(loadErr))
 		return
@@ -331,14 +351,21 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("exchange key failed").WithCause(exchangeErr)))
 		return
 	}
+	// save session
 	sessionKey = bytex.FromString(base64.URLEncoding.EncodeToString(sessionKey))
 	sess := session{
-		Key:      sessionKey,
-		ExpireAT: time.Now().Add(middleware.exchangeKeyTTL),
-		sig:      nil,
+		Agreed:                   false,
+		Key:                      sessionKey,
+		ExpireAT:                 time.Now().Add(middleware.exchangeKeyTTL),
+		InitiatorExchangeKeyHash: nil,
+		sig:                      nil,
+	}
+	if middleware.exchangeKeyConfirmEnabled {
+		sess.InitiatorExchangeKeyHash = initiatorExchangeKeyHash
+	} else {
+		sess.Agreed = true
 	}
 	sessBytes, _ := json.Marshal(&sess)
-
 	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)), sessBytes, middleware.exchangeKeyTTL)
 	if setErr != nil {
 		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("save session failed").WithCause(setErr)))
@@ -351,9 +378,70 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 		PublicKey:                bytex.ToString(middleware.publicPEM),
 		ExpireAT:                 sess.ExpireAT,
 		ResponderExchangeKeyHash: responderExchangeKeyHash,
-		InitiatorExchangeKeyHash: initiatorExchangeKeyHash,
 	})
 
+	return
+}
+
+type signatureConfirmExchangeKeyParam struct {
+	InitiatorExchangeKeyHash []byte `json:"initiatorExchangeKeyHash"`
+}
+
+type signatureConfirmExchangeKeyResult struct {
+	Ok bool `json:"ok"`
+}
+
+func (middleware *signatureMiddleware) handleConfirmExchangeKey(w transports.ResponseWriter, r *transports.Request) {
+	param := signatureConfirmExchangeKeyParam{}
+	decodeErr := json.Unmarshal(r.Body(), &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("fns: confirm exchange key failed").WithCause(errors.Warning("param is invalid").WithCause(decodeErr)))
+		return
+	}
+	if param.InitiatorExchangeKeyHash == nil || len(param.InitiatorExchangeKeyHash) == 0 {
+		w.Failed(errors.Warning("fns: confirm exchange key failed").WithCause(errors.Warning("param is invalid")))
+		return
+	}
+	deviceId := r.Header().Get(httpDeviceIdHeader)
+	sessBytes, existSess, getErr := middleware.store.Get(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+	if getErr != nil {
+		w.Failed(errors.Warning("fns: get exchange key session failed").WithCause(getErr))
+		return
+	}
+	if !existSess {
+		w.Failed(errors.Warning("fns: exchange key session was not started"))
+		return
+	}
+	sess := session{}
+	decodeSessionErr := json.Unmarshal(sessBytes, &sess)
+	if decodeSessionErr != nil {
+		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+		w.Failed(errors.Warning("fns: decode exchange key session failed").WithCause(decodeSessionErr))
+		return
+	}
+	if bytes.Compare(sess.InitiatorExchangeKeyHash, param.InitiatorExchangeKeyHash) != 0 {
+		w.Succeed(&signatureConfirmExchangeKeyResult{
+			Ok: false,
+		})
+		return
+	}
+	exchangeKeyTTL := sess.ExpireAT.Sub(time.Now())
+	if exchangeKeyTTL < 1 {
+		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+		w.Failed(errors.Warning("fns: confirm exchange key failed").WithCause(errors.Warning("expired")))
+		return
+	}
+	sess.Agreed = true
+	sessBytes, _ = json.Marshal(&sess)
+	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)), sessBytes, exchangeKeyTTL)
+	if setErr != nil {
+		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+		w.Failed(errors.Warning("fns: confirm exchange key failed").WithCause(errors.Warning("update session failed").WithCause(setErr)))
+		return
+	}
+	w.Succeed(&signatureConfirmExchangeKeyResult{
+		Ok: true,
+	})
 	return
 }
 
@@ -362,9 +450,11 @@ func (middleware *signatureMiddleware) Close() (err error) {
 }
 
 type session struct {
-	Key      []byte    `json:"key"`
-	ExpireAT time.Time `json:"expireAT"`
-	sig      signatures.Signer
+	Agreed                   bool      `json:"agreed"`
+	Key                      []byte    `json:"key"`
+	ExpireAT                 time.Time `json:"expireAT"`
+	InitiatorExchangeKeyHash []byte    `json:"initiatorExchangeKeyHash"`
+	sig                      signatures.Signer
 }
 
 type Certificate interface {

@@ -60,7 +60,7 @@ var (
 // curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{"publicKey":"pem string", "keyLength": 20}' http://ip:port/signatures/exchange_key
 // 其中`X-Fns-Device-Id`的值是证书的编号，即证书必须是由响应方签发的。
 // 响应方收到请求后，创建共享密钥，如果成功，则返回响应方的公钥，共享密钥有效期，响应方的共享密钥hash，发起方的共享密钥hash。
-// 成功结果结果: `{"publicKey":"pem string", "expireAT": "RFC3339", "responderExchangeKeyHash": []byte}`
+// 成功结果结果: `{"id": "responder id", "publicKey":"pem string", "expireAT": "RFC3339", "responderExchangeKeyHash": []byte}`
 // 发起方拿到响应方的公钥，进行创建共享密钥，然后比对响应方的密钥hash，如果成功，则发起确认请求。
 // curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{"initiatorExchangeKeyHash":[]byte}' http://ip:port/signatures/confirm_exchange_key
 // 响应方收到确认请求后，比对发起方的密钥HASH，如果成功，则同意协商结果。返回{"ok": true}
@@ -297,6 +297,7 @@ type signatureExchangeKeyParam struct {
 }
 
 type signatureExchangeKeyResult struct {
+	Id                       string    `json:"id"`
 	PublicKey                string    `json:"publicKey"`
 	ExpireAT                 time.Time `json:"expireAT"`
 	ResponderExchangeKeyHash []byte    `json:"responderExchangeKeyHash"`
@@ -375,6 +376,7 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 	middleware.sigs.Store(deviceId, &sess)
 
 	w.Succeed(&signatureExchangeKeyResult{
+		Id:                       middleware.certificateId,
 		PublicKey:                bytex.ToString(middleware.publicPEM),
 		ExpireAT:                 sess.ExpireAT,
 		ResponderExchangeKeyHash: responderExchangeKeyHash,

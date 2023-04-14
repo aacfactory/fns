@@ -113,7 +113,7 @@ func (middleware *signatureMiddleware) Name() (name string) {
 }
 
 func (middleware *signatureMiddleware) Build(options TransportMiddlewareOptions) (err error) {
-	middleware.store = options.Shared.Store()
+	middleware.store = options.Runtime.Shared().Store()
 	config := signatureMiddlewareConfig{}
 	err = options.Config.As(&config)
 	if err != nil {

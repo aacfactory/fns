@@ -87,7 +87,7 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 	middleware.tags = &ETags{
 		log:        middleware.log,
 		defaultTTL: ttl,
-		store:      options.Shared.Caches(),
+		store:      options.Runtime.Shared().Caches(),
 	}
 	middleware.pool = sync.Pool{
 		New: func() any {

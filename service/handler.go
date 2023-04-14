@@ -37,14 +37,9 @@ import (
 )
 
 type TransportHandlerOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppStatus  *Status
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
+	Log     logs.Logger
+	Config  configures.Config
+	Runtime *Runtime
 }
 
 type TransportHandler interface {
@@ -91,25 +86,27 @@ func (handlers *transportHandlers) Append(handler TransportHandler) (err error) 
 		err = errors.Warning("append handler failed").WithCause(errors.Warning("this handle was appended")).WithMeta("handler", name)
 		return
 	}
-	config, exist := handlers.config.Node(name)
-	if !exist {
-		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
-	}
-	buildErr := handler.Build(TransportHandlerOptions{
-		AppId:      handlers.runtime.AppId(),
-		AppName:    handlers.runtime.AppName(),
-		AppVersion: handlers.runtime.AppVersion(),
-		AppStatus:  handlers.runtime.AppStatus(),
-		Log:        handlers.runtime.RootLog().With("transports", "handlers").With("handler", name),
-		Config:     config,
-		Discovery:  handlers.runtime.discovery,
-		Shared:     handlers.runtime.shared,
-	})
-	if buildErr != nil {
-		err = errors.Warning("append handler failed").WithCause(buildErr).WithMeta("handler", name)
-		return
-	}
 	handlers.handlers = append(handlers.handlers, handler)
+	return
+}
+
+func (handlers *transportHandlers) Build() (err error) {
+	for _, handler := range handlers.handlers {
+		name := strings.TrimSpace(handler.Name())
+		config, exist := handlers.config.Node(name)
+		if !exist {
+			config, _ = configures.NewJsonConfig([]byte{'{', '}'})
+		}
+		buildErr := handler.Build(TransportHandlerOptions{
+			Log:     handlers.runtime.RootLog().With("transports", "handlers").With("handler", name),
+			Config:  config,
+			Runtime: handlers.runtime,
+		})
+		if buildErr != nil {
+			err = errors.Warning("build handler failed").WithCause(buildErr).WithMeta("handler", name)
+			return
+		}
+	}
 	return
 }
 
@@ -202,10 +199,10 @@ func (handler *transportApplicationHandler) Name() (name string) {
 }
 
 func (handler *transportApplicationHandler) Build(options TransportHandlerOptions) (err error) {
-	handler.appId = options.AppId
-	handler.appName = options.AppName
-	handler.appVersion = options.AppVersion
-	handler.appStatus = options.AppStatus
+	handler.appId = options.Runtime.AppId()
+	handler.appName = options.Runtime.AppName()
+	handler.appVersion = options.Runtime.AppVersion()
+	handler.appStatus = options.Runtime.AppStatus()
 	handler.launchAT = time.Now()
 	config := transportApplicationMiddlewareConfig{}
 	configErr := options.Config.As(&config)

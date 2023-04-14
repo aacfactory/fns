@@ -42,7 +42,8 @@ const (
 	proxyHandlerName = "proxy"
 )
 
-func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, registrations *Registrations, middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, closers []io.Closer, err error) {
+func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, registrations *Registrations,
+	middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, mid *transportMiddlewares, hds *transportHandlers, closers []io.Closer, err error) {
 	registered := false
 	tr, registered = transports.Registered(strings.TrimSpace(config.Name))
 	if !registered {
@@ -55,7 +56,7 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 		err = errors.Warning("fns: create proxy failed").WithCause(midConfigErr)
 		return
 	}
-	mid := newTransportMiddlewares(transportMiddlewaresOptions{
+	mid = newTransportMiddlewares(transportMiddlewaresOptions{
 		Runtime: runtime,
 		Cors:    config.Cors,
 		Config:  midConfig,
@@ -75,12 +76,12 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 		err = errors.Warning("fns: create proxy failed").WithCause(handlersConfigErr)
 		return
 	}
-	h := newTransportHandlers(transportHandlersOptions{
+	hds = newTransportHandlers(transportHandlersOptions{
 		Runtime: runtime,
 		Config:  handlersConfig,
 	})
 
-	closers = append(closers, h)
+	closers = append(closers, hds)
 	if handlers == nil {
 		handlers = make([]TransportHandler, 0, 1)
 	}
@@ -95,14 +96,14 @@ func createProxy(config *ProxyConfig, deployedCh <-chan map[string]*endpoint, ru
 	}))
 
 	for _, handler := range handlers {
-		appendErr := h.Append(handler)
+		appendErr := hds.Append(handler)
 		if appendErr != nil {
 			err = errors.Warning("fns: create proxy failed").WithCause(appendErr)
 			return
 		}
 	}
 
-	options, optionsErr := config.ConvertToTransportsOptions(runtime.RootLog().With("fns", "proxy"), mid.Handler(h))
+	options, optionsErr := config.ConvertToTransportsOptions(runtime.RootLog().With("fns", "proxy"), mid.Handler(hds))
 	if optionsErr != nil {
 		err = errors.Warning("fns: create proxy failed").WithCause(optionsErr)
 		return
@@ -185,9 +186,9 @@ func (handler *proxyHandler) Build(options TransportHandlerOptions) (err error) 
 		return
 	}
 	handler.log = options.Log
-	handler.appId = options.AppId
-	handler.appName = options.AppName
-	handler.appVersion = options.AppVersion
+	handler.appId = options.Runtime.AppId()
+	handler.appName = options.Runtime.AppName()
+	handler.appVersion = options.Runtime.AppVersion()
 	handler.disableHandleDocuments = config.DisableHandleDocuments
 	handler.disableHandleOpenapi = config.DisableHandleOpenapi
 	if !handler.disableHandleOpenapi {

@@ -71,14 +71,7 @@ func CustomizeRateLimitMiddleware(counter RateLimitCounter) TransportMiddleware 
 }
 
 type rateLimitMiddleware struct {
-	appId      string
-	appName    string
-	appVersion versions.Version
-	appStatus  *Status
 	log        logs.Logger
-	config     configures.Config
-	discovery  EndpointDiscovery
-	shared     Shared
 	counter    RateLimitCounter
 	retryAfter string
 }
@@ -90,6 +83,7 @@ func (middleware *rateLimitMiddleware) Name() (name string) {
 
 func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions) (err error) {
 	middleware.log = options.Log
+
 	config := rateLimitMiddlewareConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
@@ -110,14 +104,14 @@ func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions)
 		return
 	}
 	counterErr := middleware.counter.Build(RateLimitCounterOptions{
-		AppId:      middleware.appId,
-		AppName:    middleware.appName,
-		AppVersion: middleware.appVersion,
-		AppStatus:  middleware.appStatus,
+		AppId:      options.Runtime.AppId(),
+		AppName:    options.Runtime.AppName(),
+		AppVersion: options.Runtime.AppVersion(),
+		AppStatus:  options.Runtime.AppStatus(),
 		Log:        middleware.log.With("counter", middleware.counter.Name()),
 		Config:     counterConfig,
-		Discovery:  middleware.discovery,
-		Shared:     middleware.shared,
+		Discovery:  options.Runtime.Discovery(),
+		Shared:     options.Runtime.Shared(),
 	})
 	if counterErr != nil {
 		err = errors.Warning("fns: rate limit middleware build failed").WithCause(counterErr)

@@ -38,6 +38,7 @@ type ClusterBuilderOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
+	Port       int
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)

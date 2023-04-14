@@ -224,13 +224,15 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	v.rt.discovery = v
 
 	// transports >>>
-	transport, transportClosers, transportErr := createService(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Middlewares, options.Transport.Handlers)
+	transport, transportMid, transportHds, transportClosers, transportErr := createService(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Middlewares, options.Transport.Handlers)
 	if transportErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(transportErr)
 		return
 	}
 	v.closers = append(v.closers, transportClosers...)
 	v.transport = transport
+	v.transportMiddlewares = transportMid
+	v.transportHandlers = transportHds
 	for _, middleware := range options.Transport.Middlewares {
 		v.closers = append(v.closers, middleware)
 		servicesSupplier, ok := middleware.(ServicesSupplier)
@@ -254,13 +256,15 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	// proxy
 	if options.Proxy != nil {
-		proxy, proxyClosers, proxyErr := createProxy(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
+		proxy, proxyMid, proxyHds, proxyClosers, proxyErr := createProxy(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
 		if proxyErr != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(proxyErr)
 			return
 		}
 		v.closers = append(v.closers, proxyClosers...)
 		v.proxy = proxy
+		v.proxyMiddlewares = proxyMid
+		v.proxyHandlers = proxyHds
 		for _, middleware := range options.Proxy.Middlewares {
 			servicesSupplier, ok := middleware.(ServicesSupplier)
 			if ok && servicesSupplier.Services() != nil {
@@ -290,19 +294,23 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 }
 
 type Endpoints struct {
-	log           logs.Logger
-	rt            *Runtime
-	autoMaxProcs  *procs.AutoMaxProcs
-	handleTimeout time.Duration
-	config        configures.Config
-	deployed      map[string]*endpoint
-	deployedCHS   *deployed
-	registrations *Registrations
-	transport     transports.Transport
-	proxy         transports.Transport
-	closers       []io.Closer
-	cluster       Cluster
-	closeCh       chan struct{}
+	log                  logs.Logger
+	rt                   *Runtime
+	autoMaxProcs         *procs.AutoMaxProcs
+	handleTimeout        time.Duration
+	config               configures.Config
+	deployed             map[string]*endpoint
+	deployedCHS          *deployed
+	registrations        *Registrations
+	transport            transports.Transport
+	transportMiddlewares *transportMiddlewares
+	transportHandlers    *transportHandlers
+	proxy                transports.Transport
+	proxyMiddlewares     *transportMiddlewares
+	proxyHandlers        *transportHandlers
+	closers              []io.Closer
+	cluster              Cluster
+	closeCh              chan struct{}
 }
 
 func (e *Endpoints) Log() (log logs.Logger) {
@@ -406,6 +414,16 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 		e.fetchRegistrations()
 	}
 	// transport listen
+	err = e.transportMiddlewares.Build()
+	if err != nil {
+		err = errors.Warning("fns: endpoints listen failed").WithCause(err)
+		return
+	}
+	err = e.transportHandlers.Build()
+	if err != nil {
+		err = errors.Warning("fns: endpoints listen failed").WithCause(err)
+		return
+	}
 	transportListenErrCh := make(chan error, 2)
 	go func(srv transports.Transport, ch chan error) {
 		listenErr := srv.ListenAndServe()
@@ -415,6 +433,16 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 		}
 	}(e.transport, transportListenErrCh)
 	if e.proxy != nil {
+		err = e.proxyMiddlewares.Build()
+		if err != nil {
+			err = errors.Warning("fns: endpoints listen failed").WithCause(err)
+			return
+		}
+		err = e.proxyHandlers.Build()
+		if err != nil {
+			err = errors.Warning("fns: endpoints listen failed").WithCause(err)
+			return
+		}
 		go func(srv transports.Transport, ch chan error) {
 			listenErr := srv.ListenAndServe()
 			if listenErr != nil {

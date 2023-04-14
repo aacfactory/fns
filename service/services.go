@@ -46,7 +46,8 @@ var (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime, middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, closers []io.Closer, err error) {
+func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime,
+	middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, mid *transportMiddlewares, hds *transportHandlers, closers []io.Closer, err error) {
 	registered := false
 	tr, registered = transports.Registered(strings.TrimSpace(config.Name))
 	if !registered {
@@ -59,7 +60,7 @@ func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoi
 		err = errors.Warning("fns: create transport failed").WithCause(midConfigErr)
 		return
 	}
-	mid := newTransportMiddlewares(transportMiddlewaresOptions{
+	mid = newTransportMiddlewares(transportMiddlewaresOptions{
 		Runtime: runtime,
 		Cors:    config.Cors,
 		Config:  midConfig,
@@ -79,11 +80,11 @@ func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoi
 		err = errors.Warning("fns: create transport failed").WithCause(handlersConfigErr)
 		return
 	}
-	h := newTransportHandlers(transportHandlersOptions{
+	hds = newTransportHandlers(transportHandlersOptions{
 		Runtime: runtime,
 		Config:  handlersConfig,
 	})
-	closers = append(closers, h)
+	closers = append(closers, hds)
 	if handlers == nil {
 		handlers = make([]TransportHandler, 0, 1)
 	}
@@ -92,14 +93,14 @@ func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoi
 		DeployedCh: deployedCh,
 	}))
 	for _, handler := range handlers {
-		appendErr := h.Append(handler)
+		appendErr := hds.Append(handler)
 		if appendErr != nil {
 			err = errors.Warning("fns: create transport failed").WithCause(appendErr)
 			return
 		}
 	}
 
-	options, optionsErr := config.ConvertToTransportsOptions(runtime.RootLog().With("fns", "transport"), mid.Handler(h))
+	options, optionsErr := config.ConvertToTransportsOptions(runtime.RootLog().With("fns", "transport"), mid.Handler(hds))
 	if optionsErr != nil {
 		err = errors.Warning("fns: create transport failed").WithCause(optionsErr)
 		return
@@ -194,10 +195,10 @@ func (handler *servicesHandler) Build(options TransportHandlerOptions) (err erro
 		return
 	}
 	handler.log = options.Log.With("handler", "services")
-	handler.appId = options.AppId
-	handler.appName = options.AppName
-	handler.appVersion = options.AppVersion
-	handler.discovery = options.Discovery
+	handler.appId = options.Runtime.AppId()
+	handler.appName = options.Runtime.AppName()
+	handler.appVersion = options.Runtime.AppVersion()
+	handler.discovery = options.Runtime.discovery
 	handler.disableHandleDocuments = config.DisableHandleDocuments
 	handler.disableHandleOpenapi = config.DisableHandleOpenapi
 	if !handler.disableHandleOpenapi {

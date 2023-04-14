@@ -21,7 +21,6 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -88,14 +87,9 @@ func TransportResponseWriter(ctx context.Context) (w transports.ResponseWriter, 
 }
 
 type TransportMiddlewareOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	AppStatus  *Status
-	Log        logs.Logger
-	Config     configures.Config
-	Discovery  EndpointDiscovery
-	Shared     Shared
+	Log     logs.Logger
+	Config  configures.Config
+	Runtime *Runtime
 }
 
 type TransportMiddleware interface {
@@ -145,25 +139,27 @@ func (middlewares *transportMiddlewares) Append(middleware TransportMiddleware) 
 		err = errors.Warning("append middleware failed").WithCause(errors.Warning("this middleware was appended")).WithMeta("middleware", name)
 		return
 	}
-	config, exist := middlewares.config.Node(name)
-	if !exist {
-		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
-	}
-	buildErr := middleware.Build(TransportMiddlewareOptions{
-		AppId:      middlewares.runtime.AppId(),
-		AppName:    middlewares.runtime.AppName(),
-		AppVersion: middlewares.runtime.AppVersion(),
-		AppStatus:  middlewares.runtime.AppStatus(),
-		Log:        middlewares.runtime.log.With("transports", "middlewares").With("middleware", name),
-		Config:     config,
-		Discovery:  middlewares.runtime.Discovery(),
-		Shared:     middlewares.runtime.Shared(),
-	})
-	if buildErr != nil {
-		err = errors.Warning("append middleware failed").WithCause(buildErr).WithMeta("middleware", name)
-		return
-	}
 	middlewares.middlewares = append(middlewares.middlewares, middleware)
+	return
+}
+
+func (middlewares *transportMiddlewares) Build() (err error) {
+	for _, middleware := range middlewares.middlewares {
+		name := strings.TrimSpace(middleware.Name())
+		config, exist := middlewares.config.Node(name)
+		if !exist {
+			config, _ = configures.NewJsonConfig([]byte{'{', '}'})
+		}
+		buildErr := middleware.Build(TransportMiddlewareOptions{
+			Log:     middlewares.runtime.log.With("transports", "middlewares").With("middleware", name),
+			Config:  config,
+			Runtime: middlewares.runtime,
+		})
+		if buildErr != nil {
+			err = errors.Warning("build middleware failed").WithCause(buildErr).WithMeta("middleware", name)
+			return
+		}
+	}
 	return
 }
 
@@ -256,14 +252,9 @@ func (middleware *transportApplicationMiddleware) Build(options TransportMiddlew
 	}
 	middleware.latencyEnabled = config.EnableRecordLatency
 	err = middleware.handler.Build(TransportHandlerOptions{
-		AppId:      options.AppId,
-		AppName:    options.AppName,
-		AppVersion: options.AppVersion,
-		AppStatus:  options.AppStatus,
-		Log:        options.Log,
-		Config:     options.Config,
-		Discovery:  options.Discovery,
-		Shared:     options.Shared,
+		Log:     options.Log,
+		Config:  options.Config,
+		Runtime: options.Runtime,
 	})
 	if err != nil {
 		return

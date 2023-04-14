@@ -401,14 +401,8 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	e.rt.status.flag.HalfOn()
 	e.autoMaxProcs.Enable()
 	e.deployedCHS.publish(e.deployed)
-	// cluster join
+	// cluster fetch
 	if e.cluster != nil {
-		joinErr := e.cluster.Join(ctx)
-		if joinErr != nil {
-			e.Close(ctx)
-			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
-			return
-		}
 		e.fetchRegistrations()
 	}
 	// transport listen
@@ -471,6 +465,16 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 		case <-time.After(time.Duration(lns) * time.Second):
 			break
 		}
+	}
+	// cluster join
+	if e.cluster != nil {
+		joinErr := e.cluster.Join(ctx)
+		if joinErr != nil {
+			e.Close(ctx)
+			err = errors.Warning("fns: endpoints listen failed").WithCause(joinErr)
+			return
+		}
+		e.Close(ctx)
 	}
 	e.rt.status.flag.On()
 	return

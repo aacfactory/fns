@@ -58,6 +58,20 @@ func (barrier *sfgBarrier) Forget(_ context.Context, key string) {
 	barrier.group.Forget(key)
 }
 
+// todo mv into shared , and redis shared barrier use lua to implement，same as shared locker
+// 大致逻辑：注意redis开启多线程
+// setNX，当结果为0则已存在，进入wait，直到status存在，返回status和value，如果wait期间key不存在，则进入起始状态
+// 起始: set key = hash{status:0, value: nil}，然后lua结束，返回1，执行逻辑，成功结果或status=1，value=结果，错误则status=-1，value=错误，expire 10s
+// 后续: 进入wait
+// lua的wait，使用 repeat until
+/*
+function wait(key)
+	status = 0 // 当key不存在时，status为-2
+    repeat
+		// 取key
+	until( status != 0 )
+end
+*/
 func clusterBarrier(shared Shared, resultTTL time.Duration) Barrier {
 	return &sharedBarrier{
 		group:     singleflight.Group{},

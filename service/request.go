@@ -634,6 +634,11 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 		if opt.deviceIp != "" {
 			header.SetDeviceIp(opt.deviceIp)
 		}
+		var hash []byte
+		if hash0 := header.Get(httpRequestHashHeader); hash0 != "" {
+			hash = bytex.FromString(hash0)
+			header.Del(httpRequestHashHeader)
+		}
 		user := opt.user
 		if user == nil {
 			user = NewRequestUser("", nil)
@@ -660,6 +665,7 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			fn:               fn,
 			argument:         arg,
 			acceptedVersions: acceptedVersions,
+			hash:             hash,
 		}
 	}
 	return
@@ -725,18 +731,28 @@ func (r *request) Hash() (p []byte) {
 	}
 	path := bytex.FromString(fmt.Sprintf("/%s/%s", r.service, r.fn))
 	body, _ := json.Marshal(r.argument)
-	r.hash = requestHash(path, body)
+	r.hash = makeRequestHash(path, body)
 	p = r.hash
 	return
 }
 
-func requestHash(path []byte, body []byte) (v []byte) {
+func makeRequestHash(path []byte, body []byte) (v []byte) {
 	buf := bytebufferpool.Get()
 	_, _ = buf.Write(path)
 	_, _ = buf.Write(body)
 	p := buf.Bytes()
 	bytebufferpool.Put(buf)
 	v = bytex.FromString(strconv.FormatUint(xxhash.Sum64(p), 10))
+	return
+}
+
+func getOrMakeRequestHash(header transports.Header, path []byte, body []byte) (v []byte) {
+	vv := header.Get(httpRequestHashHeader)
+	if vv != "" {
+		v = bytex.FromString(vv)
+		return
+	}
+	v = makeRequestHash(path, body)
 	return
 }
 

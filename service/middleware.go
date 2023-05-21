@@ -67,6 +67,7 @@ const (
 	httpResponseTimingAllowOrigin       = "Timing-Allow-Origin"
 	httpResponseXFrameOptions           = "X-Frame-Options"
 	httpResponseXFrameOptionsSameOrigin = "SAMEORIGIN"
+	httpRequestHashHeader               = "X-Fns-Request-Hash"
 )
 
 var (
@@ -283,6 +284,8 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 		if middleware.latencyEnabled {
 			handleBeg = time.Now()
 		}
+		// remove hash
+		r.Header().Del(httpRequestHashHeader)
 		// deviceId
 		deviceId := strings.TrimSpace(r.Header().Get(httpDeviceIdHeader))
 		if deviceId == "" {

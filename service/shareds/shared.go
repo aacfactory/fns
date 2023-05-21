@@ -2,8 +2,6 @@ package shareds
 
 import "github.com/aacfactory/systems/memory"
 
-type Builder func() (Shared, error)
-
 type Shared interface {
 	Lockers() (lockers Lockers)
 	Store() (store Store)

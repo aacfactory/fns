@@ -122,7 +122,7 @@ func (certs *defaultCertificates) Get(ctx context.Context, id string) (certifica
 		if !has {
 			return
 		}
-		cache.Set(ctx, key, v, 24*time.Hour)
+		_, _ = cache.Set(ctx, key, v, 24*time.Hour)
 	}
 	certificate = &Certificate{}
 	decodeErr := json.Unmarshal(v, certificate)

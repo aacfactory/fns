@@ -165,17 +165,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		}
 		// cluster <<<
 		shared = cluster.Shared()
-		if config.Cluster.Shared != nil {
-			if config.Cluster.Shared.BarrierDisabled {
-				barrier = defaultBarrier()
-			} else {
-				barrierTTL := 100 * time.Millisecond
-				if config.Cluster.Shared.BarrierTTLMilliseconds > 0 {
-					barrierTTL = time.Duration(config.Cluster.Shared.BarrierTTLMilliseconds) * time.Millisecond
-				}
-				barrier = clusterBarrier(shared, barrierTTL)
-			}
-		}
 	} else {
 		// shared >>>
 		shared, err = shareds.Local()
@@ -184,10 +173,10 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			return
 		}
 		// shared <<<
-		// barrier >>>
-		barrier = defaultBarrier()
-		// barrier <<<
 	}
+	// barrier >>>
+	barrier = defaultBarrier()
+	// barrier <<<
 	// timeout
 	handleTimeoutSeconds := runtimeConfig.HandleTimeoutSeconds
 	if handleTimeoutSeconds < 1 {

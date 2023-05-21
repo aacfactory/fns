@@ -209,13 +209,7 @@ func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config,
 type ClusterConfig struct {
 	Kind                 string          `json:"kind" yaml:"kind,omitempty"`
 	FetchMembersInterval string          `json:"fetchMembersInterval" yaml:"fetchMembersInterval,omitempty"`
-	Shared               *SharedConfig   `json:"shared" yaml:"shared,omitempty"`
 	Options              json.RawMessage `json:"options" yaml:"options,omitempty"`
-}
-
-type SharedConfig struct {
-	BarrierDisabled        bool   `json:"barrierDisabled" yaml:"barrierDisabled,omitempty"`
-	BarrierTTLMilliseconds uint64 `json:"barrierTTLMilliseconds" yaml:"barrierTTLMilliseconds,omitempty"`
 }
 
 const (

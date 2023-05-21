@@ -556,7 +556,7 @@ func (dev *devSharedCaches) Exist(ctx context.Context, key []byte) (has bool) {
 	return
 }
 
-func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (ok bool) {
+func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (prev []byte, ok bool) {
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheSetParam{
@@ -584,6 +584,7 @@ func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, t
 		return
 	}
 	ok = result.Ok
+	prev = result.Prev
 	return
 }
 

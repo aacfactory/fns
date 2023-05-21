@@ -120,7 +120,7 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 			next.Handle(w, r)
 		} else {
 			// load cache
-			rk = requestHash(r.Path(), r.Body())
+			rk = getOrMakeRequestHash(r.Header(), r.Path(), r.Body())
 			tag, cached := middleware.tags.get(ctx, rk)
 			if !cached {
 				// no cache
@@ -163,7 +163,7 @@ func (middleware *cacheControlMiddleware) Handler(next transports.Handler) trans
 			return
 		}
 		if rk == nil {
-			rk = requestHash(r.Path(), r.Body())
+			rk = getOrMakeRequestHash(r.Header(), r.Path(), r.Body())
 		}
 		// write header
 		etag, ttl, enabled := cc.Enabled(rk)
@@ -223,13 +223,19 @@ func (tags *ETags) get(ctx context.Context, rk []byte) (tag *tagValue, has bool)
 func (tags *ETags) save(ctx context.Context, rk []byte, value *tagValue, ttl time.Duration) {
 	p, encodeErr := json.Marshal(value)
 	if encodeErr != nil {
-		err := errors.Warning("fns: encode etag value failed").WithCause(encodeErr)
 		if tags.log.ErrorEnabled() {
+			err := errors.Warning("fns: encode etag value failed").WithCause(encodeErr)
 			tags.log.Error().Cause(err).Message("fns: encode etag value failed")
 		}
 		return
 	}
-	tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl)
+	_, ok := tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl)
+	if !ok {
+		if tags.log.ErrorEnabled() {
+			err := errors.Warning("fns: save etag")
+			tags.log.Error().Cause(err).Message("fns: save etag")
+		}
+	}
 	return
 }
 
@@ -377,7 +383,7 @@ func RemoveCacheControl(ctx context.Context, service string, fn string, arg Argu
 		arg = EmptyArgument()
 	}
 	body, _ := json.Marshal(arg)
-	rk := requestHash(bytes.Join([][]byte{emptyBytes, bytex.FromString(service), bytex.FromString(fn)}, slashBytes), body)
+	rk := makeRequestHash(bytes.Join([][]byte{emptyBytes, bytex.FromString(service), bytex.FromString(fn)}, slashBytes), body)
 	cc.Disable(ctx, rk)
 }
 
@@ -395,7 +401,7 @@ func FetchCacheControl(ctx context.Context, service string, fn string, arg Argum
 		arg = EmptyArgument()
 	}
 	reqBody, _ := json.Marshal(arg)
-	rk := requestHash(bytes.Join([][]byte{emptyBytes, bytex.FromString(service), bytex.FromString(fn)}, slashBytes), reqBody)
+	rk := makeRequestHash(bytes.Join([][]byte{emptyBytes, bytex.FromString(service), bytex.FromString(fn)}, slashBytes), reqBody)
 	value, cached := cc.entries[bytex.ToString(rk)]
 	if cached {
 		etag = value.Etag

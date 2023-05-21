@@ -438,7 +438,8 @@ type devCacheSetParam struct {
 }
 
 type devCacheSetResult struct {
-	Ok bool `json:"ok"`
+	Ok   bool   `json:"ok"`
+	Prev []byte `json:"prev"`
 }
 
 func (handler *devProxyHandler) handleSharedCacheSet(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -449,9 +450,10 @@ func (handler *devProxyHandler) handleSharedCacheSet(w transports.ResponseWriter
 		return
 	}
 	cache := handler.registrations.cluster.Shared().Caches()
-	ok := cache.Set(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL)
+	prev, ok := cache.Set(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL)
 	w.Succeed(&devCacheSetResult{
-		Ok: ok,
+		Ok:   ok,
+		Prev: prev,
 	})
 }
 

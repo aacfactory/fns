@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"golang.org/x/sync/singleflight"
@@ -72,7 +73,7 @@ function wait(key)
 	until( status != 0 )
 end
 */
-func clusterBarrier(shared Shared, resultTTL time.Duration) Barrier {
+func clusterBarrier(shared shareds.Shared, resultTTL time.Duration) Barrier {
 	return &sharedBarrier{
 		group:     singleflight.Group{},
 		shared:    shared,
@@ -82,7 +83,7 @@ func clusterBarrier(shared Shared, resultTTL time.Duration) Barrier {
 
 type sharedBarrier struct {
 	group     singleflight.Group
-	shared    Shared
+	shared    shareds.Shared
 	resultTTL time.Duration
 }
 

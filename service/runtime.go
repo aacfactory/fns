@@ -63,7 +63,7 @@ type Runtime struct {
 	worker     Workers
 	discovery  EndpointDiscovery
 	barrier    Barrier
-	shared     Shared
+	shared     shareds.Shared
 	signer     *secret.Signer
 }
 
@@ -99,7 +99,7 @@ func (rt *Runtime) Barrier() Barrier {
 	return rt.barrier
 }
 
-func (rt *Runtime) Shared() Shared {
+func (rt *Runtime) Shared() shareds.Shared {
 	return rt.shared
 }
 

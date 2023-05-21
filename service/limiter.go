@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -40,7 +41,7 @@ type RateLimitCounterOptions struct {
 	Log        logs.Logger
 	Config     configures.Config
 	Discovery  EndpointDiscovery
-	Shared     Shared
+	Shared     shareds.Shared
 }
 
 type RateLimitCounter interface {
@@ -61,7 +62,9 @@ type rateLimitMiddlewareConfig struct {
 }
 
 func RateLimitMiddleware() TransportMiddleware {
-	return &rateLimitMiddleware{}
+	return &rateLimitMiddleware{
+		counter: &rateLimitCounter{},
+	}
 }
 
 func CustomizeRateLimitMiddleware(counter RateLimitCounter) TransportMiddleware {
@@ -163,7 +166,7 @@ type rateLimitCounterConfig struct {
 type rateLimitCounter struct {
 	max    int64
 	window time.Duration
-	shared Shared
+	shared shareds.Shared
 }
 
 func (counter *rateLimitCounter) Name() (name string) {

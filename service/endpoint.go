@@ -28,6 +28,7 @@ import (
 	"github.com/aacfactory/fns/service/internal/logger"
 	"github.com/aacfactory/fns/service/internal/procs"
 	"github.com/aacfactory/fns/service/internal/secret"
+	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
@@ -117,7 +118,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 
 	// cluster
 	var cluster Cluster
-	var shared Shared
+	var shared shareds.Shared
 	var barrier Barrier
 	clusterFetchMembersInterval := time.Duration(0)
 	if config.Cluster != nil {
@@ -177,7 +178,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 		}
 	} else {
 		// shared >>>
-		shared, err = newLocalShared()
+		shared, err = shareds.Local()
 		if err != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(err)
 			return

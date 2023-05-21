@@ -47,7 +47,7 @@ type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
 	Nodes(ctx context.Context) (nodes Nodes, err error)
-	Shared() (shared Shared)
+	Shared() (shared shareds.Shared)
 }
 
 type Node struct {
@@ -216,7 +216,7 @@ func (cluster *devCluster) Nodes(ctx context.Context) (nodes Nodes, err error) {
 	return
 }
 
-func (cluster *devCluster) Shared() (shared Shared) {
+func (cluster *devCluster) Shared() (shared shareds.Shared) {
 	shared = cluster.shared
 	return
 }

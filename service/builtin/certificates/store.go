@@ -109,6 +109,7 @@ func (certs *defaultCertificates) Get(ctx context.Context, id string) (certifica
 		err = errors.Warning("certificates: get certificate failed").WithCause(errors.Warning("id is required"))
 		return
 	}
+	// todo cache 移到外面去，然后是local的，
 	key := bytex.FromString(certs.key(id))
 	cache := service.SharedCache(ctx)
 	v, has := cache.Get(ctx, key)

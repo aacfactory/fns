@@ -43,6 +43,21 @@ type ClusterBuilderOptions struct {
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
 
+// Cluster todo
+/*
+join：store增加条目，启动health刷新认为
+leave：关闭刷新任务，删除条目。
+nodes：返回members，不在返回nodes，member是不带services的
+shared：返回shared。
+==========
+关于shared，通过cluster builder去注册，所以修改builder。
+使用方式不再是import init，而是放在modules的service发布里，然后以参数的方式注入。
+E.G.: RegisterCluster（）（cluster） {
+	dockers.Cluster（redis.Shareds（）） // 这个函数里是注册cluster builder
+	// 可能redis的shareds也是个builder，参数是相关配置，
+}
+
+*/
 type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)

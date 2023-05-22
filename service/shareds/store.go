@@ -21,11 +21,13 @@ import (
 	"encoding/binary"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Store interface {
+	Keys(ctx context.Context, prefix []byte) (keys [][]byte, err errors.CodeError)
 	Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError)
 	Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError)
 	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError)
@@ -50,6 +52,28 @@ type entry struct {
 
 type localStore struct {
 	values sync.Map
+}
+
+func (store *localStore) Keys(ctx context.Context, prefix []byte) (keys [][]byte, err errors.CodeError) {
+	all := make([]string, 0, 1)
+	store.values.Range(func(key, value any) bool {
+		if k, ok := key.(string); ok {
+			all = append(all, k)
+		}
+		return true
+	})
+	if len(all) == 0 {
+		return
+	}
+	keys = make([][]byte, 0, 1)
+	pfx := bytex.ToString(prefix)
+	for _, key := range all {
+		if pfx == "" || pfx == "*" || strings.Index(key, pfx) == 0 {
+			keys = append(keys, bytex.FromString(key))
+			continue
+		}
+	}
+	return
 }
 
 func (store *localStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {

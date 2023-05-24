@@ -17,6 +17,7 @@
 package shareds
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -27,7 +28,7 @@ import (
 )
 
 var (
-	ErrLockTimeout = fmt.Errorf("lockers: lock timeout")
+	ErrLockTimeout = fmt.Errorf("fns: shared lockers lock timeout failed")
 )
 
 type Locker interface {
@@ -36,7 +37,7 @@ type Locker interface {
 }
 
 type Lockers interface {
-	Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err error)
+	Acquire(ctx context.Context, key []byte, ttl time.Duration, options ...Option) (locker Locker, err error)
 }
 
 type localLocker struct {
@@ -102,11 +103,17 @@ type localLockers struct {
 	releaseCh chan []byte
 }
 
-func (lockers *localLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err error) {
+func (lockers *localLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration, options ...Option) (locker Locker, err error) {
 	if key == nil || len(key) == 0 {
-		err = fmt.Errorf("%+v", errors.Warning("lockers: acquire failed").WithCause(errors.Warning("key is required")))
+		err = fmt.Errorf("%+v", errors.Warning("fns: shared lockers acquire failed").WithCause(errors.Warning("key is required")))
 		return
 	}
+	opt, optErr := NewOptions(options)
+	if optErr != nil {
+		err = errors.Warning("fns: shared lockers acquire failed").WithCause(optErr)
+		return
+	}
+	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	lockers.mutex.Lock()
 	rl, has := lockers.lockers[bytex.ToString(key)]
 	if !has {

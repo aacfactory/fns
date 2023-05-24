@@ -17,16 +17,18 @@
 package shareds
 
 import (
+	"bytes"
 	"context"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/caches"
 	"time"
 )
 
 type Caches interface {
-	Get(ctx context.Context, key []byte) (value []byte, has bool)
-	Exist(ctx context.Context, key []byte) (has bool)
-	Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (prev []byte, ok bool)
-	Remove(ctx context.Context, key []byte)
+	Get(ctx context.Context, key []byte, options ...Option) (value []byte, has bool)
+	Exist(ctx context.Context, key []byte, options ...Option) (has bool)
+	Set(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...Option) (prev []byte, ok bool)
+	Remove(ctx context.Context, key []byte, options ...Option)
 }
 
 func LocalCaches(maxCacheSize uint64) Caches {
@@ -39,17 +41,32 @@ type localCaches struct {
 	store *caches.Cache
 }
 
-func (cache *localCaches) Get(ctx context.Context, key []byte) (value []byte, has bool) {
+func (cache *localCaches) Get(ctx context.Context, key []byte, options ...Option) (value []byte, has bool) {
+	opt, optErr := NewOptions(options)
+	if optErr != nil {
+		return
+	}
+	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	value, has = cache.store.Get(key)
 	return
 }
 
-func (cache *localCaches) Exist(ctx context.Context, key []byte) (has bool) {
+func (cache *localCaches) Exist(ctx context.Context, key []byte, options ...Option) (has bool) {
+	opt, optErr := NewOptions(options)
+	if optErr != nil {
+		return
+	}
+	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	has = cache.store.Exist(key)
 	return
 }
 
-func (cache *localCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (prev []byte, ok bool) {
+func (cache *localCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...Option) (prev []byte, ok bool) {
+	opt, optErr := NewOptions(options)
+	if optErr != nil {
+		return
+	}
+	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	old, has := cache.store.Get(key)
 	if has {
 		prev = old
@@ -58,7 +75,12 @@ func (cache *localCaches) Set(ctx context.Context, key []byte, value []byte, ttl
 	return
 }
 
-func (cache *localCaches) Remove(ctx context.Context, key []byte) {
+func (cache *localCaches) Remove(ctx context.Context, key []byte, options ...Option) {
+	opt, optErr := NewOptions(options)
+	if optErr != nil {
+		return
+	}
+	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	cache.store.Remove(key)
 	return
 }

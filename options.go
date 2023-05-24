@@ -39,6 +39,7 @@ var (
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
 		transportOptions:      TransportOption(),
 		proxyOptions:          nil,
+		hooks:                 nil,
 		shutdownTimeout:       60 * time.Second,
 	}
 )
@@ -80,6 +81,7 @@ type Options struct {
 	configRetrieverOption configures.RetrieverOption
 	transportOptions      *TransportOptions
 	proxyOptions          *TransportOptions
+	hooks                 []Hook
 	shutdownTimeout       time.Duration
 }
 
@@ -159,6 +161,26 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 			return fmt.Errorf("customize validator failed for nil")
 		}
 		validators.AddValidateRegister(register)
+		return nil
+	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func Hooks(hooks ...Hook) Option {
+	return func(options *Options) error {
+		if hooks == nil || len(hooks) == 0 {
+			return fmt.Errorf("customize hooks failed for nil")
+		}
+		if options.hooks == nil {
+			options.hooks = make([]Hook, 0, 1)
+		}
+		for _, hook := range hooks {
+			if hook == nil {
+				continue
+			}
+			options.hooks = append(options.hooks, hook)
+		}
 		return nil
 	}
 }

@@ -35,7 +35,6 @@ import (
 type Application interface {
 	Deploy(service ...service.Service) (err error)
 	Run(ctx context.Context) (err error)
-	RunWithHooks(ctx context.Context, hook ...Hook) (err error)
 	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result service.FutureResult, err errors.CodeError)
 	Log() (log logs.Logger)
 	Sync() (err error)
@@ -113,6 +112,7 @@ func New(options ...Option) (app Application) {
 		version:         appVersion,
 		config:          config,
 		endpoints:       endpoints,
+		hooks:           opt.hooks,
 		shutdownTimeout: opt.shutdownTimeout,
 		signalCh:        signalCh,
 		synced:          false,
@@ -128,6 +128,7 @@ type application struct {
 	version         versions.Version
 	config          configures.Config
 	endpoints       *service.Endpoints
+	hooks           []Hook
 	shutdownTimeout time.Duration
 	signalCh        chan os.Signal
 	synced          bool
@@ -165,58 +166,57 @@ func (app *application) Run(ctx context.Context) (err error) {
 		err = errors.Warning("fns: application is running")
 		return
 	}
-	err = app.endpoints.Listen(ctx)
-	return
-}
-
-func (app *application) RunWithHooks(ctx context.Context, hooks ...Hook) (err error) {
-	runErr := app.Run(ctx)
-	if runErr != nil {
-		err = runErr
-		return
-	}
-	if hooks == nil || len(hooks) == 0 {
-		return
-	}
-
 	ctx = app.wrapCtx(ctx)
-
-	config, hasConfig := app.config.Node("hooks")
-	if !hasConfig {
-		config, _ = configures.NewJsonConfig([]byte{'{', '}'})
+	err = app.endpoints.Listen(ctx)
+	if err != nil {
+		err = errors.Warning("fns: run application failed").WithCause(err)
+		return
 	}
-
-	for _, hook := range hooks {
-		if hook == nil {
-			continue
+	if app.hooks != nil && len(app.hooks) > 0 {
+		config, hasConfig := app.config.Node("hooks")
+		if !hasConfig {
+			config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 		}
-		hookConfig, hasHookConfig := config.Node(hook.Name())
-		if !hasHookConfig {
-			hookConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
+		failed := false
+		for _, hook := range app.hooks {
+			if hook == nil {
+				continue
+			}
+			hookConfig, hasHookConfig := config.Node(hook.Name())
+			if !hasHookConfig {
+				hookConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
+			}
+			buildErr := hook.Build(&HookOptions{
+				Log:    app.Log().With("hook", hook.Name()),
+				Config: hookConfig,
+			})
+			if buildErr != nil {
+				failed = true
+				err = errors.Warning("fns: run application failed").WithCause(buildErr)
+				break
+			}
+			service.Fork(ctx, hook)
 		}
-		buildErr := hook.Build(&HookOptions{
-			Log:    app.Log().With("hook", hook.Name()),
-			Config: hookConfig,
-		})
-		if buildErr != nil {
-			err = errors.Warning("fns run with hooks failed").WithCause(buildErr)
+		if failed {
+			_ = app.stop(ctx)
 			return
 		}
-
-		service.Fork(ctx, hook)
+	}
+	if app.Log().DebugEnabled() {
+		app.Log().Debug().Message("fns: run application succeed")
 	}
 	return
 }
 
 func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result service.FutureResult, err errors.CodeError) {
 	if serviceName == "" || fn == "" {
-		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service name or fn is invalid"))
+		err = errors.Warning("fns: application execute service's fn failed").WithCause(fmt.Errorf("service name or fn is invalid"))
 		return
 	}
 	ctx = app.wrapCtx(ctx)
 	endpoint, hasEndpoint := app.endpoints.Get(ctx, serviceName)
 	if !hasEndpoint {
-		err = errors.Warning("fns: execute failed").WithCause(fmt.Errorf("service was not found")).WithMeta("service", serviceName)
+		err = errors.Warning("fns: application execute service's fn failed").WithCause(fmt.Errorf("service was not found")).WithMeta("service", serviceName)
 		return
 	}
 
@@ -236,7 +236,7 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 	requestOptions = append(requestOptions, service.WithDeviceId(app.id))
 	result, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, serviceName, fn, service.NewArgument(argument), requestOptions...))
 	if err != nil {
-		err = errors.Warning("fns: execute failed").WithCause(err).WithMeta("service", serviceName)
+		err = errors.Warning("fns: application execute failed").WithCause(err).WithMeta("service", serviceName)
 	}
 	return
 }
@@ -255,29 +255,32 @@ func (app *application) Sync() (err error) {
 	}
 	app.synced = true
 	<-app.signalCh
-	stopped := make(chan struct{}, 1)
-	ctx, cancel := context.WithTimeout(context.TODO(), app.shutdownTimeout)
-	go app.stop(ctx, stopped)
+	err = app.stop(context.TODO())
+	return
+}
+
+func (app *application) stop(ctx context.Context) (err error) {
+	ch := make(chan struct{}, 1)
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(context.TODO(), app.shutdownTimeout)
+	go func(ctx context.Context, app *application, ch chan struct{}) {
+		// endpoints
+		app.endpoints.Close(ctx)
+		// return
+		ch <- struct{}{}
+		close(ch)
+	}(ctx, app, ch)
 	select {
 	case <-time.After(app.shutdownTimeout):
 		err = errors.Warning("fns: stop application timeout")
 		break
-	case <-stopped:
+	case <-ch:
 		if app.Log().DebugEnabled() {
 			app.Log().Debug().Message("fns: stop application succeed")
 		}
 		break
 	}
 	cancel()
-	return
-}
-
-func (app *application) stop(ctx context.Context, ch chan struct{}) {
-	// endpoints
-	app.endpoints.Close(ctx)
-	// return
-	ch <- struct{}{}
-	close(ch)
 	return
 }
 

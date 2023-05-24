@@ -46,8 +46,9 @@ var (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime,
-	middlewares []TransportMiddleware, handlers []TransportHandler) (tr transports.Transport, mid *transportMiddlewares, hds *transportHandlers, closers []io.Closer, err error) {
+func createServiceTransport(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime,
+	middlewares []TransportMiddleware, handlers []TransportHandler) (
+	tr transports.Transport, mid *transportMiddlewares, hds *transportHandlers, closers []io.Closer, port int, err error) {
 	registered := false
 	tr, registered = transports.Registered(strings.TrimSpace(config.Name))
 	if !registered {
@@ -105,6 +106,7 @@ func createService(config *TransportConfig, deployedCh <-chan map[string]*endpoi
 		err = errors.Warning("fns: create transport failed").WithCause(optionsErr)
 		return
 	}
+	port = options.Port
 
 	buildErr := tr.Build(options)
 	if buildErr != nil {

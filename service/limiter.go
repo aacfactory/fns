@@ -126,7 +126,8 @@ func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions)
 func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
 		deviceId := r.Header().Get(httpDeviceIdHeader)
-		ok, incrErr := middleware.counter.Incr(r.Context(), bytex.FromString(deviceId))
+		key := fmt.Sprintf("rateLimit/%s", deviceId)
+		ok, incrErr := middleware.counter.Incr(r.Context(), bytex.FromString(key))
 		if incrErr != nil {
 			w.Failed(errors.Warning("fns: rate limit counter incr failed").WithCause(incrErr))
 			return
@@ -137,7 +138,7 @@ func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transpor
 			return
 		}
 		next.Handle(w, r)
-		repayErr := middleware.counter.Decr(r.Context(), bytex.FromString(deviceId))
+		repayErr := middleware.counter.Decr(r.Context(), bytex.FromString(key))
 		if repayErr != nil && middleware.log.ErrorEnabled() {
 			middleware.log.Error().Cause(
 				errors.Warning("fns: rate limit counter decr failed").WithCause(repayErr),
@@ -206,7 +207,7 @@ func (counter *rateLimitCounter) Incr(ctx context.Context, key []byte) (ok bool,
 		return
 	}
 	key = counter.preflight(key)
-	n, incrErr := counter.shared.Store().Incr(ctx, key, 1)
+	n, incrErr := counter.shared.Store().Incr(ctx, key, 1, shareds.SystemScope())
 	if incrErr != nil {
 		err = errors.Warning("fns: incr failed").WithCause(incrErr).WithMeta("counter", counter.Name())
 		return
@@ -216,7 +217,7 @@ func (counter *rateLimitCounter) Incr(ctx context.Context, key []byte) (ok bool,
 		return
 	}
 	if n == 1 && counter.window > 0 {
-		expireErr := counter.shared.Store().ExpireKey(ctx, key, counter.window)
+		expireErr := counter.shared.Store().ExpireKey(ctx, key, counter.window, shareds.SystemScope())
 		if expireErr != nil {
 			err = errors.Warning("fns: incr failed").WithCause(expireErr).WithMeta("counter", counter.Name())
 			return
@@ -231,13 +232,13 @@ func (counter *rateLimitCounter) Decr(ctx context.Context, key []byte) (err erro
 		return
 	}
 	key = counter.preflight(key)
-	n, incrErr := counter.shared.Store().Incr(ctx, key, -1)
+	n, incrErr := counter.shared.Store().Incr(ctx, key, -1, shareds.SystemScope())
 	if incrErr != nil {
 		err = errors.Warning("fns: decr failed").WithCause(incrErr).WithMeta("counter", counter.Name())
 		return
 	}
 	if n < 0 {
-		_ = counter.shared.Store().Remove(ctx, key)
+		_ = counter.shared.Store().Remove(ctx, key, shareds.SystemScope())
 	}
 	return
 }

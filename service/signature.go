@@ -231,7 +231,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 		deviceId := r.Header().Get(httpDeviceIdHeader)
 		x, loaded := middleware.sigs.Load(deviceId)
 		if !loaded {
-			sessionBytes, hasExchanged, getErr := middleware.store.Get(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+			sessionBytes, hasExchanged, getErr := middleware.store.Get(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 			if getErr != nil {
 				w.Failed(errors.Warning("fns: get session key from shared store failed").WithCause(getErr))
 				return
@@ -251,7 +251,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 				return
 			}
 			if sess.ExpireAT.Before(time.Now()) || sess.Key == nil || len(sess.Key) == 0 {
-				_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+				_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 				w.Failed(ErrSharedSecretKeyOutOfDate)
 				return
 			}
@@ -262,7 +262,7 @@ func (middleware *signatureMiddleware) Handler(next transports.Handler) transpor
 		sess := x.(*session)
 
 		if sess.ExpireAT.Before(time.Now()) {
-			_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+			_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 			middleware.sigs.Delete(deviceId)
 			w.Failed(ErrSharedSecretKeyOutOfDate)
 			return
@@ -367,7 +367,7 @@ func (middleware *signatureMiddleware) handleExchangeKey(w transports.ResponseWr
 		sess.Agreed = true
 	}
 	sessBytes, _ := json.Marshal(&sess)
-	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)), sessBytes, middleware.exchangeKeyTTL)
+	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), sessBytes, middleware.exchangeKeyTTL, shareds.SystemScope())
 	if setErr != nil {
 		w.Failed(errors.Warning("fns: exchange key failed").WithCause(errors.Warning("save session failed").WithCause(setErr)))
 		return
@@ -405,7 +405,7 @@ func (middleware *signatureMiddleware) handleConfirmExchangeKey(w transports.Res
 		return
 	}
 	deviceId := r.Header().Get(httpDeviceIdHeader)
-	sessBytes, existSess, getErr := middleware.store.Get(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+	sessBytes, existSess, getErr := middleware.store.Get(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 	if getErr != nil {
 		w.Failed(errors.Warning("fns: get exchange key session failed").WithCause(getErr))
 		return
@@ -417,7 +417,7 @@ func (middleware *signatureMiddleware) handleConfirmExchangeKey(w transports.Res
 	sess := session{}
 	decodeSessionErr := json.Unmarshal(sessBytes, &sess)
 	if decodeSessionErr != nil {
-		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 		w.Failed(errors.Warning("fns: decode exchange key session failed").WithCause(decodeSessionErr))
 		return
 	}
@@ -429,15 +429,15 @@ func (middleware *signatureMiddleware) handleConfirmExchangeKey(w transports.Res
 	}
 	exchangeKeyTTL := sess.ExpireAT.Sub(time.Now())
 	if exchangeKeyTTL < 1 {
-		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 		w.Failed(errors.Warning("fns: confirm exchange key failed").WithCause(errors.Warning("expired")))
 		return
 	}
 	sess.Agreed = true
 	sessBytes, _ = json.Marshal(&sess)
-	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)), sessBytes, exchangeKeyTTL)
+	setErr := middleware.store.SetWithTTL(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), sessBytes, exchangeKeyTTL, shareds.SystemScope())
 	if setErr != nil {
-		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("fns/signatures/sessions/%s", deviceId)))
+		_ = middleware.store.Remove(r.Context(), bytex.FromString(fmt.Sprintf("signatures/sessions/%s", deviceId)), shareds.SystemScope())
 		w.Failed(errors.Warning("fns: confirm exchange key failed").WithCause(errors.Warning("update session failed").WithCause(setErr)))
 		return
 	}

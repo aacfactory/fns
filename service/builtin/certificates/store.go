@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"time"
@@ -101,7 +102,7 @@ func (certs *defaultCertificates) Build(_ StoreOptions) (err error) {
 }
 
 func (certs *defaultCertificates) key(id string) string {
-	return fmt.Sprintf("fns/certificates/%s", id)
+	return fmt.Sprintf("certificates/%s", id)
 }
 
 func (certs *defaultCertificates) Get(ctx context.Context, id string) (certificate *Certificate, err errors.CodeError) {
@@ -112,10 +113,10 @@ func (certs *defaultCertificates) Get(ctx context.Context, id string) (certifica
 	// todo cache 移到外面去，然后是local的，
 	key := bytex.FromString(certs.key(id))
 	cache := service.SharedCache(ctx)
-	v, has := cache.Get(ctx, key)
+	v, has := cache.Get(ctx, key, shareds.SystemScope())
 	if !has {
 		store := service.SharedStore(ctx)
-		v, has, err = store.Get(ctx, bytex.FromString(certs.key(id)))
+		v, has, err = store.Get(ctx, bytex.FromString(certs.key(id)), shareds.SystemScope())
 		if err != nil {
 			err = errors.Warning("certificates: get certificate failed").WithCause(err)
 			return
@@ -123,7 +124,7 @@ func (certs *defaultCertificates) Get(ctx context.Context, id string) (certifica
 		if !has {
 			return
 		}
-		_, _ = cache.Set(ctx, key, v, 24*time.Hour)
+		_, _ = cache.Set(ctx, key, v, 24*time.Hour, shareds.SystemScope())
 	}
 	certificate = &Certificate{}
 	decodeErr := json.Unmarshal(v, certificate)
@@ -150,7 +151,7 @@ func (certs *defaultCertificates) Create(ctx context.Context, certificate *Certi
 		return
 	}
 	store := service.SharedStore(ctx)
-	setErr := store.Set(ctx, bytex.FromString(certs.key(id)), p)
+	setErr := store.Set(ctx, bytex.FromString(certs.key(id)), p, shareds.SystemScope())
 	if setErr != nil {
 		err = errors.Warning("certificates: create certificate failed").WithCause(setErr)
 		return
@@ -165,9 +166,9 @@ func (certs *defaultCertificates) Remove(ctx context.Context, id string) (err er
 	}
 	key := bytex.FromString(certs.key(id))
 	cache := service.SharedCache(ctx)
-	cache.Remove(ctx, key)
+	cache.Remove(ctx, key, shareds.SystemScope())
 	store := service.SharedStore(ctx)
-	rmErr := store.Remove(ctx, key)
+	rmErr := store.Remove(ctx, key, shareds.SystemScope())
 	if rmErr != nil {
 		err = errors.Warning("certificates: remove certificate failed").WithCause(rmErr)
 		return

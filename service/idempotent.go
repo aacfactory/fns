@@ -69,7 +69,7 @@ func (middleware *idempotentMiddleware) Handler(next transports.Handler) transpo
 		}
 		rh := getOrMakeRequestHash(r.Header(), r.Path(), r.Body())
 		key := bytes.Join([][]byte{bytex.FromString(idempotentMiddlewareTicketPrefix), rh}, slashBytes)
-		prev, ok := middleware.tickets.Set(r.Context(), key, []byte{'1'}, middleware.ticketTTL)
+		prev, ok := middleware.tickets.Set(r.Context(), key, []byte{'1'}, middleware.ticketTTL, shareds.SystemScope())
 		if !ok {
 			w.Failed(ErrLockedRequest.WithCause(errors.Warning("fns: save request idempotent ticket failed")))
 			return
@@ -79,7 +79,7 @@ func (middleware *idempotentMiddleware) Handler(next transports.Handler) transpo
 			return
 		}
 		next.Handle(w, r)
-		middleware.tickets.Remove(r.Context(), key)
+		middleware.tickets.Remove(r.Context(), key, shareds.SystemScope())
 	})
 }
 

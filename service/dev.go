@@ -146,6 +146,9 @@ func (handler *devProxyHandler) handleShared(w transports.ResponseWriter, r *tra
 	case "locker:unlock":
 		handler.handleSharedUnLock(w, r, param.Payload)
 		break
+	case "store:keys":
+		handler.handleSharedStoreKeys(w, r, param.Payload)
+		break
 	case "store:get":
 		handler.handleSharedStoreGet(w, r, param.Payload)
 		break
@@ -180,9 +183,26 @@ func (handler *devProxyHandler) handleShared(w transports.ResponseWriter, r *tra
 	return
 }
 
+type devSharedOptions struct {
+	Scope string `json:"scope"`
+}
+
+func newDevSharedOptions(opts []shareds.Option) (v devSharedOptions, err error) {
+	opt, optErr := shareds.NewOptions(opts)
+	if optErr != nil {
+		err = optErr
+		return
+	}
+	v = devSharedOptions{
+		Scope: opt.Scope,
+	}
+	return
+}
+
 type devAcquireLockerParam struct {
-	Key string        `json:"key"`
-	TTL time.Duration `json:"ttl"`
+	Key     string           `json:"key"`
+	TTL     time.Duration    `json:"ttl"`
+	Options devSharedOptions `json:"options"`
 }
 
 func (handler *devProxyHandler) handleSharedLockerAcquire(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -193,7 +213,7 @@ func (handler *devProxyHandler) handleSharedLockerAcquire(w transports.ResponseW
 		return
 	}
 	lockers := handler.registrations.cluster.Shared().Lockers()
-	locker, lockerErr := lockers.Acquire(r.Context(), bytex.FromString(param.Key), param.TTL)
+	locker, lockerErr := lockers.Acquire(r.Context(), bytex.FromString(param.Key), param.TTL, shareds.WithScope(param.Options.Scope))
 	if lockerErr != nil {
 		w.Failed(errors.Warning("dev: locker acquire failed").WithCause(lockerErr))
 		return
@@ -257,8 +277,37 @@ func (handler *devProxyHandler) handleSharedUnLock(w transports.ResponseWriter, 
 	return
 }
 
+type devStoreKeysParam struct {
+	Prefix  string           `json:"prefix"`
+	Options devSharedOptions `json:"options"`
+}
+
+type devStoreKeysResult struct {
+	Keys [][]byte `json:"keys"`
+}
+
+func (handler *devProxyHandler) handleSharedStoreKeys(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
+	param := devStoreKeysParam{}
+	decodeErr := json.Unmarshal(payload, &param)
+	if decodeErr != nil {
+		w.Failed(errors.Warning("dev: store keys failed").WithCause(decodeErr))
+		return
+	}
+	store := handler.registrations.cluster.Shared().Store()
+	keys, keysErr := store.Keys(r.Context(), bytex.FromString(param.Prefix), shareds.WithScope(param.Options.Scope))
+	if keysErr != nil {
+		w.Failed(errors.Warning("dev: store keys failed").WithCause(keysErr))
+		return
+	}
+	w.Succeed(&devStoreKeysResult{
+		Keys: keys,
+	})
+	return
+}
+
 type devStoreGetParam struct {
-	Key string `json:"key"`
+	Key     string           `json:"key"`
+	Options devSharedOptions `json:"options"`
 }
 
 type devStoreGetResult struct {
@@ -274,7 +323,7 @@ func (handler *devProxyHandler) handleSharedStoreGet(w transports.ResponseWriter
 		return
 	}
 	store := handler.registrations.cluster.Shared().Store()
-	value, has, getErr := store.Get(r.Context(), bytex.FromString(param.Key))
+	value, has, getErr := store.Get(r.Context(), bytex.FromString(param.Key), shareds.WithScope(param.Options.Scope))
 	if getErr != nil {
 		w.Failed(errors.Warning("dev: store get failed").WithCause(getErr))
 		return
@@ -287,9 +336,10 @@ func (handler *devProxyHandler) handleSharedStoreGet(w transports.ResponseWriter
 }
 
 type devStoreSetParam struct {
-	Key   string        `json:"key"`
-	Value []byte        `json:"value"`
-	TTL   time.Duration `json:"ttl"`
+	Key     string           `json:"key"`
+	Value   []byte           `json:"value"`
+	TTL     time.Duration    `json:"ttl"`
+	Options devSharedOptions `json:"options"`
 }
 
 func (handler *devProxyHandler) handleSharedStoreSet(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -302,7 +352,7 @@ func (handler *devProxyHandler) handleSharedStoreSet(w transports.ResponseWriter
 	store := handler.registrations.cluster.Shared().Store()
 	var setErr error
 	if param.TTL > 0 {
-		setErr = store.SetWithTTL(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL)
+		setErr = store.SetWithTTL(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL, shareds.WithScope(param.Options.Scope))
 	} else {
 		setErr = store.Set(r.Context(), bytex.FromString(param.Key), param.Value)
 	}
@@ -315,8 +365,9 @@ func (handler *devProxyHandler) handleSharedStoreSet(w transports.ResponseWriter
 }
 
 type devStoreIncrParam struct {
-	Key   string `json:"key"`
-	Delta int64  `json:"delta"`
+	Key     string           `json:"key"`
+	Delta   int64            `json:"delta"`
+	Options devSharedOptions `json:"options"`
 }
 
 type devStoreIncrResult struct {
@@ -331,7 +382,7 @@ func (handler *devProxyHandler) handleSharedStoreIncr(w transports.ResponseWrite
 		return
 	}
 	store := handler.registrations.cluster.Shared().Store()
-	n, incrErr := store.Incr(r.Context(), bytex.FromString(param.Key), param.Delta)
+	n, incrErr := store.Incr(r.Context(), bytex.FromString(param.Key), param.Delta, shareds.WithScope(param.Options.Scope))
 	if incrErr != nil {
 		w.Failed(errors.Warning("dev: store incr failed").WithCause(incrErr))
 		return
@@ -343,8 +394,9 @@ func (handler *devProxyHandler) handleSharedStoreIncr(w transports.ResponseWrite
 }
 
 type devStoreExprParam struct {
-	Key string        `json:"key"`
-	TTL time.Duration `json:"ttl"`
+	Key     string           `json:"key"`
+	TTL     time.Duration    `json:"ttl"`
+	Options devSharedOptions `json:"options"`
 }
 
 func (handler *devProxyHandler) handleSharedStoreExpireKey(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -355,7 +407,7 @@ func (handler *devProxyHandler) handleSharedStoreExpireKey(w transports.Response
 		return
 	}
 	store := handler.registrations.cluster.Shared().Store()
-	err := store.ExpireKey(r.Context(), bytex.FromString(param.Key), param.TTL)
+	err := store.ExpireKey(r.Context(), bytex.FromString(param.Key), param.TTL, shareds.WithScope(param.Options.Scope))
 	if err != nil {
 		w.Failed(errors.Warning("dev: store expire key failed").WithCause(err))
 		return
@@ -365,7 +417,8 @@ func (handler *devProxyHandler) handleSharedStoreExpireKey(w transports.Response
 }
 
 type devStoreRemoveParam struct {
-	Key string `json:"key"`
+	Key     string           `json:"key"`
+	Options devSharedOptions `json:"options"`
 }
 
 func (handler *devProxyHandler) handleSharedStoreRemove(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -376,7 +429,7 @@ func (handler *devProxyHandler) handleSharedStoreRemove(w transports.ResponseWri
 		return
 	}
 	store := handler.registrations.cluster.Shared().Store()
-	err := store.Remove(r.Context(), bytex.FromString(param.Key))
+	err := store.Remove(r.Context(), bytex.FromString(param.Key), shareds.WithScope(param.Options.Scope))
 	if err != nil {
 		w.Failed(errors.Warning("dev: store remove failed").WithCause(err))
 		return
@@ -386,7 +439,8 @@ func (handler *devProxyHandler) handleSharedStoreRemove(w transports.ResponseWri
 }
 
 type devCacheGetParam struct {
-	Key string `json:"key"`
+	Key     string           `json:"key"`
+	Options devSharedOptions `json:"options"`
 }
 
 type devCacheGetResult struct {
@@ -402,7 +456,7 @@ func (handler *devProxyHandler) handleSharedCacheGet(w transports.ResponseWriter
 		return
 	}
 	cache := handler.registrations.cluster.Shared().Caches()
-	value, has := cache.Get(r.Context(), bytex.FromString(param.Key))
+	value, has := cache.Get(r.Context(), bytex.FromString(param.Key), shareds.WithScope(param.Options.Scope))
 	w.Succeed(&devCacheGetResult{
 		Has:   has,
 		Value: value,
@@ -410,7 +464,8 @@ func (handler *devProxyHandler) handleSharedCacheGet(w transports.ResponseWriter
 }
 
 type devCacheExistParam struct {
-	Key string `json:"key"`
+	Key     string           `json:"key"`
+	Options devSharedOptions `json:"options"`
 }
 
 type devCacheExistResult struct {
@@ -425,16 +480,17 @@ func (handler *devProxyHandler) handleSharedCacheExist(w transports.ResponseWrit
 		return
 	}
 	cache := handler.registrations.cluster.Shared().Caches()
-	has := cache.Exist(r.Context(), bytex.FromString(param.Key))
+	has := cache.Exist(r.Context(), bytex.FromString(param.Key), shareds.WithScope(param.Options.Scope))
 	w.Succeed(&devCacheExistResult{
 		Has: has,
 	})
 }
 
 type devCacheSetParam struct {
-	Key   string        `json:"key"`
-	Value []byte        `json:"value"`
-	TTL   time.Duration `json:"ttl"`
+	Key     string           `json:"key"`
+	Value   []byte           `json:"value"`
+	TTL     time.Duration    `json:"ttl"`
+	Options devSharedOptions `json:"options"`
 }
 
 type devCacheSetResult struct {
@@ -450,7 +506,7 @@ func (handler *devProxyHandler) handleSharedCacheSet(w transports.ResponseWriter
 		return
 	}
 	cache := handler.registrations.cluster.Shared().Caches()
-	prev, ok := cache.Set(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL)
+	prev, ok := cache.Set(r.Context(), bytex.FromString(param.Key), param.Value, param.TTL, shareds.WithScope(param.Options.Scope))
 	w.Succeed(&devCacheSetResult{
 		Ok:   ok,
 		Prev: prev,
@@ -458,7 +514,8 @@ func (handler *devProxyHandler) handleSharedCacheSet(w transports.ResponseWriter
 }
 
 type devCacheRemoveParam struct {
-	Key string `json:"key"`
+	Key     string           `json:"key"`
+	Options devSharedOptions `json:"options"`
 }
 
 func (handler *devProxyHandler) handleSharedCacheRemove(w transports.ResponseWriter, r *transports.Request, payload json.RawMessage) {
@@ -469,7 +526,7 @@ func (handler *devProxyHandler) handleSharedCacheRemove(w transports.ResponseWri
 		return
 	}
 	cache := handler.registrations.cluster.Shared().Caches()
-	cache.Remove(r.Context(), bytex.FromString(param.Key))
+	cache.Remove(r.Context(), bytex.FromString(param.Key), shareds.WithScope(param.Options.Scope))
 	w.Succeed(Empty{})
 }
 

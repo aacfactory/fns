@@ -38,26 +38,10 @@ type ClusterBuilderOptions struct {
 	AppId      string
 	AppName    string
 	AppVersion versions.Version
-	Port       int
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
 
-// Cluster todo
-/*
-join：store增加条目，启动health刷新认为
-leave：关闭刷新任务，删除条目。
-nodes：返回members，不在返回nodes，member是不带services的
-shared：返回shared。
-==========
-关于shared，通过cluster builder去注册，所以修改builder。
-使用方式不再是import init，而是放在modules的service发布里，然后以参数的方式注入。
-E.G.: RegisterCluster（）（cluster） {
-	dockers.Cluster（redis.Shareds（）） // 这个函数里是注册cluster builder
-	// 可能redis的shareds也是个builder，参数是相关配置，
-}
-
-*/
 type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
@@ -105,9 +89,9 @@ func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
 	return
 }
 
-type fakeTransportHandler struct{}
+type devTransportHandler struct{}
 
-func (handler fakeTransportHandler) Handle(w transports.ResponseWriter, _ *transports.Request) {
+func (handler devTransportHandler) Handle(w transports.ResponseWriter, _ *transports.Request) {
 	w.Succeed(&Empty{})
 }
 
@@ -157,7 +141,7 @@ func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err erro
 		Port:      13000,
 		ServerTLS: srvTLS,
 		ClientTLS: cliTLS,
-		Handler:   &fakeTransportHandler{},
+		Handler:   &devTransportHandler{},
 		Log:       options.Log.With("transport", "dev"),
 		Config:    transportsConfig,
 	}
@@ -262,12 +246,18 @@ type devSharedLockers struct {
 	client transports.Client
 }
 
-func (dev *devSharedLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
+func (dev *devSharedLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration, options ...shareds.Option) (locker shareds.Locker, err error) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = optErr
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devAcquireLockerParam{
-		Key: bytex.ToString(key),
-		TTL: ttl,
+		Key:     bytex.ToString(key),
+		TTL:     ttl,
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -352,11 +342,55 @@ type devSharedStore struct {
 	client transports.Client
 }
 
-func (dev *devSharedStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err errors.CodeError) {
+func (dev *devSharedStore) Keys(ctx context.Context, prefix []byte, options ...shareds.Option) (keys [][]byte, err errors.CodeError) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = errors.Map(optErr)
+		return
+	}
+	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req.Header().Set(httpDevModeHeader, "*")
+	subParam := devStoreKeysParam{
+		Prefix:  bytex.ToString(prefix),
+		Options: opt,
+	}
+	subParamBytes, _ := json.Marshal(subParam)
+	param := &devShardParam{
+		Type:    "store:keys",
+		Payload: subParamBytes,
+	}
+	paramBytes, _ := json.Marshal(param)
+	req.SetBody(paramBytes)
+	resp, doErr := dev.client.Do(ctx, req)
+	if doErr != nil {
+		err = errors.Warning("dev: store keys failed").WithCause(doErr)
+		return
+	}
+	if resp.Status != http.StatusOK {
+		err = errors.Warning("dev: store keys failed")
+		return
+	}
+	result := devStoreKeysResult{}
+	decodeErr := json.Unmarshal(resp.Body, &result)
+	if decodeErr != nil {
+		err = errors.Warning("dev: store keys failed").WithCause(decodeErr)
+		return
+	}
+	keys = result.Keys
+	return
+}
+
+func (dev *devSharedStore) Get(ctx context.Context, key []byte, options ...shareds.Option) (value []byte, has bool, err errors.CodeError) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = errors.Map(optErr)
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreGetParam{
-		Key: bytex.ToString(key),
+		Key:     bytex.ToString(key),
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -385,8 +419,8 @@ func (dev *devSharedStore) Get(ctx context.Context, key []byte) (value []byte, h
 	return
 }
 
-func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte) (err errors.CodeError) {
-	err = dev.SetWithTTL(ctx, key, value, 0)
+func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte, options ...shareds.Option) (err errors.CodeError) {
+	err = dev.SetWithTTL(ctx, key, value, 0, options...)
 	if err != nil {
 		err = errors.Warning("dev: store set failed")
 		return
@@ -394,13 +428,19 @@ func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte) (e
 	return
 }
 
-func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err errors.CodeError) {
+func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...shareds.Option) (err errors.CodeError) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = errors.Map(optErr)
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreSetParam{
-		Key:   bytex.ToString(key),
-		Value: value,
-		TTL:   ttl,
+		Key:     bytex.ToString(key),
+		Value:   value,
+		TTL:     ttl,
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -421,12 +461,18 @@ func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []b
 	return
 }
 
-func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err errors.CodeError) {
+func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64, options ...shareds.Option) (v int64, err errors.CodeError) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = errors.Map(optErr)
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreIncrParam{
-		Key:   bytex.ToString(key),
-		Delta: delta,
+		Key:     bytex.ToString(key),
+		Delta:   delta,
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -454,12 +500,18 @@ func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64) (v
 	return
 }
 
-func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err errors.CodeError) {
+func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration, options ...shareds.Option) (err errors.CodeError) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = errors.Map(optErr)
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreExprParam{
-		Key: bytex.ToString(key),
-		TTL: ttl,
+		Key:     bytex.ToString(key),
+		TTL:     ttl,
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -480,11 +532,17 @@ func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.D
 	return
 }
 
-func (dev *devSharedStore) Remove(ctx context.Context, key []byte) (err errors.CodeError) {
+func (dev *devSharedStore) Remove(ctx context.Context, key []byte, options ...shareds.Option) (err errors.CodeError) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		err = errors.Map(optErr)
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreRemoveParam{
-		Key: bytex.ToString(key),
+		Key:     bytex.ToString(key),
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -510,11 +568,16 @@ type devSharedCaches struct {
 	client transports.Client
 }
 
-func (dev *devSharedCaches) Get(ctx context.Context, key []byte) (value []byte, has bool) {
+func (dev *devSharedCaches) Get(ctx context.Context, key []byte, options ...shareds.Option) (value []byte, has bool) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheGetParam{
-		Key: bytex.ToString(key),
+		Key:     bytex.ToString(key),
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -542,11 +605,16 @@ func (dev *devSharedCaches) Get(ctx context.Context, key []byte) (value []byte, 
 	return
 }
 
-func (dev *devSharedCaches) Exist(ctx context.Context, key []byte) (has bool) {
+func (dev *devSharedCaches) Exist(ctx context.Context, key []byte, options ...shareds.Option) (has bool) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheExistParam{
-		Key: bytex.ToString(key),
+		Key:     bytex.ToString(key),
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -571,13 +639,18 @@ func (dev *devSharedCaches) Exist(ctx context.Context, key []byte) (has bool) {
 	return
 }
 
-func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (prev []byte, ok bool) {
+func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...shareds.Option) (prev []byte, ok bool) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheSetParam{
-		Key:   bytex.ToString(key),
-		Value: value,
-		TTL:   ttl,
+		Key:     bytex.ToString(key),
+		Value:   value,
+		TTL:     ttl,
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{
@@ -603,11 +676,16 @@ func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, t
 	return
 }
 
-func (dev *devSharedCaches) Remove(ctx context.Context, key []byte) {
+func (dev *devSharedCaches) Remove(ctx context.Context, key []byte, options ...shareds.Option) {
+	opt, optErr := newDevSharedOptions(options)
+	if optErr != nil {
+		return
+	}
 	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheRemoveParam{
-		Key: bytex.ToString(key),
+		Key:     bytex.ToString(key),
+		Options: opt,
 	}
 	subParamBytes, _ := json.Marshal(subParam)
 	param := &devShardParam{

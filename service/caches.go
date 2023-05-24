@@ -201,7 +201,7 @@ type ETags struct {
 }
 
 func (tags *ETags) get(ctx context.Context, rk []byte) (tag *tagValue, has bool) {
-	value, exist := tags.store.Get(ctx, tags.makeCacheKey(rk))
+	value, exist := tags.store.Get(ctx, tags.makeCacheKey(rk), shareds.SystemScope())
 	if !exist {
 		return
 	}
@@ -229,7 +229,7 @@ func (tags *ETags) save(ctx context.Context, rk []byte, value *tagValue, ttl tim
 		}
 		return
 	}
-	_, ok := tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl)
+	_, ok := tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl, shareds.SystemScope())
 	if !ok {
 		if tags.log.ErrorEnabled() {
 			err := errors.Warning("fns: save etag")
@@ -240,7 +240,7 @@ func (tags *ETags) save(ctx context.Context, rk []byte, value *tagValue, ttl tim
 }
 
 func (tags *ETags) remove(ctx context.Context, rk []byte) {
-	tags.store.Remove(ctx, tags.makeCacheKey(rk))
+	tags.store.Remove(ctx, tags.makeCacheKey(rk), shareds.SystemScope())
 	return
 }
 

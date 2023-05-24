@@ -186,9 +186,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	v = &Endpoints{
 		log: log,
 		rt: &Runtime{
-			appId:      options.AppId,
-			appName:    options.AppName,
-			appVersion: options.AppVersion,
+			appId:       options.AppId,
+			appName:     options.AppName,
+			appVersion:  options.AppVersion,
+			appPort:     0,
+			appServices: make([]string, 0, 1),
 			status: &Status{
 				flag: flags.New(false),
 			},
@@ -214,11 +216,12 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	v.rt.discovery = v
 
 	// transports >>>
-	transport, transportMid, transportHds, transportClosers, transportErr := createService(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Middlewares, options.Transport.Handlers)
+	transport, transportMid, transportHds, transportClosers, transportPort, transportErr := createServiceTransport(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Middlewares, options.Transport.Handlers)
 	if transportErr != nil {
 		err = errors.Warning("fns: create endpoints failed").WithCause(transportErr)
 		return
 	}
+	v.rt.appPort = transportPort
 	v.closers = append(v.closers, transportClosers...)
 	v.transport = transport
 	v.transportMiddlewares = transportMid
@@ -246,7 +249,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	}
 	// proxy
 	if options.Proxy != nil {
-		proxy, proxyMid, proxyHds, proxyClosers, proxyErr := createProxy(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
+		proxy, proxyMid, proxyHds, proxyClosers, proxyErr := createProxyTransport(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
 		if proxyErr != nil {
 			err = errors.Warning("fns: create endpoints failed").WithCause(proxyErr)
 			return
@@ -391,7 +394,7 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 		})
 	}
 	e.deployed[svc.Name()] = ep
-
+	e.rt.appServices = append(e.rt.appServices, name)
 	return
 }
 

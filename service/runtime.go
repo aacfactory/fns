@@ -55,16 +55,18 @@ func (status *Status) Closed() (ok bool) {
 }
 
 type Runtime struct {
-	appId      string
-	appName    string
-	appVersion versions.Version
-	status     *Status
-	log        logs.Logger
-	worker     Workers
-	discovery  EndpointDiscovery
-	barrier    Barrier
-	shared     shareds.Shared
-	signer     *secret.Signer
+	appId       string
+	appName     string
+	appVersion  versions.Version
+	appPort     int
+	appServices []string
+	status      *Status
+	log         logs.Logger
+	worker      Workers
+	discovery   EndpointDiscovery
+	barrier     Barrier
+	shared      shareds.Shared
+	signer      *secret.Signer
 }
 
 func (rt *Runtime) AppId() string {
@@ -77,6 +79,14 @@ func (rt *Runtime) AppName() string {
 
 func (rt *Runtime) AppVersion() versions.Version {
 	return rt.appVersion
+}
+
+func (rt *Runtime) AppPort() int {
+	return rt.appPort
+}
+
+func (rt *Runtime) AppServices() []string {
+	return rt.appServices
 }
 
 func (rt *Runtime) AppStatus() *Status {

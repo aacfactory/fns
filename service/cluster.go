@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/shareds"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
@@ -49,12 +50,17 @@ type Cluster interface {
 	Shared() (shared shareds.Shared)
 }
 
+type NodeService struct {
+	Name     string              `json:"name"`
+	Document *documents.Document `json:"document"`
+}
+
 type Node struct {
 	Id       string           `json:"id"`
 	Name     string           `json:"name"`
 	Version  versions.Version `json:"version"`
 	Address  string           `json:"address"`
-	Services []string         `json:"services"`
+	Services []*NodeService   `json:"services"`
 }
 
 type Nodes []*Node

@@ -29,7 +29,6 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -46,27 +45,22 @@ var (
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func createServiceTransport(config *TransportConfig, deployedCh <-chan map[string]*endpoint, runtime *Runtime,
-	middlewares []TransportMiddleware, handlers []TransportHandler) (
-	tr transports.Transport, mid *transportMiddlewares, hds *transportHandlers, closers []io.Closer, port int, err error) {
-	registered := false
-	tr, registered = transports.Registered(strings.TrimSpace(config.Name))
+func createServiceTransport(config *TransportConfig, runtime *Runtime, middlewares []TransportMiddleware, handlers []TransportHandler) (tr *serviceTransport, err error) {
+	transport, registered := transports.Registered(strings.TrimSpace(config.Name))
 	if !registered {
 		err = errors.Warning("fns: create transport failed").WithCause(errors.Warning("transport was not registered")).WithMeta("name", config.Name)
 		return
 	}
-	closers = make([]io.Closer, 0, 1)
 	midConfig, midConfigErr := config.MiddlewaresConfig()
 	if midConfigErr != nil {
 		err = errors.Warning("fns: create transport failed").WithCause(midConfigErr)
 		return
 	}
-	mid = newTransportMiddlewares(transportMiddlewaresOptions{
+	mid := newTransportMiddlewares(transportMiddlewaresOptions{
 		Runtime: runtime,
 		Cors:    config.Cors,
 		Config:  midConfig,
 	})
-	closers = append(closers, mid)
 	if middlewares != nil && len(middlewares) > 0 {
 		for _, middleware := range middlewares {
 			appendErr := mid.Append(middleware)
@@ -81,17 +75,15 @@ func createServiceTransport(config *TransportConfig, deployedCh <-chan map[strin
 		err = errors.Warning("fns: create transport failed").WithCause(handlersConfigErr)
 		return
 	}
-	hds = newTransportHandlers(transportHandlersOptions{
+	hds := newTransportHandlers(transportHandlersOptions{
 		Runtime: runtime,
 		Config:  handlersConfig,
 	})
-	closers = append(closers, hds)
 	if handlers == nil {
 		handlers = make([]TransportHandler, 0, 1)
 	}
 	handlers = append(handlers, newServicesHandler(servicesHandlerOptions{
-		Signer:     runtime.Signer(),
-		DeployedCh: deployedCh,
+		Signer: runtime.Signer(),
 	}))
 	for _, handler := range handlers {
 		appendErr := hds.Append(handler)
@@ -106,13 +98,46 @@ func createServiceTransport(config *TransportConfig, deployedCh <-chan map[strin
 		err = errors.Warning("fns: create transport failed").WithCause(optionsErr)
 		return
 	}
-	port = options.Port
 
-	buildErr := tr.Build(options)
+	buildErr := transport.Build(options)
 	if buildErr != nil {
 		err = errors.Warning("fns: create transport failed").WithCause(buildErr)
 		return
 	}
+	port := options.Port
+	tr = &serviceTransport{
+		transport:   transport,
+		middlewares: mid,
+		handlers:    hds,
+		port:        port,
+	}
+	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type serviceTransport struct {
+	transport   transports.Transport
+	middlewares *transportMiddlewares
+	handlers    *transportHandlers
+	port        int
+}
+
+func (tr *serviceTransport) Close() (err error) {
+	errs := errors.MakeErrors()
+	err = tr.middlewares.Close()
+	if err != nil {
+		errs.Append(err)
+	}
+	err = tr.handlers.Close()
+	if err != nil {
+		errs.Append(err)
+	}
+	err = tr.transport.Close()
+	if err != nil {
+		errs.Append(err)
+	}
+	err = errs.Error()
 	return
 }
 
@@ -240,11 +265,11 @@ func (handler *servicesHandler) Handle(w transports.ResponseWriter, r *transport
 		return
 	}
 	if r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0 {
-		handler.handleDocuments(w)
+		handler.handleDocuments(w, r)
 		return
 	}
 	if r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0 {
-		handler.handleOpenapi(w)
+		handler.handleOpenapi(w, r)
 		return
 	}
 	// internal
@@ -466,9 +491,22 @@ func (handler *servicesHandler) handleInternalRequest(writer transports.Response
 	return
 }
 
-func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter) {
+func (handler *servicesHandler) createDocuments(r *transports.Request) {
+	handler.documents = documents.NewDocuments()
+	rt := GetRuntime(r.Context())
+	namePlates := rt.ServiceNamePlates()
+	if len(namePlates) > 0 {
+		for _, namePlate := range namePlates {
+			if !namePlate.Internal() && namePlate.Document() != nil {
+				handler.documents.Add(namePlate.Document())
+			}
+		}
+	}
+}
+
+func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter, r *transports.Request) {
 	if handler.disableHandleDocuments {
-		w.Succeed(Empty{})
+		w.Failed(errors.Warning("fns: documents handler was disabled"))
 		return
 	}
 	const (
@@ -476,6 +514,13 @@ func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter) {
 	)
 	// handle
 	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
+		if handler.documents == nil {
+			handler.createDocuments(r)
+		}
+		if handler.documents.Len() > 0 {
+			v = []byte{'{', '}'}
+			return
+		}
 		p, encodeErr := json.Marshal(handler.documents)
 		if encodeErr != nil {
 			err = errors.Warning("fns: encode documents failed").WithCause(encodeErr)
@@ -492,7 +537,7 @@ func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter) {
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter) {
+func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter, r *transports.Request) {
 	if handler.disableHandleOpenapi {
 		w.Succeed(Empty{})
 		return
@@ -502,6 +547,9 @@ func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter) {
 	)
 	// handle
 	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
+		if handler.documents == nil {
+			handler.createDocuments(r)
+		}
 		openapi := handler.documents.Openapi(handler.openapiVersion, handler.appId, handler.appName, handler.appVersion)
 		p, encodeErr := json.Marshal(openapi)
 		if encodeErr != nil {

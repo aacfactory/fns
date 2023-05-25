@@ -59,7 +59,7 @@ type Runtime struct {
 	appName     string
 	appVersion  versions.Version
 	appPort     int
-	appServices []string
+	appServices []NamePlate
 	status      *Status
 	log         logs.Logger
 	worker      Workers
@@ -85,7 +85,7 @@ func (rt *Runtime) AppPort() int {
 	return rt.appPort
 }
 
-func (rt *Runtime) AppServices() []string {
+func (rt *Runtime) ServiceNamePlates() []NamePlate {
 	return rt.appServices
 }
 

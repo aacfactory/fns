@@ -190,7 +190,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			appName:     options.AppName,
 			appVersion:  options.AppVersion,
 			appPort:     0,
-			appServices: make([]string, 0, 1),
+			appServices: make([]NamePlate, 0, 1),
 			status: &Status{
 				flag: flags.New(false),
 			},
@@ -394,7 +394,7 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 		})
 	}
 	e.deployed[svc.Name()] = ep
-	e.rt.appServices = append(e.rt.appServices, name)
+	e.rt.appServices = append(e.rt.appServices, svc)
 	return
 }
 

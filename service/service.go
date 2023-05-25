@@ -48,12 +48,16 @@ type Options struct {
 	Config     configures.Config
 }
 
-type Service interface {
-	Build(options Options) (err error)
+type NamePlate interface {
 	Name() (name string)
 	Internal() (internal bool)
-	Components() (components map[string]Component)
 	Document() (doc *documents.Document)
+}
+
+type Service interface {
+	NamePlate
+	Build(options Options) (err error)
+	Components() (components map[string]Component)
 	Handle(ctx context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
 	Close()
 }

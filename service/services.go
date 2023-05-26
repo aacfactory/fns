@@ -40,12 +40,11 @@ import (
 var (
 	servicesDocumentsPath = []byte("/services/documents")
 	servicesOpenapiPath   = []byte("/services/openapi")
-	servicesNamesPath     = []byte("/services/names")
 )
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func createServiceTransport(config *TransportConfig, runtime *Runtime, middlewares []TransportMiddleware, handlers []TransportHandler) (tr *serviceTransport, err error) {
+func createServiceTransport(config *TransportConfig, runtime *Runtime, middlewares []TransportMiddleware, handlers []TransportHandler) (tr *Transport, err error) {
 	transport, registered := transports.Registered(strings.TrimSpace(config.Name))
 	if !registered {
 		err = errors.Warning("fns: create transport failed").WithCause(errors.Warning("transport was not registered")).WithMeta("name", config.Name)
@@ -105,7 +104,7 @@ func createServiceTransport(config *TransportConfig, runtime *Runtime, middlewar
 		return
 	}
 	port := options.Port
-	tr = &serviceTransport{
+	tr = &Transport{
 		transport:   transport,
 		middlewares: mid,
 		handlers:    hds,
@@ -116,44 +115,14 @@ func createServiceTransport(config *TransportConfig, runtime *Runtime, middlewar
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type serviceTransport struct {
-	transport   transports.Transport
-	middlewares *transportMiddlewares
-	handlers    *transportHandlers
-	port        int
-}
-
-func (tr *serviceTransport) Close() (err error) {
-	errs := errors.MakeErrors()
-	err = tr.middlewares.Close()
-	if err != nil {
-		errs.Append(err)
-	}
-	err = tr.handlers.Close()
-	if err != nil {
-		errs.Append(err)
-	}
-	err = tr.transport.Close()
-	if err != nil {
-		errs.Append(err)
-	}
-	err = errs.Error()
-	return
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 type servicesHandlerOptions struct {
-	Signer     *secret.Signer
-	DeployedCh <-chan map[string]*endpoint
+	Signer *secret.Signer
 }
 
 func newServicesHandler(options servicesHandlerOptions) (handler TransportHandler) {
-	sh := &servicesHandler{
+	handler = &servicesHandler{
 		log:                    nil,
-		ready:                  false,
-		names:                  make([]string, 0, 1),
-		documents:              documents.NewDocuments(),
+		documents:              nil,
 		disableHandleDocuments: false,
 		disableHandleOpenapi:   false,
 		openapiVersion:         "",
@@ -164,26 +133,6 @@ func newServicesHandler(options servicesHandlerOptions) (handler TransportHandle
 		discovery:              nil,
 		group:                  &singleflight.Group{},
 	}
-	go func(handler *servicesHandler, deployedCh <-chan map[string]*endpoint) {
-		eps, ok := <-deployedCh
-		if !ok {
-			return
-		}
-		handler.ready = true
-		if eps == nil || len(eps) == 0 {
-			return
-		}
-		names := make([]string, 0, 1)
-		for name, ep := range eps {
-			handler.names = append(handler.names, name)
-			names = append(names, name)
-			if ep.Internal() || ep.Document() == nil {
-				continue
-			}
-			handler.documents.Add(ep.Document())
-		}
-	}(sh, options.DeployedCh)
-	handler = sh
 	return
 }
 
@@ -195,8 +144,6 @@ type servicesHandlerConfig struct {
 
 type servicesHandler struct {
 	log                    logs.Logger
-	ready                  bool
-	names                  []string
 	documents              documents.Documents
 	disableHandleDocuments bool
 	disableHandleOpenapi   bool
@@ -235,35 +182,19 @@ func (handler *servicesHandler) Build(options TransportHandlerOptions) (err erro
 }
 
 func (handler *servicesHandler) Accept(r *transports.Request) (ok bool) {
-	ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0
-	if ok {
+	if ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0; ok {
 		return
 	}
-	ok = r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0
-	if ok {
+	if ok = r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0; ok {
 		return
 	}
-	ok = r.IsGet() && bytes.Compare(r.Path(), servicesNamesPath) == 0
-	if ok {
+	if ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson && len(r.PathResources()) == 2; ok {
 		return
 	}
-	ok = r.IsPost() && r.Header().Get(httpContentType) == httpContentTypeJson
-	if !ok {
-		return
-	}
-	_, _, ok = parseServiceRequestPath(r.Path())
 	return
 }
 
 func (handler *servicesHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
-	if !handler.ready {
-		w.Failed(ErrTooEarly.WithMeta("handler", handler.Name()))
-		return
-	}
-	if r.IsGet() && bytes.Compare(r.Path(), servicesNamesPath) == 0 {
-		handler.handleNames(w, r)
-		return
-	}
 	if r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0 {
 		handler.handleDocuments(w, r)
 		return
@@ -303,11 +234,9 @@ func (handler *servicesHandler) getRequestId(r *transports.Request) (requestId s
 
 func (handler *servicesHandler) handleRequest(writer transports.ResponseWriter, r *transports.Request) {
 	// read path
-	serviceNameBytes, fnNameBytes, invalidPath := parseServiceRequestPath(r.Path())
-	if !invalidPath {
-		handler.failed(writer, "", errors.Warning("fns: invalid request url path"))
-		return
-	}
+	resources := r.PathResources()
+	serviceNameBytes := resources[0]
+	fnNameBytes := resources[1]
 	serviceName := bytex.ToString(serviceNameBytes)
 	fnName := bytex.ToString(fnNameBytes)
 	// check version
@@ -567,34 +496,6 @@ func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter, r *tr
 	return
 }
 
-func (handler *servicesHandler) handleNames(w transports.ResponseWriter, r *transports.Request) {
-	const (
-		key = "names"
-	)
-	deviceId := handler.getDeviceId(r)
-	// handle
-	signature := r.Header().Get(httpRequestInternalSignatureHeader)
-	if !handler.signer.Verify([]byte(deviceId), []byte(signature)) {
-		w.Failed(errors.Warning("fns: invalid signature").WithMeta("handler", handler.Name()))
-		return
-	}
-	v, err, _ := handler.group.Do(key, func() (v interface{}, err error) {
-		p, encodeErr := json.Marshal(handler.names)
-		if encodeErr != nil {
-			err = errors.Warning("fns: encode names failed").WithCause(encodeErr)
-			return
-		}
-		v = p
-		return
-	})
-	if err != nil {
-		w.Failed(errors.Map(err))
-		return
-	}
-	handler.write(w, http.StatusOK, v.([]byte))
-	return
-}
-
 func (handler *servicesHandler) succeed(w transports.ResponseWriter, id string, result interface{}) {
 	if id != "" {
 		w.Header().Set(httpRequestIdHeader, id)
@@ -617,30 +518,5 @@ func (handler *servicesHandler) write(w transports.ResponseWriter, status int, b
 		w.Header().Set(httpContentType, httpContentTypeJson)
 		_, _ = w.Write(body)
 	}
-	return
-}
-
-func parseServiceRequestPath(path []byte) (service []byte, fn []byte, ok bool) {
-	pLen := len(path)
-	if pLen < 1 {
-		return
-	}
-	if path[0] != '/' {
-		return
-	}
-	slashIdx := bytes.IndexByte(path[1:], '/')
-	if slashIdx < 1 {
-		return
-	}
-	slashIdx++
-	if pLen == slashIdx+1 {
-		return
-	}
-	if bytes.IndexByte(path[slashIdx+1:], '/') > -1 {
-		return
-	}
-	service = path[1:slashIdx]
-	fn = path[slashIdx+1:]
-	ok = true
 	return
 }

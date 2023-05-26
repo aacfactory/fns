@@ -29,10 +29,8 @@ import (
 	"github.com/aacfactory/fns/service/internal/procs"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/shareds"
-	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
-	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -201,75 +199,44 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			shared:    shared,
 			signer:    secret.NewSigner(bytex.FromString(secretKey)),
 		},
-		autoMaxProcs:  goprocs,
-		handleTimeout: time.Duration(handleTimeoutSeconds) * time.Second,
-		config:        options.Config,
-		deployed:      make(map[string]*endpoint),
-		deployedCHS:   newDeployed(),
-		registrations: nil,
-		transport:     nil,
-		proxy:         nil,
-		closers:       make([]io.Closer, 0, 1),
-		cluster:       cluster,
-		closeCh:       make(chan struct{}, 1),
+		autoMaxProcs:     goprocs,
+		handleTimeout:    time.Duration(handleTimeoutSeconds) * time.Second,
+		config:           options.Config,
+		deployed:         make(map[string]*endpoint),
+		registrations:    nil,
+		serviceTransport: nil,
+		proxyTransport:   nil,
+		cluster:          cluster,
+		closeCh:          make(chan struct{}, 1),
 	}
 	v.rt.discovery = v
 
 	// transports >>>
-	transport, transportMid, transportHds, transportClosers, transportPort, transportErr := createServiceTransport(config.Transport, v.deployedCHS.acquire(), v.rt, options.Transport.Middlewares, options.Transport.Handlers)
-	if transportErr != nil {
-		err = errors.Warning("fns: create endpoints failed").WithCause(transportErr)
+	serviceTransport, serviceTransportErr := createServiceTransport(config.Transport, v.rt, options.Transport.Middlewares, options.Transport.Handlers)
+	if serviceTransportErr != nil {
+		err = errors.Warning("fns: create endpoints failed").WithCause(serviceTransportErr)
 		return
 	}
-	v.rt.appPort = transportPort
-	v.closers = append(v.closers, transportClosers...)
-	v.transport = transport
-	v.transportMiddlewares = transportMid
-	v.transportHandlers = transportHds
-	for _, middleware := range options.Transport.Middlewares {
-		v.closers = append(v.closers, middleware)
-		servicesSupplier, ok := middleware.(ServicesSupplier)
-		if ok && servicesSupplier.Services() != nil {
-			embeds = append(embeds, servicesSupplier.Services()...)
-		}
-	}
-	for _, handlers := range options.Transport.Handlers {
-		servicesSupplier, ok := handlers.(ServicesSupplier)
-		if ok && servicesSupplier.Services() != nil {
-			embeds = append(embeds, servicesSupplier.Services()...)
-		}
-	}
+	v.serviceTransport = serviceTransport
+	v.rt.appPort = serviceTransport.Port()
+	embeds = append(embeds, serviceTransport.services()...)
 	if cluster != nil {
 		v.registrations = newRegistrations(
 			v.rt.log.With("discovery", "registrations"),
 			v.rt.appId, v.rt.appName, v.rt.appVersion,
-			cluster, v.rt.worker, v.transport, v.rt.signer, v.handleTimeout,
+			cluster, v.rt.worker, serviceTransport.transport, v.rt.signer, v.handleTimeout,
 			clusterFetchMembersInterval,
 		)
 	}
 	// proxy
 	if options.Proxy != nil {
-		proxy, proxyMid, proxyHds, proxyClosers, proxyErr := createProxyTransport(config.Proxy, v.deployedCHS.acquire(), v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
-		if proxyErr != nil {
-			err = errors.Warning("fns: create endpoints failed").WithCause(proxyErr)
+		proxyTransport, proxyTransportErr := createProxyTransport(config.Proxy, v.rt, v.registrations, options.Proxy.Middlewares, options.Proxy.Handlers)
+		if proxyTransportErr != nil {
+			err = errors.Warning("fns: create endpoints failed").WithCause(proxyTransportErr)
 			return
 		}
-		v.closers = append(v.closers, proxyClosers...)
-		v.proxy = proxy
-		v.proxyMiddlewares = proxyMid
-		v.proxyHandlers = proxyHds
-		for _, middleware := range options.Proxy.Middlewares {
-			servicesSupplier, ok := middleware.(ServicesSupplier)
-			if ok && servicesSupplier.Services() != nil {
-				embeds = append(embeds, servicesSupplier.Services()...)
-			}
-		}
-		for _, handlers := range options.Proxy.Handlers {
-			servicesSupplier, ok := handlers.(ServicesSupplier)
-			if ok && servicesSupplier.Services() != nil {
-				embeds = append(embeds, servicesSupplier.Services()...)
-			}
-		}
+		v.proxyTransport = serviceTransport
+		embeds = append(embeds, proxyTransport.services()...)
 	}
 	// transports <<<
 
@@ -287,23 +254,17 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 }
 
 type Endpoints struct {
-	log                  logs.Logger
-	rt                   *Runtime
-	autoMaxProcs         *procs.AutoMaxProcs
-	handleTimeout        time.Duration
-	config               configures.Config
-	deployed             map[string]*endpoint
-	deployedCHS          *deployed
-	registrations        *Registrations
-	transport            transports.Transport
-	transportMiddlewares *transportMiddlewares
-	transportHandlers    *transportHandlers
-	proxy                transports.Transport
-	proxyMiddlewares     *transportMiddlewares
-	proxyHandlers        *transportHandlers
-	closers              []io.Closer
-	cluster              Cluster
-	closeCh              chan struct{}
+	log              logs.Logger
+	rt               *Runtime
+	autoMaxProcs     *procs.AutoMaxProcs
+	handleTimeout    time.Duration
+	config           configures.Config
+	deployed         map[string]*endpoint
+	registrations    *Registrations
+	serviceTransport *Transport
+	proxyTransport   *Transport
+	cluster          Cluster
+	closeCh          chan struct{}
 }
 
 func (e *Endpoints) Log() (log logs.Logger) {
@@ -401,58 +362,23 @@ func (e *Endpoints) Deploy(svc Service) (err error) {
 func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	e.rt.status.flag.HalfOn()
 	e.autoMaxProcs.Enable()
-	e.deployedCHS.publish(e.deployed)
 	// cluster fetch
 	if e.cluster != nil {
 		e.fetchRegistrations()
 	}
 	// transport listen
-	err = e.transportMiddlewares.Build()
+	err = e.serviceTransport.Listen(ctx)
 	if err != nil {
 		err = errors.Warning("fns: endpoints listen failed").WithCause(err)
 		return
 	}
-	err = e.transportHandlers.Build()
-	if err != nil {
-		err = errors.Warning("fns: endpoints listen failed").WithCause(err)
-		return
-	}
-	transportListenErrCh := make(chan error, 2)
-	go func(srv transports.Transport, ch chan error) {
-		listenErr := srv.ListenAndServe()
-		if listenErr != nil {
-			ch <- errors.Warning("fns: endpoints listen failed").WithCause(listenErr)
-			close(ch)
-		}
-	}(e.transport, transportListenErrCh)
-	if e.proxy != nil {
-		err = e.proxyMiddlewares.Build()
+	if e.proxyTransport != nil {
+		err = e.proxyTransport.Listen(ctx)
 		if err != nil {
 			err = errors.Warning("fns: endpoints listen failed").WithCause(err)
 			return
 		}
-		err = e.proxyHandlers.Build()
-		if err != nil {
-			err = errors.Warning("fns: endpoints listen failed").WithCause(err)
-			return
-		}
-		go func(srv transports.Transport, ch chan error) {
-			listenErr := srv.ListenAndServe()
-			if listenErr != nil {
-				ch <- errors.Warning("fns: endpoints listen failed").WithCause(listenErr)
-				close(ch)
-			}
-		}(e.proxy, transportListenErrCh)
 	}
-	select {
-	case <-time.After(3 * time.Second):
-		break
-	case transportErr := <-transportListenErrCh:
-		e.Close(ctx)
-		err = errors.Warning("fns: endpoints listen failed").WithCause(transportErr)
-		return
-	}
-
 	// listen endpoint after cluster cause the endpoint may use cluster
 	serviceListenErrCh := make(chan error, 8)
 	lns := 0
@@ -511,25 +437,24 @@ func (e *Endpoints) Close(ctx context.Context) {
 	close(e.closeCh)
 
 	e.rt.status.flag.Off()
-
-	for _, closer := range e.closers {
-		_ = closer.Close()
-	}
+	// leave
 	if e.cluster != nil {
 		_ = e.cluster.Leave(ctx)
 	}
+	// close transport
+	_ = e.serviceTransport.Close()
+	if e.proxyTransport != nil {
+		_ = e.proxyTransport.Close()
+	}
+	// close registrations
 	if e.registrations != nil {
 		e.registrations.Close()
 	}
-
-	_ = e.transport.Close()
-	if e.proxy != nil {
-		_ = e.proxy.Close()
-	}
-
+	// close services
 	for _, ep := range e.deployed {
 		ep.svc.Close()
 	}
+	// reset max proc
 	e.autoMaxProcs.Reset()
 }
 

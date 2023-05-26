@@ -21,10 +21,11 @@ import (
 	"sort"
 )
 
-func New(name string, description string, ver versions.Version) *Document {
+func New(name string, description string, internal bool, ver versions.Version) *Document {
 	return &Document{
 		Name:        name,
 		Description: description,
+		Internal:    internal,
 		Version:     ver,
 		Fns:         make([]*Fn, 0, 1),
 		Elements:    make(map[string]*Element),
@@ -38,6 +39,8 @@ type Document struct {
 	// Description
 	// as description of tag, support markdown
 	Description string `json:"description"`
+	// Internal
+	Internal bool
 	// Version
 	Version versions.Version `json:"version"`
 	// Fns

@@ -745,14 +745,14 @@ func (r *Registrations) AddNode(node *Node) (err error) {
 		return
 	}
 
-	for _, name := range node.Services {
+	for _, svc := range node.Services {
 		registration := &Registration{
 			hostId:  r.id,
 			id:      node.Id,
 			version: node.Version,
 			address: node.Address,
 			devMode: r.devMode,
-			name:    name,
+			name:    svc.Name,
 			client:  client,
 			signer:  r.signer,
 			worker:  r.worker,
@@ -841,40 +841,12 @@ func (r *Registrations) ListMembers(ctx context.Context) (members Nodes, err err
 			members = append(members, node)
 			continue
 		}
-		names, nameErr := r.GetNodeServices(ctx, node)
-		if nameErr != nil {
+		if node.Services == nil || len(node.Services) == 0 {
 			continue
 		}
-		if names == nil || len(names) == 0 {
-			continue
-		}
-		node.Services = names
 		members = append(members, node)
 	}
 	sort.Sort(members)
-	return
-}
-
-func (r *Registrations) GetNodeServices(ctx context.Context, node *Node) (names []string, err error) {
-	client, clientErr := r.dialer.Dial(node.Address)
-	if clientErr != nil {
-		err = clientErr
-		return
-	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, servicesNamesPath)
-	req.Header().Set(httpDeviceIdHeader, r.id)
-	req.Header().Set(httpRequestInternalSignatureHeader, bytex.ToString(r.signer.Sign(bytex.FromString(r.id))))
-
-	resp, doErr := client.Do(ctx, req)
-	if doErr != nil {
-		err = doErr
-		return
-	}
-	if resp.Status != http.StatusOK {
-		return
-	}
-	names = make([]string, 0, 1)
-	_ = json.Unmarshal(resp.Body, names)
 	return
 }
 
@@ -912,20 +884,24 @@ func (r *Registrations) Refresh(ctx context.Context) {
 	return
 }
 
-func (r *Registrations) FetchDocuments(ctx context.Context) (v documents.Documents, err error) {
+func (r *Registrations) ServiceDocuments() (v documents.Documents, err error) {
 	v = documents.NewDocuments()
 	if r.nodes == nil || len(r.nodes) == 0 {
 		return
 	}
 	for _, node := range r.nodes {
-		doc, docErr := r.FetchNodeDocuments(ctx, node)
-		if docErr != nil {
+		if len(node.Services) == 0 {
 			continue
 		}
-		if doc == nil || doc.Len() == 0 {
-			continue
+		docs := documents.NewDocuments()
+		for _, service := range node.Services {
+			doc := service.Document
+			if doc == nil {
+				continue
+			}
+			docs.Add(doc)
 		}
-		v = v.Merge(doc)
+		v = v.Merge(docs)
 	}
 	return
 }

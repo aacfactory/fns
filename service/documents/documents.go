@@ -258,6 +258,9 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 			if !matched {
 				continue
 			}
+			if document.Internal {
+				continue
+			}
 			// tags
 			api.Tags = append(api.Tags, &oas.Tag{
 				Name:        document.Name,

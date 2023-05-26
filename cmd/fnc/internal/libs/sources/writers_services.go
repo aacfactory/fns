@@ -625,7 +625,11 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 			fnCodes = append(fnCodes, fnCode)
 		}
 		if len(fnCodes) > 0 {
-			body.Token(fmt.Sprintf("document = documents.New(_name, \"%s\", svc.AppVersion())", s.service.Description), gcg.NewPackage("github.com/aacfactory/fns/service/documents")).Line()
+			internal := "false"
+			if s.service.Internal {
+				internal = "true"
+			}
+			body.Token(fmt.Sprintf("document = documents.New(_name, \"%s\", %s, svc.AppVersion())", s.service.Description, internal), gcg.NewPackage("github.com/aacfactory/fns/service/documents")).Line()
 			for _, fnCode := range fnCodes {
 				body.Add(fnCode).Line()
 			}

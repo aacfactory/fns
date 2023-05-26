@@ -275,6 +275,7 @@ func (middleware *transportApplicationMiddleware) Handler(next transports.Handle
 			w.Failed(ErrTooEarly)
 			return
 		}
+		//
 		middleware.requests.Add(1)
 		middleware.counter.Add(1)
 		// runtime

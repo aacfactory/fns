@@ -17,6 +17,7 @@
 package transports
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -144,6 +145,7 @@ type Request struct {
 	proto              []byte
 	header             Header
 	path               []byte
+	pathResources      [][]byte
 	params             RequestParams
 	body               []byte
 }
@@ -207,6 +209,26 @@ func (r *Request) Header() Header {
 
 func (r *Request) Path() []byte {
 	return r.path
+}
+
+func (r *Request) PathResources() (v [][]byte) {
+	if r.pathResources != nil {
+		v = r.pathResources
+		return
+	}
+	r.pathResources = make([][]byte, 0, 2)
+	pLen := len(r.path)
+	if pLen < 1 {
+		v = r.pathResources
+		return
+	}
+	if r.path[0] != '/' {
+		v = r.pathResources
+		return
+	}
+	r.pathResources = bytes.Split(r.path[1:], []byte{'/'})
+	v = r.pathResources
+	return
 }
 
 func (r *Request) Param(name string) []byte {

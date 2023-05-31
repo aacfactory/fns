@@ -68,15 +68,17 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 		return
 	}
 	sscConfig := afssl.CertificateConfig{
-		Country:            ca0.Subject.Country[0],
-		Province:           ca0.Subject.Province[0],
-		City:               ca0.Subject.Locality[0],
-		Organization:       ca0.Subject.Organization[0],
-		OrganizationalUnit: ca0.Subject.OrganizationalUnit[0],
-		CommonName:         ca0.Subject.CommonName,
-		IPs:                nil,
-		Emails:             nil,
-		DNSNames:           nil,
+		Subject: &afssl.CertificatePkixName{
+			Country:            ca0.Subject.Country[0],
+			Province:           ca0.Subject.Province[0],
+			Locality:           ca0.Subject.Locality[0],
+			Organization:       ca0.Subject.Organization[0],
+			OrganizationalUnit: ca0.Subject.OrganizationalUnit[0],
+			CommonName:         ca0.Subject.CommonName,
+		},
+		IPs:      nil,
+		Emails:   nil,
+		DNSNames: nil,
 	}
 	serverCert, serverKey, createServerErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(int(ca0.NotAfter.Sub(time.Now()).Hours())/24))
 	if createServerErr != nil {

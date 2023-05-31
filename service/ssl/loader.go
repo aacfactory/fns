@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 )
 
+// Loader todo:  return struct, contains fn: net.Listener, tls.Config, Kind(SM2, rsa, ...) to support gmsm
 type Loader func(options configures.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error)
 
 var (

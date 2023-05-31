@@ -26,7 +26,7 @@ var Command = &cli.Command{
 	Name:        "ssc",
 	Aliases:     nil,
 	Usage:       "fnc ssc --cn=common_name .",
-	Description: "create self signed ca",
+	Description: "create self signed ca keypair",
 	ArgsUsage:   "",
 	Category:    "",
 	Flags: []cli.Flag{
@@ -36,25 +36,18 @@ var Command = &cli.Command{
 			Value:    "",
 			Usage:    "common name",
 		},
-		&cli.BoolFlag{
-			Required: false,
-			Name:     "full",
-			Value:    false,
-			Usage:    "create all tls files",
-		},
 	},
 	Action: func(ctx *cli.Context) (err error) {
 		cn := ctx.String("cn")
 		if cn == "" {
 			cn = "FNS"
 		}
-		full := ctx.Bool("full")
 		outputDir := strings.TrimSpace(ctx.Args().First())
 		if outputDir == "" {
 			err = errors.Warning("fnc: create ssc failed").WithCause(errors.Warning("output is undefined"))
 			return
 		}
-		err = generate(cn, full, outputDir)
+		err = generate(cn, outputDir)
 		if err != nil {
 			err = errors.Warning("fnc: create ssc failed").WithCause(err)
 			return

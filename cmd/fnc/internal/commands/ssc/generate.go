@@ -23,82 +23,28 @@ import (
 	"path/filepath"
 )
 
-func generate(cn string, full bool, outputDir string) (err error) {
-	ca, caKey, caErr := create(cn, nil, nil)
-	if caErr != nil {
-		return
-	}
-	var serverCrt, serverKey []byte
-	var clientCrt, clientKey []byte
-	if full {
-		serverCrt, serverKey, err = create(cn, ca, caKey)
-		if err != nil {
-			return
-		}
-		clientCrt, clientKey, err = create(cn, ca, caKey)
-		if err != nil {
-			return
-		}
-	}
-	err = os.WriteFile(filepath.Join(outputDir, "ca.crt"), ca, 0644)
-	if err != nil {
-		err = fmt.Errorf("fnc: create ssc failed, %v", err)
-		return
-	}
-	err = os.WriteFile(filepath.Join(outputDir, "ca.key"), caKey, 0644)
-	if err != nil {
-		err = fmt.Errorf("fnc: create ssc failed, %v", err)
-		return
-	}
-	if full {
-		err = os.WriteFile(filepath.Join(outputDir, "server.crt"), serverCrt, 0644)
-		if err != nil {
-			err = fmt.Errorf("fnc: create ssc failed, %v", err)
-			return
-		}
-		err = os.WriteFile(filepath.Join(outputDir, "server.key"), serverKey, 0644)
-		if err != nil {
-			err = fmt.Errorf("fnc: create ssc failed, %v", err)
-			return
-		}
-		err = os.WriteFile(filepath.Join(outputDir, "client.crt"), clientCrt, 0644)
-		if err != nil {
-			err = fmt.Errorf("fnc: create ssc failed, %v", err)
-			return
-		}
-		err = os.WriteFile(filepath.Join(outputDir, "client.key"), clientKey, 0644)
-		if err != nil {
-			err = fmt.Errorf("fnc: create ssc failed, %v", err)
-			return
-		}
-	}
-	return
-}
-
-func create(cn string, ca []byte, caKey []byte) (cert []byte, key []byte, err error) {
+func generate(cn string, outputDir string) (err error) {
 	config := afssl.CertificateConfig{
-		Country:            "",
-		Province:           "",
-		City:               "",
-		Organization:       "",
-		OrganizationalUnit: "",
-		CommonName:         cn,
-		IPs:                nil,
-		Emails:             nil,
-		DNSNames:           nil,
+		Subject: &afssl.CertificatePkixName{
+			CommonName: cn,
+		},
+		IPs:      nil,
+		Emails:   nil,
+		DNSNames: nil,
 	}
-	if ca == nil || len(ca) == 0 {
-		// ca
-		cert, key, err = afssl.GenerateCertificate(config, afssl.CA())
-		if err != nil {
-			err = fmt.Errorf("fnc: create ssc failed")
-			return
-		}
+	cert, key, genErr := afssl.GenerateCertificate(config, afssl.CA())
+	if genErr != nil {
+		err = fmt.Errorf("fnc: create ssc failed. %v", genErr)
 		return
 	}
-	cert, key, err = afssl.GenerateCertificate(config, afssl.WithParent(ca, caKey))
+	err = os.WriteFile(filepath.Join(outputDir, "ca.crt"), cert, 0644)
 	if err != nil {
-		err = fmt.Errorf("fnc: create ssc failed")
+		err = fmt.Errorf("fnc: create ssc failed, %v", err)
+		return
+	}
+	err = os.WriteFile(filepath.Join(outputDir, "ca.key"), key, 0644)
+	if err != nil {
+		err = fmt.Errorf("fnc: create ssc failed, %v", err)
 		return
 	}
 	return

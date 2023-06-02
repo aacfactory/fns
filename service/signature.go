@@ -45,7 +45,7 @@ var (
 	signaturesConfirmExchangeKeyPath = []byte("/signatures/confirm_exchange_key")
 )
 
-// SignatureMiddleware
+// SignatureMiddleware todo: make it be an interceptor, such as @interceptor signature
 //
 // 使用SM2进行共享密钥交换，交换成功后双方使用共享密钥进行对签名与验证
 // 签名方式为使用HMAC+XXHASH对path+body签名，使用HEX对签名编码。最终将签名赋值于X-Fns-Signature头。
@@ -72,39 +72,38 @@ func SignatureMiddleware(certificates Certificates) TransportMiddleware {
 		return nil
 	}
 	return &signatureMiddleware{
-		store:          nil,
-		sigs:           sync.Map{},
-		certificates:   certificates,
-		group:          new(singleflight.Group),
-		certificateId:  "",
-		exchangeKeyTTL: 0,
-		publicPEM:      nil,
-		publicKey:      nil,
-		privateKey:     nil,
+		store:               nil,
+		sigs:                sync.Map{},
+		certificates:        certificates,
+		group:               new(singleflight.Group),
+		certificateId:       "",
+		certificateExpireAT: time.Time{},
+		exchangeKeyTTL:      0,
+		exchange:            nil,
+		secretKeyLen:        0,
 	}
 }
 
 type signatureMiddlewareConfig struct {
-	// CertificateId 响应方的证书编号，其证书类型必须是SM2
+	// CertificateId 响应方的证书编号，其证书类型必须是SM2或者ECDSA
 	CertificateId string `json:"certificateId"`
 	// ExchangeKeyTTL 共享密钥的有效时长
 	ExchangeKeyTTL string `json:"exchangeKeyTTL"`
-	// DisableConfirm 是否关闭密钥交换确认过程
-	DisableConfirm bool `json:"disableConfirm"`
+	// SecretKeyLen 共享密钥的长度
+	SecretKeyLen int `json:"secretKeyLen"`
 }
 
 type signatureMiddleware struct {
-	store                     shareds.Store
-	sigs                      sync.Map
-	certificates              Certificates
-	group                     *singleflight.Group
-	certificateId             string
-	exchangeKeyTTL            time.Duration
-	publicPEM                 []byte
-	publicKey                 *sm2.PublicKey
-	privateKey                *sm2.PrivateKey
-	expireAT                  time.Time
-	exchangeKeyConfirmEnabled bool
+	store        shareds.Store
+	sigs         sync.Map
+	certificates Certificates
+	group        *singleflight.Group
+
+	certificateId       string
+	certificateExpireAT time.Time
+	exchangeKeyTTL      time.Duration
+	exchange            KeyExchange
+	secretKeyLen        int
 }
 
 func (middleware *signatureMiddleware) Name() (name string) {
@@ -135,7 +134,11 @@ func (middleware *signatureMiddleware) Build(options TransportMiddlewareOptions)
 	if middleware.exchangeKeyTTL < 1 {
 		middleware.exchangeKeyTTL = 24 * time.Hour
 	}
-	middleware.exchangeKeyConfirmEnabled = !config.DisableConfirm
+	if config.SecretKeyLen < 1 {
+
+	}
+
+	middleware.exchange = !config.DisableConfirm
 	return
 }
 
@@ -464,10 +467,42 @@ type Certificate interface {
 	Kind() string
 	Key() []byte
 	SecretKey() []byte
-	Password() []byte
 	ExpireAT() time.Time
 }
 
 type Certificates interface {
 	Get(ctx context.Context, id string) (certificate Certificate, err errors.CodeError)
+}
+
+type KeyExchange interface {
+	Init(ctx context.Context, initiatorUID []byte, responderUID []byte, responderPubKeyPEM []byte, secretKeyLen int) (initiatorTempPubKeyPEM []byte, err error)
+	Confirm(ctx context.Context, initiatorUID []byte, responderUID []byte, responderTempPubKeyPEM []byte, responderSecretSign []byte) (secret []byte, initiatorSecretSign []byte, err error)
+}
+
+type sm2KeyExchange struct {
+	certificates Certificates
+	cache        shareds.Caches
+}
+
+func (ke *sm2KeyExchange) Init(ctx context.Context, initiatorUID []byte, responderUID []byte, responderPubKeyPEM []byte, secretKeyLen int) (initiatorTempPubKeyPEM []byte, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (ke *sm2KeyExchange) Confirm(ctx context.Context, responderUID []byte, responderTempPubKeyPEM []byte, responderSecretSign []byte) (secret []byte, initiatorSecretSign []byte, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+type ecdsaKeyExchange struct {
+}
+
+func (ke *ecdsaKeyExchange) Init(ctx context.Context, initiatorUID []byte, responderUID []byte, responderPubKeyPEM []byte, secretKeyLen int) (initiatorTempPubKeyPEM []byte, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (ke *ecdsaKeyExchange) Confirm(ctx context.Context, initiatorUID []byte, responderUID []byte, responderTempPubKeyPEM []byte, responderSecretSign []byte) (secret []byte, initiatorSecretSign []byte, err error) {
+	//TODO implement me
+	panic("implement me")
 }

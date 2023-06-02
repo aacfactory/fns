@@ -45,7 +45,7 @@ var (
 	signaturesConfirmExchangeKeyPath = []byte("/signatures/confirm_exchange_key")
 )
 
-// SignatureMiddleware todo: make it be an interceptor, such as @interceptor signature
+// SignatureMiddleware todo: make it be a Component
 //
 // 使用SM2进行共享密钥交换，交换成功后双方使用共享密钥进行对签名与验证
 // 签名方式为使用HMAC+XXHASH对path+body签名，使用HEX对签名编码。最终将签名赋值于X-Fns-Signature头。

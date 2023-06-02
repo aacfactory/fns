@@ -17,16 +17,26 @@
 package signatures_test
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"github.com/aacfactory/fns/commons/signatures"
 	"testing"
 	"time"
 )
 
-func TestECC(t *testing.T) {
-	pub := []byte(`MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEgTozHvlIiW85B63PRWb/GycHQ2pw8RXKQZErDqBFQr26Hy7Xtjd/c/bS4zm7+Q8twrnH8bJcNGrJKbmn+wEOhA==`)
-	pri := []byte(`MHcCAQEEIOcApuQLLvGy0fBpPH5rUNgj3qq0+0J86nB8ULcqfpd9oAoGCCqGSM49AwEHoUQDQgAEgTozHvlIiW85B63PRWb/GycHQ2pw8RXKQZErDqBFQr26Hy7Xtjd/c/bS4zm7+Q8twrnH8bJcNGrJKbmn+wEOhA==`)
-	s, sErr := signatures.ECC(pub, pri, signatures.XXHash)
+func TestECDSA(t *testing.T) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	der, _ := x509.MarshalPKCS8PrivateKey(key)
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:    "PRIVATE KEY",
+		Headers: nil,
+		Bytes:   der,
+	})
+	s, sErr := signatures.ECDSA(keyPEM, signatures.XXHash)
 	if sErr != nil {
 		t.Errorf("%+v", sErr)
 		return

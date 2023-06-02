@@ -19,6 +19,8 @@ package signatures_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"github.com/aacfactory/fns/commons/signatures"
 	"testing"
@@ -26,9 +28,18 @@ import (
 )
 
 func TestRSA(t *testing.T) {
-	pri, _ := rsa.GenerateKey(rand.Reader, 2048)
-	pub := pri.PublicKey
-	s := signatures.RSA(&pub, pri)
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	der, _ := x509.MarshalPKCS8PrivateKey(key)
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:    "PRIVATE KEY",
+		Headers: nil,
+		Bytes:   der,
+	})
+	s, sErr := signatures.RSA(keyPEM)
+	if sErr != nil {
+		t.Errorf("%+v", sErr)
+		return
+	}
 	p := []byte(time.Now().String())
 	v := s.Sign(p)
 	fmt.Println(s.Verify(p, v))

@@ -17,10 +17,8 @@
 package signatures
 
 import (
-	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"github.com/aacfactory/errors"
@@ -28,63 +26,62 @@ import (
 	"sync"
 )
 
-func RSA(keyPEM []byte) (Signer, error) {
+func ECDSA(keyPEM []byte, hf HashFunc) (Signer, error) {
 	block, _ := pem.Decode(keyPEM)
 	privateKey, priErr := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if priErr != nil {
-		return nil, errors.Warning("fns: create rsa signer failed").WithCause(errors.Warning("parse private key failed")).WithCause(priErr)
+		return nil, errors.Warning("fns: create ecdsa signer failed").WithCause(errors.Warning("parse private key failed")).WithCause(priErr)
 	}
-	key, ok := privateKey.(*rsa.PrivateKey)
+	key, ok := privateKey.(*ecdsa.PrivateKey)
 	if !ok {
-		return nil, errors.Warning("fns: create rsa signer failed").WithCause(errors.Warning("private is not rsa"))
+		return nil, errors.Warning("fns: create ecdsa signer failed").WithCause(errors.Warning("private is not ecdsa"))
 	}
-	return &rsaSigner{
+	return &ecdsaSigner{
 		pub: &key.PublicKey,
 		pri: key,
 		pool: sync.Pool{
 			New: func() any {
-				return sha256.New()
+				return hf()
 			},
 		},
 	}, nil
 }
 
-type rsaSigner struct {
-	pub  *rsa.PublicKey
-	pri  *rsa.PrivateKey
+type ecdsaSigner struct {
+	pub  *ecdsa.PublicKey
+	pri  *ecdsa.PrivateKey
 	pool sync.Pool
 }
 
-func (s *rsaSigner) acquire() (h hash.Hash) {
+func (s *ecdsaSigner) acquire() (h hash.Hash) {
 	v := s.pool.Get()
 	if v != nil {
 		h = v.(hash.Hash)
 		return
 	}
-	h = sha256.New()
 	return
 }
 
-func (s *rsaSigner) release(h hash.Hash) {
+func (s *ecdsaSigner) release(h hash.Hash) {
 	h.Reset()
 	s.pool.Put(h)
 	return
 }
 
-func (s *rsaSigner) Sign(target []byte) (signature []byte) {
+func (s *ecdsaSigner) Sign(target []byte) (signature []byte) {
 	h := s.acquire()
 	h.Write(target)
 	hashed := h.Sum(nil)
-	signature, _ = rsa.SignPKCS1v15(rand.Reader, s.pri, crypto.SHA256, hashed)
+	signature, _ = ecdsa.SignASN1(rand.Reader, s.pri, hashed)
 	s.release(h)
 	return
 }
 
-func (s *rsaSigner) Verify(target []byte, signature []byte) (ok bool) {
+func (s *ecdsaSigner) Verify(target []byte, signature []byte) (ok bool) {
 	h := s.acquire()
 	h.Write(target)
 	hashed := h.Sum(nil)
-	ok = rsa.VerifyPKCS1v15(s.pub, crypto.SHA256, hashed, signature) == nil
+	ok = ecdsa.VerifyASN1(s.pub, hashed, signature)
 	s.release(h)
 	return
 }

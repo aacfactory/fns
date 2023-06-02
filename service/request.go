@@ -578,6 +578,7 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			header = opt.header
 		} else {
 			header = prev.Header().Clone()
+			header.Del(httpSignatureHeader)
 			header.Del(httpRequestVersionsHeader)
 			header.Del(httpCacheControlHeader)
 			header.Del(httpCacheControlIfNonMatch)

@@ -17,7 +17,6 @@
 package service
 
 import (
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
@@ -135,31 +134,26 @@ func (config *TransportConfig) HandlersConfig() (conf configures.Config, err err
 
 func (config *TransportConfig) ConvertToTransportsOptions(log logs.Logger, handler transports.Handler) (options transports.Options, err error) {
 	options = transports.Options{
-		Port:      80,
-		ServerTLS: nil,
-		ClientTLS: nil,
-		Handler:   handler,
-		Log:       log.With("fns", "transport"),
-		Config:    nil,
+		Port:    80,
+		TLS:     nil,
+		Handler: handler,
+		Log:     log.With("fns", "transport"),
+		Config:  nil,
 	}
 	if config == nil {
 		return
 	}
-	var serverTLS *tls.Config
-	var clientTLS *tls.Config
 	if config.TLS != nil {
 		var tlsErr error
-		serverTLS, clientTLS, tlsErr = config.TLS.Config()
+		options.TLS, tlsErr = config.TLS.Config()
 		if tlsErr != nil {
 			err = errors.Warning("convert to transport options failed").WithCause(tlsErr)
 			return
 		}
 	}
-	options.ServerTLS = serverTLS
-	options.ClientTLS = clientTLS
 	port := config.Port
 	if port == 0 {
-		if serverTLS == nil {
+		if options.TLS == nil {
 			port = 80
 		} else {
 			port = 443
@@ -186,23 +180,25 @@ type TLSConfig struct {
 	// ACME
 	// SSC(SELF-SIGN-CERT)
 	// DEFAULT
+	// GM
 	Kind    string          `json:"kind" yaml:"kind,omitempty"`
 	Options json.RawMessage `json:"options" yaml:"options,omitempty"`
 }
 
-func (config *TLSConfig) Config() (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
+func (config *TLSConfig) Config() (conf ssl.Config, err error) {
 	kind := strings.TrimSpace(config.Kind)
-	loader, hasLoader := ssl.GetLoader(kind)
-	if !hasLoader {
-		err = errors.Warning(fmt.Sprintf("fns: can not get %s tls loader", kind))
+	hasConf := false
+	conf, hasConf = ssl.GetConfig(kind)
+	if !hasConf {
+		err = errors.Warning(fmt.Sprintf("fns: can not get %s tls config", kind))
 		return
 	}
-	loaderConfig, loaderConfigErr := configures.NewJsonConfig(config.Options)
-	if loaderConfigErr != nil {
-		err = errors.Warning(fmt.Sprintf("fns: can not get options of %s tls loader", kind)).WithCause(loaderConfigErr)
+	confOptions, confOptionsErr := configures.NewJsonConfig(config.Options)
+	if confOptionsErr != nil {
+		err = errors.Warning(fmt.Sprintf("fns: can not get options of %s tls config", kind)).WithCause(confOptionsErr)
 		return
 	}
-	serverTLS, clientTLS, err = loader(loaderConfig)
+	err = conf.Build(confOptions)
 	return
 }
 

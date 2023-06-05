@@ -18,13 +18,13 @@ package service
 
 import (
 	"context"
-	"crypto/tls"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/shareds"
+	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -128,10 +128,9 @@ func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err erro
 		err = errors.Warning("fns: build dev cluster failed").WithCause(errors.Warning("proxyAddress of config options is required"))
 		return
 	}
-	var srvTLS *tls.Config
-	var cliTLS *tls.Config
+	var sslConf ssl.Config
 	if config.TLS != nil {
-		srvTLS, cliTLS, err = config.TLS.Config()
+		sslConf, err = config.TLS.Config()
 		if err != nil {
 			err = errors.Warning("fns: build dev cluster failed").WithCause(err)
 			return
@@ -144,12 +143,11 @@ func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err erro
 	}
 	transportsConfig, _ := configures.NewJsonConfig([]byte{'{', '}'})
 	transportsOptions := transports.Options{
-		Port:      13000,
-		ServerTLS: srvTLS,
-		ClientTLS: cliTLS,
-		Handler:   &devTransportHandler{},
-		Log:       options.Log.With("transport", "dev"),
-		Config:    transportsConfig,
+		Port:    13000,
+		TLS:     sslConf,
+		Handler: &devTransportHandler{},
+		Log:     options.Log.With("transport", "dev"),
+		Config:  transportsConfig,
 	}
 	buildTransportErr := proxyTransport.Build(transportsOptions)
 	if buildTransportErr != nil {

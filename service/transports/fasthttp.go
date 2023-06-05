@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/valyala/bytebufferpool"
@@ -147,7 +148,7 @@ func (client *fastClient) Close() {
 
 type fastHttpTransport struct {
 	log       logs.Logger
-	ssl       bool
+	sslConfig ssl.Config
 	address   string
 	preforked bool
 	client    *fasthttp.Client
@@ -162,7 +163,7 @@ func (srv *fastHttpTransport) Name() (name string) {
 func (srv *fastHttpTransport) Build(options Options) (err error) {
 	srv.log = options.Log
 	srv.address = fmt.Sprintf(":%d", options.Port)
-	srv.ssl = options.ServerTLS != nil
+	srv.sslConfig = options.TLS
 
 	opt := &FastHttpTransportOptions{}
 	optErr := options.Config.As(opt)
@@ -262,11 +263,16 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 		StreamRequestBody:                  opt.StreamRequestBody,
 		ConnState:                          nil,
 		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
-		TLSConfig:                          options.ServerTLS,
+		TLSConfig:                          nil,
 		FormValueFunc:                      nil,
 	}
 	// client
-	err = srv.buildClient(opt.Client, options.ClientTLS)
+	_, cliTLS, tlsErr := options.TLS.TLS()
+	if tlsErr == nil {
+		err = srv.buildClient(opt.Client, cliTLS)
+	} else {
+		err = srv.buildClient(opt.Client, nil)
+	}
 	if err != nil {
 		err = errors.Warning("fns: fasthttp build failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
 		return
@@ -366,9 +372,18 @@ func (srv *fastHttpTransport) buildClient(opt FastHttpClientOptions, cliConfig *
 
 func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
 	client = &fastClient{
-		ssl:     srv.ssl,
+		ssl:     srv.sslConfig != nil,
 		address: address,
 		tr:      srv.client,
+	}
+	return
+}
+
+func (srv *fastHttpTransport) preforkServe(ln net.Listener) (err error) {
+	if srv.sslConfig != nil {
+		err = srv.server.Serve(srv.sslConfig.NewListener(ln))
+	} else {
+		err = srv.server.Serve(ln)
 	}
 	return
 }
@@ -376,19 +391,21 @@ func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
 func (srv *fastHttpTransport) ListenAndServe() (err error) {
 	if srv.preforked {
 		pf := prefork.New(srv.server)
-		if srv.ssl {
-			err = pf.ListenAndServeTLS(srv.address, "", "")
-		} else {
-			err = pf.ListenAndServe(srv.address)
-		}
+		pf.ServeFunc = srv.preforkServe
+		err = pf.ListenAndServe(srv.address)
 		if err != nil {
 			err = errors.Warning("fns: transport perfork listen and serve failed").WithCause(err)
 			return
 		}
 		return
 	}
-	if srv.ssl {
-		err = srv.server.ListenAndServeTLS(srv.address, "", "")
+	if srv.sslConfig != nil {
+		ln, lnErr := net.Listen("tcp4", srv.address)
+		if lnErr != nil {
+			err = errors.Warning("fns: transport listen and serve failed").WithCause(lnErr).WithMeta("transport", fastHttpTransportName)
+			return
+		}
+		err = srv.server.Serve(srv.sslConfig.NewListener(ln))
 	} else {
 		err = srv.server.ListenAndServe(srv.address)
 	}

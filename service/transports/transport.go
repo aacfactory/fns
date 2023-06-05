@@ -17,8 +17,8 @@
 package transports
 
 import (
-	"crypto/tls"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/logs"
 	"io"
 )
@@ -42,12 +42,11 @@ func Registered(name string) (transport Transport, has bool) {
 }
 
 type Options struct {
-	Port      int
-	ServerTLS *tls.Config
-	ClientTLS *tls.Config
-	Handler   Handler
-	Log       logs.Logger
-	Config    configures.Config
+	Port    int
+	TLS     ssl.Config
+	Handler Handler
+	Log     logs.Logger
+	Config  configures.Config
 }
 
 type Transport interface {

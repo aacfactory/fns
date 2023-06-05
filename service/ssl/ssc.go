@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/afssl"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -34,7 +35,12 @@ type SSCLoaderOptions struct {
 	CAKEY string `json:"caKey"`
 }
 
-func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
+type SSCConfig struct {
+	serverTLS *tls.Config
+	clientTLS *tls.Config
+}
+
+func (config *SSCConfig) Build(options configures.Config) (err error) {
 	caPEM := defaultTestSSCCaPEM
 	caKeyPEM := defaultTestSSCCaKeyPEM
 	opt := &SSCLoaderOptions{}
@@ -95,7 +101,7 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(serverCertificateErr)
 		return
 	}
-	serverTLS = &tls.Config{
+	config.serverTLS = &tls.Config{
 		ClientCAs:    cas,
 		Certificates: []tls.Certificate{serverCertificate},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -110,11 +116,22 @@ func SSCLoader(options configures.Config) (serverTLS *tls.Config, clientTLS *tls
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(clientCertificateErr)
 		return
 	}
-	clientTLS = &tls.Config{
+	config.clientTLS = &tls.Config{
 		RootCAs:            cas,
 		Certificates:       []tls.Certificate{clientCertificate},
 		InsecureSkipVerify: true,
 	}
+	return
+}
+
+func (config *SSCConfig) TLS() (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
+	serverTLS = config.serverTLS
+	clientTLS = config.clientTLS
+	return
+}
+
+func (config *SSCConfig) NewListener(inner net.Listener) (ln net.Listener) {
+	ln = tls.NewListener(inner, config.serverTLS.Clone())
 	return
 }
 

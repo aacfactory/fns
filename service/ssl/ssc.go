@@ -30,7 +30,7 @@ import (
 	"time"
 )
 
-type SSCLoaderOptions struct {
+type SSCConfigOptions struct {
 	CA    string `json:"ca"`
 	CAKEY string `json:"caKey"`
 }
@@ -43,7 +43,7 @@ type SSCConfig struct {
 func (config *SSCConfig) Build(options configures.Config) (err error) {
 	caPEM := defaultTestSSCCaPEM
 	caKeyPEM := defaultTestSSCCaKeyPEM
-	opt := &SSCLoaderOptions{}
+	opt := &SSCConfigOptions{}
 	optErr := options.As(opt)
 	if optErr != nil {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(optErr)

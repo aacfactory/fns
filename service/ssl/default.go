@@ -26,40 +26,60 @@ import (
 	"strings"
 )
 
-type DefaultConfigOptions struct {
-	Cert string `json:"cert"`
-	Key  string `json:"key"`
+type Keypair struct {
+	Cert     string `json:"cert"`
+	Key      string `json:"key"`
+	Password string `json:"password"`
 }
 
-func (options *DefaultConfigOptions) Build() (serverTLS *tls.Config, err error) {
-	cert := strings.TrimSpace(options.Cert)
-	if cert == "" {
-		err = errors.Warning("fns: build default tls config failed").WithCause(fmt.Errorf("cert is undefined"))
+type DefaultConfigOptions struct {
+	ClientAuth int       `json:"clientAuth"`
+	Keypair    []Keypair `json:"keypair"`
+}
+
+func (options DefaultConfigOptions) Build() (serverTLS *tls.Config, err error) {
+	clientAuth := tls.ClientAuthType(options.ClientAuth)
+	if clientAuth < tls.NoClientCert || clientAuth > tls.RequireAndVerifyClientCert {
+		err = errors.Warning("fns: build default tls config failed").WithCause(fmt.Errorf("clientAuth is invalid"))
 		return
 	}
-	certPEM, readCertErr := os.ReadFile(cert)
-	if readCertErr != nil {
-		err = errors.Warning("fns: build default tls config failed").WithCause(readCertErr)
+	if len(options.Keypair) == 0 {
+		err = errors.Warning("fns: build default tls config failed").WithCause(fmt.Errorf("keypair is undefined"))
 		return
 	}
-	key := strings.TrimSpace(options.Key)
-	if key == "" {
-		err = errors.Warning("fns: build default tls config failed").WithCause(fmt.Errorf("key is undefined"))
-		return
+	certificates := make([]tls.Certificate, 0, 1)
+	for _, keypair := range options.Keypair {
+		cert := strings.TrimSpace(keypair.Cert)
+		if cert == "" {
+			err = errors.Warning("fns: build default tls config failed").WithCause(fmt.Errorf("cert is undefined"))
+			return
+		}
+		certPEM, readCertErr := os.ReadFile(cert)
+		if readCertErr != nil {
+			err = errors.Warning("fns: build default tls config failed").WithCause(readCertErr)
+			return
+		}
+		key := strings.TrimSpace(keypair.Key)
+		if key == "" {
+			err = errors.Warning("fns: build default tls config failed").WithCause(fmt.Errorf("key is undefined"))
+			return
+		}
+		keyPEM, readKeyErr := os.ReadFile(key)
+		if readKeyErr != nil {
+			err = errors.Warning("fns: build default tls config failed").WithCause(readKeyErr)
+			return
+		}
+		certificate, certificateErr := tls.X509KeyPair(certPEM, keyPEM)
+		if certificateErr != nil {
+			err = errors.Warning("fns: build default tls config failed").WithCause(certificateErr)
+			return
+		}
+		certificates = append(certificates, certificate)
 	}
-	keyPEM, readKeyErr := os.ReadFile(key)
-	if readKeyErr != nil {
-		err = errors.Warning("fns: build default tls config failed").WithCause(readKeyErr)
-		return
-	}
-	certificate, certificateErr := tls.X509KeyPair(certPEM, keyPEM)
-	if certificateErr != nil {
-		err = errors.Warning("fns: build default tls config failed").WithCause(certificateErr)
-		return
-	}
+
 	serverTLS = &tls.Config{
-		Certificates: []tls.Certificate{certificate},
-		ClientAuth:   tls.NoClientCert,
+		Certificates: certificates,
+		ClientAuth:   clientAuth,
 	}
 	return
 }

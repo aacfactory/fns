@@ -18,14 +18,13 @@ package transports
 
 import (
 	"bufio"
-	"context"
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/dgrr/http2"
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/prefork"
@@ -39,20 +38,6 @@ import (
 const (
 	fastHttpTransportName = "fasthttp"
 )
-
-type FastHttpClientOptions struct {
-	DialDualStack             bool   `json:"dialDualStack"`
-	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
-	MaxIdleConnDuration       string `json:"maxIdleConnDuration"`
-	MaxConnDuration           string `json:"maxConnDuration"`
-	MaxIdemponentCallAttempts int    `json:"maxIdemponentCallAttempts"`
-	ReadBufferSize            string `json:"readBufferSize"`
-	ReadTimeout               string `json:"readTimeout"`
-	WriteBufferSize           string `json:"writeBufferSize"`
-	WriteTimeout              string `json:"writeTimeout"`
-	MaxResponseBodySize       string `json:"maxResponseBodySize"`
-	MaxConnWaitTimeout        string `json:"maxConnWaitTimeout"`
-}
 
 type FastHttpTransportOptions struct {
 	ReadBufferSize        string                `json:"readBufferSize"`
@@ -68,81 +53,11 @@ type FastHttpTransportOptions struct {
 	KeepHijackedConns     bool                  `json:"keepHijackedConns"`
 	StreamRequestBody     bool                  `json:"streamRequestBody"`
 	Prefork               bool                  `json:"prefork"`
+	DisableHttp2          bool                  `json:"disableHttp2"`
 	Client                FastHttpClientOptions `json:"client"`
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
-
-type fastClient struct {
-	ssl     bool
-	address string
-	tr      *fasthttp.Client
-}
-
-func (client *fastClient) Do(ctx context.Context, request *Request) (response *Response, err error) {
-	req := fasthttp.AcquireRequest()
-	// method
-	req.Header.SetMethodBytes(request.method)
-	// header
-	if request.header != nil && len(request.header) > 0 {
-		for k, vv := range request.header {
-			if vv == nil || len(vv) == 0 {
-				continue
-			}
-			for _, v := range vv {
-				req.Header.Add(k, v)
-			}
-		}
-	}
-	// uri
-	uri := req.URI()
-	if client.ssl {
-		uri.SetSchemeBytes(bytex.FromString("https"))
-	} else {
-		uri.SetSchemeBytes(bytex.FromString("http"))
-	}
-	uri.SetHostBytes(bytex.FromString(client.address))
-	uri.SetPathBytes(request.path)
-	if request.params != nil && len(request.params) > 0 {
-		uri.SetQueryStringBytes(bytex.FromString(request.params.String()))
-	}
-	// body
-	if request.body != nil && len(request.body) > 0 {
-		req.SetBodyRaw(request.body)
-	}
-	// resp
-	resp := fasthttp.AcquireResponse()
-	// do
-	deadline, hasDeadline := ctx.Deadline()
-	if hasDeadline {
-		err = client.tr.DoDeadline(req, resp, deadline)
-	} else {
-		err = client.tr.Do(req, resp)
-	}
-	if err != nil {
-		err = errors.Warning("fns: transport client do failed").
-			WithCause(err).
-			WithMeta("transport", fastHttpTransportName).WithMeta("method", bytex.ToString(request.method)).WithMeta("path", bytex.ToString(request.path))
-		fasthttp.ReleaseRequest(req)
-		fasthttp.ReleaseResponse(resp)
-		return
-	}
-	response = &Response{
-		Status: resp.StatusCode(),
-		Header: make(Header),
-		Body:   resp.Body(),
-	}
-	resp.Header.VisitAll(func(key, value []byte) {
-		response.Header.Add(bytex.ToString(key), bytex.ToString(value))
-	})
-	fasthttp.ReleaseRequest(req)
-	fasthttp.ReleaseResponse(resp)
-	return
-}
-
-func (client *fastClient) Close() {
-	client.tr.CloseIdleConnections()
-}
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
@@ -151,8 +66,8 @@ type fastHttpTransport struct {
 	sslConfig ssl.Config
 	address   string
 	preforked bool
-	client    *fasthttp.Client
 	server    *fasthttp.Server
+	dialer    Dialer
 }
 
 func (srv *fastHttpTransport) Name() (name string) {
@@ -164,6 +79,11 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 	srv.log = options.Log
 	srv.address = fmt.Sprintf(":%d", options.Port)
 	srv.sslConfig = options.TLS
+	srvTLS, cliTLS, tlsErr := srv.sslConfig.TLS()
+	if tlsErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(tlsErr).WithMeta("transport", fastHttpTransportName)
+		return
+	}
 
 	opt := &FastHttpTransportOptions{}
 	optErr := options.Config.As(opt)
@@ -263,119 +183,29 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 		StreamRequestBody:                  opt.StreamRequestBody,
 		ConnState:                          nil,
 		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
-		TLSConfig:                          nil,
+		TLSConfig:                          srvTLS,
 		FormValueFunc:                      nil,
 	}
-	// client
-	_, cliTLS, tlsErr := options.TLS.TLS()
-	if tlsErr == nil {
-		err = srv.buildClient(opt.Client, cliTLS)
-	} else {
-		err = srv.buildClient(opt.Client, nil)
+	// http2
+	if !opt.DisableHttp2 && srvTLS != nil {
+		http2.ConfigureServer(srv.server, http2.ServerConfig{})
 	}
-	if err != nil {
-		err = errors.Warning("fns: fasthttp build failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
+
+	// dialer
+	clientOPTS := &opt.Client
+	clientOPTS.TLSConfig = cliTLS
+	clientOPTS.DisableHttp2 = opt.DisableHttp2
+	dialer, dialerErr := NewDialer(clientOPTS)
+	if dialerErr != nil {
+		err = errors.Warning("fns: build server failed").WithCause(dialerErr)
 		return
 	}
-	return
-}
-
-func (srv *fastHttpTransport) buildClient(opt FastHttpClientOptions, cliConfig *tls.Config) (err error) {
-	maxIdleWorkerDuration := time.Duration(0)
-	if opt.MaxIdleConnDuration != "" {
-		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxIdleConnDuration))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxIdleWorkerDuration must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	maxConnDuration := time.Duration(0)
-	if opt.MaxConnDuration != "" {
-		maxConnDuration, err = time.ParseDuration(strings.TrimSpace(opt.MaxConnDuration))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxConnDuration must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	readBufferSize := uint64(0)
-	if opt.ReadBufferSize != "" {
-		readBufferSize, err = bytex.ParseBytes(strings.TrimSpace(opt.ReadBufferSize))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	readTimeout := 10 * time.Second
-	if opt.ReadTimeout != "" {
-		readTimeout, err = time.ParseDuration(strings.TrimSpace(opt.ReadTimeout))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("readTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	writeBufferSize := uint64(0)
-	if opt.WriteBufferSize != "" {
-		writeBufferSize, err = bytex.ParseBytes(strings.TrimSpace(opt.WriteBufferSize))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	writeTimeout := 10 * time.Second
-	if opt.WriteTimeout != "" {
-		writeTimeout, err = time.ParseDuration(strings.TrimSpace(opt.WriteTimeout))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("writeTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	maxResponseBodySize := uint64(4 * bytex.MEGABYTE)
-	if opt.MaxResponseBodySize != "" {
-		maxResponseBodySize, err = bytex.ParseBytes(strings.TrimSpace(opt.MaxResponseBodySize))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxResponseBodySize must be bytes format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	maxConnWaitTimeout := time.Duration(0)
-	if opt.MaxConnWaitTimeout != "" {
-		maxConnWaitTimeout, err = time.ParseDuration(strings.TrimSpace(opt.MaxConnWaitTimeout))
-		if err != nil {
-			err = errors.Warning("fns: build client failed").WithCause(errors.Warning("maxConnWaitTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-	}
-	srv.client = &fasthttp.Client{
-		Name:                          "",
-		NoDefaultUserAgentHeader:      true,
-		Dial:                          nil,
-		DialDualStack:                 false,
-		TLSConfig:                     cliConfig,
-		MaxConnsPerHost:               opt.MaxConnsPerHost,
-		MaxIdleConnDuration:           maxIdleWorkerDuration,
-		MaxConnDuration:               maxConnDuration,
-		MaxIdemponentCallAttempts:     opt.MaxIdemponentCallAttempts,
-		ReadBufferSize:                int(readBufferSize),
-		WriteBufferSize:               int(writeBufferSize),
-		ReadTimeout:                   readTimeout,
-		WriteTimeout:                  writeTimeout,
-		MaxResponseBodySize:           int(maxResponseBodySize),
-		DisableHeaderNamesNormalizing: false,
-		DisablePathNormalizing:        false,
-		MaxConnWaitTimeout:            maxConnWaitTimeout,
-		RetryIf:                       nil,
-		ConnPoolStrategy:              0,
-		ConfigureClient:               nil,
-	}
+	srv.dialer = dialer
 	return
 }
 
 func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
-	client = &fastClient{
-		ssl:     srv.sslConfig != nil,
-		address: address,
-		tr:      srv.client,
-	}
+	client, err = srv.dialer.Dial(address)
 	return
 }
 

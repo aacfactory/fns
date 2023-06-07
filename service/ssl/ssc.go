@@ -124,6 +124,16 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 	return
 }
 
+func (config *SSCConfig) Server() (srvTLS *tls.Config, ln Listener) {
+
+	return
+}
+
+func (config *SSCConfig) Client() (cliTLS *tls.Config, dialer Dialer) {
+
+	return
+}
+
 func (config *SSCConfig) TLS() (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
 	serverTLS = config.serverTLS
 	clientTLS = config.clientTLS

@@ -1,23 +1,27 @@
 package ssl
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"net"
 )
 
+type Listener func(inner net.Listener) (ln net.Listener)
+
+type Dialer func(dialer *net.Dialer) (dialFunc func(ctx context.Context, network string, addr string) (conn net.Conn, err error))
+
 type Config interface {
 	Build(options configures.Config) (err error)
-	TLS() (serverTLS *tls.Config, clientTLS *tls.Config, err error)
-	NewListener(inner net.Listener) (ln net.Listener)
+	Server() (srvTLS *tls.Config, ln Listener)
+	Client() (cliTLS *tls.Config, dialer Dialer)
 }
 
 var (
 	configs = map[string]Config{
-		"SSC":     &SSCConfig{},
 		"DEFAULT": &DefaultConfig{},
-		"GM":      &GMConfig{},
+		"SSC":     &SSCConfig{},
 	}
 )
 

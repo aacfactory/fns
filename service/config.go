@@ -180,7 +180,6 @@ type TLSConfig struct {
 	// ACME
 	// SSC(SELF-SIGN-CERT)
 	// DEFAULT
-	// GM
 	Kind    string          `json:"kind" yaml:"kind,omitempty"`
 	Options json.RawMessage `json:"options" yaml:"options,omitempty"`
 }

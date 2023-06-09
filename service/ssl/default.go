@@ -17,7 +17,6 @@
 package ssl
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/tls"
@@ -33,6 +32,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 type Keypair struct {
@@ -370,28 +370,26 @@ func (config *DefaultConfig) Server() (srvTLS *tls.Config, ln Listener) {
 }
 
 func (config *DefaultConfig) Client() (cliTLS *tls.Config, dialer Dialer) {
+	if config.cliStdTLS != nil {
+		cliTLS = config.cliStdTLS
+		return
+	}
 	if config.cliGmTLS != nil {
 		if config.cliStdTLS != nil {
 			cliTLS = config.cliStdTLS
 		}
-		dialer = func(dialer *net.Dialer) (dialFunc func(ctx context.Context, network string, addr string) (conn net.Conn, err error)) {
-			dialFunc = func(ctx context.Context, network string, addr string) (conn net.Conn, err error) {
-				d := &tlcp.Dialer{NetDialer: dialer, Config: config.cliGmTLS}
-				return d.DialContext(ctx, network, addr)
-			}
-			return
+		nd := &net.Dialer{
+			Timeout:        30 * time.Second,
+			Deadline:       time.Time{},
+			LocalAddr:      nil,
+			FallbackDelay:  0,
+			KeepAlive:      60 * time.Second,
+			Resolver:       nil,
+			Control:        nil,
+			ControlContext: nil,
 		}
+		dialer = &tlcp.Dialer{NetDialer: nd, Config: config.cliGmTLS}
 		return
-	}
-	if config.cliStdTLS != nil {
-		cliTLS = config.cliStdTLS
-		//dialer = func(dialer *net.Dialer) (dialFunc func(ctx context.Context, network string, addr string) (conn net.Conn, err error)) {
-		//	dialFunc = func(ctx context.Context, network string, addr string) (conn net.Conn, err error) {
-		//		d := &tls.Dialer{NetDialer: dialer, Config: config.cliStdTLS}
-		//		return d.DialContext(ctx, network, addr)
-		//	}
-		//	return
-		//}
 	}
 	return
 }

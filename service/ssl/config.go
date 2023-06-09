@@ -10,7 +10,9 @@ import (
 
 type Listener func(inner net.Listener) (ln net.Listener)
 
-type Dialer func(dialer *net.Dialer) (dialFunc func(ctx context.Context, network string, addr string) (conn net.Conn, err error))
+type Dialer interface {
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+}
 
 type Config interface {
 	Build(options configures.Config) (err error)

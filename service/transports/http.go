@@ -102,8 +102,8 @@ func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *Request, 
 
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
-	b := acquireBuf()
-	defer releaseBuf(b)
+	b := bytex.Acquire4KBuffer()
+	defer bytex.Release4KBuffer(b)
 	for {
 		n, readErr := req.Body.Read(b)
 		if n > 0 {

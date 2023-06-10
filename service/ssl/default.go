@@ -343,7 +343,7 @@ func (config *DefaultConfig) Build(options configures.Config) (err error) {
 	return
 }
 
-func (config *DefaultConfig) Server() (srvTLS *tls.Config, ln Listener) {
+func (config *DefaultConfig) Server() (srvTLS *tls.Config, ln ListenerFunc) {
 	if config.srvGmTLS != nil {
 		if config.srvStdTLS != nil {
 			srvTLS = config.srvStdTLS

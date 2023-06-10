@@ -124,7 +124,7 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 	return
 }
 
-func (config *SSCConfig) Server() (srvTLS *tls.Config, ln Listener) {
+func (config *SSCConfig) Server() (srvTLS *tls.Config, ln ListenerFunc) {
 
 	return
 }

@@ -8,7 +8,7 @@ import (
 	"net"
 )
 
-type Listener func(inner net.Listener) (ln net.Listener)
+type ListenerFunc func(inner net.Listener) (ln net.Listener)
 
 type Dialer interface {
 	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
@@ -16,7 +16,7 @@ type Dialer interface {
 
 type Config interface {
 	Build(options configures.Config) (err error)
-	Server() (srvTLS *tls.Config, ln Listener)
+	Server() (srvTLS *tls.Config, ln ListenerFunc)
 	Client() (cliTLS *tls.Config, dialer Dialer)
 }
 

@@ -18,6 +18,7 @@ package transports
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -63,7 +64,7 @@ type FastHttpTransportOptions struct {
 
 type fastHttpTransport struct {
 	log       logs.Logger
-	sslConfig ssl.Config
+	lnf       ssl.ListenerFunc
 	address   string
 	preforked bool
 	server    *fasthttp.Server
@@ -78,13 +79,10 @@ func (srv *fastHttpTransport) Name() (name string) {
 func (srv *fastHttpTransport) Build(options Options) (err error) {
 	srv.log = options.Log
 	srv.address = fmt.Sprintf(":%d", options.Port)
-	srv.sslConfig = options.TLS
-	srvTLS, cliTLS, tlsErr := srv.sslConfig.TLS()
-	if tlsErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(tlsErr).WithMeta("transport", fastHttpTransportName)
-		return
+	var srvTLS *tls.Config
+	if options.TLS != nil {
+		srvTLS, srv.lnf = options.TLS.Server()
 	}
-
 	opt := &FastHttpTransportOptions{}
 	optErr := options.Config.As(opt)
 	if optErr != nil {
@@ -193,8 +191,14 @@ func (srv *fastHttpTransport) Build(options Options) (err error) {
 
 	// dialer
 	clientOPTS := &opt.Client
-	clientOPTS.TLSConfig = cliTLS
-	clientOPTS.DisableHttp2 = opt.DisableHttp2
+	if options.TLS != nil {
+		cliTLS, dialer := options.TLS.Client()
+		clientOPTS.TLSConfig = cliTLS
+		clientOPTS.DisableHttp2 = opt.DisableHttp2
+		if dialer != nil {
+			clientOPTS.Dial = dialer.DialContext
+		}
+	}
 	dialer, dialerErr := NewDialer(clientOPTS)
 	if dialerErr != nil {
 		err = errors.Warning("fns: build server failed").WithCause(dialerErr)
@@ -210,11 +214,10 @@ func (srv *fastHttpTransport) Dial(address string) (client Client, err error) {
 }
 
 func (srv *fastHttpTransport) preforkServe(ln net.Listener) (err error) {
-	if srv.sslConfig != nil {
-		err = srv.server.Serve(srv.sslConfig.NewListener(ln))
-	} else {
-		err = srv.server.Serve(ln)
+	if srv.lnf != nil {
+		ln = srv.lnf(ln)
 	}
+	err = srv.server.Serve(ln)
 	return
 }
 
@@ -229,16 +232,15 @@ func (srv *fastHttpTransport) ListenAndServe() (err error) {
 		}
 		return
 	}
-	if srv.sslConfig != nil {
-		ln, lnErr := net.Listen("tcp4", srv.address)
-		if lnErr != nil {
-			err = errors.Warning("fns: transport listen and serve failed").WithCause(lnErr).WithMeta("transport", fastHttpTransportName)
-			return
-		}
-		err = srv.server.Serve(srv.sslConfig.NewListener(ln))
-	} else {
-		err = srv.server.ListenAndServe(srv.address)
+	ln, lnErr := net.Listen("tcp", srv.address)
+	if lnErr != nil {
+		err = errors.Warning("fns: transport listen and serve failed").WithCause(lnErr)
+		return
 	}
+	if srv.lnf != nil {
+		ln = srv.lnf(ln)
+	}
+	err = srv.server.Serve(ln)
 	if err != nil {
 		err = errors.Warning("fns: transport listen and serve failed").WithCause(err).WithMeta("transport", fastHttpTransportName)
 		return

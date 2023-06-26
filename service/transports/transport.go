@@ -17,29 +17,12 @@
 package transports
 
 import (
+	"context"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/logs"
 	"io"
 )
-
-var (
-	registered = make(map[string]Transport)
-)
-
-func Register(transport Transport) {
-	registered[transport.Name()] = transport
-}
-
-func Registered(name string) (transport Transport, has bool) {
-	if name == "" {
-		transport = &fastHttpTransport{}
-		has = true
-		return
-	}
-	transport, has = registered[name]
-	return
-}
 
 type Options struct {
 	Port    int
@@ -47,6 +30,14 @@ type Options struct {
 	Handler Handler
 	Log     logs.Logger
 	Config  configures.Config
+}
+
+type Client interface {
+	Do(ctx context.Context, request *Request) (response *Response, err error)
+}
+
+type Dialer interface {
+	Dial(address string) (client Client, err error)
 }
 
 type Transport interface {

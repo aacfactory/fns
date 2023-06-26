@@ -171,8 +171,16 @@ func (r *Request) TLSConnectionState() *tls.ConnectionState {
 	return r.tlsConnectionState
 }
 
+func (r *Request) SetTLSConnectionState(state *tls.ConnectionState) {
+	r.tlsConnectionState = state
+}
+
 func (r *Request) Method() []byte {
 	return r.method
+}
+
+func (r *Request) SetMethod(method []byte) {
+	r.method = method
 }
 
 func (r *Request) IsGet() bool {
@@ -185,6 +193,10 @@ func (r *Request) IsPost() bool {
 
 func (r *Request) RemoteAddr() []byte {
 	return r.remoteAddr
+}
+
+func (r *Request) SetRemoteAddr(addr []byte) {
+	r.remoteAddr = addr
 }
 
 func (r *Request) Proto() []byte {

@@ -17,6 +17,7 @@
 package transports
 
 import (
+	"context"
 	"github.com/aacfactory/fns/commons/bytex"
 	"net/http"
 	"sort"
@@ -119,6 +120,18 @@ type corsHandler struct {
 	allowCredentials    bool
 	allowPrivateNetwork bool
 	handler             Handler
+}
+
+func (c *corsHandler) Name() string {
+	return "cors"
+}
+
+func (c *corsHandler) Build(ctx context.Context, options HandlerOptions) (err error) {
+	return
+}
+
+func (c *corsHandler) Close() (err error) {
+	return
 }
 
 func (c *corsHandler) Handle(w ResponseWriter, r *Request) {

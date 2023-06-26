@@ -23,14 +23,40 @@ import (
 )
 
 const (
-	contentTypeHeaderName      = "Content-Type"
-	contentTypeJsonHeaderValue = "application/json"
-	contentLengthHeaderName    = "Content-Length"
-	authorizationHeaderName    = "Authorization"
-	connectionHeaderName       = "Connection"
-	upgradeHeaderName          = "Upgrade"
-	closeHeaderValue           = "close"
-	clearSiteDataHeaderName    = "Clear-Site-Data"
+	ContentTypeHeaderName                     = "Content-Type"
+	ContentTypeJsonHeaderValue                = "application/json"
+	ContentLengthHeaderName                   = "Content-Length"
+	AuthorizationHeaderName                   = "Authorization"
+	ConnectionHeaderName                      = "Connection"
+	UpgradeHeaderName                         = "Upgrade"
+	CloseHeaderValue                          = "close"
+	ClearSiteDataHeaderName                   = "Clear-Site-Data"
+	CacheControlHeaderName                    = "Cache-Control"
+	CacheControlHeaderEnabled                 = "public, max-age=0"
+	CacheControlHeaderNoStore                 = "no-store"
+	CacheControlHeaderNoCache                 = "no-cache"
+	ETagHeaderName                            = "ETag"
+	CacheControlHeaderIfNonMatch              = "If-None-Match"
+	VaryHeaderName                            = "Vary"
+	TrueClientIpHeaderName                    = "True-Client-Ip"
+	XRealIpHeaderName                         = "X-Real-IP"
+	XForwardedForHeaderName                   = "X-Forwarded-For"
+	RequestIdHeaderName                       = "X-Fns-Request-Id"
+	SignatureHeaderName                       = "X-Fns-Signature"
+	RequestInternalSignatureHeaderName        = "X-Fns-Request-Internal-Signature"
+	RequestInternalHeaderName                 = "X-Fns-Request-Internal"
+	RequestTimeoutHeaderName                  = "X-Fns-Request-Timeout"
+	RequestVersionsHeaderName                 = "X-Fns-Request-Version"
+	HandleLatencyHeaderName                   = "X-Fns-Handle-Latency"
+	DeviceIdHeaderName                        = "X-Fns-Device-Id"
+	DeviceIpHeaderName                        = "X-Fns-Device-Ip"
+	DevModeHeaderName                         = "X-Fns-Dev-Mode"
+	ResponseRetryAfterHeaderName              = "Retry-After"
+	ResponseCacheTTLHeaderName                = "X-Fns-Cache-TTL"
+	ResponseTimingAllowOriginHeaderName       = "Timing-Allow-Origin"
+	ResponseXFrameOptionsHeaderName           = "X-Frame-Options"
+	ResponseXFrameOptionsSameOriginHeaderName = "SAMEORIGIN"
+	RequestHashHeaderHeaderName               = "X-Fns-Request-Hash"
 )
 
 type Header http.Header
@@ -56,30 +82,30 @@ func (h Header) Del(key string) {
 }
 
 func (h Header) Authorization() string {
-	return textproto.MIMEHeader(h).Get(authorizationHeaderName)
+	return textproto.MIMEHeader(h).Get(AuthorizationHeaderName)
 }
 
 func (h Header) Connection() string {
-	return textproto.MIMEHeader(h).Get(connectionHeaderName)
+	return textproto.MIMEHeader(h).Get(ConnectionHeaderName)
 }
 
 func (h Header) IsConnectionClosed() bool {
-	return textproto.MIMEHeader(h).Get(connectionHeaderName) == closeHeaderValue
+	return textproto.MIMEHeader(h).Get(ConnectionHeaderName) == CloseHeaderValue
 }
 
 func (h Header) SetConnectionClose() {
-	textproto.MIMEHeader(h).Set(connectionHeaderName, closeHeaderValue)
+	textproto.MIMEHeader(h).Set(ConnectionHeaderName, CloseHeaderValue)
 }
 
 func (h Header) Upgrade() string {
-	return textproto.MIMEHeader(h).Get(upgradeHeaderName)
+	return textproto.MIMEHeader(h).Get(UpgradeHeaderName)
 }
 
 func (h Header) ClearSiteData(scopes ...string) {
 	if scopes == nil || len(scopes) == 0 {
-		textproto.MIMEHeader(h).Set(clearSiteDataHeaderName, "*")
+		textproto.MIMEHeader(h).Set(ClearSiteDataHeaderName, "*")
 	} else {
-		textproto.MIMEHeader(h).Set(clearSiteDataHeaderName, `"`+strings.Join(scopes, `", "`)+`"`)
+		textproto.MIMEHeader(h).Set(ClearSiteDataHeaderName, `"`+strings.Join(scopes, `", "`)+`"`)
 	}
 }
 

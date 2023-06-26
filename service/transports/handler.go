@@ -16,8 +16,22 @@
 
 package transports
 
+import (
+	"context"
+	"github.com/aacfactory/configures"
+	"github.com/aacfactory/logs"
+)
+
+type HandlerOptions struct {
+	Log    logs.Logger
+	Config configures.Config
+}
+
 type Handler interface {
+	Name() (name string)
+	Build(ctx context.Context, options HandlerOptions) (err error)
 	Handle(w ResponseWriter, r *Request)
+	Close() (err error)
 }
 
 type HandlerFunc func(ResponseWriter, *Request)

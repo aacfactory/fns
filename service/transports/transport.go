@@ -66,6 +66,7 @@ type MiddlewareOptions struct {
 }
 
 type Middleware interface {
+	Name() string
 	Build(options MiddlewareOptions) (err error)
 	Handler(next Handler) Handler
 }

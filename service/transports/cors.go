@@ -52,6 +52,10 @@ type corsMiddleware struct {
 	handler             Handler
 }
 
+func (c *corsMiddleware) Name() string {
+	return "cors"
+}
+
 func (c *corsMiddleware) Build(options MiddlewareOptions) (err error) {
 	config := CorsConfig{}
 	err = options.Config.As(&config)

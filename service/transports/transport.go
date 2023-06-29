@@ -47,3 +47,25 @@ type Transport interface {
 	ListenAndServe() (err error)
 	io.Closer
 }
+
+type HandlerBuilder func() Handler
+
+type Handler interface {
+	Handle(w ResponseWriter, r *Request)
+}
+
+type HandlerFunc func(ResponseWriter, *Request)
+
+func (f HandlerFunc) Handle(w ResponseWriter, r *Request) {
+	f(w, r)
+}
+
+type MiddlewareOptions struct {
+	Log    logs.Logger
+	Config configures.Config
+}
+
+type Middleware interface {
+	Build(options MiddlewareOptions) (err error)
+	Handler(next Handler) Handler
+}

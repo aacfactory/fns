@@ -17,7 +17,7 @@
 package transports
 
 import (
-	"context"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"net/http"
 	"sort"
@@ -34,34 +34,52 @@ type CorsConfig struct {
 	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"`
 }
 
-func (config *CorsConfig) TryFillAllowedHeaders(headers []string) {
+func CORS() Middleware {
+	return &corsMiddleware{}
+}
+
+type corsMiddleware struct {
+	allowedOrigins      []string
+	allowedWOrigins     []wildcard
+	allowedOriginsAll   bool
+	allowedHeaders      []string
+	allowedHeadersAll   bool
+	allowedMethods      []string
+	exposedHeaders      []string
+	maxAge              int
+	allowCredentials    bool
+	allowPrivateNetwork bool
+	handler             Handler
+}
+
+func (c *corsMiddleware) Build(options MiddlewareOptions) (err error) {
+	config := CorsConfig{}
+	err = options.Config.As(&config)
+	if err != nil {
+		err = errors.Warning("fns: build cors middleware failed").WithCause(err)
+		return
+	}
+	allowedOrigins := make([]string, 0, 1)
+	allowedWOrigins := make([]wildcard, 0, 1)
+	allowedOriginsAll := false
 	if config.AllowedHeaders == nil {
 		config.AllowedHeaders = make([]string, 0, 1)
 	}
 	if config.AllowedHeaders[0] != "*" {
-		for _, header := range headers {
+		defaultAllowedHeaders := []string{
+			ConnectionHeaderName, UpgradeHeaderName,
+			XForwardedForHeaderName, TrueClientIpHeaderName, XRealIpHeaderName,
+			DeviceIpHeaderName, DeviceIdHeaderName,
+			RequestIdHeaderName,
+			RequestInternalSignatureHeaderName, RequestTimeoutHeaderName, RequestVersionsHeaderName,
+			ETagHeaderName, CacheControlHeaderIfNonMatch, ClearSiteDataHeaderName, ResponseRetryAfterHeaderName, SignatureHeaderName,
+		}
+		for _, header := range defaultAllowedHeaders {
 			if sort.SearchStrings(config.AllowedHeaders, header) < 0 {
 				config.AllowedHeaders = append(config.AllowedHeaders, header)
 			}
 		}
 	}
-}
-
-func (config *CorsConfig) TryFillExposedHeaders(headers []string) {
-	if config.ExposedHeaders == nil {
-		config.ExposedHeaders = make([]string, 0, 1)
-	}
-	for _, header := range headers {
-		if sort.SearchStrings(config.ExposedHeaders, header) < 0 {
-			config.ExposedHeaders = append(config.ExposedHeaders, header)
-		}
-	}
-}
-
-func (config *CorsConfig) Handler(handler Handler) Handler {
-	allowedOrigins := make([]string, 0, 1)
-	allowedWOrigins := make([]wildcard, 0, 1)
-	allowedOriginsAll := false
 	for _, origin := range config.AllowedOrigins {
 		origin = strings.ToLower(origin)
 		if origin == "*" {
@@ -76,11 +94,10 @@ func (config *CorsConfig) Handler(handler Handler) Handler {
 			allowedOrigins = append(allowedOrigins, origin)
 		}
 	}
-
 	var allowedHeaders []string
 	allowedHeadersAll := false
 	if len(config.AllowedHeaders) == 0 {
-		allowedHeaders = []string{"Origin", "Accept", "Content-Type", "X-Requested-With"}
+		allowedHeaders = []string{OriginHeaderName, AcceptHeaderName, ContentTypeHeaderName, XRequestedWithHeaderName}
 	} else {
 		allowedHeaders = make([]string, 0, 1)
 		allowedHeaders = convert(append(config.AllowedHeaders, "Origin"), http.CanonicalHeaderKey)
@@ -92,50 +109,38 @@ func (config *CorsConfig) Handler(handler Handler) Handler {
 			}
 		}
 	}
-
-	return &corsHandler{
-		allowedOrigins:      allowedOrigins,
-		allowedWOrigins:     allowedWOrigins,
-		allowedOriginsAll:   allowedOriginsAll,
-		allowedHeaders:      allowedHeaders,
-		allowedHeadersAll:   allowedHeadersAll,
-		allowedMethods:      []string{http.MethodGet, http.MethodPost, http.MethodHead},
-		exposedHeaders:      convert(config.ExposedHeaders, http.CanonicalHeaderKey),
-		maxAge:              config.MaxAge,
-		allowCredentials:    config.AllowCredentials,
-		allowPrivateNetwork: config.AllowPrivateNetwork,
-		handler:             handler,
+	if config.ExposedHeaders == nil {
+		config.ExposedHeaders = make([]string, 0, 1)
 	}
-}
-
-type corsHandler struct {
-	allowedOrigins      []string
-	allowedWOrigins     []wildcard
-	allowedOriginsAll   bool
-	allowedHeaders      []string
-	allowedHeadersAll   bool
-	allowedMethods      []string
-	exposedHeaders      []string
-	maxAge              int
-	allowCredentials    bool
-	allowPrivateNetwork bool
-	handler             Handler
-}
-
-func (c *corsHandler) Name() string {
-	return "cors"
-}
-
-func (c *corsHandler) Build(ctx context.Context, options HandlerOptions) (err error) {
+	defaultExposedHeaders := []string{
+		RequestIdHeaderName, RequestInternalSignatureHeaderName, HandleLatencyHeaderName,
+		CacheControlHeaderName, ETagHeaderName, ClearSiteDataHeaderName, ResponseRetryAfterHeaderName, ResponseCacheTTLHeaderName, SignatureHeaderName,
+	}
+	for _, header := range defaultExposedHeaders {
+		if sort.SearchStrings(config.ExposedHeaders, header) < 0 {
+			config.ExposedHeaders = append(config.ExposedHeaders, header)
+		}
+	}
+	c.allowedOrigins = allowedOrigins
+	c.allowedWOrigins = allowedWOrigins
+	c.allowedOriginsAll = allowedOriginsAll
+	c.allowedHeaders = allowedHeaders
+	c.allowedHeadersAll = allowedHeadersAll
+	c.allowedMethods = []string{http.MethodGet, http.MethodPost, http.MethodHead}
+	c.exposedHeaders = convert(config.ExposedHeaders, http.CanonicalHeaderKey)
+	c.maxAge = config.MaxAge
+	c.allowCredentials = config.AllowCredentials
+	c.allowPrivateNetwork = config.AllowPrivateNetwork
 	return
 }
 
-func (c *corsHandler) Close() (err error) {
-	return
+func (c *corsMiddleware) Handler(next Handler) Handler {
+	c.handler = next
+	return c
 }
 
-func (c *corsHandler) Handle(w ResponseWriter, r *Request) {
-	if bytex.ToString(r.Method()) == http.MethodOptions && r.Header().Get("Access-Control-Request-Method") != "" {
+func (c *corsMiddleware) Handle(w ResponseWriter, r *Request) {
+	if bytex.ToString(r.Method()) == http.MethodOptions && r.Header().Get(AccessControlRequestMethodHeaderName) != "" {
 		c.handlePreflight(w, r)
 		w.SetStatus(http.StatusNoContent)
 	} else {
@@ -144,18 +149,18 @@ func (c *corsHandler) Handle(w ResponseWriter, r *Request) {
 	}
 }
 
-func (c *corsHandler) handlePreflight(w ResponseWriter, r *Request) {
+func (c *corsMiddleware) handlePreflight(w ResponseWriter, r *Request) {
 	headers := w.Header()
-	origin := r.Header().Get("Origin")
+	origin := r.Header().Get(OriginHeaderName)
 
 	if bytex.ToString(r.Method()) != http.MethodOptions {
 		return
 	}
-	headers.Add("Vary", "Origin")
-	headers.Add("Vary", "Access-Control-Request-Method")
-	headers.Add("Vary", "Access-Control-Request-Headers")
+	headers.Add(VaryHeaderName, OriginHeaderName)
+	headers.Add(VaryHeaderName, AccessControlRequestMethodHeaderName)
+	headers.Add(VaryHeaderName, AccessControlRequestHeadersHeaderName)
 	if c.allowPrivateNetwork {
-		headers.Add("Vary", "Access-Control-Request-Private-Network")
+		headers.Add(VaryHeaderName, AccessControlRequestPrivateNetworkHeaderName)
 	}
 
 	if origin == "" {
@@ -165,39 +170,39 @@ func (c *corsHandler) handlePreflight(w ResponseWriter, r *Request) {
 		return
 	}
 
-	reqMethod := r.Header().Get("Access-Control-Request-Method")
+	reqMethod := r.Header().Get(AccessControlRequestMethodHeaderName)
 	if !c.isMethodAllowed(reqMethod) {
 		return
 	}
-	reqHeaders := parseHeaderList(r.Header().Get("Access-Control-Request-Headers"))
+	reqHeaders := parseHeaderList(r.Header().Get(AccessControlRequestHeadersHeaderName))
 	if !c.areHeadersAllowed(reqHeaders) {
 		return
 	}
 	if c.allowedOriginsAll {
-		headers.Set("Access-Control-Allow-Origin", "*")
+		headers.Set(AccessControlAllowOriginHeaderName, "*")
 	} else {
-		headers.Set("Access-Control-Allow-Origin", origin)
+		headers.Set(AccessControlAllowOriginHeaderName, origin)
 	}
-	headers.Set("Access-Control-Allow-Methods", strings.ToUpper(reqMethod))
+	headers.Set(AccessControlAllowMethodsHeaderName, strings.ToUpper(reqMethod))
 	if len(reqHeaders) > 0 {
-		headers.Set("Access-Control-Allow-Headers", strings.Join(reqHeaders, ", "))
+		headers.Set(AccessControlAllowHeadersHeaderName, strings.Join(reqHeaders, ", "))
 	}
 	if c.allowCredentials {
-		headers.Set("Access-Control-Allow-Credentials", "true")
+		headers.Set(AccessControlAllowCredentialsHeaderName, "true")
 	}
-	if c.allowPrivateNetwork && r.Header().Get("Access-Control-Request-Private-Network") == "true" {
-		headers.Set("Access-Control-Allow-Private-Network", "true")
+	if c.allowPrivateNetwork && r.Header().Get(AccessControlRequestPrivateNetworkHeaderName) == "true" {
+		headers.Set(AccessControlAllowPrivateNetworkHeaderName, "true")
 	}
 	if c.maxAge > 0 {
-		headers.Set("Access-Control-Max-Age", strconv.Itoa(c.maxAge))
+		headers.Set(AccessControlMaxAgeHeaderName, strconv.Itoa(c.maxAge))
 	}
 }
 
-func (c *corsHandler) handleActualRequest(w ResponseWriter, r *Request) {
+func (c *corsMiddleware) handleActualRequest(w ResponseWriter, r *Request) {
 	headers := w.Header()
-	origin := r.Header().Get("Origin")
+	origin := r.Header().Get(OriginHeaderName)
 
-	headers.Add("Vary", "Origin")
+	headers.Add(VaryHeaderName, OriginHeaderName)
 	if origin == "" {
 		return
 	}
@@ -209,19 +214,19 @@ func (c *corsHandler) handleActualRequest(w ResponseWriter, r *Request) {
 		return
 	}
 	if c.allowedOriginsAll {
-		headers.Set("Access-Control-Allow-Origin", "*")
+		headers.Set(AccessControlAllowOriginHeaderName, "*")
 	} else {
-		headers.Set("Access-Control-Allow-Origin", origin)
+		headers.Set(AccessControlAllowOriginHeaderName, origin)
 	}
 	if len(c.exposedHeaders) > 0 {
-		headers.Set("Access-Control-Expose-Headers", strings.Join(c.exposedHeaders, ", "))
+		headers.Set(AccessControlExposeHeadersHeaderName, strings.Join(c.exposedHeaders, ", "))
 	}
 	if c.allowCredentials {
-		headers.Set("Access-Control-Allow-Credentials", "true")
+		headers.Set(AccessControlAllowCredentialsHeaderName, "true")
 	}
 }
 
-func (c *corsHandler) isOriginAllowed(origin string) bool {
+func (c *corsMiddleware) isOriginAllowed(origin string) bool {
 	if c.allowedOriginsAll {
 		return true
 	}
@@ -239,7 +244,7 @@ func (c *corsHandler) isOriginAllowed(origin string) bool {
 	return false
 }
 
-func (c *corsHandler) isMethodAllowed(method string) bool {
+func (c *corsMiddleware) isMethodAllowed(method string) bool {
 	if len(c.allowedMethods) == 0 {
 		return false
 	}
@@ -255,7 +260,7 @@ func (c *corsHandler) isMethodAllowed(method string) bool {
 	return false
 }
 
-func (c *corsHandler) areHeadersAllowed(requestedHeaders []string) bool {
+func (c *corsMiddleware) areHeadersAllowed(requestedHeaders []string) bool {
 	if c.allowedHeadersAll || len(requestedHeaders) == 0 {
 		return true
 	}

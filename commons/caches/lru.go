@@ -101,10 +101,12 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 			value = item.value
 			c.mu.RUnlock()
 		} else {
+			c.mu.RUnlock()
 			c.removeElement(ent)
 		}
 		return
 	}
+	c.mu.RUnlock()
 	return
 }
 

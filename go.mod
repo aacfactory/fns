@@ -15,6 +15,7 @@ require (
 	github.com/aacfactory/systems v0.2.0
 	github.com/aacfactory/workers v1.8.1
 	github.com/cespare/xxhash/v2 v2.2.0
+	github.com/dgrr/http2 v0.3.5
 	github.com/go-playground/validator/v10 v10.12.0
 	github.com/goccy/go-yaml v1.10.0
 	github.com/rs/xid v1.4.0
@@ -31,7 +32,6 @@ require (
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
-	github.com/dgrr/http2 v0.3.5 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect

@@ -44,6 +44,7 @@ type RateLimitCounterOptions struct {
 	Shared     shareds.Shared
 }
 
+// todo use golang.org/x/time/rate
 type RateLimitCounter interface {
 	Name() (name string)
 	Build(options RateLimitCounterOptions) (err error)

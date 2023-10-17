@@ -21,7 +21,8 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/service/transports/middlewares/cors"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net"
@@ -78,12 +79,12 @@ const (
 	transportResponseWriterCtxKey = "@fns_transport_response_writer"
 )
 
-func TransportResponseWriter(ctx context.Context) (w transports.ResponseWriter, has bool) {
+func TransportResponseWriter(ctx context.Context) (w transports2.ResponseWriter, has bool) {
 	x := ctx.Value(transportResponseWriterCtxKey)
 	if x == nil {
 		return
 	}
-	w, has = x.(transports.ResponseWriter)
+	w, has = x.(transports2.ResponseWriter)
 	return
 }
 
@@ -96,13 +97,13 @@ type TransportMiddlewareOptions struct {
 type TransportMiddleware interface {
 	Name() (name string)
 	Build(options TransportMiddlewareOptions) (err error)
-	Handler(next transports.Handler) transports.Handler
+	Handler(next transports2.Handler) transports2.Handler
 	Close() (err error)
 }
 
 type transportMiddlewaresOptions struct {
 	Runtime *Runtime
-	Cors    *transports.CorsConfig
+	Cors    *cors.CorsConfig
 	Config  configures.Config
 }
 
@@ -120,7 +121,7 @@ func newTransportMiddlewares(options transportMiddlewaresOptions) *transportMidd
 type transportMiddlewares struct {
 	config      configures.Config
 	runtime     *Runtime
-	cors        *transports.CorsConfig
+	cors        *cors.CorsConfig
 	middlewares []TransportMiddleware
 }
 
@@ -176,13 +177,13 @@ func (middlewares *transportMiddlewares) Close() (err error) {
 	return
 }
 
-func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) transports.Handler {
-	var handler transports.Handler = handlers
+func (middlewares *transportMiddlewares) Handler(handlers *transportHandlers) transports2.Handler {
+	var handler transports2.Handler = handlers
 	for i := len(middlewares.middlewares) - 1; i > -1; i-- {
 		handler = middlewares.middlewares[i].Handler(handler)
 	}
 	if middlewares.cors == nil {
-		middlewares.cors = &transports.CorsConfig{
+		middlewares.cors = &middlewares.CorsConfig{
 			AllowedOrigins:      []string{"*"},
 			AllowedHeaders:      []string{"*"},
 			ExposedHeaders:      make([]string, 0, 1),
@@ -264,8 +265,8 @@ func (middleware *transportApplicationMiddleware) Build(options TransportMiddlew
 	return
 }
 
-func (middleware *transportApplicationMiddleware) Handler(next transports.Handler) transports.Handler {
-	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
+func (middleware *transportApplicationMiddleware) Handler(next transports2.Handler) transports2.Handler {
+	return transports2.HandlerFunc(func(w transports2.ResponseWriter, r *transports2.Request) {
 		if middleware.runtime.status.Closed() {
 			w.Failed(ErrUnavailable)
 			return

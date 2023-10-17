@@ -23,7 +23,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/shareds"
-	"github.com/aacfactory/fns/service/transports"
+	shareds2 "github.com/aacfactory/fns/shareds"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/cespare/xxhash/v2"
@@ -97,8 +98,8 @@ func (middleware *cacheControlMiddleware) Build(options TransportMiddlewareOptio
 	return
 }
 
-func (middleware *cacheControlMiddleware) Handler(next transports.Handler) transports.Handler {
-	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
+func (middleware *cacheControlMiddleware) Handler(next transports2.Handler) transports2.Handler {
+	return transports2.HandlerFunc(func(w transports2.ResponseWriter, r *transports2.Request) {
 		// discard upgrade and internal(cache by caller endpoint)
 		if r.Header().Get(httpUpgradeHeader) != "" || r.Header().Get(httpRequestInternalHeader) == "true" {
 			next.Handle(w, r)
@@ -201,7 +202,7 @@ type ETags struct {
 }
 
 func (tags *ETags) get(ctx context.Context, rk []byte) (tag *tagValue, has bool) {
-	value, exist := tags.store.Get(ctx, tags.makeCacheKey(rk), shareds.SystemScope())
+	value, exist := tags.store.Get(ctx, tags.makeCacheKey(rk), shareds2.SystemScope())
 	if !exist {
 		return
 	}
@@ -229,7 +230,7 @@ func (tags *ETags) save(ctx context.Context, rk []byte, value *tagValue, ttl tim
 		}
 		return
 	}
-	_, ok := tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl, shareds.SystemScope())
+	_, ok := tags.store.Set(ctx, tags.makeCacheKey(rk), p, ttl, shareds2.SystemScope())
 	if !ok {
 		if tags.log.ErrorEnabled() {
 			err := errors.Warning("fns: save etag")
@@ -240,7 +241,7 @@ func (tags *ETags) save(ctx context.Context, rk []byte, value *tagValue, ttl tim
 }
 
 func (tags *ETags) remove(ctx context.Context, rk []byte) {
-	tags.store.Remove(ctx, tags.makeCacheKey(rk), shareds.SystemScope())
+	tags.store.Remove(ctx, tags.makeCacheKey(rk), shareds2.SystemScope())
 	return
 }
 

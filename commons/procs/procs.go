@@ -17,28 +17,19 @@
 package procs
 
 import (
-	"github.com/aacfactory/logs"
+	"github.com/aacfactory/errors"
 	"go.uber.org/automaxprocs/maxprocs"
 	"runtime"
 )
 
-type Options struct {
-	Log logs.Logger
-	Min int
-	Max int
-}
-
-func New(options Options) *AutoMaxProcs {
-	min := options.Min
+func New(min int, max int) *AutoMaxProcs {
 	if min < 0 {
 		min = 0
 	}
-	max := options.Max
 	if max < 0 {
 		max = 0
 	}
 	return &AutoMaxProcs{
-		log:     options.Log.With("fns", "automaxprocs"),
 		min:     min,
 		max:     max,
 		resetFn: nil,
@@ -46,31 +37,16 @@ func New(options Options) *AutoMaxProcs {
 }
 
 type AutoMaxProcs struct {
-	log     logs.Logger
 	min     int
 	max     int
 	resetFn func()
 }
 
-func (p *AutoMaxProcs) Enable() {
+func (p *AutoMaxProcs) Enable() (err error) {
 	if p.min > 0 {
-		var log func(string, ...interface{})
-		if p.log.DebugEnabled() {
-			log = logs.MapToLogger(p.log, logs.DebugLevel, true).Printf
-		} else if p.log.InfoEnabled() {
-			log = logs.MapToLogger(p.log, logs.InfoLevel, false).Printf
-		} else if p.log.WarnEnabled() {
-			log = logs.MapToLogger(p.log, logs.WarnLevel, false).Printf
-		} else if p.log.ErrorEnabled() {
-			log = logs.MapToLogger(p.log, logs.ErrorLevel, false).Printf
-		} else {
-			log = logs.MapToLogger(p.log, logs.InfoLevel, false).Printf
-		}
-		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(log))
+		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(func(s string, i ...interface{}) {}))
 		if setErr != nil {
-			if p.log.DebugEnabled() {
-				p.log.Debug().Message("fns: set automaxprocs failed, use runtime.GOMAXPROCS(0) insteadof")
-			}
+			err = errors.Warning("fns: set automaxprocs failed, use runtime.GOMAXPROCS(0) insteadof").WithCause(setErr)
 			runtime.GOMAXPROCS(0)
 			return
 		}

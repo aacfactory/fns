@@ -18,8 +18,8 @@ package documents
 
 import (
 	"fmt"
+	oas2 "github.com/aacfactory/fns/commons/oas"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/internal/oas"
 	"sort"
 )
 
@@ -200,14 +200,14 @@ func (documents Documents) Merge(o Documents) Documents {
 	return documents
 }
 
-func (documents Documents) Openapi(openapiVersion string, appId string, appName string, appVersion versions.Version) (api *oas.API) {
+func (documents Documents) Openapi(openapiVersion string, appId string, appName string, appVersion versions.Version) (api *oas2.API) {
 	if openapiVersion == "" {
 		openapiVersion = "3.1.0"
 	}
 	// oas
-	api = &oas.API{
+	api = &oas2.API{
 		Openapi: openapiVersion,
-		Info: &oas.Info{
+		Info: &oas2.Info{
 			Title:          appName,
 			Description:    fmt.Sprintf("%s(%s)", appName, appId),
 			TermsOfService: "",
@@ -215,13 +215,13 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 			License:        nil,
 			Version:        appVersion.String(),
 		},
-		Servers: []*oas.Server{},
-		Paths:   make(map[string]*oas.Path),
-		Components: &oas.Components{
-			Schemas:   make(map[string]*oas.Schema),
-			Responses: make(map[string]*oas.Response),
+		Servers: []*oas2.Server{},
+		Paths:   make(map[string]*oas2.Path),
+		Components: &oas2.Components{
+			Schemas:   make(map[string]*oas2.Schema),
+			Responses: make(map[string]*oas2.Response),
 		},
-		Tags: make([]*oas.Tag, 0, 1),
+		Tags: make([]*oas2.Tag, 0, 1),
 	}
 	// schemas
 	codeErr := codeErrOpenapiSchema()
@@ -234,7 +234,7 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 	for status, response := range responseStatusOpenapi() {
 		api.Components.Responses[status] = response
 	}
-	api.Tags = append(api.Tags, &oas.Tag{
+	api.Tags = append(api.Tags, &oas2.Tag{
 		Name:        "builtin",
 		Description: "fns builtins",
 	})
@@ -262,7 +262,7 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 				continue
 			}
 			// tags
-			api.Tags = append(api.Tags, &oas.Tag{
+			api.Tags = append(api.Tags, &oas2.Tag{
 				Name:        document.Name,
 				Description: document.Description,
 			})
@@ -292,14 +292,14 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 						}
 					}
 				}
-				path := &oas.Path{
-					Post: &oas.Operation{
+				path := &oas2.Path{
+					Post: &oas2.Operation{
 						OperationId: fmt.Sprintf("%s_%s", document.Name, fn.Name),
 						Tags:        []string{document.Name},
 						Summary:     fn.Title,
 						Description: description,
 						Deprecated:  fn.Deprecated,
-						Parameters: func() []*oas.Parameter {
+						Parameters: func() []*oas2.Parameter {
 							params := requestHeadersOpenapiParams()
 							if fn.Authorization {
 								params = append(params, requestAuthHeadersOpenapiParams()...)
@@ -307,25 +307,25 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 							}
 							return params
 						}(),
-						RequestBody: &oas.RequestBody{
+						RequestBody: &oas2.RequestBody{
 							Required:    func() bool { return fn.Argument != nil }(),
 							Description: "",
-							Content: func() (c map[string]*oas.MediaType) {
+							Content: func() (c map[string]*oas2.MediaType) {
 								if fn.Argument == nil {
 									return
 								}
-								c = oas.ApplicationJsonContent(fn.Argument.Schema())
+								c = oas2.ApplicationJsonContent(fn.Argument.Schema())
 								return
 							}(),
 						},
-						Responses: map[string]oas.Response{
+						Responses: map[string]oas2.Response{
 							"200": {
-								Content: func() (c map[string]*oas.MediaType) {
+								Content: func() (c map[string]*oas2.MediaType) {
 									if fn.Result == nil {
-										c = oas.ApplicationJsonContent(oas.RefSchema("github.com/aacfactory/fns/service.Empty"))
+										c = oas2.ApplicationJsonContent(oas2.RefSchema("github.com/aacfactory/fns/service.Empty"))
 										return
 									}
-									c = oas.ApplicationJsonContent(fn.Result.Schema())
+									c = oas2.ApplicationJsonContent(fn.Result.Schema())
 									return
 								}(),
 							},

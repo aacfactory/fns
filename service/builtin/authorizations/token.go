@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/json"
 	"math"
 	"strconv"
@@ -68,7 +68,7 @@ func DefaultTokens() Tokens {
 }
 
 type defaultTokens struct {
-	signer *secret.Signer
+	signer signatures.Signature
 }
 
 func (tokens *defaultTokens) Name() (name string) {
@@ -87,7 +87,7 @@ func (tokens *defaultTokens) Build(options service.ComponentOptions) (err error)
 		err = errors.Warning("authorizations: build default tokens failed").WithCause(errors.Warning("key is require"))
 		return
 	}
-	tokens.signer = secret.NewSigner([]byte(key))
+	tokens.signer = signatures.HMAC([]byte(key))
 	return
 }
 

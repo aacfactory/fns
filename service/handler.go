@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/transports"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/systems/cpu"
@@ -45,8 +45,8 @@ type TransportHandlerOptions struct {
 type TransportHandler interface {
 	Name() (name string)
 	Build(options TransportHandlerOptions) (err error)
-	Accept(r *transports.Request) (ok bool)
-	transports.Handler
+	Accept(r *transports2.Request) (ok bool)
+	transports2.Handler
 	Close() (err error)
 }
 
@@ -110,7 +110,7 @@ func (handlers *transportHandlers) Build() (err error) {
 	return
 }
 
-func (handlers *transportHandlers) Handle(w transports.ResponseWriter, r *transports.Request) {
+func (handlers *transportHandlers) Handle(w transports2.ResponseWriter, r *transports2.Request) {
 	handled := false
 	for _, handler := range handlers.handlers {
 		if accepted := handler.Accept(r); accepted {
@@ -214,7 +214,7 @@ func (handler *transportApplicationHandler) Build(options TransportHandlerOption
 	return
 }
 
-func (handler *transportApplicationHandler) Accept(r *transports.Request) (ok bool) {
+func (handler *transportApplicationHandler) Accept(r *transports2.Request) (ok bool) {
 	ok = r.IsGet() && bytes.Compare(r.Path(), transportApplicationHealthPath) == 0
 	if ok {
 		return
@@ -226,7 +226,7 @@ func (handler *transportApplicationHandler) Accept(r *transports.Request) (ok bo
 	return
 }
 
-func (handler *transportApplicationHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
+func (handler *transportApplicationHandler) Handle(w transports2.ResponseWriter, r *transports2.Request) {
 	if r.IsGet() && bytes.Compare(r.Path(), transportApplicationHealthPath) == 0 {
 		body := fmt.Sprintf(
 			"{\"name\":\"%s\", \"id\":\"%s\", \"version\":\"%s\", \"launch\":\"%s\", \"now\":\"%s\", \"deviceIp\":\"%s\"}",

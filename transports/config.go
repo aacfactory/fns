@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/ssl"
+	"github.com/aacfactory/fns/transports/ssl"
 	"github.com/aacfactory/json"
 	"strings"
 )

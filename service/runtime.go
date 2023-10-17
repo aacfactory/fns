@@ -20,10 +20,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/flags"
+	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/internal/commons/flags"
-	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/shareds"
+	shareds2 "github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/logs"
 	"os"
 	"time"
@@ -58,15 +59,14 @@ type Runtime struct {
 	appId       string
 	appName     string
 	appVersion  versions.Version
-	appPort     int
 	appServices []NamePlate
 	status      *Status
 	log         logs.Logger
 	worker      Workers
 	discovery   EndpointDiscovery
 	barrier     Barrier
-	shared      shareds.Shared
-	signer      *secret.Signer
+	shared      shareds2.Shared
+	signer      signatures.Signature
 }
 
 func (rt *Runtime) AppId() string {
@@ -81,11 +81,7 @@ func (rt *Runtime) AppVersion() versions.Version {
 	return rt.appVersion
 }
 
-func (rt *Runtime) AppPort() int {
-	return rt.appPort
-}
-
-func (rt *Runtime) ServiceNamePlates() []NamePlate {
+func (rt *Runtime) ServiceNames() []NamePlate {
 	return rt.appServices
 }
 
@@ -109,11 +105,11 @@ func (rt *Runtime) Barrier() Barrier {
 	return rt.barrier
 }
 
-func (rt *Runtime) Shared() shareds.Shared {
+func (rt *Runtime) Shared() shareds2.Shared {
 	return rt.shared
 }
 
-func (rt *Runtime) Signer() *secret.Signer {
+func (rt *Runtime) Signature() signatures.Signature {
 	return rt.signer
 }
 
@@ -211,17 +207,17 @@ func GetBarrier(ctx context.Context) (barrier Barrier) {
 	return
 }
 
-func GetSigner(ctx context.Context) (signer *secret.Signer) {
+func GetSigner(ctx context.Context) (signer signatures.Signature) {
 	rt := GetRuntime(ctx)
 	if rt == nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: signer was not found")))
+		panic(fmt.Errorf("%+v", errors.Warning("fns: signature was not found")))
 		return
 	}
 	signer = rt.signer
 	return
 }
 
-func SharedStore(ctx context.Context) (store shareds.Store) {
+func SharedStore(ctx context.Context) (store shareds2.Store) {
 	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: shared store was not found")))
@@ -231,7 +227,7 @@ func SharedStore(ctx context.Context) (store shareds.Store) {
 	return
 }
 
-func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err errors.CodeError) {
+func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shareds2.Locker, err errors.CodeError) {
 	rt := GetRuntime(ctx)
 	if rt == nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: shared lockers was not found")))

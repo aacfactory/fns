@@ -2,7 +2,7 @@ package fast
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/transports"
 	"golang.org/x/sync/singleflight"
 	"sync"
 )

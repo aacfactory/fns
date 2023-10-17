@@ -22,13 +22,14 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/flags"
+	"github.com/aacfactory/fns/commons/procs"
+	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/logger"
 	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/commons/flags"
-	"github.com/aacfactory/fns/service/internal/logger"
-	"github.com/aacfactory/fns/service/internal/procs"
-	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/shareds"
+	"github.com/aacfactory/fns/shareds"
+	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"strings"
@@ -40,6 +41,7 @@ import (
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type TransportOptions struct {
+	Transport   transports.Transport
 	Middlewares []TransportMiddleware
 	Handlers    []TransportHandler
 }
@@ -92,15 +94,11 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	// secret key
 	secretKey := strings.TrimSpace(runtimeConfig.SecretKey)
 	if secretKey == "" {
-		secretKey = secret.DefaultSignerKey
+		secretKey = "+fns-"
 	}
 
 	// procs
-	goprocs := procs.New(procs.Options{
-		Log: log,
-		Min: runtimeConfig.AutoMaxProcs.Min,
-		Max: runtimeConfig.AutoMaxProcs.Max,
-	})
+	goprocs := procs.New(runtimeConfig.AutoMaxProcs.Min, runtimeConfig.AutoMaxProcs.Max)
 	// workers >>>
 
 	maxWorkers := runtimeConfig.MaxWorkers
@@ -187,7 +185,6 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			appId:       options.AppId,
 			appName:     options.AppName,
 			appVersion:  options.AppVersion,
-			appPort:     0,
 			appServices: make([]NamePlate, 0, 1),
 			status: &Status{
 				flag: flags.New(false),
@@ -197,7 +194,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 			discovery: nil,
 			barrier:   barrier,
 			shared:    shared,
-			signer:    secret.NewSigner(bytex.FromString(secretKey)),
+			signer:    signatures.HMAC(bytex.FromString(secretKey)),
 		},
 		autoMaxProcs:     goprocs,
 		handleTimeout:    time.Duration(handleTimeoutSeconds) * time.Second,

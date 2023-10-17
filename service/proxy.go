@@ -28,6 +28,7 @@ import (
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/transports"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
@@ -85,7 +86,7 @@ func createProxyTransport(config *ProxyConfig, runtime *Runtime, registrations *
 	}
 
 	handlers = append(handlers, newProxyHandler(proxyHandlerOptions{
-		Signer:        runtime.Signer(),
+		Signer:        runtime.Signature(),
 		Registrations: registrations,
 	}))
 
@@ -201,7 +202,7 @@ func (handler *proxyHandler) Build(options TransportHandlerOptions) (err error) 
 	return
 }
 
-func (handler *proxyHandler) Accept(r *transports.Request) (ok bool) {
+func (handler *proxyHandler) Accept(r *transports2.Request) (ok bool) {
 	ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0
 	if ok {
 		return
@@ -218,7 +219,7 @@ func (handler *proxyHandler) Close() (err error) {
 	return
 }
 
-func (handler *proxyHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
+func (handler *proxyHandler) Handle(w transports2.ResponseWriter, r *transports2.Request) {
 	if r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0 {
 		handler.handleOpenapi(w, r)
 		return
@@ -249,7 +250,7 @@ func (handler *proxyHandler) fetchDocuments() (v documents.Documents, err error)
 	return
 }
 
-func (handler *proxyHandler) handleOpenapi(w transports.ResponseWriter, r *transports.Request) {
+func (handler *proxyHandler) handleOpenapi(w transports2.ResponseWriter, r *transports2.Request) {
 	version := versions.Latest()
 	r.Param("version")
 	if targetVersion := bytex.ToString(r.Param("version")); targetVersion != "" {
@@ -302,7 +303,7 @@ func (handler *proxyHandler) handleOpenapi(w transports.ResponseWriter, r *trans
 	return
 }
 
-func (handler *proxyHandler) handleDocuments(w transports.ResponseWriter, r *transports.Request) {
+func (handler *proxyHandler) handleDocuments(w transports2.ResponseWriter, r *transports2.Request) {
 	key := "documents"
 	refresh := bytex.ToString(r.Param("refresh")) == "true"
 	v, err, _ := handler.group.Do(fmt.Sprintf("%s:write:%v", key, refresh), func() (v interface{}, err error) {
@@ -335,23 +336,23 @@ func (handler *proxyHandler) handleDocuments(w transports.ResponseWriter, r *tra
 	return
 }
 
-func (handler *proxyHandler) getDeviceId(r *transports.Request) (devId string) {
+func (handler *proxyHandler) getDeviceId(r *transports2.Request) (devId string) {
 	devId = strings.TrimSpace(r.Header().Get(httpDeviceIdHeader))
 	return
 }
 
-func (handler *proxyHandler) getDeviceIp(r *transports.Request) (devIp string) {
+func (handler *proxyHandler) getDeviceIp(r *transports2.Request) (devIp string) {
 	devIp = r.Header().Get(httpDeviceIpHeader)
 	return
 }
 
-func (handler *proxyHandler) getRequestId(r *transports.Request) (requestId string, has bool) {
+func (handler *proxyHandler) getRequestId(r *transports2.Request) (requestId string, has bool) {
 	requestId = strings.TrimSpace(r.Header().Get(httpRequestIdHeader))
 	has = requestId != ""
 	return
 }
 
-func (handler *proxyHandler) handleProxy(w transports.ResponseWriter, r *transports.Request) {
+func (handler *proxyHandler) handleProxy(w transports2.ResponseWriter, r *transports2.Request) {
 	// read path
 	resources := r.PathResources()
 	serviceNameBytes := resources[0]
@@ -420,7 +421,7 @@ func (handler *proxyHandler) handleProxy(w transports.ResponseWriter, r *transpo
 	return
 }
 
-func (handler *proxyHandler) write(w transports.ResponseWriter, status int, body []byte) {
+func (handler *proxyHandler) write(w transports2.ResponseWriter, status int, body []byte) {
 	w.SetStatus(status)
 	if body != nil {
 		w.Header().Set(httpContentType, httpContentTypeJson)

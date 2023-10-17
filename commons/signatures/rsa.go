@@ -28,7 +28,7 @@ import (
 	"sync"
 )
 
-func RSA(keyPEM []byte) (Signer, error) {
+func RSA(keyPEM []byte) (Signature, error) {
 	block, _ := pem.Decode(keyPEM)
 	privateKey, priErr := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if priErr != nil {

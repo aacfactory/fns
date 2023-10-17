@@ -5,7 +5,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/service/shareds"
-	"github.com/aacfactory/fns/service/transports"
+	shareds2 "github.com/aacfactory/fns/shareds"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"strings"
 	"time"
@@ -61,15 +62,15 @@ func (middleware *idempotentMiddleware) Build(options TransportMiddlewareOptions
 	return
 }
 
-func (middleware *idempotentMiddleware) Handler(next transports.Handler) transports.Handler {
-	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
+func (middleware *idempotentMiddleware) Handler(next transports2.Handler) transports2.Handler {
+	return transports2.HandlerFunc(func(w transports2.ResponseWriter, r *transports2.Request) {
 		if r.Header().Get(httpRequestInternalHeader) != "" {
 			next.Handle(w, r)
 			return
 		}
 		rh := getOrMakeRequestHash(r.Header(), r.Path(), r.Body())
 		key := bytes.Join([][]byte{bytex.FromString(idempotentMiddlewareTicketPrefix), rh}, slashBytes)
-		prev, ok := middleware.tickets.Set(r.Context(), key, []byte{'1'}, middleware.ticketTTL, shareds.SystemScope())
+		prev, ok := middleware.tickets.Set(r.Context(), key, []byte{'1'}, middleware.ticketTTL, shareds2.SystemScope())
 		if !ok {
 			w.Failed(ErrLockedRequest.WithCause(errors.Warning("fns: save request idempotent ticket failed")))
 			return
@@ -79,7 +80,7 @@ func (middleware *idempotentMiddleware) Handler(next transports.Handler) transpo
 			return
 		}
 		next.Handle(w, r)
-		middleware.tickets.Remove(r.Context(), key, shareds.SystemScope())
+		middleware.tickets.Remove(r.Context(), key, shareds2.SystemScope())
 	})
 }
 

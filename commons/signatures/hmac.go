@@ -24,7 +24,7 @@ import (
 	"sync"
 )
 
-func HMAC(key []byte) Signer {
+func HMAC(key []byte) Signature {
 	h := &hmacSigner{
 		key:  key,
 		pool: sync.Pool{},

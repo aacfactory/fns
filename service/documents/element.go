@@ -18,7 +18,7 @@ package documents
 
 import (
 	"fmt"
-	"github.com/aacfactory/fns/service/internal/oas"
+	"github.com/aacfactory/fns/commons/oas"
 	"reflect"
 	"sort"
 	"strings"

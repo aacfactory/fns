@@ -20,7 +20,7 @@ import (
 	stdjson "encoding/json"
 	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/internal/commons/objects"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 )

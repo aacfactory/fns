@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/transports"
 	"time"
 )
 

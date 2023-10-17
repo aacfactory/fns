@@ -3,7 +3,7 @@ package standard
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/transports"
 )
 
 const (

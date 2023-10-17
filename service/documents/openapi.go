@@ -16,16 +16,18 @@
 
 package documents
 
-import "github.com/aacfactory/fns/service/internal/oas"
+import (
+	oas2 "github.com/aacfactory/fns/commons/oas"
+)
 
-func codeErrOpenapiSchema() *oas.Schema {
-	return &oas.Schema{
+func codeErrOpenapiSchema() *oas2.Schema {
+	return &oas2.Schema{
 		Key:         "github.com/aacfactory/errors.CodeError",
 		Title:       "CodeError",
 		Description: "Fns Code Error",
 		Type:        "object",
 		Required:    []string{"id", "code", "name", "message", "stacktrace"},
-		Properties: map[string]*oas.Schema{
+		Properties: map[string]*oas2.Schema{
 			"id": {
 				Title: "Id",
 				Type:  "string",
@@ -45,24 +47,24 @@ func codeErrOpenapiSchema() *oas.Schema {
 			"meta": {
 				Title:                "Meta",
 				Type:                 "object",
-				AdditionalProperties: &oas.Schema{Type: "string"},
+				AdditionalProperties: &oas2.Schema{Type: "string"},
 			},
 			"stacktrace": {
 				Title: "Stacktrace",
 				Type:  "object",
-				Properties: map[string]*oas.Schema{
+				Properties: map[string]*oas2.Schema{
 					"fn":   {Type: "string"},
 					"file": {Type: "string"},
 					"line": {Type: "string"},
 				},
 			},
-			"cause": oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+			"cause": oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 		},
 	}
 }
 
-func jsonRawMessageOpenapiSchema() *oas.Schema {
-	return &oas.Schema{
+func jsonRawMessageOpenapiSchema() *oas2.Schema {
+	return &oas2.Schema{
 		Key:         "github.com/aacfactory/json.RawMessage",
 		Title:       "JsonRawMessage",
 		Description: "Json Raw Message",
@@ -70,8 +72,8 @@ func jsonRawMessageOpenapiSchema() *oas.Schema {
 	}
 }
 
-func emptyOpenapiSchema() *oas.Schema {
-	return &oas.Schema{
+func emptyOpenapiSchema() *oas2.Schema {
+	return &oas2.Schema{
 		Key:         "github.com/aacfactory/fns/service.Empty",
 		Title:       "Empty",
 		Description: "Empty Object",
@@ -79,8 +81,8 @@ func emptyOpenapiSchema() *oas.Schema {
 	}
 }
 
-func requestAuthHeadersOpenapiParams() []*oas.Parameter {
-	return []*oas.Parameter{
+func requestAuthHeadersOpenapiParams() []*oas2.Parameter {
+	return []*oas2.Parameter{
 		{
 			Name:        "Authorization",
 			In:          "header",
@@ -90,8 +92,8 @@ func requestAuthHeadersOpenapiParams() []*oas.Parameter {
 	}
 }
 
-func requestHeadersOpenapiParams() []*oas.Parameter {
-	return []*oas.Parameter{
+func requestHeadersOpenapiParams() []*oas2.Parameter {
+	return []*oas2.Parameter{
 		{
 			Name:        "X-Fns-Device-Id",
 			In:          "header",
@@ -131,140 +133,140 @@ func requestHeadersOpenapiParams() []*oas.Parameter {
 	}
 }
 
-func responseHeadersOpenapi() map[string]*oas.Header {
-	return map[string]*oas.Header{
+func responseHeadersOpenapi() map[string]*oas2.Header {
+	return map[string]*oas2.Header{
 		"X-Fns-Id": {
 			Description: "app id",
-			Schema: &oas.Schema{
+			Schema: &oas2.Schema{
 				Type: "string",
 			},
 		},
 		"X-Fns-Name": {
 			Description: "app name",
-			Schema: &oas.Schema{
+			Schema: &oas2.Schema{
 				Type: "string",
 			},
 		},
 		"X-Fns-Version": {
 			Description: "app version",
-			Schema: &oas.Schema{
+			Schema: &oas2.Schema{
 				Type: "string",
 			},
 		},
 		"X-Fns-Request-Id": {
 			Description: "request id",
-			Schema: &oas.Schema{
+			Schema: &oas2.Schema{
 				Type: "string",
 			},
 		},
 		"X-Fns-Handle-Latency": {
 			Description: "request latency",
-			Schema: &oas.Schema{
+			Schema: &oas2.Schema{
 				Type: "string",
 			},
 		},
 	}
 }
 
-func responseStatusOpenapi() map[string]*oas.Response {
-	return map[string]*oas.Response{
+func responseStatusOpenapi() map[string]*oas2.Response {
+	return map[string]*oas2.Response{
 		"400": {
 			Description: "***BAD REQUEST***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"401": {
 			Description: "***UNAUTHORIZED***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"403": {
 			Description: "***FORBIDDEN***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"404": {
 			Description: "***NOT FOUND***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"406": {
 			Description: "***NOT ACCEPTABLE***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"408": {
 			Description: "***TIMEOUT***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"500": {
 			Description: "***SERVICE EXECUTE FAILED***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"501": {
 			Description: "***SERVICE NOT IMPLEMENTED***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"503": {
 			Description: "***SERVICE UNAVAILABLE***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 		"555": {
 			Description: "***WARNING***",
 			Header:      responseHeadersOpenapi(),
-			Content: map[string]*oas.MediaType{
+			Content: map[string]*oas2.MediaType{
 				"Document/json": {
-					Schema: oas.RefSchema("github.com/aacfactory/errors.CodeError"),
+					Schema: oas2.RefSchema("github.com/aacfactory/errors.CodeError"),
 				},
 			},
 		},
 	}
 }
 
-func healthPath() (uri string, path *oas.Path) {
+func healthPath() (uri string, path *oas2.Path) {
 	uri = "/application/health"
-	path = &oas.Path{
-		Get: &oas.Operation{
+	path = &oas2.Path{
+		Get: &oas2.Operation{
 			OperationId: "application_health",
 			Tags:        []string{"builtin"},
 			Summary:     "Health Check",
@@ -272,16 +274,16 @@ func healthPath() (uri string, path *oas.Path) {
 			Deprecated:  false,
 			Parameters:  nil,
 			RequestBody: nil,
-			Responses: map[string]oas.Response{
+			Responses: map[string]oas2.Response{
 				"200": {
-					Content: func() (c map[string]*oas.MediaType) {
-						schema := &oas.Schema{
+					Content: func() (c map[string]*oas2.MediaType) {
+						schema := &oas2.Schema{
 							Key:         "github.com/aacfactory/fns/service.ApplicationHealth",
 							Title:       "Health Check Result",
 							Description: "",
 							Type:        "object",
 							Required:    []string{"name", "id", "version", "running", "now"},
-							Properties: map[string]*oas.Schema{
+							Properties: map[string]*oas2.Schema{
 								"name": {
 									Title: "Application name",
 									Type:  "string",
@@ -302,17 +304,17 @@ func healthPath() (uri string, path *oas.Path) {
 									Title:                "Application launch times",
 									Type:                 "string",
 									Format:               "2006-01-02T15:04:05Z07:00",
-									AdditionalProperties: &oas.Schema{Type: "string"},
+									AdditionalProperties: &oas2.Schema{Type: "string"},
 								},
 								"now": {
 									Title:                "Now",
 									Type:                 "string",
 									Format:               "2006-01-02T15:04:05Z07:00",
-									AdditionalProperties: &oas.Schema{Type: "string"},
+									AdditionalProperties: &oas2.Schema{Type: "string"},
 								},
 							},
 						}
-						c = oas.ApplicationJsonContent(schema)
+						c = oas2.ApplicationJsonContent(schema)
 						return
 					}(),
 				},

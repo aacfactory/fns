@@ -24,8 +24,10 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/shareds"
-	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/fns/service/transports"
+	shareds2 "github.com/aacfactory/fns/shareds"
+	transports2 "github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/fns/transports/ssl"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"net/http"
@@ -47,7 +49,7 @@ type Cluster interface {
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
 	Nodes(ctx context.Context) (nodes Nodes, err error)
-	Shared() (shared shareds.Shared)
+	Shared() (shared shareds2.Shared)
 }
 
 type NodeService struct {
@@ -97,7 +99,7 @@ func getClusterBuilder(name string) (builder ClusterBuilder, has bool) {
 
 type devTransportHandler struct{}
 
-func (handler devTransportHandler) Handle(w transports.ResponseWriter, _ *transports.Request) {
+func (handler devTransportHandler) Handle(w transports2.ResponseWriter, _ *transports2.Request) {
 	w.Succeed(&Empty{})
 }
 
@@ -142,7 +144,7 @@ func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err erro
 		return
 	}
 	transportsConfig, _ := configures.NewJsonConfig([]byte{'{', '}'})
-	transportsOptions := transports.Options{
+	transportsOptions := transports2.Options{
 		Port:    13000,
 		TLS:     sslConf,
 		Handler: &devTransportHandler{},
@@ -185,8 +187,8 @@ func devClusterBuilder(options ClusterBuilderOptions) (cluster Cluster, err erro
 type devCluster struct {
 	appId        string
 	proxyAddress string
-	dialer       transports.Dialer
-	client       transports.Client
+	dialer       transports2.Dialer
+	client       transports2.Client
 	shared       *devShared
 }
 
@@ -199,7 +201,7 @@ func (cluster *devCluster) Leave(_ context.Context) (err error) {
 }
 
 func (cluster *devCluster) Nodes(ctx context.Context) (nodes Nodes, err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, devClusterNodesPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodGET, devClusterNodesPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	resp, doErr := cluster.client.Do(ctx, req)
 	if doErr != nil {
@@ -219,7 +221,7 @@ func (cluster *devCluster) Nodes(ctx context.Context) (nodes Nodes, err error) {
 	return
 }
 
-func (cluster *devCluster) Shared() (shared shareds.Shared) {
+func (cluster *devCluster) Shared() (shared shareds2.Shared) {
 	shared = cluster.shared
 	return
 }
@@ -230,12 +232,12 @@ type devShared struct {
 	caches  *devSharedCaches
 }
 
-func (dev *devShared) Lockers() (lockers shareds.Lockers) {
+func (dev *devShared) Lockers() (lockers shareds2.Lockers) {
 	lockers = dev.lockers
 	return
 }
 
-func (dev *devShared) Store() (store shareds.Store) {
+func (dev *devShared) Store() (store shareds2.Store) {
 	store = dev.store
 	return
 }
@@ -247,16 +249,16 @@ func (dev *devShared) Caches() (store shareds.Caches) {
 
 type devSharedLockers struct {
 	appId  string
-	client transports.Client
+	client transports2.Client
 }
 
-func (dev *devSharedLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration, options ...shareds.Option) (locker shareds.Locker, err error) {
+func (dev *devSharedLockers) Acquire(ctx context.Context, key []byte, ttl time.Duration, options ...shareds2.Option) (locker shareds2.Locker, err error) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = optErr
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devAcquireLockerParam{
 		Key:     bytex.ToString(key),
@@ -287,12 +289,12 @@ func (dev *devSharedLockers) Acquire(ctx context.Context, key []byte, ttl time.D
 }
 
 type devSharedLocker struct {
-	client transports.Client
+	client transports2.Client
 	key    []byte
 }
 
 func (dev *devSharedLocker) Lock(ctx context.Context) (err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devLockParam{
 		Key: bytex.ToString(dev.key),
@@ -317,7 +319,7 @@ func (dev *devSharedLocker) Lock(ctx context.Context) (err error) {
 }
 
 func (dev *devSharedLocker) Unlock(ctx context.Context) (err error) {
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devUnLockParam{
 		Key: bytex.ToString(dev.key),
@@ -343,16 +345,16 @@ func (dev *devSharedLocker) Unlock(ctx context.Context) (err error) {
 
 type devSharedStore struct {
 	appId  string
-	client transports.Client
+	client transports2.Client
 }
 
-func (dev *devSharedStore) Keys(ctx context.Context, prefix []byte, options ...shareds.Option) (keys [][]byte, err errors.CodeError) {
+func (dev *devSharedStore) Keys(ctx context.Context, prefix []byte, options ...shareds2.Option) (keys [][]byte, err errors.CodeError) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = errors.Map(optErr)
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreKeysParam{
 		Prefix:  bytex.ToString(prefix),
@@ -384,13 +386,13 @@ func (dev *devSharedStore) Keys(ctx context.Context, prefix []byte, options ...s
 	return
 }
 
-func (dev *devSharedStore) Get(ctx context.Context, key []byte, options ...shareds.Option) (value []byte, has bool, err errors.CodeError) {
+func (dev *devSharedStore) Get(ctx context.Context, key []byte, options ...shareds2.Option) (value []byte, has bool, err errors.CodeError) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = errors.Map(optErr)
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreGetParam{
 		Key:     bytex.ToString(key),
@@ -423,7 +425,7 @@ func (dev *devSharedStore) Get(ctx context.Context, key []byte, options ...share
 	return
 }
 
-func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte, options ...shareds.Option) (err errors.CodeError) {
+func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte, options ...shareds2.Option) (err errors.CodeError) {
 	err = dev.SetWithTTL(ctx, key, value, 0, options...)
 	if err != nil {
 		err = errors.Warning("dev: store set failed")
@@ -432,13 +434,13 @@ func (dev *devSharedStore) Set(ctx context.Context, key []byte, value []byte, op
 	return
 }
 
-func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...shareds.Option) (err errors.CodeError) {
+func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...shareds2.Option) (err errors.CodeError) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = errors.Map(optErr)
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreSetParam{
 		Key:     bytex.ToString(key),
@@ -465,13 +467,13 @@ func (dev *devSharedStore) SetWithTTL(ctx context.Context, key []byte, value []b
 	return
 }
 
-func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64, options ...shareds.Option) (v int64, err errors.CodeError) {
+func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64, options ...shareds2.Option) (v int64, err errors.CodeError) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = errors.Map(optErr)
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreIncrParam{
 		Key:     bytex.ToString(key),
@@ -504,13 +506,13 @@ func (dev *devSharedStore) Incr(ctx context.Context, key []byte, delta int64, op
 	return
 }
 
-func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration, options ...shareds.Option) (err errors.CodeError) {
+func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration, options ...shareds2.Option) (err errors.CodeError) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = errors.Map(optErr)
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreExprParam{
 		Key:     bytex.ToString(key),
@@ -536,13 +538,13 @@ func (dev *devSharedStore) ExpireKey(ctx context.Context, key []byte, ttl time.D
 	return
 }
 
-func (dev *devSharedStore) Remove(ctx context.Context, key []byte, options ...shareds.Option) (err errors.CodeError) {
+func (dev *devSharedStore) Remove(ctx context.Context, key []byte, options ...shareds2.Option) (err errors.CodeError) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		err = errors.Map(optErr)
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devStoreRemoveParam{
 		Key:     bytex.ToString(key),
@@ -569,15 +571,15 @@ func (dev *devSharedStore) Remove(ctx context.Context, key []byte, options ...sh
 
 type devSharedCaches struct {
 	appId  string
-	client transports.Client
+	client transports2.Client
 }
 
-func (dev *devSharedCaches) Get(ctx context.Context, key []byte, options ...shareds.Option) (value []byte, has bool) {
+func (dev *devSharedCaches) Get(ctx context.Context, key []byte, options ...shareds2.Option) (value []byte, has bool) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheGetParam{
 		Key:     bytex.ToString(key),
@@ -609,12 +611,12 @@ func (dev *devSharedCaches) Get(ctx context.Context, key []byte, options ...shar
 	return
 }
 
-func (dev *devSharedCaches) Exist(ctx context.Context, key []byte, options ...shareds.Option) (has bool) {
+func (dev *devSharedCaches) Exist(ctx context.Context, key []byte, options ...shareds2.Option) (has bool) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheExistParam{
 		Key:     bytex.ToString(key),
@@ -643,12 +645,12 @@ func (dev *devSharedCaches) Exist(ctx context.Context, key []byte, options ...sh
 	return
 }
 
-func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...shareds.Option) (prev []byte, ok bool) {
+func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...shareds2.Option) (prev []byte, ok bool) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheSetParam{
 		Key:     bytex.ToString(key),
@@ -680,12 +682,12 @@ func (dev *devSharedCaches) Set(ctx context.Context, key []byte, value []byte, t
 	return
 }
 
-func (dev *devSharedCaches) Remove(ctx context.Context, key []byte, options ...shareds.Option) {
+func (dev *devSharedCaches) Remove(ctx context.Context, key []byte, options ...shareds2.Option) {
 	opt, optErr := newDevSharedOptions(options)
 	if optErr != nil {
 		return
 	}
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, devClusterSharedPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, devClusterSharedPath)
 	req.Header().Set(httpDevModeHeader, "*")
 	subParam := devCacheRemoveParam{
 		Key:     bytex.ToString(key),

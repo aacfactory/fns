@@ -21,7 +21,7 @@ import (
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/internal/commons/objects"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
 )
 

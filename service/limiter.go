@@ -24,8 +24,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/shareds"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/shareds"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"strconv"
@@ -44,7 +44,7 @@ type RateLimitCounterOptions struct {
 	Shared     shareds.Shared
 }
 
-// todo use golang.org/x/time/rate
+// todo use golang.org/x/time/rate，外层用rate，内层是每个device的
 type RateLimitCounter interface {
 	Name() (name string)
 	Build(options RateLimitCounterOptions) (err error)
@@ -124,8 +124,8 @@ func (middleware *rateLimitMiddleware) Build(options TransportMiddlewareOptions)
 	return
 }
 
-func (middleware *rateLimitMiddleware) Handler(next transports.Handler) transports.Handler {
-	return transports.HandlerFunc(func(w transports.ResponseWriter, r *transports.Request) {
+func (middleware *rateLimitMiddleware) Handler(next transports2.Handler) transports2.Handler {
+	return transports2.HandlerFunc(func(w transports2.ResponseWriter, r *transports2.Request) {
 		deviceId := r.Header().Get(httpDeviceIdHeader)
 		key := fmt.Sprintf("rateLimit/%s", deviceId)
 		ok, incrErr := middleware.counter.Incr(r.Context(), bytex.FromString(key))

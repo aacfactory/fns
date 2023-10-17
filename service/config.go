@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/ssl"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/service/transports/middlewares/cors"
+	transports2 "github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/fns/transports/ssl"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"os"
@@ -91,13 +92,13 @@ type AutoMaxProcsConfig struct {
 }
 
 type TransportConfig struct {
-	Name        string                 `json:"name" yaml:"name,omitempty"`
-	Port        int                    `json:"port" yaml:"port,omitempty"`
-	Cors        *transports.CorsConfig `json:"cors" yaml:"cors,omitempty"`
-	TLS         *TLSConfig             `json:"tls" yaml:"tls,omitempty"`
-	Options     json.RawMessage        `json:"options" yaml:"options,omitempty"`
-	Middlewares json.RawMessage        `json:"middlewares" yaml:"middlewares,omitempty"`
-	Handlers    json.RawMessage        `json:"handlers" yaml:"handlers,omitempty"`
+	Name        string           `json:"name" yaml:"name,omitempty"`
+	Port        int              `json:"port" yaml:"port,omitempty"`
+	Cors        *cors.CorsConfig `json:"cors" yaml:"cors,omitempty"`
+	TLS         *TLSConfig       `json:"tls" yaml:"tls,omitempty"`
+	Options     json.RawMessage  `json:"options" yaml:"options,omitempty"`
+	Middlewares json.RawMessage  `json:"middlewares" yaml:"middlewares,omitempty"`
+	Handlers    json.RawMessage  `json:"handlers" yaml:"handlers,omitempty"`
 }
 
 func (config *TransportConfig) MiddlewaresConfig() (conf configures.Config, err error) {
@@ -132,8 +133,8 @@ func (config *TransportConfig) HandlersConfig() (conf configures.Config, err err
 	return
 }
 
-func (config *TransportConfig) ConvertToTransportsOptions(log logs.Logger, handler transports.Handler) (options transports.Options, err error) {
-	options = transports.Options{
+func (config *TransportConfig) ConvertToTransportsOptions(log logs.Logger, handler transports2.Handler) (options transports2.Options, err error) {
+	options = transports2.Options{
 		Port:    80,
 		TLS:     nil,
 		Handler: handler,

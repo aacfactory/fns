@@ -22,6 +22,8 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/service"
 	"github.com/aacfactory/fns/service/validators"
+	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/fns/transports/fast"
 	"os"
 	"strings"
 	"time"
@@ -37,21 +39,23 @@ var (
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
 		configRetrieverOption: service.DefaultConfigRetrieverOption(),
-		transportOptions:      TransportOption(),
+		transportOptions:      TransportOption(fast.New()),
 		proxyOptions:          nil,
 		hooks:                 nil,
 		shutdownTimeout:       60 * time.Second,
 	}
 )
 
-func TransportOption() *TransportOptions {
+func TransportOption(transport transports.Transport) *TransportOptions {
 	return &TransportOptions{
+		transport:   transport,
 		handlers:    make([]service.TransportHandler, 0, 1),
 		middlewares: make([]service.TransportMiddleware, 0, 1),
 	}
 }
 
 type TransportOptions struct {
+	transport   transports.Transport
 	handlers    []service.TransportHandler
 	middlewares []service.TransportMiddleware
 }

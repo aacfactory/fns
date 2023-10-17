@@ -25,7 +25,6 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/wildcard"
-	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
@@ -85,7 +84,7 @@ func (rvs RequestVersions) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
 }
 
-func ParseRequestVersionFromHeader(header transports.Header) (rvs RequestVersions, has bool, err error) {
+func ParseRequestVersionFromHeader(header http.Header) (rvs RequestVersions, has bool, err error) {
 	values := header.Values(httpRequestVersionsHeader)
 	if values == nil || len(values) == 0 {
 		return
@@ -487,7 +486,7 @@ func WithRequestId(id string) RequestOption {
 	}
 }
 
-func WithRequestHeader(header transports.Header) RequestOption {
+func WithRequestHeader(header http.Header) RequestOption {
 	return func(options *RequestOptions) {
 		options.header = RequestHeader(header)
 	}
@@ -747,7 +746,7 @@ func makeRequestHash(path []byte, body []byte) (v []byte) {
 	return
 }
 
-func getOrMakeRequestHash(header transports.Header, path []byte, body []byte) (v []byte) {
+func getOrMakeRequestHash(header http.Header, path []byte, body []byte) (v []byte) {
 	vv := header.Get(httpRequestHashHeader)
 	if vv != "" {
 		v = bytex.FromString(vv)

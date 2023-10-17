@@ -51,6 +51,7 @@ type entry struct {
 	deadline time.Time
 }
 
+// todo use file
 type localStore struct {
 	values sync.Map
 }

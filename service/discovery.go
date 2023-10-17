@@ -22,10 +22,10 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/commons/window"
 	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/commons/window"
 	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/transports"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/rings"
@@ -133,7 +133,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	serviceName, fn := r.Fn()
 	path := bytex.FromString(fmt.Sprintf("/%s/%s", serviceName, fn))
 	// request
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, path)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, path)
 	// request set header
 	for name, vv := range header {
 		for _, v := range vv {
@@ -265,7 +265,7 @@ func (task *registrationTask) executeInternal(ctx context.Context) {
 	header := r.Header()
 	path := bytex.FromString(fmt.Sprintf("/%s/%s", service, fn))
 	// request
-	req := transports.NewUnsafeRequest(ctx, transports.MethodPost, path)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodPost, path)
 	// request set header
 	for name, vv := range header {
 		for _, v := range vv {
@@ -454,7 +454,7 @@ type Registration struct {
 	address string
 	name    string
 	devMode bool
-	client  transports.Client
+	client  transports2.Client
 	signer  *secret.Signer
 	worker  Workers
 	timeout time.Duration
@@ -518,7 +518,7 @@ func (registration *Registration) release(task *registrationTask) {
 	return
 }
 
-func newRegistrations(log logs.Logger, id string, name string, version versions.Version, cluster Cluster, worker Workers, dialer transports.Dialer, signer *secret.Signer, timeout time.Duration, refreshInterval time.Duration) *Registrations {
+func newRegistrations(log logs.Logger, id string, name string, version versions.Version, cluster Cluster, worker Workers, dialer transports2.Dialer, signer *secret.Signer, timeout time.Duration, refreshInterval time.Duration) *Registrations {
 	dev, ok := cluster.(*devCluster)
 	if ok {
 		dialer = dev.dialer
@@ -550,7 +550,7 @@ type Registrations struct {
 	values          sync.Map
 	nodes           map[string]*Node
 	signer          *secret.Signer
-	dialer          transports.Dialer
+	dialer          transports2.Dialer
 	worker          Workers
 	timeout         time.Duration
 	refreshInterval time.Duration
@@ -704,7 +704,7 @@ func (r *Registrations) FetchNodeDocuments(ctx context.Context, node *Node) (v d
 		return
 	}
 
-	req := transports.NewUnsafeRequest(ctx, transports.MethodGET, servicesDocumentsPath)
+	req := transports2.NewUnsafeRequest(ctx, transports2.MethodGET, servicesDocumentsPath)
 	req.Header().Set(httpDeviceIdHeader, r.id)
 
 	for i := 0; i < 5; i++ {

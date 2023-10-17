@@ -26,7 +26,7 @@ import (
 	"sync"
 )
 
-func ECDSA(keyPEM []byte, hf HashFunc) (Signer, error) {
+func ECDSA(keyPEM []byte, hf HashFunc) (Signature, error) {
 	block, _ := pem.Decode(keyPEM)
 	privateKey, priErr := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if priErr != nil {

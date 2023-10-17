@@ -26,6 +26,7 @@ import (
 	"github.com/aacfactory/fns/service/documents"
 	"github.com/aacfactory/fns/service/internal/secret"
 	"github.com/aacfactory/fns/service/transports"
+	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"golang.org/x/sync/singleflight"
@@ -82,7 +83,7 @@ func createServiceTransport(config *TransportConfig, runtime *Runtime, middlewar
 		handlers = make([]TransportHandler, 0, 1)
 	}
 	handlers = append(handlers, newServicesHandler(servicesHandlerOptions{
-		Signer: runtime.Signer(),
+		Signer: runtime.Signature(),
 	}))
 	for _, handler := range handlers {
 		appendErr := hds.Append(handler)
@@ -181,7 +182,7 @@ func (handler *servicesHandler) Build(options TransportHandlerOptions) (err erro
 	return
 }
 
-func (handler *servicesHandler) Accept(r *transports.Request) (ok bool) {
+func (handler *servicesHandler) Accept(r *transports2.Request) (ok bool) {
 	if ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0; ok {
 		return
 	}
@@ -194,7 +195,7 @@ func (handler *servicesHandler) Accept(r *transports.Request) (ok bool) {
 	return
 }
 
-func (handler *servicesHandler) Handle(w transports.ResponseWriter, r *transports.Request) {
+func (handler *servicesHandler) Handle(w transports2.ResponseWriter, r *transports2.Request) {
 	if r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0 {
 		handler.handleDocuments(w, r)
 		return
@@ -216,23 +217,23 @@ func (handler *servicesHandler) Close() (err error) {
 	return
 }
 
-func (handler *servicesHandler) getDeviceId(r *transports.Request) (devId string) {
+func (handler *servicesHandler) getDeviceId(r *transports2.Request) (devId string) {
 	devId = strings.TrimSpace(r.Header().Get(httpDeviceIdHeader))
 	return
 }
 
-func (handler *servicesHandler) getDeviceIp(r *transports.Request) (devIp string) {
+func (handler *servicesHandler) getDeviceIp(r *transports2.Request) (devIp string) {
 	devIp = r.Header().Get(httpDeviceIpHeader)
 	return
 }
 
-func (handler *servicesHandler) getRequestId(r *transports.Request) (requestId string, has bool) {
+func (handler *servicesHandler) getRequestId(r *transports2.Request) (requestId string, has bool) {
 	requestId = strings.TrimSpace(r.Header().Get(httpRequestIdHeader))
 	has = requestId != ""
 	return
 }
 
-func (handler *servicesHandler) handleRequest(writer transports.ResponseWriter, r *transports.Request) {
+func (handler *servicesHandler) handleRequest(writer transports2.ResponseWriter, r *transports2.Request) {
 	// read path
 	resources := r.PathResources()
 	serviceNameBytes := resources[0]
@@ -309,7 +310,7 @@ func (handler *servicesHandler) handleRequest(writer transports.ResponseWriter, 
 	return
 }
 
-func (handler *servicesHandler) handleInternalRequest(writer transports.ResponseWriter, r *transports.Request) {
+func (handler *servicesHandler) handleInternalRequest(writer transports2.ResponseWriter, r *transports2.Request) {
 	// reade request id
 	requestId, hasRequestId := handler.getRequestId(r)
 	if !hasRequestId {
@@ -420,10 +421,10 @@ func (handler *servicesHandler) handleInternalRequest(writer transports.Response
 	return
 }
 
-func (handler *servicesHandler) createDocuments(r *transports.Request) {
+func (handler *servicesHandler) createDocuments(r *transports2.Request) {
 	handler.documents = documents.NewDocuments()
 	rt := GetRuntime(r.Context())
-	namePlates := rt.ServiceNamePlates()
+	namePlates := rt.ServiceNames()
 	if len(namePlates) > 0 {
 		for _, namePlate := range namePlates {
 			if !namePlate.Internal() && namePlate.Document() != nil {
@@ -433,7 +434,7 @@ func (handler *servicesHandler) createDocuments(r *transports.Request) {
 	}
 }
 
-func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter, r *transports.Request) {
+func (handler *servicesHandler) handleDocuments(w transports2.ResponseWriter, r *transports2.Request) {
 	if handler.disableHandleDocuments {
 		w.Failed(errors.Warning("fns: documents handler was disabled"))
 		return
@@ -466,7 +467,7 @@ func (handler *servicesHandler) handleDocuments(w transports.ResponseWriter, r *
 	return
 }
 
-func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter, r *transports.Request) {
+func (handler *servicesHandler) handleOpenapi(w transports2.ResponseWriter, r *transports2.Request) {
 	if handler.disableHandleOpenapi {
 		w.Succeed(Empty{})
 		return
@@ -496,7 +497,7 @@ func (handler *servicesHandler) handleOpenapi(w transports.ResponseWriter, r *tr
 	return
 }
 
-func (handler *servicesHandler) succeed(w transports.ResponseWriter, id string, result interface{}) {
+func (handler *servicesHandler) succeed(w transports2.ResponseWriter, id string, result interface{}) {
 	if id != "" {
 		w.Header().Set(httpRequestIdHeader, id)
 	}
@@ -504,7 +505,7 @@ func (handler *servicesHandler) succeed(w transports.ResponseWriter, id string, 
 	return
 }
 
-func (handler *servicesHandler) failed(w transports.ResponseWriter, id string, cause errors.CodeError) {
+func (handler *servicesHandler) failed(w transports2.ResponseWriter, id string, cause errors.CodeError) {
 	if id != "" {
 		w.Header().Set(httpRequestIdHeader, id)
 	}
@@ -512,7 +513,7 @@ func (handler *servicesHandler) failed(w transports.ResponseWriter, id string, c
 	return
 }
 
-func (handler *servicesHandler) write(w transports.ResponseWriter, status int, body []byte) {
+func (handler *servicesHandler) write(w transports2.ResponseWriter, status int, body []byte) {
 	w.SetStatus(status)
 	if body != nil {
 		w.Header().Set(httpContentType, httpContentTypeJson)

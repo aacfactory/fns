@@ -3,7 +3,7 @@ package fast
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/valyala/fasthttp"
 )

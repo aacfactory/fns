@@ -18,7 +18,7 @@ package signatures
 
 import "hash"
 
-type Signer interface {
+type Signature interface {
 	Sign(target []byte) (signature []byte)
 	Verify(target []byte, signature []byte) (ok bool)
 }

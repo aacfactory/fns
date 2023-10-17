@@ -20,7 +20,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/wildcard"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/transports"
 	"net/http"
 	"sort"
 	"strconv"
@@ -56,8 +56,9 @@ func (builder *builder) Build(options transports.MiddlewareBuilderOptions) (midd
 	if config.AllowedHeaders == nil {
 		config.AllowedHeaders = make([]string, 0, 1)
 	}
-	if config.AllowedHeaders[0] != "*" {
+	if len(config.AllowedHeaders) == 0 || config.AllowedHeaders[0] != "*" {
 		defaultAllowedHeaders := []string{
+			transports.OriginHeaderName, transports.AcceptHeaderName, transports.ContentTypeHeaderName, transports.XRequestedWithHeaderName,
 			transports.ConnectionHeaderName, transports.UpgradeHeaderName,
 			transports.XForwardedForHeaderName, transports.TrueClientIpHeaderName, transports.XRealIpHeaderName,
 			transports.DeviceIpHeaderName, transports.DeviceIdHeaderName,
@@ -85,21 +86,17 @@ func (builder *builder) Build(options transports.MiddlewareBuilderOptions) (midd
 			allowedOrigins = append(allowedOrigins, origin)
 		}
 	}
-	var allowedHeaders []string
 	allowedHeadersAll := false
-	if len(config.AllowedHeaders) == 0 {
-		allowedHeaders = []string{transports.OriginHeaderName, transports.AcceptHeaderName, transports.ContentTypeHeaderName, transports.XRequestedWithHeaderName}
-	} else {
-		allowedHeaders = make([]string, 0, 1)
-		allowedHeaders = builder.convert(append(config.AllowedHeaders, "Origin"), http.CanonicalHeaderKey)
-		for _, h := range config.AllowedHeaders {
-			if h == "*" {
-				allowedHeadersAll = true
-				allowedHeaders = nil
-				break
-			}
+	allowedHeaders := make([]string, 0, 1)
+	allowedHeaders = builder.convert(append(config.AllowedHeaders, "Origin"), http.CanonicalHeaderKey)
+	for _, h := range config.AllowedHeaders {
+		if h == "*" {
+			allowedHeadersAll = true
+			allowedHeaders = nil
+			break
 		}
 	}
+
 	if config.ExposedHeaders == nil {
 		config.ExposedHeaders = make([]string, 0, 1)
 	}

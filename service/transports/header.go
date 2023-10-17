@@ -143,3 +143,7 @@ func (h Header) Clone() Header {
 	}
 	return h2
 }
+
+func (h Header) ConvertToHttp() http.Header {
+	return http.Header(h)
+}

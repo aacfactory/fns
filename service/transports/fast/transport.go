@@ -1,20 +1,11 @@
 package fast
 
 import (
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/fns/service/transports"
 	"github.com/aacfactory/json"
-	"github.com/aacfactory/logs"
-	"github.com/dgrr/http2"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/prefork"
-	"net"
-	"strings"
-	"time"
 )
 
 const (
@@ -44,12 +35,8 @@ func New() transports.Transport {
 }
 
 type Transport struct {
-	log       logs.Logger
-	lnf       ssl.ListenerFunc
-	address   string
-	preforked bool
-	server    *fasthttp.Server
-	dialer    *Dialer
+	server *Server
+	dialer *Dialer
 }
 
 func (tr *Transport) Name() (name string) {
@@ -58,121 +45,57 @@ func (tr *Transport) Name() (name string) {
 }
 
 func (tr *Transport) Build(options transports.Options) (err error) {
-	tr.log = options.Log
-	tr.address = fmt.Sprintf(":%d", options.Port)
-	var srvTLS *tls.Config
-	if options.TLS != nil {
-		srvTLS, tr.lnf = options.TLS.Server()
-	}
-	config := &Config{}
-	optErr := options.Config.As(config)
-	if optErr != nil {
-		err = errors.Warning("fns: build server failed").WithCause(optErr).WithMeta("transport", transportName)
+	// log
+	log := options.Log.With("transport", transportName)
+	// tls
+	tlsConfig, tlsConfigErr := options.Config.TLS()
+	if tlsConfig != nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(tlsConfigErr).WithMeta("transport", transportName)
 		return
 	}
-	readBufferSize := uint64(0)
-	if config.ReadBufferSize != "" {
-		readBufferSize, err = bytex.ParseBytes(strings.TrimSpace(config.ReadBufferSize))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readBufferSize must be bytes format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
+	// middlewares
+	middleware, middlewareErr := transports.WaveMiddlewares(options.Log, options.Config, options.MiddlewareBuilders)
+	if middlewareErr != nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(middlewareErr).WithMeta("transport", transportName)
+		return
 	}
-	readTimeout := 10 * time.Second
-	if config.ReadTimeout != "" {
-		readTimeout, err = time.ParseDuration(strings.TrimSpace(config.ReadTimeout))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("readTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
+	// handler
+	if options.Handler == nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(fmt.Errorf("handler is nil")).WithMeta("transport", transportName)
+		return
 	}
-	writeBufferSize := uint64(0)
-	if config.WriteBufferSize != "" {
-		writeBufferSize, err = bytex.ParseBytes(strings.TrimSpace(config.WriteBufferSize))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeBufferSize must be bytes format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
-	}
-	writeTimeout := 10 * time.Second
-	if config.WriteTimeout != "" {
-		writeTimeout, err = time.ParseDuration(strings.TrimSpace(config.WriteTimeout))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("writeTimeout must be time.Duration format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
-	}
-	maxIdleWorkerDuration := time.Duration(0)
-	if config.MaxIdleWorkerDuration != "" {
-		maxIdleWorkerDuration, err = time.ParseDuration(strings.TrimSpace(config.MaxIdleWorkerDuration))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxIdleWorkerDuration must be time.Duration format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
-	}
-	tcpKeepalivePeriod := time.Duration(0)
-	if config.TCPKeepalivePeriod != "" {
-		tcpKeepalivePeriod, err = time.ParseDuration(strings.TrimSpace(config.TCPKeepalivePeriod))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("tcpKeepalivePeriod must be time.Duration format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
-	}
+	handler := middleware.Handler(options.Handler)
 
-	maxRequestBodySize := uint64(4 * bytex.MEGABYTE)
-	if config.MaxRequestBodySize != "" {
-		maxRequestBodySize, err = bytex.ParseBytes(strings.TrimSpace(config.MaxRequestBodySize))
-		if err != nil {
-			err = errors.Warning("fns: build server failed").WithCause(errors.Warning("maxRequestBodySize must be bytes format")).WithCause(err).WithMeta("transport", transportName)
-			return
-		}
+	// port
+	port, portErr := options.Config.Port()
+	if portErr != nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(portErr).WithMeta("transport", transportName)
+		return
 	}
-
-	reduceMemoryUsage := config.ReduceMemoryUsage
-
-	tr.preforked = config.Prefork
-
-	tr.server = &fasthttp.Server{
-		Handler:                            handlerAdaptor(options.Handler),
-		ErrorHandler:                       errorHandler,
-		Name:                               "",
-		Concurrency:                        0,
-		ReadBufferSize:                     int(readBufferSize),
-		WriteBufferSize:                    int(writeBufferSize),
-		ReadTimeout:                        readTimeout,
-		WriteTimeout:                       writeTimeout,
-		MaxRequestsPerConn:                 config.MaxRequestsPerConn,
-		MaxIdleWorkerDuration:              maxIdleWorkerDuration,
-		TCPKeepalivePeriod:                 tcpKeepalivePeriod,
-		MaxRequestBodySize:                 int(maxRequestBodySize),
-		DisableKeepalive:                   false,
-		TCPKeepalive:                       config.TCPKeepalive,
-		ReduceMemoryUsage:                  reduceMemoryUsage,
-		GetOnly:                            false,
-		DisablePreParseMultipartForm:       true,
-		LogAllErrors:                       false,
-		SecureErrorLogMessage:              false,
-		DisableHeaderNamesNormalizing:      false,
-		SleepWhenConcurrencyLimitsExceeded: 10 * time.Second,
-		NoDefaultServerHeader:              true,
-		NoDefaultDate:                      false,
-		NoDefaultContentType:               false,
-		KeepHijackedConns:                  config.KeepHijackedConns,
-		CloseOnShutdown:                    true,
-		StreamRequestBody:                  config.StreamRequestBody,
-		ConnState:                          nil,
-		Logger:                             logs.MapToLogger(options.Log, logs.DebugLevel, false),
-		TLSConfig:                          srvTLS,
+	// config
+	optConfig, optConfigErr := options.Config.Options()
+	if optConfigErr != nil {
+		err = errors.Warning("fns: build transport failed").WithCause(optConfigErr).WithMeta("transport", transportName)
+		return
 	}
-	// http2
-	if !config.DisableHttp2 && srvTLS != nil {
-		http2.ConfigureServer(tr.server, http2.ServerConfig{})
+	config := &Config{}
+	configErr := optConfig.As(config)
+	if configErr != nil {
+		err = errors.Warning("fns: build transport failed").WithCause(configErr).WithMeta("transport", transportName)
+		return
 	}
+	// server
+	srv, srvErr := newServer(log, port, tlsConfig, config, handler)
+	if srvErr != nil {
+		err = errors.Warning("fns: build transport failed").WithCause(srvErr).WithMeta("transport", transportName)
+		return
+	}
+	tr.server = srv
 
 	// dialer
 	clientConfig := &config.Client
-	if options.TLS != nil {
-		cliTLS, dialer := options.TLS.Client()
+	if tlsConfig != nil {
+		cliTLS, dialer := tlsConfig.Client()
 		clientConfig.TLSConfig = cliTLS
 		clientConfig.DisableHttp2 = config.DisableHttp2
 		if dialer != nil {
@@ -193,47 +116,19 @@ func (tr *Transport) Dial(address string) (client transports.Client, err error) 
 	return
 }
 
-func (tr *Transport) preforkServe(ln net.Listener) (err error) {
-	if tr.lnf != nil {
-		ln = tr.lnf(ln)
-	}
-	err = tr.server.Serve(ln)
+func (tr *Transport) Port() (port int) {
+	port = tr.server.port
 	return
 }
 
 func (tr *Transport) ListenAndServe() (err error) {
-	if tr.preforked {
-		pf := prefork.New(tr.server)
-		pf.ServeFunc = tr.preforkServe
-		err = pf.ListenAndServe(tr.address)
-		if err != nil {
-			err = errors.Warning("fns: transport perfork listen and serve failed").WithCause(err)
-			return
-		}
-		return
-	}
-	ln, lnErr := net.Listen("tcp", tr.address)
-	if lnErr != nil {
-		err = errors.Warning("fns: transport listen and serve failed").WithCause(lnErr)
-		return
-	}
-	if tr.lnf != nil {
-		ln = tr.lnf(ln)
-	}
-	err = tr.server.Serve(ln)
-	if err != nil {
-		err = errors.Warning("fns: transport listen and serve failed").WithCause(err).WithMeta("transport", transportName)
-		return
-	}
+	err = tr.server.ListenAndServe()
 	return
 }
 
-func (tr *Transport) Close() (err error) {
+func (tr *Transport) Shutdown() (err error) {
 	tr.dialer.Close()
 	err = tr.server.Shutdown()
-	if err != nil {
-		err = errors.Warning("fns: transport close failed").WithCause(err).WithMeta("transport", transportName)
-	}
 	return
 }
 

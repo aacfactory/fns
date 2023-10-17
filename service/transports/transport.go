@@ -18,18 +18,14 @@ package transports
 
 import (
 	"context"
-	"github.com/aacfactory/configures"
-	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/logs"
-	"io"
 )
 
 type Options struct {
-	Port    int
-	TLS     ssl.Config
-	Handler Handler
-	Log     logs.Logger
-	Config  configures.Config
+	Log                logs.Logger
+	Config             *Config
+	MiddlewareBuilders []MiddlewareBuilder
+	Handler            Handler
 }
 
 type Client interface {
@@ -40,33 +36,15 @@ type Dialer interface {
 	Dial(address string) (client Client, err error)
 }
 
+type Server interface {
+	Port() (port int)
+	ListenAndServe() (err error)
+	Shutdown() (err error)
+}
+
 type Transport interface {
 	Name() (name string)
 	Build(options Options) (err error)
 	Dialer
-	ListenAndServe() (err error)
-	io.Closer
-}
-
-type HandlerBuilder func() Handler
-
-type Handler interface {
-	Handle(w ResponseWriter, r *Request)
-}
-
-type HandlerFunc func(ResponseWriter, *Request)
-
-func (f HandlerFunc) Handle(w ResponseWriter, r *Request) {
-	f(w, r)
-}
-
-type MiddlewareOptions struct {
-	Log    logs.Logger
-	Config configures.Config
-}
-
-type Middleware interface {
-	Name() string
-	Build(options MiddlewareOptions) (err error)
-	Handler(next Handler) Handler
+	Server
 }

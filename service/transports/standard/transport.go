@@ -1,20 +1,13 @@
 package standard
 
 import (
-	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/ssl"
 	"github.com/aacfactory/fns/service/transports"
-	"github.com/aacfactory/logs"
-	"net/http"
-	"strings"
-	"time"
 )
 
 const (
-	transportName = "http"
+	transportName = "standard"
 )
 
 type Config struct {
@@ -39,9 +32,7 @@ func New() transports.Transport {
 }
 
 type Transport struct {
-	log    logs.Logger
-	lnf    ssl.ListenerFunc
-	srv    *http.Server
+	server *Server
 	dialer *Dialer
 }
 
@@ -51,88 +42,57 @@ func (tr *Transport) Name() (name string) {
 }
 
 func (tr *Transport) Build(options transports.Options) (err error) {
-	tr.log = options.Log
-
-	var srvTLS *tls.Config
-	if options.TLS != nil {
-		srvTLS, tr.lnf = options.TLS.Server()
-	}
-
-	config := Config{}
-	decodeErr := options.Config.As(&config)
-	if decodeErr != nil {
-		err = errors.Warning("http: build failed").WithCause(decodeErr)
+	// log
+	log := options.Log.With("transport", transportName)
+	// tls
+	tlsConfig, tlsConfigErr := options.Config.TLS()
+	if tlsConfig != nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(tlsConfigErr).WithMeta("transport", transportName)
 		return
 	}
-	maxRequestHeaderSize := uint64(0)
-	if config.MaxRequestHeaderSize != "" {
-		maxRequestHeaderSize, err = bytex.ParseBytes(strings.TrimSpace(config.MaxRequestHeaderSize))
-		if err != nil {
-			err = errors.Warning("http: build failed").WithCause(errors.Warning("maxRequestHeaderSize is invalid").WithCause(err).WithMeta("hit", "format must be bytes"))
-			return
-		}
+	// middlewares
+	middleware, middlewareErr := transports.WaveMiddlewares(options.Log, options.Config, options.MiddlewareBuilders)
+	if middlewareErr != nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(middlewareErr).WithMeta("transport", transportName)
+		return
 	}
-	maxRequestBodySize := uint64(0)
-	if config.MaxRequestBodySize != "" {
-		maxRequestBodySize, err = bytex.ParseBytes(strings.TrimSpace(config.MaxRequestBodySize))
-		if err != nil {
-			err = errors.Warning("http: build failed").WithCause(errors.Warning("maxRequestBodySize is invalid").WithCause(err).WithMeta("hit", "format must be bytes"))
-			return
-		}
+	// handler
+	if options.Handler == nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(fmt.Errorf("handler is nil")).WithMeta("transport", transportName)
+		return
 	}
-	if maxRequestBodySize == 0 {
-		maxRequestBodySize = 4 * bytex.MEGABYTE
+	handler := middleware.Handler(options.Handler)
+
+	// port
+	port, portErr := options.Config.Port()
+	if portErr != nil {
+		err = errors.Warning("fns: fast transport build failed").WithCause(portErr).WithMeta("transport", transportName)
+		return
 	}
-	readTimeout := 10 * time.Second
-	if config.ReadTimeout != "" {
-		readTimeout, err = time.ParseDuration(strings.TrimSpace(config.ReadTimeout))
-		if err != nil {
-			err = errors.Warning("http: build failed").WithCause(errors.Warning("readTimeout is invalid").WithCause(err).WithMeta("hit", "format must time.Duration"))
-			return
-		}
+	// config
+	optConfig, optConfigErr := options.Config.Options()
+	if optConfigErr != nil {
+		err = errors.Warning("fns: build transport failed").WithCause(optConfigErr).WithMeta("transport", transportName)
+		return
 	}
-	readHeaderTimeout := 5 * time.Second
-	if config.ReadHeaderTimeout != "" {
-		readHeaderTimeout, err = time.ParseDuration(strings.TrimSpace(config.ReadHeaderTimeout))
-		if err != nil {
-			err = errors.Warning("http: build failed").WithCause(errors.Warning("readHeaderTimeout is invalid").WithCause(err).WithMeta("hit", "format must time.Duration"))
-			return
-		}
+	config := &Config{}
+	configErr := optConfig.As(config)
+	if configErr != nil {
+		err = errors.Warning("fns: build transport failed").WithCause(configErr).WithMeta("transport", transportName)
+		return
 	}
-	writeTimeout := 30 * time.Second
-	if config.WriteTimeout != "" {
-		writeTimeout, err = time.ParseDuration(strings.TrimSpace(config.WriteTimeout))
-		if err != nil {
-			err = errors.Warning("http: build failed").WithCause(errors.Warning("writeTimeout is invalid").WithCause(err).WithMeta("hit", "format must time.Duration"))
-			return
-		}
+	// server
+	srv, srvErr := newServer(log, port, tlsConfig, config, handler)
+	if srvErr != nil {
+		err = errors.Warning("fns: build transport failed").WithCause(srvErr).WithMeta("transport", transportName)
+		return
 	}
-	idleTimeout := 30 * time.Second
-	if config.IdleTimeout != "" {
-		idleTimeout, err = time.ParseDuration(strings.TrimSpace(config.IdleTimeout))
-		if err != nil {
-			err = errors.Warning("http: build failed").WithCause(errors.Warning("idleTimeout is invalid").WithCause(err).WithMeta("hit", "format must time.Duration"))
-			return
-		}
-	}
-	// Transport
-	handler := HttpTransportHandlerAdaptor(options.Handler, int(maxRequestBodySize))
-	tr.srv = &http.Server{
-		Addr:                         fmt.Sprintf(":%d", options.Port),
-		Handler:                      handler,
-		DisableGeneralOptionsHandler: false,
-		TLSConfig:                    srvTLS,
-		ReadTimeout:                  readTimeout,
-		ReadHeaderTimeout:            readHeaderTimeout,
-		WriteTimeout:                 writeTimeout,
-		IdleTimeout:                  idleTimeout,
-		MaxHeaderBytes:               int(maxRequestHeaderSize),
-		ErrorLog:                     logs.MapToLogger(tr.log, logs.DebugLevel, false),
-	}
+	tr.server = srv
+
 	// dialer
 	clientConfig := config.ClientConfig()
-	if options.TLS != nil {
-		cliTLS, dialer := options.TLS.Client()
+	if tlsConfig != nil {
+		cliTLS, dialer := tlsConfig.Client()
 		clientConfig.TLSConfig = cliTLS
 		if dialer != nil {
 			clientConfig.TLSDialer = dialer
@@ -140,7 +100,7 @@ func (tr *Transport) Build(options transports.Options) (err error) {
 	}
 	dialer, dialerErr := NewDialer(clientConfig)
 	if dialerErr != nil {
-		err = errors.Warning("http: build failed").WithCause(dialerErr)
+		err = errors.Warning("http: build transport failed").WithCause(dialerErr)
 		return
 	}
 	tr.dialer = dialer
@@ -152,24 +112,18 @@ func (tr *Transport) Dial(address string) (client transports.Client, err error) 
 	return
 }
 
-func (tr *Transport) ListenAndServe() (err error) {
-	if tr.srv.TLSConfig == nil {
-		err = tr.srv.ListenAndServe()
-	} else {
-		err = tr.srv.ListenAndServeTLS("", "")
-	}
-	if err != nil {
-		err = errors.Warning("http: listen and serve failed").WithCause(err)
-		return
-	}
+func (tr *Transport) Port() (port int) {
+	port = tr.server.port
 	return
 }
 
-func (tr *Transport) Close() (err error) {
+func (tr *Transport) ListenAndServe() (err error) {
+	err = tr.server.ListenAndServe()
+	return
+}
+
+func (tr *Transport) Shutdown() (err error) {
 	tr.dialer.Close()
-	err = tr.srv.Close()
-	if err != nil {
-		err = errors.Warning("http: close failed").WithCause(err)
-	}
+	err = tr.server.Shutdown()
 	return
 }

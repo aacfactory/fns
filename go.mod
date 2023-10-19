@@ -13,7 +13,7 @@ require (
 	github.com/aacfactory/logs v1.13.0
 	github.com/aacfactory/rings v1.1.2
 	github.com/aacfactory/systems v0.2.0
-	github.com/aacfactory/workers v1.8.1
+	github.com/aacfactory/workers v1.8.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dgrr/http2 v0.3.5
 	github.com/go-playground/validator/v10 v10.12.0

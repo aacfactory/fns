@@ -14,31 +14,25 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"context"
 	"github.com/aacfactory/workers"
 )
 
-type Workers interface {
-	Dispatch(ctx context.Context, task workers.Task) (ok bool)
-	MustDispatch(ctx context.Context, task workers.Task)
-}
-
-type Task interface {
-	workers.Task
-	Name() (name string)
-}
-
-func TryFork(ctx context.Context, task Task) (ok bool) {
+func TryFork(ctx context.Context, task workers.Task) (ok bool) {
 	if task == nil {
 		return
 	}
 	rt := GetRuntime(ctx)
 	nc := context.WithValue(context.TODO(), contextRuntimeKey, rt)
 	log := rt.log
-	taskName := task.Name()
+	taskName := "-"
+	named, hasName := task.(workers.NamedTask)
+	if hasName {
+		taskName = named.Name()
+	}
 	if taskName == "" {
 		taskName = "-"
 	}
@@ -48,18 +42,22 @@ func TryFork(ctx context.Context, task Task) (ok bool) {
 	if vcm != nil {
 		nc = withComponents(ctx, vcm.(map[string]Component))
 	}
-	ok = rt.worker.Dispatch(ctx, task)
+	ok = rt.worker.Dispatch(nc, task)
 	return
 }
 
-func Fork(ctx context.Context, task Task) {
+func Fork(ctx context.Context, task workers.Task) {
 	if task == nil {
 		return
 	}
 	rt := GetRuntime(ctx)
 	nc := context.WithValue(context.TODO(), contextRuntimeKey, rt)
 	log := rt.log
-	taskName := task.Name()
+	taskName := "-"
+	named, hasName := task.(workers.NamedTask)
+	if hasName {
+		taskName = named.Name()
+	}
 	if taskName == "" {
 		taskName = "-"
 	}
@@ -69,6 +67,6 @@ func Fork(ctx context.Context, task Task) {
 	if vcm != nil {
 		nc = withComponents(ctx, vcm.(map[string]Component))
 	}
-	rt.worker.MustDispatch(ctx, task)
+	rt.worker.MustDispatch(nc, task)
 	return
 }

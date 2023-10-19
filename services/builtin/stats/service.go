@@ -21,17 +21,17 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/validators"
+	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/documents"
+	"github.com/aacfactory/fns/services/validators"
 )
 
 const (
 	name = "stats"
 )
 
-func Service(components ...service.Component) (v service.Service) {
-	var reporter service.Component
+func Service(components ...services.Component) (v services.Service) {
+	var reporter services.Component
 	for _, component := range components {
 		if component.Name() == "reporter" {
 			reporter = component
@@ -44,17 +44,17 @@ func Service(components ...service.Component) (v service.Service) {
 	if reporter == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("stats: create stats service failed").WithCause(fmt.Errorf("reporter is nil"))))
 	}
-	v = &statsService{
-		components: map[string]service.Component{"reporter": reporter},
+	v = &service{
+		components: map[string]services.Component{"reporter": reporter},
 	}
 	return
 }
 
-type statsService struct {
-	components map[string]service.Component
+type service struct {
+	components map[string]services.Component
 }
 
-func (svc *statsService) Build(options service.Options) (err error) {
+func (svc *service) Build(options services.Options) (err error) {
 	if svc.components != nil {
 		for cn, component := range svc.components {
 			if component == nil {
@@ -64,7 +64,7 @@ func (svc *statsService) Build(options service.Options) (err error) {
 			if !hasConfig {
 				componentCfg, _ = configures.NewJsonConfig([]byte("{}"))
 			}
-			err = component.Build(service.ComponentOptions{
+			err = component.Build(services.ComponentOptions{
 				Log:    options.Log.With("component", cn),
 				Config: componentCfg,
 			})
@@ -77,24 +77,24 @@ func (svc *statsService) Build(options service.Options) (err error) {
 	return
 }
 
-func (svc *statsService) Name() string {
+func (svc *service) Name() string {
 	return name
 }
 
-func (svc *statsService) Internal() bool {
+func (svc *service) Internal() bool {
 	return true
 }
 
-func (svc *statsService) Components() (components map[string]service.Component) {
+func (svc *service) Components() (components map[string]services.Component) {
 	components = svc.components
 	return
 }
 
-func (svc *statsService) Document() (doc *documents.Document) {
+func (svc *service) Document() (doc *documents.Document) {
 	return
 }
 
-func (svc *statsService) Handle(context context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
+func (svc *service) Handle(context context.Context, fn string, argument services.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case "report":
 		metric := &Metric{}
@@ -120,6 +120,4 @@ func (svc *statsService) Handle(context context.Context, fn string, argument ser
 	return
 }
 
-func (svc *statsService) Close() {
-
-}
+func (svc *service) Close() {}

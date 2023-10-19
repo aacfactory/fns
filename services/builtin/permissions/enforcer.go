@@ -19,16 +19,16 @@ package permissions
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 )
 
 type EnforceParam struct {
-	UserId  service.RequestUserId `json:"userId"`
-	Service string                `json:"service"`
-	Fn      string                `json:"fn"`
+	UserId  services.RequestUserId `json:"userId"`
+	Service string                 `json:"service"`
+	Fn      string                 `json:"fn"`
 }
 
 type Enforcer interface {
-	service.Component
+	services.Component
 	Enforce(ctx context.Context, param EnforceParam) (ok bool, err errors.CodeError)
 }

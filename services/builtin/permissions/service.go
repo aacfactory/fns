@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 )
 
 const (
@@ -28,23 +28,23 @@ const (
 	enforceFn = "enforce"
 )
 
-func Service(enforcer Enforcer) (v service.Service) {
+func Service(enforcer Enforcer) (v services.Service) {
 	if enforcer == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("permissions: service requires enforcer component")))
 		return
 	}
-	v = &service_{
-		Abstract: service.NewAbstract(name, true, enforcer),
+	v = &service{
+		Abstract: services.NewAbstract(name, true, enforcer),
 	}
 	return
 }
 
-type service_ struct {
-	service.Abstract
+type service struct {
+	services.Abstract
 	enforcer Enforcer
 }
 
-func (svc *service_) Build(options service.Options) (err error) {
+func (svc *service) Build(options services.Options) (err error) {
 	err = svc.Abstract.Build(options)
 	if err != nil {
 		return
@@ -64,7 +64,7 @@ func (svc *service_) Build(options service.Options) (err error) {
 	return
 }
 
-func (svc *service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
+func (svc *service) Handle(ctx context.Context, fn string, argument services.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case enforceFn:
 		param := EnforceParam{}

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/logs"
 )
 
@@ -36,7 +36,7 @@ type Reporter interface {
 	Close()
 }
 
-func NewReporterComponent(reporter Reporter) (component service.Component) {
+func NewReporterComponent(reporter Reporter) (component services.Component) {
 	if reporter == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("tracings: new tracings components failed").WithCause(fmt.Errorf("reporter is nil"))))
 	}
@@ -55,7 +55,7 @@ func (component *reporterComponent) Name() (name string) {
 	return
 }
 
-func (component *reporterComponent) Build(options service.ComponentOptions) (err error) {
+func (component *reporterComponent) Build(options services.ComponentOptions) (err error) {
 	config, hasConfig := options.Config.Node("reporter")
 	if !hasConfig {
 		err = errors.Warning("tracings: build tracer reporter failed").WithCause(fmt.Errorf("there is no reporter node in tracer config node"))
@@ -77,7 +77,7 @@ func (component *reporterComponent) Close() {
 }
 
 func getReporter(ctx context.Context) (v Reporter) {
-	vv, has := service.GetComponent(ctx, "reporter")
+	vv, has := services.GetComponent(ctx, "reporter")
 	if !has {
 		panic(fmt.Sprintf("%+v", errors.Warning("tracings: get tracer reporter failed").WithCause(fmt.Errorf("reporter was not found in context"))))
 	}

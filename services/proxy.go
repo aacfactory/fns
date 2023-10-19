@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"bytes"
@@ -25,9 +25,9 @@ import (
 	"github.com/aacfactory/fns/commons/caches"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/services/documents"
+	"github.com/aacfactory/fns/services/internal/secret"
+	"github.com/aacfactory/fns/services/transports"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"

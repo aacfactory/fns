@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service/transports/middlewares/cors"
+	"github.com/aacfactory/fns/services/transports/middlewares/cors"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/ssl"
 	"github.com/aacfactory/json"

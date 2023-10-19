@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/window"
-	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/secret"
+	"github.com/aacfactory/fns/services/documents"
+	"github.com/aacfactory/fns/services/internal/secret"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -66,7 +66,7 @@ func Versions(requestVersions RequestVersions) EndpointDiscoveryGetOption {
 	}
 }
 
-type EndpointDiscovery interface {
+type Discovery interface {
 	Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (endpoint Endpoint, has bool)
 }
 

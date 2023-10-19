@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-package service_test
+package services_test
 
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/json"
 	"testing"
 )
 
 func TestFutureResult_MarshalJSON(t *testing.T) {
-	p, f := service.NewFuture()
+	p, f := services.NewFuture()
 	v := func() (v []string) {
 		return
 	}()

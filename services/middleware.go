@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"context"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/transports/middlewares/cors"
+	"github.com/aacfactory/fns/services/transports/middlewares/cors"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/documents"
+	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/logs"
 )
 
@@ -190,6 +190,6 @@ func (svc *Abstract) Barrier(ctx context.Context, name string, arg Argument, fn 
 	return
 }
 
-type ServicesSupplier interface {
+type Supplier interface {
 	Services() (services []Service)
 }

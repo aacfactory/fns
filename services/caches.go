@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"bytes"
@@ -22,8 +22,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/shareds"
-	shareds2 "github.com/aacfactory/fns/shareds"
+	"github.com/aacfactory/fns/shareds"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"

@@ -1,10 +1,10 @@
-package service
+package services
 
 import (
 	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service/shareds"
+	"github.com/aacfactory/fns/services/shareds"
 	shareds2 "github.com/aacfactory/fns/shareds"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"

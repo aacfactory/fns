@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"bytes"
@@ -25,6 +25,7 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/wildcard"
+	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
@@ -85,7 +86,7 @@ func (rvs RequestVersions) String() string {
 }
 
 func ParseRequestVersionFromHeader(header http.Header) (rvs RequestVersions, has bool, err error) {
-	values := header.Values(httpRequestVersionsHeader)
+	values := header.Values(transports.RequestVersionsHeaderName)
 	if values == nil || len(values) == 0 {
 		return
 	}
@@ -221,33 +222,33 @@ func (header RequestHeader) Contains(key string) (ok bool) {
 }
 
 func (header RequestHeader) Authorization() (authorization string, has bool) {
-	authorization = http.Header(header).Get("Authorization")
+	authorization = http.Header(header).Get(transports.AuthorizationHeaderName)
 	has = authorization != ""
 	return
 }
 
 func (header RequestHeader) SetDeviceId(id string) {
-	http.Header(header).Set(httpDeviceIdHeader, id)
+	http.Header(header).Set(transports.DeviceIdHeaderName, id)
 	return
 }
 
 func (header RequestHeader) DeviceId() (id string) {
-	id = http.Header(header).Get(httpDeviceIdHeader)
+	id = http.Header(header).Get(transports.DeviceIdHeaderName)
 	return
 }
 
 func (header RequestHeader) SetDeviceIp(ip string) {
-	http.Header(header).Set(httpDeviceIpHeader, ip)
+	http.Header(header).Set(transports.DeviceIpHeaderName, ip)
 	return
 }
 
 func (header RequestHeader) DeviceIp() (id string) {
-	id = http.Header(header).Get(httpDeviceIpHeader)
+	id = http.Header(header).Get(transports.DeviceIpHeaderName)
 	return
 }
 
 func (header RequestHeader) SetAcceptVersions(rvs RequestVersions) {
-	header.Del(httpRequestVersionsHeader)
+	header.Del(transports.RequestVersionsHeaderName)
 	if rvs == nil || len(rvs) == 0 {
 		return
 	}
@@ -255,25 +256,25 @@ func (header RequestHeader) SetAcceptVersions(rvs RequestVersions) {
 		if rv == nil {
 			return
 		}
-		header.Add(httpRequestVersionsHeader, rv.String())
+		header.Add(transports.RequestVersionsHeaderName, rv.String())
 	}
 	return
 }
 
 func (header RequestHeader) CacheControlDisabled() (ok bool) {
-	cc := bytex.FromString(http.Header(header).Get(httpCacheControlHeader))
-	ok = bytes.Contains(cc, bytex.FromString(httpCacheControlNoStore)) || bytes.Contains(cc, bytex.FromString(httpCacheControlNoCache))
+	cc := bytex.FromString(http.Header(header).Get(transports.CacheControlHeaderName))
+	ok = bytes.Contains(cc, bytex.FromString(transports.CacheControlHeaderNoStore)) || bytes.Contains(cc, bytex.FromString(transports.CacheControlHeaderNoCache))
 	return
 }
 
 func (header RequestHeader) DisableCacheControl() {
-	header.Set(httpCacheControlHeader, httpCacheControlNoStore)
+	header.Set(transports.CacheControlHeaderName, transports.CacheControlHeaderNoStore)
 	return
 }
 
 func (header RequestHeader) EnableCacheControl(etag []byte) {
-	header.Set(httpCacheControlHeader, httpCacheControlEnabled)
-	header.Set(httpCacheControlIfNonMatch, bytex.ToString(etag))
+	header.Set(transports.CacheControlHeaderName, transports.CacheControlHeaderEnabled)
+	header.Set(transports.CacheControlHeaderIfNonMatch, bytex.ToString(etag))
 	return
 }
 
@@ -312,156 +313,72 @@ func (id RequestUserId) Exist() (ok bool) {
 	return
 }
 
-type RequestUser interface {
-	json.Marshaler
-	json.Unmarshaler
-	Authenticated() (ok bool)
-	Id() (id RequestUserId)
-	SetId(id RequestUserId)
-	Attributes() (attributes *json.Object)
-	SetAttributes(attributes *json.Object)
+func NewRequestUserAttributes() RequestUserAttributes {
+	return []byte{'{', '}'}
 }
 
-func NewRequestUser(id RequestUserId, attributes *json.Object) (u RequestUser) {
-	if attributes == nil {
-		attributes = json.NewObject()
-	}
-	u = &requestUser{
-		id:         id,
-		attributes: attributes,
-	}
+type RequestUserAttributes []byte
+
+func (attr *RequestUserAttributes) ReplaceBy(o RequestUserAttributes) {
+	*attr = o
 	return
 }
 
-type requestUser struct {
-	id         RequestUserId
-	attributes *json.Object
-}
-
-func (u *requestUser) Authenticated() (ok bool) {
-	ok = u.id != ""
-	return
-}
-
-func (u *requestUser) Id() (id RequestUserId) {
-	id = u.id
-	return
-}
-
-func (u *requestUser) SetId(id RequestUserId) {
-	u.id = id
-}
-
-func (u *requestUser) Attributes() (attributes *json.Object) {
-	attributes = u.attributes
-	return
-}
-
-func (u *requestUser) SetAttributes(attributes *json.Object) {
-	if attributes == nil {
-		attributes = json.NewObject()
-	}
-	u.attributes = attributes
-}
-
-func (u *requestUser) MarshalJSON() (p []byte, err error) {
-	o := json.NewObject()
-	_ = o.Put("id", u.id)
-	_ = o.Put("authenticated", u.Authenticated())
-	if u.attributes == nil {
-		u.attributes = json.NewObject()
-	}
-	_ = o.Put("attributes", u.attributes)
-	p, err = o.MarshalJSON()
-	return
-}
-
-func (u *requestUser) UnmarshalJSON(p []byte) (err error) {
-	o := json.NewObjectFromBytes(p)
-	err = o.Get("id", &u.id)
+func (attr *RequestUserAttributes) Set(key string, value interface{}) (err error) {
+	obj := json.NewObjectFromBytes(*attr)
+	err = obj.Put(key, value)
 	if err != nil {
+		err = errors.Warning("fns: request user attribute put failed").WithMeta("key", key).WithCause(err)
 		return
 	}
-	if u.attributes == nil {
-		u.attributes = json.NewObject()
+	*attr = obj.Raw()
+	return
+}
+
+func (attr *RequestUserAttributes) Get(key string, value interface{}) (has bool, err error) {
+	obj := json.NewObjectFromBytes(*attr)
+	has = obj.Contains(key)
+	if !has {
+		return
 	}
-	err = o.Get("attributes", &u.attributes)
+	err = obj.Get(key, value)
 	if err != nil {
+		err = errors.Warning("fns: request user attribute get failed").WithMeta("key", key).WithCause(err)
 		return
 	}
 	return
 }
 
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type RequestTrunk interface {
-	json.Marshaler
-	json.Unmarshaler
-	Get(key string) (value []byte, has bool)
-	Put(key string, value []byte)
-	ForEach(fn func(key string, value []byte) (next bool))
-	ReadFrom(o RequestTrunk)
-	Remove(key string)
-}
-
-func newRequestTrunk() RequestTrunk {
-	return &requestTrunk{
-		values: make(map[string][]byte),
-	}
-}
-
-type requestTrunk struct {
-	values map[string][]byte
-}
-
-func (trunk *requestTrunk) MarshalJSON() (p []byte, err error) {
-	p, err = json.Marshal(trunk.values)
-	return
-}
-
-func (trunk *requestTrunk) UnmarshalJSON(p []byte) (err error) {
-	values := make(map[string][]byte)
-	err = json.Unmarshal(p, &values)
+func (attr *RequestUserAttributes) Remove(key string) (err error) {
+	obj := json.NewObjectFromBytes(*attr)
+	err = obj.Remove(key)
 	if err != nil {
+		err = errors.Warning("fns: request user attribute remove failed").WithMeta("key", key).WithCause(err)
 		return
 	}
-	trunk.values = values
+	*attr = obj.Raw()
 	return
 }
 
-func (trunk *requestTrunk) ReadFrom(o RequestTrunk) {
-	trunk.values = make(map[string][]byte)
-	o.ForEach(func(key string, value []byte) (next bool) {
-		trunk.values[key] = value
-		next = true
-		return
-	})
+func NewRequestUser(id RequestUserId, attributes RequestUserAttributes) (u RequestUser) {
+	if len(attributes) == 0 {
+		attributes = NewRequestUserAttributes()
+	}
+	u = RequestUser{
+		Id:         id,
+		Attributes: attributes,
+	}
 	return
 }
 
-func (trunk *requestTrunk) Get(key string) (value []byte, has bool) {
-	value, has = trunk.values[key]
+type RequestUser struct {
+	Id         RequestUserId
+	Attributes RequestUserAttributes
+}
+
+func (u *RequestUser) Authenticated() (ok bool) {
+	ok = u.Id.Exist()
 	return
-}
-
-func (trunk *requestTrunk) Put(key string, value []byte) {
-	trunk.values[key] = value
-}
-
-func (trunk *requestTrunk) ForEach(fn func(key string, value []byte) (next bool)) {
-	if fn == nil {
-		return
-	}
-	for ket, value := range trunk.values {
-		next := fn(ket, value)
-		if !next {
-			break
-		}
-	}
-}
-
-func (trunk *requestTrunk) Remove(key string) {
-	delete(trunk.values, key)
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -473,8 +390,7 @@ type Request interface {
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
 	Internal() (ok bool)
-	User() (user RequestUser)
-	Trunk() (trunk RequestTrunk)
+	User() (user *RequestUser)
 	Hash() (p []byte)
 }
 
@@ -510,15 +426,10 @@ func WithInternalRequest() RequestOption {
 	}
 }
 
-func WithRequestUser(id RequestUserId, attributes *json.Object) RequestOption {
+func WithRequestUser(id RequestUserId, attributes RequestUserAttributes) RequestOption {
 	return func(options *RequestOptions) {
-		options.user = NewRequestUser(id, attributes)
-	}
-}
-
-func WithRequestTrunk(trunk RequestTrunk) RequestOption {
-	return func(options *RequestOptions) {
-		options.trunk = trunk
+		options.user.Id = id
+		options.user.Attributes = attributes
 	}
 }
 
@@ -542,7 +453,6 @@ type RequestOptions struct {
 	deviceIp            string
 	internal            bool
 	user                RequestUser
-	trunk               RequestTrunk
 	disableCacheControl bool
 }
 
@@ -553,9 +463,8 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 		acceptedVersions:    nil,
 		deviceId:            "",
 		deviceIp:            "",
-		user:                nil,
+		user:                NewRequestUser("", NewRequestUserAttributes()),
 		internal:            false,
-		trunk:               nil,
 		disableCacheControl: false,
 	}
 	if options != nil && len(options) > 0 {
@@ -592,13 +501,10 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			header.DisableCacheControl()
 		}
 		user := prev.User()
-		if opt.user != nil {
-			user = opt.user
+		if opt.user.Authenticated() {
+			user = &opt.user
 		}
-		trunk := prev.Trunk()
-		if opt.trunk != nil {
-			trunk = opt.trunk
-		}
+
 		acceptedVersions := prev.AcceptedVersions()
 		if opt.acceptedVersions != nil {
 			acceptedVersions = opt.acceptedVersions
@@ -610,7 +516,6 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			id:               id,
 			internal:         true,
 			user:             user,
-			trunk:            trunk,
 			header:           header,
 			service:          service,
 			fn:               fn,
@@ -640,15 +545,7 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 			header.Del(httpRequestHashHeader)
 		}
 		user := opt.user
-		if user == nil {
-			user = NewRequestUser("", nil)
-		}
-		var trunk RequestTrunk
-		if opt.trunk != nil {
-			trunk = opt.trunk
-		} else {
-			trunk = newRequestTrunk()
-		}
+
 		var acceptedVersions RequestVersions
 		if opt.acceptedVersions != nil {
 			acceptedVersions = opt.acceptedVersions
@@ -658,8 +555,7 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 		v = &request{
 			id:               id,
 			internal:         opt.internal,
-			user:             user,
-			trunk:            trunk,
+			user:             &user,
 			header:           header,
 			service:          service,
 			fn:               fn,
@@ -674,8 +570,7 @@ func NewRequest(ctx context.Context, service string, fn string, arg Argument, op
 type request struct {
 	id               string
 	internal         bool
-	user             RequestUser
-	trunk            RequestTrunk
+	user             *RequestUser
 	header           RequestHeader
 	acceptedVersions RequestVersions
 	service          string
@@ -694,13 +589,8 @@ func (r *request) Internal() (ok bool) {
 	return
 }
 
-func (r *request) User() (user RequestUser) {
+func (r *request) User() (user *RequestUser) {
 	user = r.user
-	return
-}
-
-func (r *request) Trunk() (trunk RequestTrunk) {
-	trunk = r.trunk
 	return
 }
 
@@ -775,7 +665,7 @@ func withRequest(ctx context.Context, r Request) context.Context {
 	return context.WithValue(ctx, contextRequestKey, r)
 }
 
-func GetRequestUser(ctx context.Context) (user RequestUser, authenticated bool) {
+func GetRequestUser(ctx context.Context) (user *RequestUser, authenticated bool) {
 	req, hasReq := GetRequest(ctx)
 	if !hasReq {
 		return
@@ -783,32 +673,4 @@ func GetRequestUser(ctx context.Context) (user RequestUser, authenticated bool) 
 	user = req.User()
 	authenticated = user.Authenticated()
 	return
-}
-
-type internalRequestImpl struct {
-	User     *requestUser  `json:"user"`
-	Trunk    *requestTrunk `json:"trunk"`
-	Argument *argument     `json:"argument"`
-}
-
-type internalRequest struct {
-	User     RequestUser  `json:"user"`
-	Trunk    RequestTrunk `json:"trunk"`
-	Argument Argument     `json:"argument,omitempty"`
-}
-
-type internalResponseImpl struct {
-	User    *requestUser    `json:"user"`
-	Trunk   *requestTrunk   `json:"trunk"`
-	Span    *Span           `json:"Span"`
-	Succeed bool            `json:"succeed"`
-	Body    json.RawMessage `json:"body"`
-}
-
-type internalResponse struct {
-	User    RequestUser  `json:"user"`
-	Trunk   RequestTrunk `json:"trunk"`
-	Span    *Span        `json:"Span"`
-	Succeed bool         `json:"succeed"`
-	Body    interface{}  `json:"body,omitempty"`
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"bytes"
@@ -23,9 +23,8 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service/documents"
-	"github.com/aacfactory/fns/service/internal/secret"
-	"github.com/aacfactory/fns/service/transports"
+	"github.com/aacfactory/fns/services/documents"
+	"github.com/aacfactory/fns/services/internal/secret"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -183,7 +182,7 @@ func (handler *servicesHandler) Build(options TransportHandlerOptions) (err erro
 }
 
 func (handler *servicesHandler) Accept(r *transports2.Request) (ok bool) {
-	if ok = r.IsGet() && bytes.Compare(r.Path(), servicesDocumentsPath) == 0; ok {
+	if ok = r.IsGet() && bytes.Compare(r.Path(), bytex.FromString(documents.ServicesDocumentsPath)) == 0; ok {
 		return
 	}
 	if ok = r.IsGet() && bytes.Compare(r.Path(), servicesOpenapiPath) == 0; ok {

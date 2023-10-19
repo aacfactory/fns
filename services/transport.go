@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"context"
@@ -74,13 +74,13 @@ func (tr *Transport) Close() (err error) {
 func (tr *Transport) services() (v []Service) {
 	v = make([]Service, 0, 1)
 	for _, middleware := range tr.middlewares.middlewares {
-		servicesSupplier, ok := middleware.(ServicesSupplier)
+		servicesSupplier, ok := middleware.(Supplier)
 		if ok && servicesSupplier.Services() != nil {
 			v = append(v, servicesSupplier.Services()...)
 		}
 	}
 	for _, handler := range tr.handlers.handlers {
-		servicesSupplier, ok := handler.(ServicesSupplier)
+		servicesSupplier, ok := handler.(Supplier)
 		if ok && servicesSupplier.Services() != nil {
 			v = append(v, servicesSupplier.Services()...)
 		}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"context"
@@ -33,6 +33,10 @@ func defaultBarrier() Barrier {
 	}
 }
 
+// todo 外层本地，然后判断等级，如果是全局的，则使用shared，shared的key带时间戳
+// shared key：1、取store里的时间戳，key为key本身，如果没有则新建，如果有，则拿存在的，用原本的key+时间戳构建新的key，用于存结果，有效期是3秒
+// 等级分：本地、本地+device、全局、全局+device
+// forget，只处理本地的，shared里的由TTL实现
 type sfgBarrier struct {
 	group singleflight.Group
 }

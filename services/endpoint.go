@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package service
+package services
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/logger"
-	"github.com/aacfactory/fns/service/documents"
+	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
@@ -250,7 +250,7 @@ func NewEndpoints(options EndpointsOptions) (v *Endpoints, err error) {
 	return
 }
 
-type Endpoints struct {
+type Endpoints1 struct {
 	log              logs.Logger
 	rt               *Runtime
 	autoMaxProcs     *procs.AutoMaxProcs
@@ -262,16 +262,6 @@ type Endpoints struct {
 	proxyTransport   *Transport
 	cluster          Cluster
 	closeCh          chan struct{}
-}
-
-func (e *Endpoints) Log() (log logs.Logger) {
-	log = e.rt.log
-	return
-}
-
-func (e *Endpoints) Runtime() (rt *Runtime) {
-	rt = e.rt
-	return
 }
 
 func (e *Endpoints) Get(ctx context.Context, service string, options ...EndpointDiscoveryGetOption) (v Endpoint, has bool) {
@@ -323,39 +313,6 @@ func (e *Endpoints) Get(ctx context.Context, service string, options ...Endpoint
 	return
 }
 
-func (e *Endpoints) Deploy(svc Service) (err error) {
-	name := strings.TrimSpace(svc.Name())
-	serviceConfig, hasConfig := e.config.Node(name)
-	if !hasConfig {
-		serviceConfig, _ = configures.NewJsonConfig([]byte("{}"))
-	}
-	buildErr := svc.Build(Options{
-		AppId:      e.rt.appId,
-		AppName:    e.rt.appName,
-		AppVersion: e.rt.appVersion,
-		Log:        e.log.With("fns", "service").With("service", name),
-		Config:     serviceConfig,
-	})
-	if buildErr != nil {
-		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithMeta("service", name).WithCause(buildErr)
-		return
-	}
-	ep := &endpoint{
-		rt:            e.rt,
-		handleTimeout: e.handleTimeout,
-		svc:           svc,
-		pool:          sync.Pool{},
-	}
-	ep.pool.New = func() any {
-		return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
-			ep.release(task)
-		})
-	}
-	e.deployed[svc.Name()] = ep
-	e.rt.appServices = append(e.rt.appServices, svc)
-	return
-}
-
 func (e *Endpoints) Listen(ctx context.Context) (err error) {
 	e.rt.status.flag.HalfOn()
 	e.autoMaxProcs.Enable()
@@ -397,7 +354,7 @@ func (e *Endpoints) Listen(ctx context.Context) (err error) {
 					errCh <- lnErr
 				}
 			}
-		}(e.rt.SetIntoContext(context.TODO()), ln, serviceListenErrCh)
+		}(e.rt.SetIntoContext(context.TODO()), ln, serviceListenErrCh) // runtime 在外面的ctx中，
 	}
 	if lns > 0 {
 		select {

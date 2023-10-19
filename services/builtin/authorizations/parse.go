@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/fns/services"
 )
 
+// todo return user,
 func ParseContext(ctx context.Context) (err errors.CodeError) {
 	request, hasRequest := services.GetRequest(ctx)
 	if !hasRequest {

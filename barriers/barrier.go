@@ -54,6 +54,9 @@ type Store interface {
 
 type ErrorReporter func(ctx context.Context, cause error)
 
+// Barrier
+// @barrier
+// 当@authorization 存在时，则key增加user，不存在时，不加user
 type Barrier struct {
 	group         *singleflight.Group
 	standalone    bool

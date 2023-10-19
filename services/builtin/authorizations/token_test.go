@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/builtin/authorizations"
+	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/builtin/authorizations"
 	"github.com/aacfactory/json"
 	"testing"
 	"time"
@@ -33,7 +33,7 @@ func TestDefaultTokens(t *testing.T) {
 	_ = config.Put("key", "key")
 	opt, _ := configures.NewJsonConfig(config.Raw())
 	tokens := authorizations.DefaultTokens()
-	buildErr := tokens.Build(service.ComponentOptions{
+	buildErr := tokens.Build(services.ComponentOptions{
 		AppId:      "0",
 		AppName:    "0",
 		AppVersion: versions.Version{},
@@ -44,8 +44,8 @@ func TestDefaultTokens(t *testing.T) {
 		t.Errorf("%+v", buildErr)
 		return
 	}
-	attrs := json.NewObject()
-	_ = attrs.Put("attr0", "0")
+	attrs := services.RequestUserAttributes{}
+	_ = attrs.Set("attr0", "0")
 	token, createErr := tokens.Format(context.TODO(), authorizations.FormatTokenParam{
 		Id:          "0",
 		UserId:      "user:0",

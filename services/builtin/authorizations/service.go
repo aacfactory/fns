@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 )
 
 const (
@@ -29,23 +29,23 @@ const (
 	parseFn  = "parse"
 )
 
-func Service(tokens Tokens) (v service.Service) {
+func Service(tokens Tokens) (v services.Service) {
 	if tokens == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("authorizations: service requires tokens component")))
 		return
 	}
-	v = &_service_{
-		Abstract: service.NewAbstract(name, true, tokens),
+	v = &service{
+		Abstract: services.NewAbstract(name, true, tokens),
 	}
 	return
 }
 
-type _service_ struct {
-	service.Abstract
+type service struct {
+	services.Abstract
 	tokens Tokens
 }
 
-func (svc *_service_) Build(options service.Options) (err error) {
+func (svc *service) Build(options services.Options) (err error) {
 	err = svc.Abstract.Build(options)
 	if err != nil {
 		return
@@ -65,7 +65,7 @@ func (svc *_service_) Build(options service.Options) (err error) {
 	return
 }
 
-func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
+func (svc *service) Handle(ctx context.Context, fn string, argument services.Argument) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case formatFn:
 		param := FormatTokenParam{}

@@ -24,7 +24,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/json"
 	"math"
 	"strconv"
@@ -39,22 +39,22 @@ func (token Token) String() string {
 }
 
 type FormatTokenParam struct {
-	Id          string                `json:"id"`
-	UserId      service.RequestUserId `json:"userId"`
-	Attributes  *json.Object          `json:"attributes"`
-	Expirations time.Duration         `json:"expirations"`
+	Id          string                         `json:"id"`
+	UserId      services.RequestUserId         `json:"userId"`
+	Attributes  services.RequestUserAttributes `json:"attributes"`
+	Expirations time.Duration                  `json:"expirations"`
 }
 
 type ParsedToken struct {
-	Valid      bool                  `json:"valid"`
-	Id         string                `json:"id"`
-	UserId     service.RequestUserId `json:"userId"`
-	Attributes *json.Object          `json:"attributes"`
-	ExpireAT   time.Time             `json:"expireAt"`
+	Valid      bool                           `json:"valid"`
+	Id         string                         `json:"id"`
+	UserId     services.RequestUserId         `json:"userId"`
+	Attributes services.RequestUserAttributes `json:"attributes"`
+	ExpireAT   time.Time                      `json:"expireAt"`
 }
 
 type Tokens interface {
-	service.Component
+	services.Component
 	Format(ctx context.Context, param FormatTokenParam) (token Token, err errors.CodeError)
 	Parse(ctx context.Context, token Token) (result ParsedToken, err errors.CodeError)
 }
@@ -75,7 +75,7 @@ func (tokens *defaultTokens) Name() (name string) {
 	return "default"
 }
 
-func (tokens *defaultTokens) Build(options service.ComponentOptions) (err error) {
+func (tokens *defaultTokens) Build(options services.ComponentOptions) (err error) {
 	config := defaultTokensConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
@@ -122,7 +122,7 @@ func (tokens *defaultTokens) Format(ctx context.Context, param FormatTokenParam)
 	deadline := fmt.Sprintf(fmt.Sprintf("%d", time.Now().Add(expirations).Unix()))
 	payload := ""
 	if param.Attributes != nil {
-		payload = bytex.ToString(param.Attributes.Raw())
+		payload = bytex.ToString(param.Attributes)
 	}
 	if len(payload) > math.MaxInt64 {
 		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("payload is too large"))
@@ -194,7 +194,7 @@ func (tokens *defaultTokens) Parse(ctx context.Context, token Token) (result Par
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	userId := service.RequestUserId(bytex.ToString(userIdBytes))
+	userId := services.RequestUserId(bytex.ToString(userIdBytes))
 	expireAtBytes := p[eb:ee]
 	if len(expireAtBytes) == 0 {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("token is invalid"))

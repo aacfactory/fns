@@ -20,11 +20,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 )
 
 func ParseContext(ctx context.Context) (err errors.CodeError) {
-	request, hasRequest := service.GetRequest(ctx)
+	request, hasRequest := services.GetRequest(ctx)
 	if !hasRequest {
 		err = errors.Warning("authorizations: parse token failed").WithCause(fmt.Errorf("there is no request in context"))
 		return
@@ -50,20 +50,20 @@ func ParseContext(ctx context.Context) (err errors.CodeError) {
 		err = errors.Warning("authorizations: parse token failed").WithCause(fmt.Errorf("there is no user id in result"))
 		return
 	}
-	request.User().SetId(result.UserId)
+	request.User().Id = result.UserId
 	if result.Attributes != nil {
-		request.User().SetAttributes(result.Attributes)
+		request.User().Attributes = result.Attributes
 	}
 	return
 }
 
 func Parse(ctx context.Context, param Token) (result ParsedToken, err errors.CodeError) {
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, name)
+	endpoint, hasEndpoint := services.GetEndpoint(ctx, name)
 	if !hasEndpoint {
 		err = errors.Warning("authorizations: parse token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
 		return
 	}
-	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, parseFn, service.NewArgument(param), service.WithInternalRequest()))
+	future, requestErr := endpoint.RequestSync(ctx, services.NewRequest(ctx, name, parseFn, services.NewArgument(param), services.WithInternalRequest()))
 	if requestErr != nil {
 		err = requestErr
 		return

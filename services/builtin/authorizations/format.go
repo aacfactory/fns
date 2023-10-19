@@ -19,11 +19,11 @@ package authorizations
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/json"
 )
 
-func NewFormatTokenParam(userId service.RequestUserId) (param FormatTokenParam) {
+func NewFormatTokenParam(userId services.RequestUserId) (param FormatTokenParam) {
 	param = FormatTokenParam{
 		UserId:     userId,
 		Attributes: json.NewObject(),
@@ -37,12 +37,12 @@ func (param *FormatTokenParam) AddAttribute(key string, value string) FormatToke
 }
 
 func Format(ctx context.Context, param FormatTokenParam) (token Token, err errors.CodeError) {
-	endpoint, hasEndpoint := service.GetEndpoint(ctx, name)
+	endpoint, hasEndpoint := services.GetEndpoint(ctx, name)
 	if !hasEndpoint {
 		err = errors.Warning("authorizations: format token failed").WithCause(errors.Warning("authorizations: service was not deployed"))
 		return
 	}
-	future, requestErr := endpoint.RequestSync(ctx, service.NewRequest(ctx, name, formatFn, service.NewArgument(param), service.WithInternalRequest()))
+	future, requestErr := endpoint.RequestSync(ctx, services.NewRequest(ctx, name, formatFn, services.NewArgument(param), services.WithInternalRequest()))
 	if requestErr != nil {
 		err = requestErr
 		return

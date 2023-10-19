@@ -12,12 +12,19 @@ import (
 
 func New(store Store, ttl time.Duration, interval time.Duration, errorReporter ErrorReporter) (b *Barrier) {
 	standalone := store == nil
+	loops := 0
 	if !standalone {
 		if ttl < 1 {
-			ttl = 60 * time.Second
+			ttl = 10 * time.Second
 		}
 		if interval < 1 {
 			interval = 100 * time.Millisecond
+		}
+		if interval >= ttl {
+			loops = 10
+			interval = ttl / time.Duration(loops)
+		} else {
+			loops = int(ttl / interval)
 		}
 	}
 	b = &Barrier{
@@ -26,6 +33,7 @@ func New(store Store, ttl time.Duration, interval time.Duration, errorReporter E
 		store:         store,
 		ttl:           ttl,
 		interval:      interval,
+		loops:         loops,
 		errorReporter: errorReporter,
 	}
 	return
@@ -52,6 +60,7 @@ type Barrier struct {
 	store         Store
 	ttl           time.Duration
 	interval      time.Duration
+	loops         int
 	errorReporter ErrorReporter
 }
 
@@ -107,11 +116,8 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 				}
 			}
 		} else {
-			loops := int(10 * time.Second / b.interval)
-			if loops < 1 {
-				loops = 3
-			}
-			for i := 0; i < loops; i++ {
+			fetched := false
+			for i := 0; i < b.loops; i++ {
 				p, exist, getErr := b.store.Get(ctx, valueKey)
 				if getErr != nil {
 					err = errors.Warning("fns: barrier failed").WithCause(getErr)
@@ -153,6 +159,11 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 					}
 					return
 				}
+
+				fetched = true
+			}
+			if !fetched {
+				r, err = fn()
 			}
 		}
 		return
@@ -170,5 +181,6 @@ func (b *Barrier) Forget(ctx context.Context, key []byte) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
+	defer b.group.Forget(bytex.ToString(key))
 	// decr: when 0, last then remove, else skip
 }

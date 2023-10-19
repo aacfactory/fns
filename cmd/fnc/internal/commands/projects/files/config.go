@@ -20,7 +20,7 @@ import (
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/fnc/internal/libs/files"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/goccy/go-yaml"
 	"os"
 	"path/filepath"
@@ -124,33 +124,33 @@ func (cf *ConfigFile) Write(ctx context.Context) (err error) {
 			return
 		}
 	}
-	config := service.Config{}
+	config := services.Config{}
 	switch cf.kind {
 	case "local":
-		config.Log = &service.LogConfig{
+		config.Log = &services.LogConfig{
 			Level:     "debug",
 			Formatter: "console",
 			Color:     true,
 		}
-		config.Runtime = &service.RuntimeConfig{
+		config.Runtime = &services.RuntimeConfig{
 			MaxWorkers:           0,
 			WorkerMaxIdleSeconds: 0,
 			HandleTimeoutSeconds: 0,
-			AutoMaxProcs:         service.AutoMaxProcsConfig{},
+			AutoMaxProcs:         services.AutoMaxProcsConfig{},
 			SecretKey:            "",
 		}
 		break
 	case "dev":
-		config.Log = &service.LogConfig{
+		config.Log = &services.LogConfig{
 			Level:     "info",
 			Formatter: "json",
 			Color:     false,
 		}
-		config.Runtime = &service.RuntimeConfig{
+		config.Runtime = &services.RuntimeConfig{
 			MaxWorkers:           0,
 			WorkerMaxIdleSeconds: 0,
 			HandleTimeoutSeconds: 0,
-			AutoMaxProcs: service.AutoMaxProcsConfig{
+			AutoMaxProcs: services.AutoMaxProcsConfig{
 				Min: 2,
 				Max: 0,
 			},
@@ -158,16 +158,16 @@ func (cf *ConfigFile) Write(ctx context.Context) (err error) {
 		}
 		break
 	case "test":
-		config.Log = &service.LogConfig{
+		config.Log = &services.LogConfig{
 			Level:     "warn",
 			Formatter: "json",
 			Color:     false,
 		}
-		config.Runtime = &service.RuntimeConfig{
+		config.Runtime = &services.RuntimeConfig{
 			MaxWorkers:           0,
 			WorkerMaxIdleSeconds: 0,
 			HandleTimeoutSeconds: 0,
-			AutoMaxProcs: service.AutoMaxProcsConfig{
+			AutoMaxProcs: services.AutoMaxProcsConfig{
 				Min: 2,
 				Max: 0,
 			},
@@ -175,16 +175,16 @@ func (cf *ConfigFile) Write(ctx context.Context) (err error) {
 		}
 		break
 	case "prod":
-		config.Log = &service.LogConfig{
+		config.Log = &services.LogConfig{
 			Level:     "error",
 			Formatter: "json",
 			Color:     false,
 		}
-		config.Runtime = &service.RuntimeConfig{
+		config.Runtime = &services.RuntimeConfig{
 			MaxWorkers:           0,
 			WorkerMaxIdleSeconds: 0,
 			HandleTimeoutSeconds: 0,
-			AutoMaxProcs: service.AutoMaxProcsConfig{
+			AutoMaxProcs: services.AutoMaxProcsConfig{
 				Min: 4,
 				Max: 0,
 			},
@@ -192,7 +192,7 @@ func (cf *ConfigFile) Write(ctx context.Context) (err error) {
 		}
 		break
 	default:
-		config.Transport = &service.TransportConfig{
+		config.Transport = &services.TransportConfig{
 			Port: 18080,
 		}
 		break

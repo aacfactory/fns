@@ -218,3 +218,7 @@ func (client *Client) Do(ctx context.Context, request *transports.Request) (resp
 	fasthttp.ReleaseResponse(resp)
 	return
 }
+
+func (client *Client) Close() {
+	client.host.CloseIdleConnections()
+}

@@ -16,16 +16,16 @@
 
 package fns
 
-import "github.com/aacfactory/fns/service"
+import "github.com/aacfactory/fns/services"
 
 type ExecuteOption func(*ExecuteOptions)
 
 type ExecuteOptions struct {
-	user     service.RequestUser
+	user     services.RequestUser
 	internal bool
 }
 
-func ExecuteWithRequestUser(user service.RequestUser) ExecuteOption {
+func ExecuteWithRequestUser(user services.RequestUser) ExecuteOption {
 	return func(o *ExecuteOptions) {
 		o.user = user
 		return

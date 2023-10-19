@@ -30,6 +30,7 @@ type Options struct {
 
 type Client interface {
 	Do(ctx context.Context, request *Request) (response *Response, err error)
+	Close()
 }
 
 type Dialer interface {

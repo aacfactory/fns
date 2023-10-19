@@ -6,8 +6,8 @@ import (
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/window"
-	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/documents"
+	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/workers"
 	"sync"
@@ -16,19 +16,20 @@ import (
 )
 
 type Registration struct {
-	hostId  string
-	id      string
-	version versions.Version
-	address string
-	name    string
-	devMode bool // todo remove
-	client  transports.Client
-	signer  signatures.Signature
-	worker  workers.Workers
-	timeout time.Duration
-	pool    sync.Pool
-	closed  *atomic.Bool
-	errs    *window.Times
+	hostId   string
+	id       string
+	version  versions.Version
+	address  string
+	name     string
+	document *documents.Document
+	devMode  bool // todo remove
+	client   transports.Client
+	signer   signatures.Signature
+	worker   workers.Workers
+	timeout  time.Duration
+	pool     sync.Pool
+	closed   *atomic.Bool
+	errs     *window.Times
 }
 
 func (registration *Registration) Key() (key string) {
@@ -47,23 +48,23 @@ func (registration *Registration) Internal() (ok bool) {
 }
 
 func (registration *Registration) Document() (document *documents.Document) {
-	// todo fetch via transport
+	document = registration.document
 	return
 }
 
-func (registration *Registration) Request(ctx context.Context, r service.Request) (future service.Future) {
-	promise, fr := service.NewFuture()
+func (registration *Registration) Request(ctx context.Context, r services.Request) (future services.Future) {
+	promise, fr := services.NewFuture()
 	task := registration.acquire()
 	task.begin(r, promise)
 	if !registration.worker.Dispatch(ctx, task) {
-		promise.Failed(service.ErrServiceOverload)
+		promise.Failed(services.ErrServiceOverload)
 		registration.release(task)
 	}
 	future = fr
 	return
 }
 
-func (registration *Registration) RequestSync(ctx context.Context, r service.Request) (result service.FutureResult, err errors.CodeError) {
+func (registration *Registration) RequestSync(ctx context.Context, r services.Request) (result services.FutureResult, err errors.CodeError) {
 	fr := registration.Request(ctx, r)
 	result, err = fr.Get(ctx)
 	return

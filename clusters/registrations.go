@@ -7,12 +7,13 @@ import (
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/window"
-	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/documents"
+	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/rings"
+	"github.com/aacfactory/workers"
 	"net/http"
 	"sort"
 	"sync"
@@ -31,7 +32,7 @@ type Registrations struct {
 	nodes           map[string]*Node
 	signer          signatures.Signature
 	dialer          transports.Dialer
-	worker          service.Workers
+	worker          workers.Workers
 	timeout         time.Duration
 	refreshInterval time.Duration
 }
@@ -91,7 +92,7 @@ func (r *Registrations) GetExact(name string, id string) (registration *Registra
 	return
 }
 
-func (r *Registrations) Get(name string, rvs service.RequestVersions) (registration *Registration, has bool) {
+func (r *Registrations) Get(name string, rvs services.RequestVersions) (registration *Registration, has bool) {
 	v, loaded := r.values.Load(name)
 	if !loaded || v == nil {
 		return
@@ -179,6 +180,8 @@ func (r *Registrations) List() (values map[string]RegistrationList) {
 
 func (r *Registrations) AddNode(node *Node) (err error) {
 	// todo use transport
+	// get service names
+	// foreach names to get doc
 	if node.Services == nil || len(node.Services) == 0 {
 		return
 	}

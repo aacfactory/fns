@@ -167,6 +167,7 @@ func (f *Function) Deprecated() (ok bool) {
 	return
 }
 
+// todo barrier {scope: local | global}
 func (f *Function) Barrier() (ok bool) {
 	_, ok = f.Annotations["barrier"]
 	return

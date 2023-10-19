@@ -128,10 +128,10 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
-	// github.com/aacfactory/service
+	// github.com/aacfactory/services
 	RegisterBuiltinType(&Type{
 		Kind:        BuiltinKind,
-		Path:        "github.com/aacfactory/service",
+		Path:        "github.com/aacfactory/services",
 		Name:        "Empty",
 		Annotations: nil,
 		Paradigms:   nil,

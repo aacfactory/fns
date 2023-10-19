@@ -24,9 +24,9 @@ import (
 
 type LogOptions struct {
 	Name      string
-	Level     string `copy:"Level"`
-	Formatter string `copy:"Formatter"`
-	Color     bool   `copy:"Color"`
+	Level     string
+	Formatter string
+	Color     bool
 }
 
 func NewLog(options LogOptions) (v logs.Logger, err error) {

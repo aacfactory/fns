@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service"
-	"github.com/aacfactory/fns/service/validators"
+	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/fast"
 	"os"
@@ -38,7 +38,7 @@ var (
 		id:                    "",
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
-		configRetrieverOption: service.DefaultConfigRetrieverOption(),
+		configRetrieverOption: services.DefaultConfigRetrieverOption(),
 		transportOptions:      TransportOption(fast.New()),
 		proxyOptions:          nil,
 		hooks:                 nil,
@@ -49,18 +49,18 @@ var (
 func TransportOption(transport transports.Transport) *TransportOptions {
 	return &TransportOptions{
 		transport:   transport,
-		handlers:    make([]service.TransportHandler, 0, 1),
-		middlewares: make([]service.TransportMiddleware, 0, 1),
+		handlers:    make([]services.TransportHandler, 0, 1),
+		middlewares: make([]services.TransportMiddleware, 0, 1),
 	}
 }
 
 type TransportOptions struct {
 	transport   transports.Transport
-	handlers    []service.TransportHandler
-	middlewares []service.TransportMiddleware
+	handlers    []services.TransportHandler
+	middlewares []services.TransportMiddleware
 }
 
-func (options *TransportOptions) Append(handlers ...service.TransportHandler) *TransportOptions {
+func (options *TransportOptions) Append(handlers ...services.TransportHandler) *TransportOptions {
 	if handlers == nil || len(handlers) == 0 {
 		return options
 	}
@@ -68,7 +68,7 @@ func (options *TransportOptions) Append(handlers ...service.TransportHandler) *T
 	return options
 }
 
-func (options *TransportOptions) Use(middlewares ...service.TransportMiddleware) *TransportOptions {
+func (options *TransportOptions) Use(middlewares ...services.TransportMiddleware) *TransportOptions {
 	if middlewares == nil || len(middlewares) == 0 {
 		return options
 	}

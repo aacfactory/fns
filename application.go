@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/logs"
 	"os"
 	"os/signal"
@@ -33,9 +33,9 @@ import (
 )
 
 type Application interface {
-	Deploy(service ...service.Service) (err error)
+	Deploy(service ...services.Service) (err error)
 	Run(ctx context.Context) (err error)
-	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result service.FutureResult, err errors.CodeError)
+	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result services.FutureResult, err errors.CodeError)
 	Log() (log logs.Logger)
 	Sync() (err error)
 	Quit()
@@ -74,19 +74,19 @@ func New(options ...Option) (app Application) {
 	}
 
 	// proxy
-	var proxyOptions *service.TransportOptions
+	var proxyOptions *services.TransportOptions
 	if opt.proxyOptions != nil {
-		proxyOptions = &service.TransportOptions{
+		proxyOptions = &services.TransportOptions{
 			Middlewares: opt.proxyOptions.middlewares,
 			Handlers:    opt.proxyOptions.handlers,
 		}
 	}
 	// endpoints
-	endpoints, endpointsErr := service.NewEndpoints(service.EndpointsOptions{
+	endpoints, endpointsErr := services.NewEndpoints(services.EndpointsOptions{
 		AppId:      appId,
 		AppName:    appName,
 		AppVersion: appVersion,
-		Transport: &service.TransportOptions{
+		Transport: &services.TransportOptions{
 			Transport:   opt.transportOptions.transport,
 			Middlewares: opt.transportOptions.middlewares,
 			Handlers:    opt.transportOptions.handlers,
@@ -128,7 +128,7 @@ type application struct {
 	name            string
 	version         versions.Version
 	config          configures.Config
-	endpoints       *service.Endpoints
+	endpoints       *services.Endpoints
 	hooks           []Hook
 	shutdownTimeout time.Duration
 	signalCh        chan os.Signal
@@ -140,7 +140,7 @@ func (app *application) Log() (log logs.Logger) {
 	return
 }
 
-func (app *application) Deploy(services ...service.Service) (err error) {
+func (app *application) Deploy(services ...services.Service) (err error) {
 	if app.endpoints.Running() {
 		err = errors.Warning("fns: can not deployed service when application is running")
 		return
@@ -196,7 +196,7 @@ func (app *application) Run(ctx context.Context) (err error) {
 				err = errors.Warning("fns: run application failed").WithCause(buildErr)
 				break
 			}
-			service.Fork(ctx, hook)
+			services.Fork(ctx, hook)
 		}
 		if failed {
 			_ = app.stop(ctx)
@@ -209,7 +209,7 @@ func (app *application) Run(ctx context.Context) (err error) {
 	return
 }
 
-func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result service.FutureResult, err errors.CodeError) {
+func (app *application) Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result services.FutureResult, err errors.CodeError) {
 	if serviceName == "" || fn == "" {
 		err = errors.Warning("fns: application execute service's fn failed").WithCause(fmt.Errorf("service name or fn is invalid"))
 		return
@@ -227,15 +227,15 @@ func (app *application) Execute(ctx context.Context, serviceName string, fn stri
 			option(opt)
 		}
 	}
-	requestOptions := make([]service.RequestOption, 0, 1)
+	requestOptions := make([]services.RequestOption, 0, 1)
 	if opt.user != nil {
-		requestOptions = append(requestOptions, service.WithRequestUser(opt.user.Id(), opt.user.Attributes()))
+		requestOptions = append(requestOptions, services.WithRequestUser(opt.user.Id(), opt.user.Attributes()))
 	}
 	if opt.internal {
-		requestOptions = append(requestOptions, service.WithInternalRequest())
+		requestOptions = append(requestOptions, services.WithInternalRequest())
 	}
-	requestOptions = append(requestOptions, service.WithDeviceId(app.id))
-	result, err = endpoint.RequestSync(ctx, service.NewRequest(ctx, serviceName, fn, service.NewArgument(argument), requestOptions...))
+	requestOptions = append(requestOptions, services.WithDeviceId(app.id))
+	result, err = endpoint.RequestSync(ctx, services.NewRequest(ctx, serviceName, fn, services.NewArgument(argument), requestOptions...))
 	if err != nil {
 		err = errors.Warning("fns: application execute failed").WithCause(err).WithMeta("service", serviceName)
 	}

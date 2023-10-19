@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/service"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"net/http"
@@ -13,13 +13,13 @@ import (
 )
 
 type Request struct {
-	User     service.RequestUser `json:"user"`
-	Argument json.RawMessage     `json:"argument"`
+	User     *services.RequestUser `json:"user"`
+	Argument json.RawMessage       `json:"argument"`
 }
 
 type Response struct {
 	Succeed bool            `json:"succeed"`
-	Span    *service.Span   `json:"span"`
+	Span    *services.Span  `json:"span"`
 	Body    json.RawMessage `json:"body"`
 }
 
@@ -35,13 +35,13 @@ func newRegistrationTask(registration *Registration, handleTimeout time.Duration
 
 type registrationTask struct {
 	registration *Registration
-	r            service.Request
-	result       service.Promise
+	r            services.Request
+	result       services.Promise
 	timeout      time.Duration
 	hook         func(task *registrationTask)
 }
 
-func (task *registrationTask) begin(r service.Request, w service.Promise) {
+func (task *registrationTask) begin(r services.Request, w services.Promise) {
 	task.r = r
 	task.result = w
 }
@@ -61,8 +61,8 @@ func (task *registrationTask) executeInternal(ctx context.Context) {
 	r := task.r
 	fr := task.result
 	name, fn := r.Fn()
-	trace, hasTracer := service.GetTracer(ctx)
-	var span *service.Span
+	trace, hasTracer := services.GetTracer(ctx)
+	var span *services.Span
 	if hasTracer {
 		span = trace.StartSpan(name, fn)
 		span.AddTag("kind", "remote")
@@ -72,7 +72,7 @@ func (task *registrationTask) executeInternal(ctx context.Context) {
 	var cachedBody []byte // is not internal response, cause cache was set in service, not in handler
 	var cachedErr errors.CodeError
 	if !r.Header().CacheControlDisabled() { // try cache control
-		etag, status, _, _, deadline, body, exist := service.FetchCacheControl(ctx, name, fn, r.Argument())
+		etag, status, _, _, deadline, body, exist := services.FetchCacheControl(ctx, name, fn, r.Argument())
 		if exist {
 			// cache exists
 			if status != http.StatusOK {
@@ -183,10 +183,10 @@ func (task *registrationTask) executeInternal(ctx context.Context) {
 			task.registration.closed.Store(false)
 			if span != nil {
 				span.Finish()
-				span.AddTag("status", service.ErrUnavailable.Name())
+				span.AddTag("status", services.ErrUnavailable.Name())
 				span.AddTag("handled", "failed")
 			}
-			fr.Failed(service.ErrUnavailable)
+			fr.Failed(services.ErrUnavailable)
 			return
 		}
 		if resp.Status == 404 {
@@ -331,7 +331,7 @@ func (task *registrationTask) Execute(ctx context.Context) {
 	// remote endpoint was closed
 	if resp.Header.Get(transports.ConnectionHeaderName) == transports.CloseHeaderValue {
 		task.registration.closed.Store(false)
-		fr.Failed(service.ErrUnavailable)
+		fr.Failed(services.ErrUnavailable)
 		return
 	}
 	// failed response

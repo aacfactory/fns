@@ -55,7 +55,9 @@ type Store interface {
 
 type ErrorReporter func(ctx context.Context, cause error)
 
-type Result objects.Scanner
+type Result struct {
+	objects.Scanner
+}
 
 // Barrier
 // @barrier
@@ -70,7 +72,7 @@ type Barrier struct {
 	errorReporter ErrorReporter
 }
 
-func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err errors.CodeError)) (result Result, err errors.CodeError) {
+func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
@@ -87,9 +89,18 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 			}
 			return
 		}
+
 		valueKey := append(key, bytex.FromString("-value")...)
 		value := make([]byte, 0, 1)
 		if times == 1 {
+			ttlErr := b.store.TTL(ctx, key, b.ttl)
+			if ttlErr != nil {
+				err = errors.Warning("fns: barrier failed").WithCause(incrErr)
+				if b.errorReporter != nil {
+					b.errorReporter(ctx, errors.Warning("fns: barrier ttl failed").WithCause(ttlErr))
+				}
+				return
+			}
 			r, err = fn()
 			if err == nil {
 				value = append(value, 'T')
@@ -187,7 +198,9 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 		err = errors.Map(doErr)
 		return
 	}
-	result = Result(objects.NewScanner(r))
+	result = Result{
+		objects.NewScanner(r),
+	}
 	return
 }
 
@@ -217,5 +230,6 @@ func (b *Barrier) Forget(ctx context.Context, key []byte) {
 				continue
 			}
 		}
+		break
 	}
 }

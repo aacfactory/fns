@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
 	"golang.org/x/sync/singleflight"
 	"time"
@@ -54,6 +55,8 @@ type Store interface {
 
 type ErrorReporter func(ctx context.Context, cause error)
 
+type Result objects.Scanner
+
 // Barrier
 // @barrier
 // 当@authorization 存在时，则key增加user，不存在时，不加user
@@ -67,7 +70,7 @@ type Barrier struct {
 	errorReporter ErrorReporter
 }
 
-func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
+func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err errors.CodeError)) (result Result, err errors.CodeError) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
@@ -142,10 +145,9 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 				}
 				if p[0] == 'T' {
 					if p[1] == 'N' {
-						break
+						r = nil
 					} else if p[1] == 'V' {
-
-						break
+						r = p[2:]
 					} else {
 						err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
 						if b.errorReporter != nil {
@@ -154,7 +156,17 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 						return
 					}
 				} else if p[0] == 'F' {
-					// todo map bytes to object
+					if p[1] == 'C' {
+						err = errors.Decode(p[2:])
+					} else if p[1] == 'S' {
+						err = fmt.Errorf(bytex.ToString(p[2:]))
+					} else {
+						err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
+						if b.errorReporter != nil {
+							b.errorReporter(ctx, errors.Warning("fns: barrier get value failed").WithCause(fmt.Errorf("invalid value")))
+						}
+						return
+					}
 				} else {
 					err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
 					if b.errorReporter != nil {
@@ -162,8 +174,8 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 					}
 					return
 				}
-
 				fetched = true
+				break
 			}
 			if !fetched {
 				r, err = fn()
@@ -175,8 +187,7 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 		err = errors.Map(doErr)
 		return
 	}
-	result = r
-	// incr: when 1, first then do fn, else wait
+	result = Result(objects.NewScanner(r))
 	return
 }
 
@@ -185,5 +196,26 @@ func (b *Barrier) Forget(ctx context.Context, key []byte) {
 		key = []byte{'-'}
 	}
 	defer b.group.Forget(bytex.ToString(key))
-	// decr: when 0, last then remove, else skip
+	if b.standalone {
+		return
+	}
+	for i := 0; i < b.loops; i++ {
+		n, incrErr := b.store.Incr(ctx, key, -1)
+		if incrErr != nil {
+			if b.errorReporter != nil {
+				b.errorReporter(ctx, errors.Warning("fns: barrier incr failed").WithCause(incrErr))
+			}
+			continue
+		}
+		if n < 1 {
+			valueKey := append(key, bytex.FromString("-value")...)
+			rmErr := b.store.Remove(ctx, valueKey)
+			if rmErr != nil {
+				if b.errorReporter != nil {
+					b.errorReporter(ctx, errors.Warning("fns: barrier remove cached value failed").WithCause(rmErr))
+				}
+				continue
+			}
+		}
+	}
 }

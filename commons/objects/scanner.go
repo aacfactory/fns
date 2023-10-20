@@ -44,7 +44,7 @@ func (scanner Scanner) Exist() (ok bool) {
 	return
 }
 
-func (scanner Scanner) Scan(v interface{}) (err errors.CodeError) {
+func (scanner Scanner) Scan(v interface{}) (err error) {
 	if scanner.data == nil {
 		return
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/commons/wildcard"
+	"github.com/aacfactory/fns/services/users"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
@@ -292,105 +293,15 @@ func (header RequestHeader) ForEach(fn func(key string, values []string) (next b
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-type RequestUserId string
-
-func (id RequestUserId) Int() (n int64) {
-	s := string(id)
-	v, parseErr := strconv.ParseInt(s, 10, 64)
-	if parseErr != nil {
-		panic(errors.Warning(fmt.Sprintf("fns: parse user id to int failed")).WithMeta("scope", "system").WithMeta("id", s).WithCause(parseErr))
-	}
-	n = v
-	return
-}
-
-func (id RequestUserId) String() string {
-	return string(id)
-}
-
-func (id RequestUserId) Exist() (ok bool) {
-	ok = id != "" && id != "0"
-	return
-}
-
-func NewRequestUserAttributes() RequestUserAttributes {
-	return []byte{'{', '}'}
-}
-
-type RequestUserAttributes []byte
-
-func (attr *RequestUserAttributes) ReplaceBy(o RequestUserAttributes) {
-	*attr = o
-	return
-}
-
-func (attr *RequestUserAttributes) Set(key string, value interface{}) (err error) {
-	obj := json.NewObjectFromBytes(*attr)
-	err = obj.Put(key, value)
-	if err != nil {
-		err = errors.Warning("fns: request user attribute put failed").WithMeta("key", key).WithCause(err)
-		return
-	}
-	*attr = obj.Raw()
-	return
-}
-
-func (attr *RequestUserAttributes) Get(key string, value interface{}) (has bool, err error) {
-	obj := json.NewObjectFromBytes(*attr)
-	has = obj.Contains(key)
-	if !has {
-		return
-	}
-	err = obj.Get(key, value)
-	if err != nil {
-		err = errors.Warning("fns: request user attribute get failed").WithMeta("key", key).WithCause(err)
-		return
-	}
-	return
-}
-
-func (attr *RequestUserAttributes) Remove(key string) (err error) {
-	obj := json.NewObjectFromBytes(*attr)
-	err = obj.Remove(key)
-	if err != nil {
-		err = errors.Warning("fns: request user attribute remove failed").WithMeta("key", key).WithCause(err)
-		return
-	}
-	*attr = obj.Raw()
-	return
-}
-
-func NewRequestUser(id RequestUserId, attributes RequestUserAttributes) (u RequestUser) {
-	if len(attributes) == 0 {
-		attributes = NewRequestUserAttributes()
-	}
-	u = RequestUser{
-		Id:         id,
-		Attributes: attributes,
-	}
-	return
-}
-
-type RequestUser struct {
-	Id         RequestUserId
-	Attributes RequestUserAttributes
-}
-
-func (u *RequestUser) Authenticated() (ok bool) {
-	ok = u.Id.Exist()
-	return
-}
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
 type Request interface {
 	Id() (id string)
+	DeviceId() (id string)
 	Header() (header RequestHeader)
 	AcceptedVersions() (acceptedVersions RequestVersions)
 	Fn() (service string, fn string)
 	Argument() (argument Argument)
 	Internal() (ok bool)
-	User() (user *RequestUser)
+	User() (user users.User)
 	Hash() (p []byte)
 }
 

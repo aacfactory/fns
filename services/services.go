@@ -19,6 +19,8 @@ package services
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
@@ -32,8 +34,60 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+func New() {
+	tasks := sync.Pool{
+		New: func() any {
+			return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
+				ep.release(task)
+			})
+		},
+	}
+}
+
+type Services struct {
+	log    logs.Logger
+	config configures.Config
+	group  map[string]Service
+	tasks  sync.Pool
+	rt     *Runtime
+}
+
+func (s *Services) Add(service Service) (err error) {
+	name := strings.TrimSpace(service.Name())
+	serviceConfig, hasConfig := s.config.Node(name)
+	if !hasConfig {
+		serviceConfig, _ = configures.NewJsonConfig([]byte("{}"))
+	}
+	buildErr := service.Build(Options{
+		AppId:      e.rt.appId,
+		AppName:    e.rt.appName,
+		AppVersion: e.rt.appVersion,
+		Log:        e.log.With("fns", "service").With("service", name),
+		Config:     serviceConfig,
+	})
+	if buildErr != nil {
+		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithMeta("service", name).WithCause(buildErr)
+		return
+	}
+	ep := &endpoint{
+		rt:            e.rt,
+		handleTimeout: e.handleTimeout,
+		svc:           svc,
+		pool:          sync.Pool{},
+	}
+	ep.pool.New = func() any {
+		return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
+			ep.release(task)
+		})
+	}
+	e.deployed[svc.Name()] = ep
+	e.rt.appServices = append(e.rt.appServices, svc)
+	return
+}
 
 // +-------------------------------------------------------------------------------------------------------------------+
 

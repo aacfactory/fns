@@ -20,8 +20,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/flags"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/logs"
@@ -36,37 +36,18 @@ const (
 	contextComponentsKey = "@fns_service_components"
 )
 
-type Status struct {
-	flag *flags.Flag
-}
-
-func (status *Status) Starting() (ok bool) {
-	ok = status.flag.IsHalfOn()
-	return
-}
-
-func (status *Status) Serving() (ok bool) {
-	ok = status.flag.IsOn()
-	return
-}
-
-func (status *Status) Closed() (ok bool) {
-	ok = status.flag.IsOff()
-	return
-}
-
+// todo
+// 移回 services，然后增加run函数，把ctx的run给它
 type Runtime struct {
-	appId       string
-	appName     string
-	appVersion  versions.Version
-	appServices []NamePlate
-	status      *Status
-	log         logs.Logger
-	worker      workers.Workers
-	discovery   EndpointDiscovery
-	barrier     Barrier
-	shared      shareds.Shared
-	signer      signatures.Signature
+	appId      string
+	appName    string
+	appVersion versions.Version
+	status     *switchs.Switch
+	log        logs.Logger
+	worker     workers.Workers
+	endpoints  Endpoints
+	barrier    Barrier
+	shared     shareds.Shared
 }
 
 func (rt *Runtime) AppId() string {
@@ -79,14 +60,6 @@ func (rt *Runtime) AppName() string {
 
 func (rt *Runtime) AppVersion() versions.Version {
 	return rt.appVersion
-}
-
-func (rt *Runtime) ServiceNames() []NamePlate {
-	return rt.appServices
-}
-
-func (rt *Runtime) AppStatus() *Status {
-	return rt.status
 }
 
 func (rt *Runtime) RootLog() logs.Logger {

@@ -21,42 +21,26 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/logs"
 )
 
-type ComponentOptions struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
+type Options struct {
+	Log    logs.Logger
+	Config configures.Config
 }
 
 type Component interface {
 	Name() (name string)
-	Build(options ComponentOptions) (err error)
+	Construct(options Options) (err error)
 	Close()
 }
 
-type Options struct {
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
-	Log        logs.Logger
-	Config     configures.Config
-}
-
-type NamePlate interface {
+type Service interface {
+	Construct(options Options) (err error)
 	Name() (name string)
 	Internal() (internal bool)
 	Document() (doc *documents.Document)
-}
-
-type Service interface {
-	NamePlate
-	Build(options Options) (err error)
 	Components() (components map[string]Component)
 	Handle(ctx context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
 	Close()
@@ -86,38 +70,29 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 }
 
 type Abstract struct {
-	appId      string
-	appName    string
-	appVersion versions.Version
 	name       string
 	internal   bool
 	log        logs.Logger
 	components map[string]Component
 }
 
-func (svc *Abstract) Build(options Options) (err error) {
-	svc.appId = options.AppId
-	svc.appName = options.AppName
-	svc.appVersion = options.AppVersion
-	svc.log = options.Log
-	if svc.components != nil {
-		for _, component := range svc.components {
-			componentConfig, hasComponentConfig := options.Config.Node(component.Name())
-			if !hasComponentConfig {
-				componentConfig, _ = configures.NewJsonConfig([]byte{'{', '}'})
+func (abstract *Abstract) Construct(options Options) (err error) {
+	abstract.log = options.Log
+	if abstract.components != nil {
+		for _, component := range abstract.components {
+			config, hasConfig := options.Config.Node(component.Name())
+			if !hasConfig {
+				config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 			}
-			componentBuildErr := component.Build(ComponentOptions{
-				AppId:      svc.appId,
-				AppName:    svc.appName,
-				AppVersion: svc.appVersion,
-				Log:        svc.log.With("component", component.Name()),
-				Config:     componentConfig,
+			constructErr := component.Construct(Options{
+				Log:    abstract.log.With("component", component.Name()),
+				Config: config,
 			})
-			if componentBuildErr != nil {
-				if svc.log.ErrorEnabled() {
-					svc.log.Error().Caller().Cause(errors.Map(componentBuildErr).WithMeta("component", component.Name())).Message("service: build component failed")
+			if constructErr != nil {
+				if abstract.log.ErrorEnabled() {
+					abstract.log.Error().Caller().Cause(errors.Map(constructErr).WithMeta("component", component.Name())).Message("service: construct component failed")
 				}
-				err = errors.Warning(fmt.Sprintf("%s: build failed", svc.name)).WithMeta("service", svc.name).WithCause(componentBuildErr)
+				err = errors.Warning(fmt.Sprintf("%s: build failed", abstract.name)).WithMeta("service", abstract.name).WithCause(constructErr)
 			}
 			return
 		}
@@ -125,68 +100,39 @@ func (svc *Abstract) Build(options Options) (err error) {
 	return
 }
 
-func (svc *Abstract) AppId() (id string) {
-	id = svc.appId
+func (abstract *Abstract) Name() (name string) {
+	name = abstract.name
 	return
 }
 
-func (svc *Abstract) AppName() (name string) {
-	name = svc.appName
+func (abstract *Abstract) Internal() (internal bool) {
+	internal = abstract.internal
 	return
 }
 
-func (svc *Abstract) AppVersion() (version versions.Version) {
-	version = svc.appVersion
+func (abstract *Abstract) Components() (components map[string]Component) {
+	components = abstract.components
 	return
 }
 
-func (svc *Abstract) Name() (name string) {
-	name = svc.name
+func (abstract *Abstract) Document() (document *documents.Document) {
 	return
 }
 
-func (svc *Abstract) Internal() (internal bool) {
-	internal = svc.internal
-	return
-}
-
-func (svc *Abstract) Components() (components map[string]Component) {
-	components = svc.components
-	return
-}
-
-func (svc *Abstract) Document() (doc *documents.Document) {
-	return
-}
-
-func (svc *Abstract) Close() {
-	if svc.components != nil && len(svc.components) > 0 {
-		for _, component := range svc.components {
+func (abstract *Abstract) Close() {
+	if abstract.components != nil && len(abstract.components) > 0 {
+		for _, component := range abstract.components {
 			component.Close()
 		}
 	}
-	if svc.log.DebugEnabled() {
-		svc.log.Debug().Message(fmt.Sprintf("%s: closed", svc.name))
+	if abstract.log.DebugEnabled() {
+		abstract.log.Debug().Message(fmt.Sprintf("%s: closed", abstract.name))
 	}
 	return
 }
 
-func (svc *Abstract) Log() (log logs.Logger) {
-	log = svc.log
-	return
-}
-
-func (svc *Abstract) Barrier(ctx context.Context, name string, arg Argument, fn func() (result interface{}, err errors.CodeError)) (result interface{}, err errors.CodeError) {
-	barrier := GetBarrier(ctx)
-	if barrier == nil {
-		if svc.log.WarnEnabled() {
-			svc.log.Warn().With("fn", name).Message("fns: execute fn as shared failed, barrier is not found")
-		}
-		result, err = fn()
-		return
-	}
-	key := fmt.Sprintf("%s:%s:%d", svc.name, name, arg.HashCode())
-	result, err = barrier.Do(ctx, key, fn)
+func (abstract *Abstract) Log() (log logs.Logger) {
+	log = abstract.log
 	return
 }
 

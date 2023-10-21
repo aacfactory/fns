@@ -1,31 +1,10 @@
 package configs
 
-import (
-	"fmt"
-	"github.com/aacfactory/configures"
-	"github.com/aacfactory/errors"
-	"os"
-	"path/filepath"
-	"strings"
-)
-
-const (
-	activeSystemEnvKey = "FNS-ACTIVE"
-)
-
-func DefaultConfigRetrieverOption() (option configures.RetrieverOption) {
-	path, pathErr := filepath.Abs("./configs")
-	if pathErr != nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: create default config retriever failed, cant not get absolute representation of './configs'").WithCause(pathErr)))
-		return
-	}
-	active, _ := os.LookupEnv(activeSystemEnvKey)
-	active = strings.TrimSpace(active)
-	store := configures.NewFileStore(path, "fns", '-')
-	option = configures.RetrieverOption{
-		Active: active,
-		Format: "YAML",
-		Store:  store,
-	}
-	return
+type Config struct {
+	Runtime   *RuntimeConfig   `json:"runtime" yaml:"runtime,omitempty"`
+	Log       *LogConfig       `json:"log" yaml:"log,omitempty"`
+	Transport *TransportConfig `json:"transport" yaml:"transport,omitempty"`
+	Cluster   *ClusterConfig   `json:"cluster" yaml:"cluster,omitempty"`
+	Proxy     *ProxyConfig     `json:"proxy" yaml:"proxy,omitempty"`
+	Services  json.RawMessage  `json:"services" yaml:"services,omitempty"`
 }

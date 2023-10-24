@@ -60,7 +60,7 @@ func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {
 	if ok {
 		name = named.Name()
 	}
-	ctx = logger.With(ctx, rt.RootLog().With("task", name))
+	ctx = logger.With(ctx, rt.log.With("task", name))
 	return rt.worker.Dispatch(ctx, task)
 }
 
@@ -70,7 +70,7 @@ func (rt *Runtime) Execute(ctx context.Context, task workers.Task) {
 	if ok {
 		name = named.Name()
 	}
-	ctx = logger.With(ctx, rt.RootLog().With("task", name))
+	ctx = logger.With(ctx, rt.log.With("task", name))
 	rt.worker.MustDispatch(ctx, task)
 	return
 }

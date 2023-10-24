@@ -106,6 +106,11 @@ func (params RequestParams) String() string {
 }
 
 func NewRequest(ctx context.Context, method []byte, uri []byte) (r *Request, err error) {
+	r, err = NewRequestWithHeader(ctx, method, uri, NewHeader())
+	return
+}
+
+func NewRequestWithHeader(ctx context.Context, method []byte, uri []byte, header Header) (r *Request, err error) {
 	u, parseURIErr := url.ParseRequestURI(bytex.ToString(uri))
 	if parseURIErr != nil {
 		err = errors.Warning("fns: new transport request failed").WithCause(parseURIErr)
@@ -117,7 +122,7 @@ func NewRequest(ctx context.Context, method []byte, uri []byte) (r *Request, err
 		method:     method,
 		host:       nil,
 		remoteAddr: nil,
-		header:     make(Header),
+		header:     header,
 		path:       bytex.FromString(u.Path),
 		params:     make(RequestParams),
 		body:       nil,

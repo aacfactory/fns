@@ -201,9 +201,12 @@ func (c Client) Do(ctx context.Context, request *transports.Request) (response *
 		err = errors.Warning("http: create request failed").WithCause(rErr)
 		return
 	}
-	if request.Header() != nil && len(request.Header()) > 0 {
-		r.Header = http.Header(request.Header())
-	}
+	request.Header().Foreach(func(key []byte, values [][]byte) {
+		for _, value := range values {
+			r.Header.Add(bytex.ToString(key), bytex.ToString(value))
+		}
+	})
+
 	resp, doErr := c.host.Do(r)
 	if doErr != nil {
 		if errors.Map(doErr).Contains(context.Canceled) || errors.Map(doErr).Contains(context.DeadlineExceeded) {
@@ -231,7 +234,7 @@ func (c Client) Do(ctx context.Context, request *transports.Request) (response *
 	}
 	response = &transports.Response{
 		Status: resp.StatusCode,
-		Header: transports.Header(resp.Header),
+		Header: transports.WrapHttpHeader(resp.Header),
 		Body:   b.Bytes(),
 	}
 	return

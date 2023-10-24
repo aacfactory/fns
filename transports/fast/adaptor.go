@@ -30,12 +30,6 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 
 		h.Handle(w, r)
 
-		for k, vv := range w.Header() {
-			for _, v := range vv {
-				ctx.Response.Header.Add(k, v)
-			}
-		}
-
 		ctx.SetStatusCode(w.Status())
 
 		if bodyLen := buf.Len(); bodyLen > 0 {
@@ -55,7 +49,9 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 }
 
 func convertFastHttpRequestCtxToRequest(ctx *fasthttp.RequestCtx) (r *transports.Request, err error) {
-	r, err = transports.NewRequest(ctx, ctx.Method(), ctx.RequestURI())
+	r, err = transports.NewRequestWithHeader(ctx, ctx.Method(), ctx.RequestURI(), &RequestHeader{
+		RequestHeader: &ctx.Request.Header,
+	})
 	if err != nil {
 		err = errors.Warning("fns: convert fasthttp request to transport request failed").WithCause(err)
 		return
@@ -71,12 +67,6 @@ func convertFastHttpRequestCtxToRequest(ctx *fasthttp.RequestCtx) (r *transports
 	r.SetProto(ctx.Request.Header.Protocol())
 	r.SetRemoteAddr(bytex.FromString(ctx.RemoteAddr().String()))
 
-	ctx.Request.Header.VisitAll(func(key, value []byte) {
-		sk := bytex.ToString(key)
-		sv := bytex.ToString(value)
-		r.Header().Set(sk, sv)
-	})
-
 	if ctx.IsPost() || ctx.IsPut() {
 		r.SetBody(ctx.PostBody())
 	}
@@ -88,8 +78,10 @@ func convertFastHttpRequestCtxToResponseWriter(ctx *fasthttp.RequestCtx, writer 
 	w = &responseWriter{
 		ctx:    ctx,
 		status: 0,
-		header: make(transports.Header),
-		body:   writer,
+		header: &ResponseHeader{
+			ResponseHeader: &ctx.Response.Header,
+		},
+		body: writer,
 	}
 	return
 }
@@ -128,8 +120,8 @@ func (w *responseWriter) Succeed(v interface{}) {
 
 	bodyLen := len(body)
 	if bodyLen > 0 {
-		w.Header().Set(transports.ContentLengthHeaderName, strconv.Itoa(bodyLen))
-		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
+		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
+		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
 		w.write(body, bodyLen)
 	}
 	return
@@ -147,8 +139,8 @@ func (w *responseWriter) Failed(cause errors.CodeError) {
 	w.status = cause.Code()
 	bodyLen := len(body)
 	if bodyLen > 0 {
-		w.Header().Set(transports.ContentLengthHeaderName, strconv.Itoa(bodyLen))
-		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
+		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
+		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
 		w.write(body, bodyLen)
 	}
 	return

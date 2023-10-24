@@ -2,7 +2,6 @@ package standard
 
 import (
 	"bufio"
-	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/transports"
@@ -30,12 +29,6 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 
 		h.Handle(w, r)
 
-		for k, vv := range w.Header() {
-			for _, v := range vv {
-				writer.Header().Add(k, v)
-			}
-		}
-
 		writer.WriteHeader(w.Status())
 
 		bodyLen := buf.Len()
@@ -56,7 +49,7 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 }
 
 func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *transports.Request, err error) {
-	r, err = transports.NewRequest(req.Context(), bytex.FromString(req.Method), bytex.FromString(req.RequestURI))
+	r, err = transports.NewRequestWithHeader(req.Context(), bytex.FromString(req.Method), bytex.FromString(req.RequestURI), transports.WrapHttpHeader(req.Header))
 	if err != nil {
 		err = errors.Warning("fns: new transport request from http request failed").WithCause(err)
 		return
@@ -79,16 +72,10 @@ func convertHttpRequestToRequest(req *http.Request, bodyLimit int) (r *transport
 		}
 	}
 
-	for k, vv := range req.Header {
-		for _, v := range vv {
-			r.Header().Add(k, v)
-		}
-	}
-
 	if req.TransferEncoding != nil && len(req.TransferEncoding) > 0 {
-		r.Header().Del("Transfer-Encoding")
+		r.Header().Del(bytex.FromString("Transfer-Encoding"))
 		for _, te := range req.TransferEncoding {
-			r.Header().Add("Transfer-Encoding", te)
+			r.Header().Add(bytex.FromString("Transfer-Encoding"), bytex.FromString(te))
 		}
 	}
 
@@ -124,7 +111,7 @@ func convertHttpResponseWriterToResponseWriter(w http.ResponseWriter, buf transp
 	return &responseWriter{
 		writer:   w,
 		status:   0,
-		header:   make(transports.Header),
+		header:   transports.WrapHttpHeader(w.Header()),
 		body:     buf,
 		hijacked: false,
 	}
@@ -163,8 +150,8 @@ func (w *responseWriter) Succeed(v interface{}) {
 	w.status = http.StatusOK
 	bodyLen := len(body)
 	if bodyLen > 0 {
-		w.Header().Set(transports.ContentLengthHeaderName, strconv.Itoa(bodyLen))
-		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
+		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
+		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
 		w.write(body, bodyLen)
 	}
 	return
@@ -182,8 +169,8 @@ func (w *responseWriter) Failed(cause errors.CodeError) {
 	w.status = cause.Code()
 	bodyLen := len(body)
 	if bodyLen > 0 {
-		w.Header().Set(transports.ContentLengthHeaderName, strconv.Itoa(bodyLen))
-		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
+		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
+		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
 		w.write(body, bodyLen)
 	}
 	return
@@ -236,64 +223,4 @@ func (w *responseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err
 
 func (w *responseWriter) Hijacked() bool {
 	return w.hijacked
-}
-
-func ConvertRequestToHttpRequest(req *transports.Request) (r *http.Request, err error) {
-	url, urlErr := req.URL()
-	if urlErr != nil {
-		err = errors.Warning("fns: convert request to http request failed").WithCause(urlErr)
-		return
-	}
-	body := req.Body()
-	if body == nil {
-		body = make([]byte, 0, 1)
-	}
-	r, err = http.NewRequestWithContext(req.Context(), bytex.ToString(req.Method()), bytex.ToString(url), bytes.NewReader(body))
-	if err != nil {
-		err = errors.Warning("fns: convert request to http request failed").WithCause(err)
-		return
-	}
-	r.Proto = bytex.ToString(req.Proto())
-	if r.Proto == "HTTP/2" || r.Proto == "HTTP/2.0" {
-		r.ProtoMajor = 2
-	} else if r.Proto == "HTTP/3" || r.Proto == "HTTP/3.0" {
-		r.ProtoMajor = 3
-	} else {
-		r.ProtoMajor = 1
-	}
-	r.ProtoMinor = 1
-
-	r.Header = http.Header(req.Header())
-
-	tes := req.Header().Values("Transfer-Encoding")
-	if len(tes) > 0 {
-		r.TransferEncoding = append(r.TransferEncoding, tes...)
-	}
-
-	r.TLS = req.TLSConnectionState()
-
-	return
-}
-
-func ConvertResponseWriterToHttpResponseWriter(writer transports.ResponseWriter) (w http.ResponseWriter) {
-	w = &httpResponseWriter{
-		response: writer,
-	}
-	return
-}
-
-type httpResponseWriter struct {
-	response transports.ResponseWriter
-}
-
-func (w *httpResponseWriter) Header() http.Header {
-	return http.Header(w.response.Header())
-}
-
-func (w *httpResponseWriter) Write(bytes []byte) (int, error) {
-	return w.response.Write(bytes)
-}
-
-func (w *httpResponseWriter) WriteHeader(statusCode int) {
-	w.response.SetStatus(statusCode)
 }

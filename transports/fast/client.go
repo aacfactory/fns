@@ -163,16 +163,11 @@ func (client *Client) Do(ctx context.Context, request *transports.Request) (resp
 	// method
 	req.Header.SetMethodBytes(request.Method())
 	// header
-	if request.Header() != nil && len(request.Header()) > 0 {
-		for k, vv := range request.Header() {
-			if vv == nil || len(vv) == 0 {
-				continue
-			}
-			for _, v := range vv {
-				req.Header.Add(k, v)
-			}
+	request.Header().Foreach(func(key []byte, values [][]byte) {
+		for _, value := range values {
+			req.Header.AddBytesKV(key, value)
 		}
-	}
+	})
 	// uri
 	uri := req.URI()
 	if client.secured {
@@ -206,14 +201,15 @@ func (client *Client) Do(ctx context.Context, request *transports.Request) (resp
 		fasthttp.ReleaseResponse(resp)
 		return
 	}
+
 	response = &transports.Response{
 		Status: resp.StatusCode(),
-		Header: make(transports.Header),
-		Body:   resp.Body(),
+		Header: &ResponseHeader{
+			&resp.Header,
+		},
+		Body: resp.Body(),
 	}
-	resp.Header.VisitAll(func(key, value []byte) {
-		response.Header.Add(bytex.ToString(key), bytex.ToString(value))
-	})
+
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 	return

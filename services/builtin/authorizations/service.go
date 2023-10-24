@@ -29,61 +29,53 @@ const (
 	parseFn  = "parse"
 )
 
-func Service(tokens Tokens) (v services.Service) {
-	if tokens == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("authorizations: service requires tokens component")))
+var (
+	ErrUnauthorized = errors.Unauthorized("fns: unauthorized")
+)
+
+func Service(encoder TokenEncoder) (v services.Service) {
+	if encoder == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: service requires token encoder component").WithMeta("service", name)))
 		return
 	}
 	v = &service{
-		Abstract: services.NewAbstract(name, true, tokens),
+		Abstract: services.NewAbstract(name, true, encoder),
 	}
 	return
 }
 
 type service struct {
 	services.Abstract
-	tokens Tokens
+	encoder TokenEncoder
 }
 
-func (svc *service) Build(options services.Options) (err error) {
-	err = svc.Abstract.Build(options)
+func (svc *service) Construct(options services.Options) (err error) {
+	err = svc.Abstract.Construct(options)
 	if err != nil {
 		return
 	}
 	if svc.Components() == nil || len(svc.Components()) != 1 {
-		err = errors.Warning("authorizations: build failed").WithCause(errors.Warning("authorizations: tokens is required"))
+		err = errors.Warning("fns: build failed").WithMeta("service", name).WithCause(errors.Warning("fns: token encoder is required"))
 		return
 	}
 	for _, component := range svc.Components() {
-		tokens, ok := component.(Tokens)
+		encoder, ok := component.(TokenEncoder)
 		if !ok {
-			err = errors.Warning("authorizations: build failed").WithCause(errors.Warning("authorizations: tokens is required"))
+			err = errors.Warning("fns: build failed").WithMeta("service", name).WithCause(errors.Warning("fns: token encoder is required"))
 			return
 		}
-		svc.tokens = tokens
+		svc.encoder = encoder
 	}
 	return
 }
 
-func (svc *service) Handle(ctx context.Context, fn string, argument services.Argument) (v interface{}, err errors.CodeError) {
+func (svc *service) Handle(ctx context.Context, fn string, argument services.Argument) (v interface{}, err error) {
 	switch fn {
 	case formatFn:
-		param := FormatTokenParam{}
-		paramErr := argument.As(&param)
-		if paramErr != nil {
-			err = errors.Warning("authorizations: format token failed").WithCause(paramErr)
-			break
-		}
-		v, err = svc.tokens.Format(ctx, param)
+
 		break
 	case parseFn:
-		param := Token("")
-		paramErr := argument.As(&param)
-		if paramErr != nil {
-			err = errors.Warning("authorizations: parse token failed").WithCause(paramErr)
-			break
-		}
-		v, err = svc.tokens.Parse(ctx, param)
+
 		break
 	default:
 		err = errors.Warning("authorizations: fn was not found")

@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/configures"
-	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/builtin/authorizations"
 	"github.com/aacfactory/json"
@@ -32,35 +31,30 @@ func TestDefaultTokens(t *testing.T) {
 	config := json.NewObject()
 	_ = config.Put("key", "key")
 	opt, _ := configures.NewJsonConfig(config.Raw())
-	tokens := authorizations.DefaultTokens()
-	buildErr := tokens.Build(services.ComponentOptions{
-		AppId:      "0",
-		AppName:    "0",
-		AppVersion: versions.Version{},
-		Log:        nil,
-		Config:     opt,
+	encoder := authorizations.DefaultTokenEncoder()
+	buildErr := encoder.Construct(services.Options{
+		Log:    nil,
+		Config: opt,
 	})
 	if buildErr != nil {
 		t.Errorf("%+v", buildErr)
 		return
 	}
-	attrs := services.RequestUserAttributes{}
-	_ = attrs.Set("attr0", "0")
-	token, createErr := tokens.Format(context.TODO(), authorizations.FormatTokenParam{
-		Id:          "0",
-		UserId:      "user:0",
-		Attributes:  attrs,
-		Expirations: 1 * time.Second,
+	token, createErr := encoder.Encode(context.TODO(), authorizations.Authorization{
+		Id:         "1",
+		Account:    "1",
+		Attributes: nil,
+		ExpireAT:   time.Now(),
 	})
 	if createErr != nil {
 		t.Errorf("%+v", createErr)
 		return
 	}
-	fmt.Println("token:", token)
-	parsed, parseErr := tokens.Parse(context.TODO(), token)
+	fmt.Println("token:", token.String())
+	parsed, parseErr := encoder.Decode(context.TODO(), token)
 	if parseErr != nil {
 		t.Errorf("%+v", parseErr)
 		return
 	}
-	fmt.Println(parsed.Valid, parsed.Id, parsed.UserId, parsed.Attributes, parsed.ExpireAT)
+	fmt.Println(fmt.Sprintf("%+v", parsed))
 }

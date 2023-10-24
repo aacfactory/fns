@@ -2,9 +2,11 @@ package versions
 
 import (
 	"fmt"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/wildcard"
 	"github.com/valyala/bytebufferpool"
+	"strings"
 )
 
 type Interval []Version
@@ -35,8 +37,43 @@ func (interval Interval) String() string {
 	return fmt.Sprintf("[%s, %s)", interval[0].String(), interval[1].String())
 }
 
-func ParseInterval(s string) (interval Interval, err error) {
-
+// ParseInterval
+// left:right
+func ParseInterval(source string) (interval Interval, err error) {
+	ss := strings.Split(source, ":")
+	n := len(ss)
+	if n == 0 {
+		interval = Interval{Origin(), Latest()}
+		return
+	}
+	if n == 1 {
+		ver, parseErr := Parse(ss[0])
+		if parseErr != nil {
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(parseErr)
+			return
+		}
+		interval = Interval{ver, Latest()}
+		return
+	}
+	if n == 2 {
+		left, leftErr := Parse(ss[0])
+		if leftErr != nil {
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(leftErr)
+			return
+		}
+		right, rightErr := Parse(ss[1])
+		if rightErr != nil {
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(rightErr)
+			return
+		}
+		if right.LessThan(left) {
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(fmt.Errorf("invalid interval"))
+			return
+		}
+		interval = Interval{left, right}
+		return
+	}
+	err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(fmt.Errorf("invalid interval"))
 	return
 }
 
@@ -56,6 +93,9 @@ func (intervals Intervals) Accept(pattern string, target Version) (ok bool) {
 }
 
 func (intervals Intervals) String() string {
+	if len(intervals) == 0 {
+		return ""
+	}
 	p := bytebufferpool.Get()
 	defer bytebufferpool.Put(p)
 	for key, interval := range intervals {
@@ -64,8 +104,36 @@ func (intervals Intervals) String() string {
 		_, _ = p.Write([]byte{'='})
 		_, _ = p.Write(bytex.FromString(interval.String()))
 	}
-	if p.Len() > 0 {
-		return bytex.ToString(p.Bytes()[2:])
+	return bytex.ToString(p.Bytes()[2:])
+}
+
+// ParseIntervals
+// key=left:right, ...
+func ParseIntervals(source string) (intervals Intervals, err error) {
+	ss := strings.Split(source, ",")
+	for _, s := range ss {
+		s = strings.TrimSpace(s)
+		idx := strings.IndexByte(s, '=')
+		if idx < 1 {
+			err = errors.Warning("fns: parse intervals failed").WithMeta("source", source).WithCause(fmt.Errorf("invalid intervals"))
+			return
+		}
+		key := strings.TrimSpace(s[0:idx])
+		interval, parseErr := ParseInterval(s[idx+1:])
+		if parseErr != nil {
+			err = errors.Warning("fns: parse intervals failed").WithMeta("source", source).WithCause(parseErr)
+			return
+		}
+		if intervals == nil {
+			intervals = make(Intervals)
+		}
+		intervals[key] = interval
 	}
-	return ""
+	return
+}
+
+func AllowAllIntervals() Intervals {
+	return Intervals{
+		"*": Interval{Origin(), Latest()},
+	}
 }

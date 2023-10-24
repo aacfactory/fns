@@ -22,14 +22,29 @@ import (
 	"strings"
 )
 
-type LogOptions struct {
+type Config struct {
+	Level     string `json:"level" yaml:"level,omitempty"`
+	Formatter string `json:"formatter" yaml:"formatter,omitempty"`
+	Color     bool   `json:"color" yaml:"color,omitempty"`
+}
+
+func (config *Config) Options(name string) Options {
+	return Options{
+		Name:      name,
+		Level:     config.Level,
+		Formatter: config.Formatter,
+		Color:     config.Color,
+	}
+}
+
+type Options struct {
 	Name      string
 	Level     string
 	Formatter string
 	Color     bool
 }
 
-func NewLog(options LogOptions) (v logs.Logger, err error) {
+func NewLog(options Options) (v logs.Logger, err error) {
 	if options.Name == "" {
 		options.Name = "fns"
 	}

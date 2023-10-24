@@ -22,7 +22,7 @@ func Load(ctx context.Context) *Runtime {
 	}
 	rt, ok := v.(*Runtime)
 	if !ok {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: contextKey in context is not github.com/aacfactory/fns/runtime.Runtime")))
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: runtime in context is not github.com/aacfactory/fns/runtime.Runtime")))
 		return nil
 	}
 	return rt

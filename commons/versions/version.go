@@ -37,7 +37,7 @@ func Origin() Version {
 	return Version{
 		Major: 0,
 		Minor: 0,
-		Patch: 1,
+		Patch: 0,
 	}
 }
 
@@ -88,7 +88,7 @@ func (ver Version) Equals(o Version) (ok bool) {
 }
 
 func (ver Version) IsOrigin() (ok bool) {
-	ok = ver.Major == 0 && ver.Minor == 0 && ver.Patch == 1
+	ok = ver.Major == 0 && ver.Minor == 0 && ver.Patch == 0
 	return
 }
 

@@ -17,25 +17,14 @@
 package transports
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/valyala/bytebufferpool"
 	"net/http"
-	"net/url"
-	"sort"
 )
 
 var (
 	ErrTooBigRequestBody = errors.Warning("fns: request body is too big")
-)
-
-const (
-	httpSchema  = "http"
-	httpsSchema = "https"
 )
 
 var (
@@ -43,247 +32,28 @@ var (
 	MethodPost = []byte(http.MethodPost)
 )
 
-type RequestParams map[string][]byte
-
-func (params RequestParams) Len() int {
-	return len(params)
+type Request interface {
+	Context() context.Context
+	TLS() bool
+	TLSConnectionState() *tls.ConnectionState
+	RemoteAddr() []byte
+	Proto() []byte
+	Host() []byte
+	Method() []byte
+	Header() Header
+	Path() []byte
+	Params() Params
+	Body() ([]byte, error)
 }
 
-func (params RequestParams) Add(name []byte, value []byte) {
-	if name == nil || value == nil {
-		return
-	}
-	if len(name) == 0 {
-		return
-	}
-	params[bytex.ToString(name)] = value
+const (
+	contextRequestKey = "fns:transports:request"
+)
+
+func withRequest(ctx context.Context, request Request) context.Context {
+	return context.WithValue(ctx, contextRequestKey, request)
 }
 
-func (params RequestParams) Get(name []byte) []byte {
-	if name == nil {
-		return nil
-	}
-	if len(name) == 0 {
-		return nil
-	}
-	value, has := params[bytex.ToString(name)]
-	if !has {
-		return nil
-	}
-	return value
-}
-
-func (params RequestParams) Del(name []byte) {
-	if name == nil {
-		return
-	}
-	if len(name) == 0 {
-		return
-	}
-	delete(params, bytex.ToString(name))
-}
-
-func (params RequestParams) String() string {
-	size := len(params)
-	if size == 0 {
-		return ""
-	}
-	names := make([]string, 0, size)
-	for name := range params {
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	buf := bytebufferpool.Get()
-	for _, name := range names {
-		_, _ = buf.WriteString(fmt.Sprintf("&%s=%s", name, bytex.ToString(params[name])))
-	}
-	s := bytex.ToString(buf.Bytes()[1:])
-	bytebufferpool.Put(buf)
-	return s
-}
-
-func NewRequest(ctx context.Context, method []byte, uri []byte) (r *Request, err error) {
-	r, err = NewRequestWithHeader(ctx, method, uri, NewHeader())
-	return
-}
-
-func NewRequestWithHeader(ctx context.Context, method []byte, uri []byte, header Header) (r *Request, err error) {
-	u, parseURIErr := url.ParseRequestURI(bytex.ToString(uri))
-	if parseURIErr != nil {
-		err = errors.Warning("fns: new transport request failed").WithCause(parseURIErr)
-		return
-	}
-	r = &Request{
-		ctx:        ctx,
-		isTLS:      false,
-		method:     method,
-		host:       nil,
-		remoteAddr: nil,
-		header:     header,
-		path:       bytex.FromString(u.Path),
-		params:     make(RequestParams),
-		body:       nil,
-	}
-	return
-}
-
-func NewUnsafeRequest(ctx context.Context, method []byte, uri []byte) (r *Request) {
-	var err error
-	r, err = NewRequest(ctx, method, uri)
-	if err != nil {
-		panic(fmt.Sprintf("%+v", err))
-		return
-	}
-	return
-}
-
-type Request struct {
-	ctx                context.Context
-	isTLS              bool
-	tlsConnectionState *tls.ConnectionState
-	method             []byte
-	host               []byte
-	remoteAddr         []byte
-	proto              []byte
-	header             Header
-	path               []byte
-	pathResources      [][]byte
-	params             RequestParams
-	body               []byte
-}
-
-func (r *Request) WithContext(ctx context.Context) *Request {
-	r.ctx = ctx
-	return r
-}
-
-func (r *Request) Context() context.Context {
-	return r.ctx
-}
-
-func (r *Request) IsTLS() bool {
-	return r.isTLS
-}
-
-func (r *Request) UseTLS() {
-	r.isTLS = true
-}
-
-func (r *Request) TLSConnectionState() *tls.ConnectionState {
-	return r.tlsConnectionState
-}
-
-func (r *Request) SetTLSConnectionState(state *tls.ConnectionState) {
-	r.tlsConnectionState = state
-}
-
-func (r *Request) Method() []byte {
-	return r.method
-}
-
-func (r *Request) SetMethod(method []byte) {
-	r.method = method
-}
-
-func (r *Request) IsGet() bool {
-	return bytex.ToString(r.method) == http.MethodGet
-}
-
-func (r *Request) IsPost() bool {
-	return bytex.ToString(r.method) == http.MethodPost
-}
-
-func (r *Request) RemoteAddr() []byte {
-	return r.remoteAddr
-}
-
-func (r *Request) SetRemoteAddr(addr []byte) {
-	r.remoteAddr = addr
-}
-
-func (r *Request) Proto() []byte {
-	return r.proto
-}
-
-func (r *Request) SetProto(proto []byte) {
-	r.proto = proto
-}
-
-func (r *Request) Host() []byte {
-	return r.host
-}
-
-func (r *Request) SetHost(host []byte) {
-	r.host = host
-}
-
-func (r *Request) Header() Header {
-	return r.header
-}
-
-func (r *Request) Path() []byte {
-	return r.path
-}
-
-func (r *Request) PathResources() (v [][]byte) {
-	if r.pathResources != nil {
-		v = r.pathResources
-		return
-	}
-	r.pathResources = make([][]byte, 0, 2)
-	pLen := len(r.path)
-	if pLen < 1 {
-		v = r.pathResources
-		return
-	}
-	if r.path[0] != '/' {
-		v = r.pathResources
-		return
-	}
-	r.pathResources = bytes.Split(r.path[1:], []byte{'/'})
-	v = r.pathResources
-	return
-}
-
-func (r *Request) Param(name string) []byte {
-	return r.params[name]
-}
-
-func (r *Request) Params() RequestParams {
-	return r.params
-}
-
-func (r *Request) Body() []byte {
-	return r.body
-}
-
-func (r *Request) SetBody(body []byte) {
-	r.body = body
-}
-
-func (r *Request) URL() ([]byte, error) {
-	if r.host == nil || len(r.host) == 0 {
-		return nil, errors.Warning("fns: make transport request url failed").WithCause(errors.Warning("host is required"))
-	}
-	if r.path == nil || len(r.path) == 0 {
-		return nil, errors.Warning("fns: make transport request url failed").WithCause(errors.Warning("path is required"))
-	}
-	schema := httpSchema
-	if r.isTLS {
-		schema = httpsSchema
-	}
-	buf := bytebufferpool.Get()
-	defer bytebufferpool.Put(buf)
-	_, _ = buf.Write(bytex.FromString(schema))
-	_, _ = buf.Write(bytex.FromString("://"))
-	_, _ = buf.Write(r.host)
-	_, _ = buf.Write(r.path)
-	if r.params != nil && len(r.params) > 0 {
-		_, _ = buf.Write([]byte{'?'})
-		_, _ = buf.Write(bytex.FromString(r.params.String()))
-	}
-	return buf.Bytes(), nil
+func GetRequest(ctx context.Context) Request {
+	return ctx.Value(contextRequestKey).(Request)
 }

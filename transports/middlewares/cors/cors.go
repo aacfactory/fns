@@ -17,6 +17,7 @@
 package cors
 
 import (
+	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/wildcard"
@@ -27,30 +28,36 @@ import (
 	"strings"
 )
 
-type Config struct {
-	AllowedOrigins      []string `json:"allowedOrigins"`
-	AllowedHeaders      []string `json:"allowedHeaders"`
-	ExposedHeaders      []string `json:"exposedHeaders"`
-	AllowCredentials    bool     `json:"allowCredentials"`
-	MaxAge              int      `json:"maxAge"`
-	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"`
+func CORS() transports.Middleware {
+	return &corsMiddleware{}
 }
 
-type builder struct {
+type corsMiddleware struct {
+	allowedOrigins      [][]byte
+	allowedWOrigins     []*wildcard.Wildcard
+	allowedOriginsAll   bool
+	allowedHeaders      [][]byte
+	allowedHeadersAll   bool
+	allowedMethods      [][]byte
+	exposedHeaders      [][]byte
+	maxAge              int
+	allowCredentials    bool
+	allowPrivateNetwork bool
+	handler             transports.Handler
 }
 
-func (builder *builder) Name() string {
+func (c *corsMiddleware) Name() string {
 	return "cors"
 }
 
-func (builder *builder) Build(options transports.MiddlewareBuilderOptions) (middleware transports.Middleware, err error) {
+func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err error) {
 	config := Config{}
 	err = options.Config.As(&config)
 	if err != nil {
 		err = errors.Warning("fns: build cors middleware failed").WithCause(err)
 		return
 	}
-	allowedOrigins := make([]string, 0, 1)
+	allowedOrigins := make([][]byte, 0, 1)
 	allowedWOrigins := make([]*wildcard.Wildcard, 0, 1)
 	allowedOriginsAll := false
 	if config.AllowedHeaders == nil {
@@ -83,12 +90,16 @@ func (builder *builder) Build(options transports.MiddlewareBuilderOptions) (midd
 			w := wildcard.New(origin)
 			allowedWOrigins = append(allowedWOrigins, w)
 		} else {
-			allowedOrigins = append(allowedOrigins, origin)
+			allowedOrigins = append(allowedOrigins, bytex.FromString(origin))
 		}
 	}
 	allowedHeadersAll := false
-	allowedHeaders := make([]string, 0, 1)
-	allowedHeaders = builder.convert(append(config.AllowedHeaders, "Origin"), http.CanonicalHeaderKey)
+	allowedHeaders := make([][]byte, 0, 1)
+	allowedHeaders = append(allowedHeaders, bytex.FromString("Origin"))
+	for _, header := range config.AllowedHeaders {
+		allowedHeaders = append(allowedHeaders, bytex.FromString(header))
+	}
+	allowedHeaders = convert(allowedHeaders, http.CanonicalHeaderKey)
 	for _, h := range config.AllowedHeaders {
 		if h == "*" {
 			allowedHeadersAll = true
@@ -97,6 +108,7 @@ func (builder *builder) Build(options transports.MiddlewareBuilderOptions) (midd
 		}
 	}
 
+	exposedHeaders := make([][]byte, 0, 1)
 	if config.ExposedHeaders == nil {
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
@@ -109,48 +121,23 @@ func (builder *builder) Build(options transports.MiddlewareBuilderOptions) (midd
 			config.ExposedHeaders = append(config.ExposedHeaders, header)
 		}
 	}
-
-	middleware = &corsMiddleware{
-		allowedOrigins:      allowedOrigins,
-		allowedWOrigins:     allowedWOrigins,
-		allowedOriginsAll:   allowedOriginsAll,
-		allowedHeaders:      allowedHeaders,
-		allowedHeadersAll:   allowedHeadersAll,
-		allowedMethods:      []string{http.MethodGet, http.MethodPost, http.MethodHead},
-		exposedHeaders:      builder.convert(config.ExposedHeaders, http.CanonicalHeaderKey),
-		maxAge:              config.MaxAge,
-		allowCredentials:    config.AllowCredentials,
-		allowPrivateNetwork: config.AllowPrivateNetwork,
-		handler:             nil,
+	for _, header := range config.ExposedHeaders {
+		exposedHeaders = append(exposedHeaders, bytex.FromString(header))
 	}
+	exposedHeaders = convert(exposedHeaders, http.CanonicalHeaderKey)
+
+	c.allowedOrigins = allowedOrigins
+	c.allowedWOrigins = allowedWOrigins
+	c.allowedOriginsAll = allowedOriginsAll
+	c.allowedHeaders = allowedHeaders
+	c.allowedHeadersAll = allowedHeadersAll
+	c.allowedMethods = [][]byte{methodGet, methodPost, methodHead}
+	c.exposedHeaders = exposedHeaders
+	c.maxAge = config.MaxAge
+	c.allowCredentials = config.AllowCredentials
+	c.allowPrivateNetwork = config.AllowPrivateNetwork
 
 	return
-}
-
-func CORS() transports.MiddlewareBuilder {
-	return &builder{}
-}
-
-type corsMiddleware struct {
-	allowedOrigins      []string
-	allowedWOrigins     []*wildcard.Wildcard
-	allowedOriginsAll   bool
-	allowedHeaders      []string
-	allowedHeadersAll   bool
-	allowedMethods      []string
-	exposedHeaders      []string
-	maxAge              int
-	allowCredentials    bool
-	allowPrivateNetwork bool
-	handler             transports.Handler
-}
-
-func (builder *builder) convert(s []string, converter func(string) string) []string {
-	out := make([]string, 0, len(s))
-	for _, i := range s {
-		out = append(out, converter(i))
-	}
-	return out
 }
 
 func (c *corsMiddleware) Handler(next transports.Handler) transports.Handler {
@@ -158,8 +145,11 @@ func (c *corsMiddleware) Handler(next transports.Handler) transports.Handler {
 	return c
 }
 
-func (c *corsMiddleware) Handle(w transports.ResponseWriter, r *transports.Request) {
-	if bytex.ToString(r.Method()) == http.MethodOptions && r.Header().Get(transports.AccessControlRequestMethodHeaderName) != "" {
+func (c *corsMiddleware) Close() {
+}
+
+func (c *corsMiddleware) Handle(w transports.ResponseWriter, r transports.Request) {
+	if bytex.Equal(r.Method(), methodOptions) && len(r.Header().Get(accessControlRequestMethodHeader)) > 0 {
 		c.handlePreflight(w, r)
 		w.SetStatus(http.StatusNoContent)
 	} else {
@@ -168,126 +158,126 @@ func (c *corsMiddleware) Handle(w transports.ResponseWriter, r *transports.Reque
 	}
 }
 
-func (c *corsMiddleware) handlePreflight(w transports.ResponseWriter, r *transports.Request) {
+func (c *corsMiddleware) handlePreflight(w transports.ResponseWriter, r transports.Request) {
 	headers := w.Header()
-	origin := r.Header().Get(transports.OriginHeaderName)
+	origin := r.Header().Get(originHeader)
 
-	if bytex.ToString(r.Method()) != http.MethodOptions {
+	if !bytex.Equal(r.Method(), methodOptions) {
 		return
 	}
-	headers.Add(transports.VaryHeaderName, transports.OriginHeaderName)
-	headers.Add(transports.VaryHeaderName, transports.AccessControlRequestMethodHeaderName)
-	headers.Add(transports.VaryHeaderName, transports.AccessControlRequestHeadersHeaderName)
+	headers.Add(varyHeader, originHeader)
+	headers.Add(varyHeader, accessControlRequestMethodHeader)
+	headers.Add(varyHeader, accessControlRequestHeadersHeader)
 	if c.allowPrivateNetwork {
-		headers.Add(transports.VaryHeaderName, transports.AccessControlRequestPrivateNetworkHeaderName)
+		headers.Add(varyHeader, accessControlRequestPrivateNetworkHeader)
 	}
 
-	if origin == "" {
+	if len(origin) == 0 {
 		return
 	}
 	if !c.isOriginAllowed(origin) {
 		return
 	}
 
-	reqMethod := r.Header().Get(transports.AccessControlRequestMethodHeaderName)
+	reqMethod := r.Header().Get(accessControlRequestMethodHeader)
 	if !c.isMethodAllowed(reqMethod) {
 		return
 	}
-	reqHeaders := c.parseHeaderList(r.Header().Get(transports.AccessControlRequestHeadersHeaderName))
+	reqHeaders := parseHeaderList(r.Header().Get(accessControlRequestHeadersHeader))
 	if !c.areHeadersAllowed(reqHeaders) {
 		return
 	}
 	if c.allowedOriginsAll {
-		headers.Set(transports.AccessControlAllowOriginHeaderName, "*")
+		headers.Set(accessControlAllowOriginHeader, all)
 	} else {
-		headers.Set(transports.AccessControlAllowOriginHeaderName, origin)
+		headers.Set(accessControlAllowOriginHeader, origin)
 	}
-	headers.Set(transports.AccessControlAllowMethodsHeaderName, strings.ToUpper(reqMethod))
+	headers.Set(accessControlAllowMethodsHeader, bytes.ToUpper(reqMethod))
 	if len(reqHeaders) > 0 {
-		headers.Set(transports.AccessControlAllowHeadersHeaderName, strings.Join(reqHeaders, ", "))
+		headers.Set(accessControlAllowHeadersHeader, bytes.Join(reqHeaders, joinBytes))
 	}
 	if c.allowCredentials {
-		headers.Set(transports.AccessControlAllowCredentialsHeaderName, "true")
+		headers.Set(accessControlAllowCredentialsHeader, trueBytes)
 	}
-	if c.allowPrivateNetwork && r.Header().Get(transports.AccessControlRequestPrivateNetworkHeaderName) == "true" {
-		headers.Set(transports.AccessControlAllowPrivateNetworkHeaderName, "true")
+	if c.allowPrivateNetwork && bytex.Equal(r.Header().Get(accessControlRequestPrivateNetworkHeader), trueBytes) {
+		headers.Set(accessControlAllowPrivateNetworkHeader, trueBytes)
 	}
 	if c.maxAge > 0 {
-		headers.Set(transports.AccessControlMaxAgeHeaderName, strconv.Itoa(c.maxAge))
+		headers.Set(accessControlMaxAgeHeader, bytex.FromString(strconv.Itoa(c.maxAge)))
 	}
 }
 
-func (c *corsMiddleware) handleActualRequest(w transports.ResponseWriter, r *transports.Request) {
+func (c *corsMiddleware) handleActualRequest(w transports.ResponseWriter, r transports.Request) {
 	headers := w.Header()
-	origin := r.Header().Get(transports.OriginHeaderName)
+	origin := r.Header().Get(originHeader)
 
-	headers.Add(transports.VaryHeaderName, transports.OriginHeaderName)
-	if origin == "" {
+	headers.Add(varyHeader, originHeader)
+	if len(origin) == 0 {
 		return
 	}
 	if !c.isOriginAllowed(origin) {
 		return
 	}
 
-	if !c.isMethodAllowed(bytex.ToString(r.Method())) {
+	if !c.isMethodAllowed(r.Method()) {
 		return
 	}
 	if c.allowedOriginsAll {
-		headers.Set(transports.AccessControlAllowOriginHeaderName, "*")
+		headers.Set(accessControlAllowOriginHeader, all)
 	} else {
-		headers.Set(transports.AccessControlAllowOriginHeaderName, origin)
+		headers.Set(accessControlAllowOriginHeader, origin)
 	}
 	if len(c.exposedHeaders) > 0 {
-		headers.Set(transports.AccessControlExposeHeadersHeaderName, strings.Join(c.exposedHeaders, ", "))
+		headers.Set(accessControlExposeHeadersHeader, bytes.Join(c.exposedHeaders, joinBytes))
 	}
 	if c.allowCredentials {
-		headers.Set(transports.AccessControlAllowCredentialsHeaderName, "true")
+		headers.Set(accessControlAllowCredentialsHeader, trueBytes)
 	}
 }
 
-func (c *corsMiddleware) isOriginAllowed(origin string) bool {
+func (c *corsMiddleware) isOriginAllowed(origin []byte) bool {
 	if c.allowedOriginsAll {
 		return true
 	}
-	origin = strings.ToLower(origin)
+	origin = bytes.ToLower(origin)
 	for _, o := range c.allowedOrigins {
-		if o == origin {
+		if bytex.Equal(o, origin) {
 			return true
 		}
 	}
 	for _, w := range c.allowedWOrigins {
-		if w.Match(origin) {
+		if w.Match(bytex.ToString(origin)) {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *corsMiddleware) isMethodAllowed(method string) bool {
+func (c *corsMiddleware) isMethodAllowed(method []byte) bool {
 	if len(c.allowedMethods) == 0 {
 		return false
 	}
-	method = strings.ToUpper(method)
-	if method == http.MethodOptions {
+	ms := bytes.ToUpper(method)
+	if bytex.Equal(ms, methodOptions) {
 		return true
 	}
 	for _, m := range c.allowedMethods {
-		if m == method {
+		if bytex.Equal(ms, m) {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *corsMiddleware) areHeadersAllowed(requestedHeaders []string) bool {
+func (c *corsMiddleware) areHeadersAllowed(requestedHeaders [][]byte) bool {
 	if c.allowedHeadersAll || len(requestedHeaders) == 0 {
 		return true
 	}
 	for _, header := range requestedHeaders {
-		header = http.CanonicalHeaderKey(header)
+		hs := bytex.FromString(http.CanonicalHeaderKey(bytex.ToString(header)))
 		found := false
 		for _, h := range c.allowedHeaders {
-			if h == header {
+			if bytex.Equal(hs, h) {
 				found = true
 				break
 			}
@@ -297,50 +287,4 @@ func (c *corsMiddleware) areHeadersAllowed(requestedHeaders []string) bool {
 		}
 	}
 	return true
-}
-
-func (c *corsMiddleware) parseHeaderList(headerList string) []string {
-	const (
-		toLower = 'a' - 'A'
-	)
-	l := len(headerList)
-	h := make([]byte, 0, l)
-	upper := true
-	t := 0
-	for i := 0; i < l; i++ {
-		if headerList[i] == ',' {
-			t++
-		}
-	}
-	headers := make([]string, 0, t)
-	for i := 0; i < l; i++ {
-		b := headerList[i]
-		switch {
-		case b >= 'a' && b <= 'z':
-			if upper {
-				h = append(h, b-toLower)
-			} else {
-				h = append(h, b)
-			}
-		case b >= 'A' && b <= 'Z':
-			if !upper {
-				h = append(h, b+toLower)
-			} else {
-				h = append(h, b)
-			}
-		case b == '-' || b == '_' || b == '.' || (b >= '0' && b <= '9'):
-			h = append(h, b)
-		}
-
-		if b == ' ' || b == ',' || i == l-1 {
-			if len(h) > 0 {
-				headers = append(headers, string(h))
-				h = h[:0]
-				upper = true
-			}
-		} else {
-			upper = b == '-' || b == '_'
-		}
-	}
-	return headers
 }

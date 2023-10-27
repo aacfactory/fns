@@ -158,12 +158,13 @@ type Client struct {
 	host    *fasthttp.HostClient
 }
 
-func (client *Client) Do(ctx context.Context, request *transports.Request) (response *transports.Response, err error) {
+func (client *Client) Do(ctx context.Context, method []byte, path []byte, header transports.Header, body []byte) (status int, responseHeader transports.Header, responseBody []byte, err error) {
 	req := fasthttp.AcquireRequest()
+
 	// method
-	req.Header.SetMethodBytes(request.Method())
+	req.Header.SetMethodBytes(method)
 	// header
-	request.Header().Foreach(func(key []byte, values [][]byte) {
+	header.Foreach(func(key []byte, values [][]byte) {
 		for _, value := range values {
 			req.Header.AddBytesKV(key, value)
 		}
@@ -176,16 +177,15 @@ func (client *Client) Do(ctx context.Context, request *transports.Request) (resp
 		uri.SetSchemeBytes(bytex.FromString("http"))
 	}
 	uri.SetHostBytes(bytex.FromString(client.address))
-	uri.SetPathBytes(request.Path())
-	if request.Params() != nil && len(request.Params()) > 0 {
-		uri.SetQueryStringBytes(bytex.FromString(request.Params().String()))
-	}
+	uri.SetPathBytes(path)
+
 	// body
-	if request.Body() != nil && len(request.Body()) > 0 {
-		req.SetBodyRaw(request.Body())
+	if body != nil && len(body) > 0 {
+		req.SetBodyRaw(body)
 	}
 	// resp
 	resp := fasthttp.AcquireResponse()
+
 	// do
 	deadline, hasDeadline := ctx.Deadline()
 	if hasDeadline {
@@ -193,24 +193,23 @@ func (client *Client) Do(ctx context.Context, request *transports.Request) (resp
 	} else {
 		err = client.host.Do(req, resp)
 	}
+
+	fasthttp.ReleaseRequest(req)
+
 	if err != nil {
 		err = errors.Warning("fns: transport client do failed").
 			WithCause(err).
-			WithMeta("transport", transportName).WithMeta("method", bytex.ToString(request.Method())).WithMeta("path", bytex.ToString(request.Path()))
-		fasthttp.ReleaseRequest(req)
+			WithMeta("transport", transportName).WithMeta("method", bytex.ToString(method)).WithMeta("path", bytex.ToString(path))
 		fasthttp.ReleaseResponse(resp)
 		return
 	}
 
-	response = &transports.Response{
-		Status: resp.StatusCode(),
-		Header: &ResponseHeader{
-			&resp.Header,
-		},
-		Body: resp.Body(),
+	status = resp.StatusCode()
+	responseHeader = &ResponseHeader{
+		&resp.Header,
 	}
+	responseBody = resp.Body()
 
-	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 	return
 }

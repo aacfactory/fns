@@ -21,7 +21,7 @@ require (
 	github.com/rs/xid v1.4.0
 	github.com/urfave/cli/v2 v2.25.1
 	github.com/valyala/bytebufferpool v1.0.0
-	github.com/valyala/fasthttp v1.45.0
+	github.com/valyala/fasthttp v1.50.0
 	go.uber.org/automaxprocs v1.5.2
 	golang.org/x/crypto v0.9.0
 	golang.org/x/mod v0.8.0

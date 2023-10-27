@@ -32,8 +32,9 @@ func New() transports.Transport {
 }
 
 type Transport struct {
-	server *Server
-	dialer *Dialer
+	server      *Server
+	dialer      *Dialer
+	middlewares transports.Middlewares
 }
 
 func (tr *Transport) Name() (name string) {
@@ -41,7 +42,7 @@ func (tr *Transport) Name() (name string) {
 	return
 }
 
-func (tr *Transport) Build(options transports.Options) (err error) {
+func (tr *Transport) Construct(options transports.Options) (err error) {
 	// log
 	log := options.Log.With("transport", transportName)
 	// tls
@@ -51,17 +52,18 @@ func (tr *Transport) Build(options transports.Options) (err error) {
 		return
 	}
 	// middlewares
-	middleware, middlewareErr := transports.WaveMiddlewares(options.Log, options.Config, options.MiddlewareBuilders)
+	middlewares, middlewareErr := transports.WaveMiddlewares(options.Log, options.Config, options.Middlewares)
 	if middlewareErr != nil {
 		err = errors.Warning("fns: fast transport build failed").WithCause(middlewareErr).WithMeta("transport", transportName)
 		return
 	}
+	tr.middlewares = middlewares
 	// handler
 	if options.Handler == nil {
 		err = errors.Warning("fns: fast transport build failed").WithCause(fmt.Errorf("handler is nil")).WithMeta("transport", transportName)
 		return
 	}
-	handler := middleware.Handler(options.Handler)
+	handler := middlewares.Handler(options.Handler)
 
 	// port
 	port, portErr := options.Config.Port()
@@ -123,6 +125,7 @@ func (tr *Transport) ListenAndServe() (err error) {
 }
 
 func (tr *Transport) Shutdown() (err error) {
+	tr.middlewares.Close()
 	tr.dialer.Close()
 	err = tr.server.Shutdown()
 	return

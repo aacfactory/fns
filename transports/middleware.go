@@ -7,60 +7,53 @@ import (
 	"strings"
 )
 
-type MiddlewareBuilderOptions struct {
+type MiddlewareOptions struct {
 	Log    logs.Logger
 	Config configures.Config
 }
 
-type MiddlewareBuilder interface {
-	Name() string
-	Build(options MiddlewareBuilderOptions) (middleware Middleware, err error)
-}
-
 type Middleware interface {
+	Name() string
+	Construct(options MiddlewareOptions) error
 	Handler(next Handler) Handler
+	Close()
 }
 
-func WaveMiddlewares(log logs.Logger, config *Config, builders []MiddlewareBuilder) (v Middleware, err error) {
-	middlewares := make([]Middleware, 0, 1)
-	if len(builders) == 0 {
-		v = &Middlewares{
-			middlewares: middlewares,
-		}
-	}
-	for _, builder := range builders {
-		name := strings.TrimSpace(builder.Name())
+func WaveMiddlewares(log logs.Logger, config *Config, middlewares []Middleware) (v Middlewares, err error) {
+	for _, middleware := range middlewares {
+		name := strings.TrimSpace(middleware.Name())
 		mc, mcErr := config.Middleware(name)
 		if mcErr != nil {
 			err = errors.Warning("wave middlewares failed").WithCause(mcErr).WithMeta("middleware", name)
 			return
 		}
-		middleware, middlewaresErr := builder.Build(MiddlewareBuilderOptions{
+		constructErr := middleware.Construct(MiddlewareOptions{
 			Log:    log.With("middleware", name),
 			Config: mc,
 		})
-		if middlewaresErr != nil {
-			err = errors.Warning("wave middlewares failed").WithCause(middlewaresErr).WithMeta("middleware", name)
+		if constructErr != nil {
+			err = errors.Warning("wave middlewares failed").WithCause(constructErr).WithMeta("middleware", name)
 			return
 		}
-		middlewares = append(middlewares, middleware)
 	}
-	v = &Middlewares{
-		middlewares: middlewares,
-	}
+	v = middlewares
 	return
 }
 
-type Middlewares struct {
-	middlewares []Middleware
-}
+type Middlewares []Middleware
 
-func (middlewares *Middlewares) Handler(handler Handler) Handler {
-	if len(middlewares.middlewares) == 0 {
+func (middlewares Middlewares) Handler(handler Handler) Handler {
+	if len(middlewares) == 0 {
 		return handler
 	}
-	for i := len(middlewares.middlewares) - 1; i > -1; i-- {
-		handler = middlewares.middlewares[i].Handler(handler)
+	for i := len(middlewares) - 1; i > -1; i-- {
+		handler = middlewares[i].Handler(handler)
 	}
 	return handler
+}
+
+func (middlewares Middlewares) Close() {
+	for _, middleware := range middlewares {
+		middleware.Close()
+	}
 }

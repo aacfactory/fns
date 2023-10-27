@@ -189,19 +189,19 @@ func (c Client) Key() (key string) {
 	return
 }
 
-func (c Client) Do(ctx context.Context, request *transports.Request) (response *transports.Response, err error) {
+func (c Client) Do(ctx context.Context, method []byte, path []byte, header transports.Header, body []byte) (status int, responseHeader transports.Header, responseBody []byte, err error) {
 	url := ""
 	if c.secured {
-		url = fmt.Sprintf("https://%s%s", c.address, bytex.ToString(request.Path()))
+		url = fmt.Sprintf("https://%s%s", c.address, bytex.ToString(path))
 	} else {
-		url = fmt.Sprintf("http://%s%s", c.address, bytex.ToString(request.Path()))
+		url = fmt.Sprintf("http://%s%s", c.address, bytex.ToString(path))
 	}
-	r, rErr := http.NewRequestWithContext(ctx, bytex.ToString(request.Method()), url, nil)
+	r, rErr := http.NewRequestWithContext(ctx, bytex.ToString(method), url, nil)
 	if rErr != nil {
 		err = errors.Warning("http: create request failed").WithCause(rErr)
 		return
 	}
-	request.Header().Foreach(func(key []byte, values [][]byte) {
+	header.Foreach(func(key []byte, values [][]byte) {
 		for _, value := range values {
 			r.Header.Add(bytex.ToString(key), bytex.ToString(value))
 		}
@@ -232,11 +232,10 @@ func (c Client) Do(ctx context.Context, request *transports.Request) (response *
 			return
 		}
 	}
-	response = &transports.Response{
-		Status: resp.StatusCode,
-		Header: transports.WrapHttpHeader(resp.Header),
-		Body:   b.Bytes(),
-	}
+	status = resp.StatusCode
+	responseHeader = transports.WrapHttpHeader(resp.Header)
+	responseBody = b.Bytes()
+
 	return
 }
 

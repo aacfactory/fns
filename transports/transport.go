@@ -22,14 +22,14 @@ import (
 )
 
 type Options struct {
-	Log                logs.Logger
-	Config             *Config
-	MiddlewareBuilders []MiddlewareBuilder
-	Handler            Handler
+	Log         logs.Logger
+	Config      *Config
+	Middlewares []Middleware
+	Handler     Handler
 }
 
 type Client interface {
-	Do(ctx context.Context, request *Request) (response *Response, err error)
+	Do(ctx context.Context, method []byte, path []byte, header Header, body []byte) (status int, responseHeader Header, responseBody []byte, err error)
 	Close()
 }
 
@@ -45,7 +45,7 @@ type Server interface {
 
 type Transport interface {
 	Name() (name string)
-	Build(options Options) (err error)
+	Construct(options Options) (err error)
 	Dialer
 	Server
 }

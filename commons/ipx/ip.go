@@ -21,7 +21,7 @@ import (
 	"os"
 )
 
-func GetGlobalUniCastIpFromHostname() (ipv4 string) {
+func GetGlobalUniCastIpFromHostname() (v net.IP) {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
 		hostname, _ = os.LookupEnv("HOSTNAME")
@@ -35,7 +35,7 @@ func GetGlobalUniCastIpFromHostname() (ipv4 string) {
 	}
 	for _, ip := range ips {
 		if ip.IsGlobalUnicast() {
-			ipv4 = ip.To4().String()
+			v = ip
 			break
 		}
 	}

@@ -35,12 +35,6 @@ type ResponseWriter interface {
 	Hijacked() bool
 }
 
-type Response struct {
-	Status int
-	Header Header
-	Body   []byte
-}
-
 type WriteBuffer interface {
 	io.Writer
 	Bytes() []byte

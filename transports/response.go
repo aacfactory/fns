@@ -18,6 +18,8 @@ package transports
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"io"
 	"net"
@@ -38,4 +40,26 @@ type ResponseWriter interface {
 type WriteBuffer interface {
 	io.Writer
 	Bytes() []byte
+}
+
+const (
+	contextResponseKey = "fns:transports:response"
+)
+
+func WithResponse(ctx context.Context, response ResponseWriter) context.Context {
+	return context.WithValue(ctx, contextResponseKey, response)
+}
+
+func LoadResponse(ctx context.Context) ResponseWriter {
+	v := ctx.Value(contextResponseKey)
+	if v == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no transport response in context")))
+		return nil
+	}
+	r, ok := v.(ResponseWriter)
+	if !ok {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: runtime in context is not github.com/aacfactory/fns/transports.ResponseWriter")))
+		return nil
+	}
+	return r
 }

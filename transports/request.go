@@ -19,6 +19,7 @@ package transports
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"net/http"
 )
@@ -50,10 +51,20 @@ const (
 	contextRequestKey = "fns:transports:request"
 )
 
-func withRequest(ctx context.Context, request Request) context.Context {
+func WithRequest(ctx context.Context, request Request) context.Context {
 	return context.WithValue(ctx, contextRequestKey, request)
 }
 
-func GetRequest(ctx context.Context) Request {
-	return ctx.Value(contextRequestKey).(Request)
+func LoadRequest(ctx context.Context) Request {
+	v := ctx.Value(contextRequestKey)
+	if v == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no transport request in context")))
+		return nil
+	}
+	r, ok := v.(Request)
+	if !ok {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: runtime in context is not github.com/aacfactory/fns/transports.Request")))
+		return nil
+	}
+	return r
 }

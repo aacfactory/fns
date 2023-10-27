@@ -17,11 +17,12 @@
 package versions
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"math"
 	"strconv"
-	"strings"
 )
 
 func New(major int, minor int, patch int) (v Version) {
@@ -106,35 +107,35 @@ func (ver Version) String() (v string) {
 	return
 }
 
-func Parse(v string) (ver Version, err error) {
-	v = strings.ToLower(strings.TrimSpace(v))
-	if v == "latest" {
+func Parse(v []byte) (ver Version, err error) {
+	v = bytes.ToLower(bytes.TrimSpace(v))
+	if bytes.Equal(v, []byte{'l', 'a', 't', 'e', 's', 't'}) {
 		ver = Latest()
 		return
 	}
 	if v[0] != 'v' {
-		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", v)
+		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", bytex.ToString(v))
 		return
 	}
 	v = v[1:]
-	items := strings.Split(v, ".")
+	items := bytes.Split(v, []byte{'.'})
 	if len(items) != 3 {
-		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", v)
+		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", bytex.ToString(v))
 		return
 	}
-	major, majorErr := strconv.Atoi(strings.TrimSpace(items[0]))
+	major, majorErr := strconv.Atoi(bytex.ToString(bytes.TrimSpace(items[0])))
 	if majorErr != nil {
-		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", v)
+		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", bytex.ToString(v))
 		return
 	}
-	minor, minorErr := strconv.Atoi(strings.TrimSpace(items[1]))
+	minor, minorErr := strconv.Atoi(bytex.ToString(bytes.TrimSpace(items[1])))
 	if minorErr != nil {
-		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", v)
+		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", bytex.ToString(v))
 		return
 	}
-	patch, patchErr := strconv.Atoi(strings.TrimSpace(items[2]))
+	patch, patchErr := strconv.Atoi(bytex.ToString(bytes.TrimSpace(items[2])))
 	if patchErr != nil {
-		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", v)
+		err = errors.Warning("fns: parse version failed").WithCause(fmt.Errorf("invalid pattern")).WithMeta("version", bytex.ToString(v))
 		return
 	}
 	ver = New(major, minor, patch)

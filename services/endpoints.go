@@ -11,6 +11,7 @@ type Endpoint interface {
 	Internal() (ok bool)
 	Document() (document *documents.Document)
 	Handle(ctx context.Context, fn []byte, argument Argument) (v interface{}, err error)
+	Close()
 }
 
 type Endpoints interface {

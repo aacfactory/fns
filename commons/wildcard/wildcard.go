@@ -1,25 +1,28 @@
 package wildcard
 
-import "strings"
+import (
+	"bytes"
+	"github.com/aacfactory/fns/commons/bytex"
+)
 
-func Match(pattern string, target string) (ok bool) {
+func Match(pattern []byte, target []byte) (ok bool) {
 	ok = New(pattern).Match(target)
 	return
 }
 
-func New(pattern string) (w *Wildcard) {
-	if pattern == "*" {
+func New(pattern []byte) (w *Wildcard) {
+	if len(pattern) == 1 && pattern[0] == '*' {
 		w = &Wildcard{
-			prefix: "",
-			suffix: "",
+			prefix: nil,
+			suffix: nil,
 		}
 		return
 	}
-	idx := strings.IndexByte(pattern, '*')
+	idx := bytes.IndexByte(pattern, '*')
 	if idx < 0 {
 		w = &Wildcard{
 			prefix: pattern,
-			suffix: "",
+			suffix: nil,
 		}
 		return
 	}
@@ -31,13 +34,13 @@ func New(pattern string) (w *Wildcard) {
 }
 
 type Wildcard struct {
-	prefix string
-	suffix string
+	prefix []byte
+	suffix []byte
 }
 
-func (w *Wildcard) Match(s string) bool {
-	if w.suffix == "" {
-		return w.prefix == s
+func (w *Wildcard) Match(s []byte) bool {
+	if len(w.suffix) == 0 {
+		return bytex.Equal(w.prefix, s)
 	}
-	return len(s) >= len(w.prefix)+len(w.suffix) && strings.HasPrefix(s, w.prefix) && strings.HasSuffix(s, w.suffix)
+	return len(s) >= len(w.prefix)+len(w.suffix) && bytes.HasPrefix(s, w.prefix) && bytes.HasSuffix(s, w.suffix)
 }

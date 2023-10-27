@@ -1,12 +1,12 @@
 package versions
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/wildcard"
 	"github.com/valyala/bytebufferpool"
-	"strings"
 )
 
 type Interval []Version
@@ -39,8 +39,8 @@ func (interval Interval) String() string {
 
 // ParseInterval
 // left:right
-func ParseInterval(source string) (interval Interval, err error) {
-	ss := strings.Split(source, ":")
+func ParseInterval(source []byte) (interval Interval, err error) {
+	ss := bytes.Split(source, []byte{':'})
 	n := len(ss)
 	if n == 0 {
 		interval = Interval{Origin(), Latest()}
@@ -49,7 +49,7 @@ func ParseInterval(source string) (interval Interval, err error) {
 	if n == 1 {
 		ver, parseErr := Parse(ss[0])
 		if parseErr != nil {
-			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(parseErr)
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", bytex.ToString(source)).WithCause(parseErr)
 			return
 		}
 		interval = Interval{ver, Latest()}
@@ -58,30 +58,30 @@ func ParseInterval(source string) (interval Interval, err error) {
 	if n == 2 {
 		left, leftErr := Parse(ss[0])
 		if leftErr != nil {
-			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(leftErr)
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", bytex.ToString(source)).WithCause(leftErr)
 			return
 		}
 		right, rightErr := Parse(ss[1])
 		if rightErr != nil {
-			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(rightErr)
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", bytex.ToString(source)).WithCause(rightErr)
 			return
 		}
 		if right.LessThan(left) {
-			err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(fmt.Errorf("invalid interval"))
+			err = errors.Warning("fns: parse interval failed").WithMeta("source", bytex.ToString(source)).WithCause(fmt.Errorf("invalid interval"))
 			return
 		}
 		interval = Interval{left, right}
 		return
 	}
-	err = errors.Warning("fns: parse interval failed").WithMeta("source", source).WithCause(fmt.Errorf("invalid interval"))
+	err = errors.Warning("fns: parse interval failed").WithMeta("source", bytex.ToString(source)).WithCause(fmt.Errorf("invalid interval"))
 	return
 }
 
 type Intervals map[string]Interval
 
-func (intervals Intervals) Accept(pattern string, target Version) (ok bool) {
-	for key, interval := range intervals {
-		if !wildcard.Match(pattern, key) {
+func (intervals Intervals) Accept(subject []byte, target Version) (ok bool) {
+	for pattern, interval := range intervals {
+		if !wildcard.Match(bytex.FromString(pattern), subject) {
 			continue
 		}
 		ok = interval.Accept(target)
@@ -113,25 +113,29 @@ func (intervals Intervals) String() string {
 
 // ParseIntervals
 // key=left:right, ...
-func ParseIntervals(source string) (intervals Intervals, err error) {
-	ss := strings.Split(source, ",")
+func ParseIntervals(source []byte) (intervals Intervals, err error) {
+	if len(source) == 0 {
+		intervals = AllowAllIntervals()
+		return
+	}
+	ss := bytes.Split(source, []byte{','})
 	for _, s := range ss {
-		s = strings.TrimSpace(s)
-		idx := strings.IndexByte(s, '=')
+		s = bytes.TrimSpace(s)
+		idx := bytes.IndexByte(s, '=')
 		if idx < 1 {
-			err = errors.Warning("fns: parse intervals failed").WithMeta("source", source).WithCause(fmt.Errorf("invalid intervals"))
+			err = errors.Warning("fns: parse intervals failed").WithMeta("source", bytex.ToString(source)).WithCause(fmt.Errorf("invalid intervals"))
 			return
 		}
-		key := strings.TrimSpace(s[0:idx])
+		pattern := bytes.TrimSpace(s[0:idx])
 		interval, parseErr := ParseInterval(s[idx+1:])
 		if parseErr != nil {
-			err = errors.Warning("fns: parse intervals failed").WithMeta("source", source).WithCause(parseErr)
+			err = errors.Warning("fns: parse intervals failed").WithMeta("source", bytex.ToString(source)).WithCause(parseErr)
 			return
 		}
 		if intervals == nil {
 			intervals = make(Intervals)
 		}
-		intervals[key] = interval
+		intervals[bytex.ToString(pattern)] = interval
 	}
 	return
 }

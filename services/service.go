@@ -64,7 +64,6 @@ type Service interface {
 	Endpoint
 	Construct(options Options) (err error)
 	Components() (components Components)
-	Close()
 }
 
 type Listenable interface {

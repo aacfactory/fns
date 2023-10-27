@@ -87,7 +87,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 			allowedWOrigins = nil
 			break
 		} else if i := strings.IndexByte(origin, '*'); i >= 0 {
-			w := wildcard.New(origin)
+			w := wildcard.New(bytex.FromString(origin))
 			allowedWOrigins = append(allowedWOrigins, w)
 		} else {
 			allowedOrigins = append(allowedOrigins, bytex.FromString(origin))
@@ -246,7 +246,7 @@ func (c *corsMiddleware) isOriginAllowed(origin []byte) bool {
 		}
 	}
 	for _, w := range c.allowedWOrigins {
-		if w.Match(bytex.ToString(origin)) {
+		if w.Match(origin) {
 			return true
 		}
 	}

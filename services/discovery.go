@@ -19,24 +19,23 @@ package services
 import (
 	"context"
 	"github.com/aacfactory/fns/commons/versions"
-	"strings"
 )
 
 type EndpointGetOption func(options *EndpointGetOptions)
 
 type EndpointGetOptions struct {
-	id              string
-	requestVersions versions.Interval
+	id              []byte
+	requestVersions versions.Intervals
 }
 
-func EndpointId(id string) EndpointGetOption {
+func EndpointId(id []byte) EndpointGetOption {
 	return func(options *EndpointGetOptions) {
-		options.id = strings.TrimSpace(id)
+		options.id = id
 		return
 	}
 }
 
-func EndpointVersions(requestVersions versions.Interval) EndpointGetOption {
+func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 	return func(options *EndpointGetOptions) {
 		options.requestVersions = requestVersions
 		return
@@ -44,5 +43,5 @@ func EndpointVersions(requestVersions versions.Interval) EndpointGetOption {
 }
 
 type Discovery interface {
-	Get(ctx context.Context, service string, options ...EndpointGetOption) (endpoint Endpoint, has bool)
+	Get(ctx context.Context, service []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
 }

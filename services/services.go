@@ -29,6 +29,7 @@ import (
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
+	"github.com/aacfactory/workers"
 	"golang.org/x/sync/singleflight"
 	"net/http"
 	"strconv"
@@ -43,10 +44,11 @@ func New() {
 type Services struct {
 	log       logs.Logger
 	config    Config
-	group     *singleflight.Group
 	version   versions.Version
-	values    map[string]Service
+	values    map[string]Endpoint
 	discovery Discovery
+	group     *singleflight.Group
+	worker    workers.Workers
 }
 
 func (s *Services) Add(service Service) (err error) {
@@ -92,12 +94,21 @@ func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg A
 	// request
 	req := NewRequest(ctx, service, fn, arg, options...)
 
-	// accept versions
-	req.Header().AcceptedVersions().Accept()
-
+	// endpoint
 	endpoint, inLocal := s.values[bytex.ToString(service)]
-	if !inLocal {
-
+	if inLocal {
+		// accept versions
+		accepted := req.Header().AcceptedVersions().Accept(service, s.version)
+		if !accepted {
+			promise.Failed(
+				errors.NotFound("fns: endpoint was not found").
+					WithCause(fmt.Errorf("version was not match")).
+					WithMeta("service", bytex.ToString(service)).
+					WithMeta("fn", bytex.ToString(fn)),
+			)
+			return future
+		}
+	} else {
 		if s.discovery == nil {
 			promise.Failed(
 				errors.NotFound("fns: endpoint was not found").
@@ -106,40 +117,37 @@ func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg A
 			)
 			return future
 		}
-
+		remote, fetched := s.discovery.Get(ctx, service, EndpointVersions(req.Header().AcceptedVersions()))
+		if !fetched {
+			promise.Failed(
+				errors.NotFound("fns: endpoint was not found").
+					WithMeta("service", bytex.ToString(service)).
+					WithMeta("fn", bytex.ToString(fn)),
+			)
+			return future
+		}
+		endpoint = remote
 	}
 
-	fn := fnTask{
+	// todo tracer begin span
+
+	// dispatch
+	dispatched := s.worker.Dispatch(ctx, fnTask{
 		group:    s.group,
-		endpoint: nil,
+		endpoint: endpoint,
 		request:  req,
-		promise:  nil,
-	}
-
-	// todo 不能返回 future，因为唯一，不可复制
-	// do by single flight
-	v, doErr, _ := s.group.Do(bytex.ToString(append(req.Hash(), req.Header().DeviceId()...)), func() (interface{}, error) {
-
-		// todo
-		// get endpoint from local
-		// then not exist local endpoint, then get from discovery
-
-		return nil, nil
+		promise:  promise,
 	})
-	if doErr != nil {
-		err = errors.Warning("fns: endpoints request failed").
-			WithMeta("service", bytex.ToString(service)).WithMeta("fn", bytex.ToString(fn)).
-			WithCause(doErr)
-		return
+	if !dispatched {
+		promise.Failed(
+			ErrServiceOverload.
+				WithMeta("service", bytex.ToString(service)).
+				WithMeta("fn", bytex.ToString(fn)),
+		)
+		return future
 	}
-	ok := false
-	future, ok = v.(futures.Future)
-	if !ok {
-		err = errors.Warning("fns: endpoints request failed").
-			WithMeta("service", bytex.ToString(service)).WithMeta("fn", bytex.ToString(fn)).
-			WithCause(fmt.Errorf("result of singlefligth is not futures.Future"))
-	}
-	return
+
+	return future
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+

@@ -20,13 +20,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services/documents"
-	"github.com/aacfactory/fns/services/internal/secret"
 	transports2 "github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
@@ -34,58 +33,112 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 func New() {
-	tasks := sync.Pool{
-		New: func() any {
-			return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
-				ep.release(task)
-			})
-		},
-	}
+
 }
 
 type Services struct {
-	log    logs.Logger
-	config configures.Config
-	group  map[string]Service
-	tasks  sync.Pool
-	rt     *Runtime
+	log       logs.Logger
+	config    Config
+	group     *singleflight.Group
+	version   versions.Version
+	values    map[string]Service
+	discovery Discovery
 }
 
 func (s *Services) Add(service Service) (err error) {
 	name := strings.TrimSpace(service.Name())
-	serviceConfig, hasConfig := s.config.Node(name)
-	if !hasConfig {
-		serviceConfig, _ = configures.NewJsonConfig([]byte("{}"))
-	}
-	buildErr := service.Build(Options{
-		AppId:      e.rt.appId,
-		AppName:    e.rt.appName,
-		AppVersion: e.rt.appVersion,
-		Log:        e.log.With("fns", "service").With("service", name),
-		Config:     serviceConfig,
-	})
-	if buildErr != nil {
-		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithMeta("service", name).WithCause(buildErr)
+	if _, has := s.values[name]; has {
+		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(fmt.Errorf("service has added"))
 		return
 	}
-	ep := &endpoint{
-		rt:            e.rt,
-		handleTimeout: e.handleTimeout,
-		svc:           svc,
-		pool:          sync.Pool{},
+	config, configErr := s.config.Get(name)
+	if configErr != nil {
+		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(configErr)
+		return
 	}
-	ep.pool.New = func() any {
-		return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
-			ep.release(task)
-		})
+	constructErr := service.Construct(Options{
+		Log:    s.log.With("service", name),
+		Config: config,
+	})
+	if constructErr != nil {
+		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(constructErr)
+		return
 	}
-	e.deployed[svc.Name()] = ep
-	e.rt.appServices = append(e.rt.appServices, svc)
+	s.values[name] = service
+	return
+}
+
+func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) futures.Future {
+	// promise
+	promise, future := futures.New()
+	// valid params
+	if len(service) == 0 {
+		promise.Failed(errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil")))
+		return future
+
+	}
+	if len(fn) == 0 {
+		promise.Failed(errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil")))
+		return future
+	}
+	if arg == nil {
+		arg = NewArgument(nil)
+	}
+
+	// request
+	req := NewRequest(ctx, service, fn, arg, options...)
+
+	// accept versions
+	req.Header().AcceptedVersions().Accept()
+
+	endpoint, inLocal := s.values[bytex.ToString(service)]
+	if !inLocal {
+
+		if s.discovery == nil {
+			promise.Failed(
+				errors.NotFound("fns: endpoint was not found").
+					WithMeta("service", bytex.ToString(service)).
+					WithMeta("fn", bytex.ToString(fn)),
+			)
+			return future
+		}
+
+	}
+
+	fn := fnTask{
+		group:    s.group,
+		endpoint: nil,
+		request:  req,
+		promise:  nil,
+	}
+
+	// todo 不能返回 future，因为唯一，不可复制
+	// do by single flight
+	v, doErr, _ := s.group.Do(bytex.ToString(append(req.Hash(), req.Header().DeviceId()...)), func() (interface{}, error) {
+
+		// todo
+		// get endpoint from local
+		// then not exist local endpoint, then get from discovery
+
+		return nil, nil
+	})
+	if doErr != nil {
+		err = errors.Warning("fns: endpoints request failed").
+			WithMeta("service", bytex.ToString(service)).WithMeta("fn", bytex.ToString(fn)).
+			WithCause(doErr)
+		return
+	}
+	ok := false
+	future, ok = v.(futures.Future)
+	if !ok {
+		err = errors.Warning("fns: endpoints request failed").
+			WithMeta("service", bytex.ToString(service)).WithMeta("fn", bytex.ToString(fn)).
+			WithCause(fmt.Errorf("result of singlefligth is not futures.Future"))
+	}
 	return
 }
 

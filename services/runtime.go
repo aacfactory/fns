@@ -26,8 +26,6 @@ import (
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
-	"os"
-	"time"
 )
 
 const (
@@ -112,130 +110,11 @@ func withLog(ctx context.Context, log logs.Logger) context.Context {
 	return ctx
 }
 
-func GetComponent(ctx context.Context, key string) (v Component, has bool) {
-	vv := ctx.Value(contextComponentsKey)
-	if vv == nil {
-		return
-	}
-	cm, typed := vv.(map[string]Component)
-	if !typed {
-		return
-	}
-	v, has = cm[key]
-	return
-}
-
-func withComponents(ctx context.Context, cm map[string]Component) context.Context {
-	ctx = context.WithValue(ctx, contextComponentsKey, cm)
-	return ctx
-}
-
-func CanAccessInternal(ctx context.Context) (ok bool) {
-	r, hasRequest := GetRequest(ctx)
-	if !hasRequest {
-		return
-	}
-	if r.Internal() {
-		ok = true
-		return
-	}
-	t, hasTracer := GetTracer(ctx)
-	if !hasTracer {
-		return
-	}
-	if t.Span() == nil {
-		return
-	}
-	ok = t.Span().Parent() != nil
-	return
-}
-
 func GetEndpoint(ctx context.Context, name string, options ...EndpointDiscoveryGetOption) (v Endpoint, has bool) {
 	rt := GetRuntime(ctx)
 	if rt == nil {
 		return
 	}
 	v, has = rt.discovery.Get(ctx, name, options...)
-	return
-}
-
-func DataPlate(ctx context.Context) (appId string, appName string, appVersion versions.Version) {
-	rt := GetRuntime(ctx)
-	if rt == nil {
-		return
-	}
-	appId = rt.appId
-	appName = rt.appName
-	appVersion = rt.appVersion
-	return
-}
-
-func GetBarrier(ctx context.Context) (barrier Barrier) {
-	rt := GetRuntime(ctx)
-	if rt == nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: barrier was not found")))
-		return
-	}
-	barrier = rt.barrier
-	return
-}
-
-func GetSignature(ctx context.Context) (signer signatures.Signature) {
-	rt := GetRuntime(ctx)
-	if rt == nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: signature was not found")))
-		return
-	}
-	signer = rt.signer
-	return
-}
-
-func SharedStore(ctx context.Context) (store shareds.Store) {
-	rt := GetRuntime(ctx)
-	if rt == nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: shared store was not found")))
-		return
-	}
-	store = rt.shared.Store()
-	return
-}
-
-func SharedLock(ctx context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err errors.CodeError) {
-	rt := GetRuntime(ctx)
-	if rt == nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: shared lockers was not found")))
-		return
-	}
-	var acquireErr error
-	locker, acquireErr = rt.shared.Lockers().Acquire(ctx, key, ttl)
-	if acquireErr != nil {
-		err = errors.ServiceError("fns: get shared locker failed").WithCause(acquireErr)
-		return
-	}
-	return
-}
-
-func Abort() {
-	os.Exit(9)
-}
-
-func Running(ctx context.Context) (signal <-chan struct{}) {
-	rt := GetRuntime(ctx)
-	if rt == nil {
-		panic(fmt.Errorf("%+v", errors.Warning("fns: there is no application runtime")))
-		return
-	}
-	ch := make(chan struct{}, 1)
-	go func(rt *Runtime, ch chan struct{}) {
-		for {
-			if ctx.Err() != nil || !rt.status.Closed() {
-				ch <- struct{}{}
-				close(ch)
-				break
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-	}(rt, ch)
-	signal = ch
 	return
 }

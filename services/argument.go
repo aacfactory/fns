@@ -29,8 +29,7 @@ import (
 
 type Argument interface {
 	json.Marshaler
-	json.Unmarshaler
-	As(v interface{}) (err errors.CodeError)
+	As(v interface{}) (err error)
 	HashCode() (code []byte)
 }
 
@@ -44,7 +43,7 @@ func NewArgument(v interface{}) (arg Argument) {
 		arg = EmptyArgument()
 		return
 	}
-	arg = &argument{
+	arg = argument{
 		value: v,
 	}
 	return
@@ -54,7 +53,7 @@ type argument struct {
 	value interface{}
 }
 
-func (arg *argument) MarshalJSON() (data []byte, err error) {
+func (arg argument) MarshalJSON() (data []byte, err error) {
 	switch arg.value.(type) {
 	case []byte:
 		value := arg.value.([]byte)
@@ -80,12 +79,7 @@ func (arg *argument) MarshalJSON() (data []byte, err error) {
 	return
 }
 
-func (arg *argument) UnmarshalJSON(data []byte) (err error) {
-	arg.value = json.RawMessage(data)
-	return
-}
-
-func (arg *argument) As(v interface{}) (err errors.CodeError) {
+func (arg argument) As(v interface{}) (err error) {
 	if arg.value == nil {
 		return
 	}
@@ -137,7 +131,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 	return
 }
 
-func (arg *argument) HashCode() (code []byte) {
+func (arg argument) HashCode() (code []byte) {
 	if arg.value == nil {
 		return
 	}

@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	contextTracerKey = "@fns_tracer"
+	contextTracerKey = "@fns:context:tracer"
 )
 
 func GetTracer(ctx context.Context) (t Tracer, has bool) {

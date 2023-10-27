@@ -27,7 +27,6 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
 	"strconv"
-	"sync"
 )
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -87,6 +86,18 @@ type RequestOptions struct {
 	header Header
 }
 
+func hashRequest(service []byte, fn []byte, arg Argument, intervals versions.Intervals) []byte {
+	body, _ := json.Marshal(arg)
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write(service)
+	_, _ = buf.Write(fn)
+	_, _ = buf.Write(intervals.Bytes())
+	_, _ = buf.Write(body)
+	b := buf.Bytes()
+	bytebufferpool.Put(buf)
+	return b
+}
+
 func NewRequest(ctx context.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		header: Header{},
@@ -122,13 +133,20 @@ func NewRequest(ctx context.Context, service []byte, fn []byte, arg Argument, op
 		}
 		opt.header.internal = true
 	}
-	v = &request{
+	body, _ := json.Marshal(arg)
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write(service)
+	_, _ = buf.Write(fn)
+	_, _ = buf.Write(opt.header.AcceptedVersions().Bytes())
+	_, _ = buf.Write(body)
+	b := buf.Bytes()
+	bytebufferpool.Put(buf)
+	v = request{
 		header:   opt.header,
 		service:  service,
 		fn:       fn,
 		argument: arg,
-		hash:     nil,
-		hashOnce: new(sync.Once),
+		hash:     bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16)),
 	}
 	return
 }
@@ -139,36 +157,24 @@ type request struct {
 	fn       []byte
 	argument Argument
 	hash     []byte
-	hashOnce *sync.Once
 }
 
-func (r *request) Fn() (service []byte, fn []byte) {
+func (r request) Fn() (service []byte, fn []byte) {
 	service, fn = r.service, r.fn
 	return
 }
 
-func (r *request) Header() (header Header) {
+func (r request) Header() (header Header) {
 	header = r.header
 	return
 }
 
-func (r *request) Argument() (argument Argument) {
+func (r request) Argument() (argument Argument) {
 	argument = r.argument
 	return
 }
 
-func (r *request) Hash() (p []byte) {
-	r.hashOnce.Do(func() {
-		body, _ := json.Marshal(r.argument)
-		buf := bytebufferpool.Get()
-		_, _ = buf.Write(r.service)
-		_, _ = buf.Write(r.fn)
-		_, _ = buf.Write(r.header.AcceptedVersions().Bytes())
-		_, _ = buf.Write(body)
-		b := buf.Bytes()
-		bytebufferpool.Put(buf)
-		r.hash = bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16))
-	})
+func (r request) Hash() (p []byte) {
 	p = r.hash
 	return
 }

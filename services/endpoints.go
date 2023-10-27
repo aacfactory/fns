@@ -1,56 +1,18 @@
 package services
 
 import (
-	"fmt"
-	"github.com/aacfactory/configures"
-	"github.com/aacfactory/errors"
-	"github.com/aacfactory/logs"
-	"strings"
-	"sync"
+	"context"
+	"github.com/aacfactory/fns/commons/futures"
+	"github.com/aacfactory/fns/services/documents"
 )
 
-type Endpoints struct {
-	log       logs.Logger
-	rt        *Runtime
-	deployed  map[string]*endpoint
-	discovery Discovery
-	closeCh   chan struct{}
+type Endpoint interface {
+	Name() (name string)
+	Internal() (ok bool)
+	Document() (document *documents.Document)
+	Handle(ctx context.Context, fn []byte, argument Argument) (v interface{}, err error)
 }
 
-func (e *Endpoints) Runtime() (rt *Runtime) {
-	rt = e.rt
-	return
-}
-
-func (e *Endpoints) Deploy(service Service) (err error) {
-	name := strings.TrimSpace(service.Name())
-	serviceConfig, hasConfig := e.config.Node(name)
-	if !hasConfig {
-		serviceConfig, _ = configures.NewJsonConfig([]byte("{}"))
-	}
-	buildErr := svc.Build(Options{
-		AppId:      e.rt.appId,
-		AppName:    e.rt.appName,
-		AppVersion: e.rt.appVersion,
-		Log:        e.log.With("fns", "service").With("service", name),
-		Config:     serviceConfig,
-	})
-	if buildErr != nil {
-		err = errors.Warning(fmt.Sprintf("fns: endpoints deploy %s service failed", name)).WithMeta("service", name).WithCause(buildErr)
-		return
-	}
-	ep := &endpoint{
-		rt:            e.rt,
-		handleTimeout: e.handleTimeout,
-		svc:           svc,
-		pool:          sync.Pool{},
-	}
-	ep.pool.New = func() any {
-		return newFnTask(svc, e.rt.barrier, e.handleTimeout, func(task *fnTask) {
-			ep.release(task)
-		})
-	}
-	e.deployed[svc.Name()] = ep
-	e.rt.appServices = append(e.rt.appServices, svc)
-	return
+type Endpoints interface {
+	Request(ctx context.Context, service []byte, fn []byte, argument Argument, options ...RequestOption) (future futures.Future, err error)
 }

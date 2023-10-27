@@ -30,24 +30,47 @@ type Options struct {
 	Config configures.Config
 }
 
+const (
+	contextComponentsKey = "@fns:service:components"
+)
+
 type Component interface {
 	Name() (name string)
 	Construct(options Options) (err error)
 	Close()
 }
 
+type Components map[string]Component
+
+func WithComponents(ctx context.Context, components Components) context.Context {
+	ctx = context.WithValue(ctx, contextComponentsKey, components)
+	return ctx
+}
+
+func LoadComponents(ctx context.Context) Components {
+	v := ctx.Value(contextComponentsKey)
+	if v == nil {
+		return nil
+	}
+	c, ok := v.(Components)
+	if !ok {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: components in context is not github.com/aacfactory/fns/services.Components")))
+		return nil
+	}
+	return c
+}
+
 type Service interface {
+	Endpoint
 	Construct(options Options) (err error)
-	Name() (name string)
-	Internal() (internal bool)
-	Document() (doc *documents.Document)
-	Components() (components map[string]Component)
-	Handle(ctx context.Context, fn string, argument Argument) (v interface{}, err errors.CodeError)
+	Components() (components Components)
 	Close()
 }
 
 type Listenable interface {
 	Service
+	// Listen
+	// ctx with runtime
 	Listen(ctx context.Context) (err error)
 }
 
@@ -110,7 +133,7 @@ func (abstract *Abstract) Internal() (internal bool) {
 	return
 }
 
-func (abstract *Abstract) Components() (components map[string]Component) {
+func (abstract *Abstract) Components() (components Components) {
 	components = abstract.components
 	return
 }
@@ -134,8 +157,4 @@ func (abstract *Abstract) Close() {
 func (abstract *Abstract) Log() (log logs.Logger) {
 	log = abstract.log
 	return
-}
-
-type Supplier interface {
-	Services() (services []Service)
 }

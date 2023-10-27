@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// 直接调client，不再workers
 type Registration struct {
 	hostId   string
 	id       string

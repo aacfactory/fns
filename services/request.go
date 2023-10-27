@@ -52,6 +52,12 @@ func WithProcessId(id []byte) RequestOption {
 	}
 }
 
+func WithEndpointId(id []byte) RequestOption {
+	return func(options *RequestOptions) {
+		options.header.endpointId = id
+	}
+}
+
 func WithAuthorization(authorization []byte) RequestOption {
 	return func(options *RequestOptions) {
 		options.header.authorization = authorization

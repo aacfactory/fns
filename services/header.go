@@ -5,6 +5,7 @@ import "github.com/aacfactory/fns/commons/versions"
 type Header struct {
 	processId        []byte
 	requestId        []byte
+	endpointId       []byte
 	deviceId         []byte
 	deviceIp         []byte
 	authorization    []byte
@@ -18,6 +19,10 @@ func (header Header) ProcessId() []byte {
 
 func (header Header) RequestId() []byte {
 	return header.requestId
+}
+
+func (header Header) EndpointId() []byte {
+	return header.endpointId
 }
 
 func (header Header) DeviceId() []byte {

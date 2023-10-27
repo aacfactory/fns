@@ -8,7 +8,12 @@ import (
 )
 
 const (
-	contextTracerIdKey = "@fns:tracing:tracerId"
+	ServiceName  = "tracings"
+	ReportFnName = "report"
+)
+
+const (
+	contextTracerIdKey = "@fns:context:tracing:tracerId"
 )
 
 type Tracer struct {
@@ -84,6 +89,22 @@ func MarkBeginHandling(ctx context.Context, tags ...string) {
 	span.Tags.Merge(tags)
 	span.Waiting = time.Now().Sub(span.Beg)
 	return
+}
+
+func Tagging(ctx context.Context, tags ...string) {
+	tagsLen := len(tags)
+	if tagsLen == 0 {
+		return
+	}
+	if tagsLen%2 != 0 {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace add tags failed cause tags is invalid")))
+		return
+	}
+	span := loadSpan(ctx)
+	if span == nil {
+		return
+	}
+	span.Tags.Merge(tags)
 }
 
 func End(ctx context.Context, tags ...string) (tracer Tracer, finished bool) {

@@ -20,18 +20,30 @@ import (
 	"context"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/futures"
+	"github.com/aacfactory/fns/services/metrics"
+	"github.com/aacfactory/fns/services/tracing"
+	"github.com/aacfactory/workers"
 	"golang.org/x/sync/singleflight"
+	"strconv"
 )
 
 type fnTask struct {
-	group    *singleflight.Group
-	endpoint Endpoint
-	request  Request
-	promise  futures.Promise
+	group          *singleflight.Group
+	worker         workers.Workers
+	traceEndpoint  Endpoint
+	metricEndpoint Endpoint
+	endpoint       Endpoint
+	request        Request
+	promise        futures.Promise
 }
 
 func (f fnTask) Execute(ctx context.Context) {
 	req := f.request
+	// tracer mark begin
+	if f.traceEndpoint != nil {
+		tracing.MarkBeginHandling(ctx)
+	}
+
 	v, err, shared := f.group.Do(bytex.ToString(append(req.Hash(), req.Header().DeviceId()...)), func() (interface{}, error) {
 		service, ok := f.endpoint.(Service)
 		if ok {
@@ -43,15 +55,37 @@ func (f fnTask) Execute(ctx context.Context) {
 		_, fn := f.request.Fn()
 		return f.endpoint.Handle(ctx, fn, f.request.Argument())
 	})
+
 	if err == nil {
 		f.promise.Succeed(v)
 	} else {
 		f.promise.Failed(err)
 	}
 
-	// todo tracer
-	// add shared in span tag
-	// todo stats
-	// add shared in stats
+	// tracer end
+	if f.traceEndpoint != nil {
+		tracer, finished := tracing.End(
+			ctx,
+			"succeed", strconv.FormatBool(err == nil),
+			"shared", strconv.FormatBool(shared),
+		)
+		if finished {
+			f.worker.Dispatch(context.TODO(), traceReportTask{
+				endpoint: f.traceEndpoint,
+				tracer:   tracer,
+			})
+		}
+	}
+
+	// report stats
+	if f.metricEndpoint != nil {
+		metric, ok := metrics.Finish(ctx, err == nil, err, shared)
+		if ok {
+			f.worker.Dispatch(context.TODO(), metricReportTask{
+				endpoint: f.metricEndpoint,
+				metric:   metric,
+			})
+		}
+	}
 
 }

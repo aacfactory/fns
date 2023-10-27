@@ -15,3 +15,18 @@
  */
 
 package services
+
+import (
+	"context"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/services/tracing"
+)
+
+type traceReportTask struct {
+	endpoint Endpoint
+	tracer   tracing.Tracer
+}
+
+func (task traceReportTask) Execute(ctx context.Context) {
+	_, _ = task.endpoint.Handle(ctx, bytex.FromString(tracing.ReportFnName), NewArgument(task.tracer))
+}

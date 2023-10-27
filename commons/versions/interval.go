@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/wildcard"
 	"github.com/valyala/bytebufferpool"
 )
 
@@ -77,15 +76,21 @@ func ParseInterval(source []byte) (interval Interval, err error) {
 	return
 }
 
-type Intervals map[string]Interval
+type NamedInterval struct {
+	Name  []byte
+	Value Interval
+}
 
-func (intervals Intervals) Accept(subject []byte, target Version) (ok bool) {
-	for pattern, interval := range intervals {
-		if !wildcard.Match(bytex.FromString(pattern), subject) {
-			continue
-		}
-		ok = interval.Accept(target)
-		if ok {
+type Intervals []NamedInterval
+
+func (intervals Intervals) Accept(name []byte, target Version) (ok bool) {
+	if len(intervals) == 0 {
+		ok = true
+		return
+	}
+	for _, interval := range intervals {
+		if bytex.Equal(name, interval.Name) {
+			ok = interval.Value.Accept(target)
 			break
 		}
 	}
@@ -98,11 +103,11 @@ func (intervals Intervals) Bytes() []byte {
 	}
 	p := bytebufferpool.Get()
 	defer bytebufferpool.Put(p)
-	for key, interval := range intervals {
+	for _, interval := range intervals {
 		_, _ = p.Write([]byte{',', ' '})
-		_, _ = p.Write(bytex.FromString(key))
+		_, _ = p.Write(interval.Name)
 		_, _ = p.Write([]byte{'='})
-		_, _ = p.Write(bytex.FromString(interval.String()))
+		_, _ = p.Write(bytex.FromString(interval.Value.String()))
 	}
 	return p.Bytes()[2:]
 }
@@ -115,7 +120,6 @@ func (intervals Intervals) String() string {
 // key=left:right, ...
 func ParseIntervals(source []byte) (intervals Intervals, err error) {
 	if len(source) == 0 {
-		intervals = AllowAllIntervals()
 		return
 	}
 	ss := bytes.Split(source, []byte{','})
@@ -126,22 +130,19 @@ func ParseIntervals(source []byte) (intervals Intervals, err error) {
 			err = errors.Warning("fns: parse intervals failed").WithMeta("source", bytex.ToString(source)).WithCause(fmt.Errorf("invalid intervals"))
 			return
 		}
-		pattern := bytes.TrimSpace(s[0:idx])
+		name := bytes.TrimSpace(s[0:idx])
 		interval, parseErr := ParseInterval(s[idx+1:])
 		if parseErr != nil {
 			err = errors.Warning("fns: parse intervals failed").WithMeta("source", bytex.ToString(source)).WithCause(parseErr)
 			return
 		}
 		if intervals == nil {
-			intervals = make(Intervals)
+			intervals = make(Intervals, 0, 1)
 		}
-		intervals[bytex.ToString(pattern)] = interval
+		intervals = append(intervals, NamedInterval{
+			Name:  name,
+			Value: interval,
+		})
 	}
 	return
-}
-
-func AllowAllIntervals() Intervals {
-	return Intervals{
-		"*": Interval{Origin(), Latest()},
-	}
 }

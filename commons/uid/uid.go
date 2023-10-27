@@ -22,3 +22,8 @@ func UID() (id string) {
 	id = xid.New().String()
 	return
 }
+
+func Bytes() (id []byte) {
+	id = xid.New().Bytes()
+	return
+}

@@ -18,7 +18,6 @@ package transports
 
 import (
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/versions"
 	"net/http"
 	"net/textproto"
 )
@@ -80,15 +79,6 @@ type Header interface {
 	Del(key []byte)
 	Values(key []byte) [][]byte
 	Foreach(fn func(key []byte, values [][]byte))
-}
-
-type RequestHeader interface {
-	Header
-	AcceptedVersions() (intervals versions.Intervals)
-	DeviceId() (id []byte)
-	DeviceIp() (ip []byte)
-	Authorization() (authorization []byte)
-	Signature() (signature []byte)
 }
 
 func NewHeader() Header {

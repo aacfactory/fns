@@ -4,14 +4,20 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/fns/commons/futures"
+	"sync"
 	"testing"
 )
 
 func TestNew(t *testing.T) {
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
 	p, f := futures.New()
-	p.Succeed(1)
-	p.Close()
+	go func(wg *sync.WaitGroup, p futures.Promise) {
+		p.Succeed(1)
+		wg.Done()
+	}(wg, p)
 
+	wg.Wait()
 	r, err := f.Get(context.TODO())
 	if err != nil {
 		fmt.Println(err)

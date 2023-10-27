@@ -5,13 +5,11 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
-	"sync/atomic"
 )
 
 type Promise interface {
 	Succeed(v interface{})
 	Failed(err error)
-	Close()
 }
 
 type Result interface {
@@ -25,9 +23,8 @@ type Future interface {
 }
 
 func New() (p Promise, f Future) {
-	fp := &pipe{
-		ch:     make(chan interface{}, 1),
-		closed: &atomic.Bool{},
+	fp := pipe{
+		ch: make(chan result, 1),
 	}
 	p = fp
 	f = fp
@@ -35,36 +32,32 @@ func New() (p Promise, f Future) {
 }
 
 type result struct {
-	objects.Scanner
+	val any
+	err error
 }
 
 type pipe struct {
-	ch     chan interface{}
-	closed *atomic.Bool
+	ch chan result
 }
 
-func (p *pipe) Close() {
-	if p.closed.Load() {
-		return
+func (p pipe) Succeed(v interface{}) {
+	p.ch <- result{
+		val: v,
 	}
-	p.closed.Store(true)
 	close(p.ch)
 }
 
-func (p *pipe) Succeed(v interface{}) {
-	p.ch <- v
-	p.Close()
-}
-
-func (p *pipe) Failed(err error) {
+func (p pipe) Failed(err error) {
 	if err == nil {
 		err = errors.Warning("fns: empty failed result").WithMeta("fns", "future")
 	}
-	p.ch <- err
-	p.Close()
+	p.ch <- result{
+		err: err,
+	}
+	close(p.ch)
 }
 
-func (p *pipe) Get(ctx context.Context) (r Result, err error) {
+func (p pipe) Get(ctx context.Context) (r Result, err error) {
 	select {
 	case <-ctx.Done():
 		err = errors.Timeout("fns: get result value timeout").WithMeta("fns", "future")
@@ -74,21 +67,11 @@ func (p *pipe) Get(ctx context.Context) (r Result, err error) {
 			err = errors.Warning("fns: future was closed").WithMeta("fns", "future")
 			return
 		}
-		if data == nil {
-			r = objects.NewScanner(nil)
+		if data.err != nil {
+			err = data.err
 			return
 		}
-		switch data.(type) {
-		case errors.CodeError:
-			err = data.(errors.CodeError)
-			return
-		case error:
-			err = errors.Map(data.(error))
-			return
-		default:
-			r = objects.NewScanner(data)
-			//r = result(objects.NewScanner(data))
-		}
+		r = objects.NewScanner(data.val)
 		return
 	}
 }

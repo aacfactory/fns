@@ -92,9 +92,9 @@ func (intervals Intervals) Accept(pattern string, target Version) (ok bool) {
 	return
 }
 
-func (intervals Intervals) String() string {
+func (intervals Intervals) Bytes() []byte {
 	if len(intervals) == 0 {
-		return ""
+		return []byte{}
 	}
 	p := bytebufferpool.Get()
 	defer bytebufferpool.Put(p)
@@ -104,7 +104,11 @@ func (intervals Intervals) String() string {
 		_, _ = p.Write([]byte{'='})
 		_, _ = p.Write(bytex.FromString(interval.String()))
 	}
-	return bytex.ToString(p.Bytes()[2:])
+	return p.Bytes()[2:]
+}
+
+func (intervals Intervals) String() string {
+	return bytex.ToString(intervals.Bytes())
 }
 
 // ParseIntervals

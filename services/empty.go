@@ -24,6 +24,7 @@ const (
 
 var (
 	emptyBytes = make([]byte, 0, 1)
+	empty      = Empty{}
 )
 
 // Empty

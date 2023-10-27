@@ -15,7 +15,7 @@ func With(ctx context.Context, log logs.Logger) context.Context {
 	return context.WithValue(ctx, contextKey, log)
 }
 
-func Log(ctx context.Context) logs.Logger {
+func Load(ctx context.Context) logs.Logger {
 	v := ctx.Value(contextKey)
 	if v == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no log in context")))

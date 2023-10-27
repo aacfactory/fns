@@ -2,8 +2,6 @@ package context
 
 import (
 	"context"
-	"fmt"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/logger"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
@@ -79,35 +77,15 @@ type context_ struct {
 }
 
 func (c *context_) Log() logs.Logger {
-	return logger.Log(c)
+	return logger.Load(c)
 }
 
 func (c *context_) Request() services.Request {
-	v := c.Value(services.ContextRequestKey)
-	if v == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no request in context")))
-		return nil
-	}
-	r, ok := v.(services.Request)
-	if !ok {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: request in context is not github.com/aacfactory/fns/services.Request")))
-		return nil
-	}
-	return r
+	return services.LoadRequest(c)
 }
 
 func (c *context_) Components() services.Components {
-	v := c.Value(services.ContextComponentsKey)
-	if v == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no components in context")))
-		return nil
-	}
-	r, ok := v.(services.Components)
-	if !ok {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: components in context is not github.com/aacfactory/fns/services.Components")))
-		return nil
-	}
-	return r
+	return services.LoadComponents(c)
 }
 
 func (c *context_) Runtime() *runtime.Runtime {

@@ -20,20 +20,22 @@ import (
 	stdjson "encoding/json"
 	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
+	"strconv"
 )
 
 type Argument interface {
 	json.Marshaler
 	json.Unmarshaler
 	As(v interface{}) (err errors.CodeError)
-	HashCode() (code uint64)
+	HashCode() (code []byte)
 }
 
 func EmptyArgument() (arg Argument) {
-	arg = NewArgument(&Empty{})
+	arg = NewArgument(empty)
 	return
 }
 
@@ -88,7 +90,7 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 		return
 	}
 	switch arg.value.(type) {
-	case *Empty, struct{}:
+	case Empty, *Empty, struct{}:
 		break
 	case []byte:
 		value := arg.value.([]byte)
@@ -135,14 +137,14 @@ func (arg *argument) As(v interface{}) (err errors.CodeError) {
 	return
 }
 
-func (arg *argument) HashCode() (code uint64) {
+func (arg *argument) HashCode() (code []byte) {
 	if arg.value == nil {
 		return
 	}
 	var p []byte
 	switch arg.value.(type) {
-	case *Empty, struct{}:
-		break
+	case Empty, *Empty, struct{}:
+		return
 	case []byte:
 		p = arg.value.([]byte)
 		break
@@ -156,6 +158,6 @@ func (arg *argument) HashCode() (code uint64) {
 		p, _ = json.Marshal(arg.value)
 		break
 	}
-	code = xxhash.Sum64(p)
+	code = bytex.FromString(strconv.FormatUint(xxhash.Sum64(p), 16))
 	return
 }

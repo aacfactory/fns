@@ -74,11 +74,11 @@ func (s *Services) Add(service Service) (err error) {
 	return
 }
 
-func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) futures.Future {
+func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argument, options ...RequestOption) futures.Future {
 	// promise
 	promise, future := futures.New()
 	// valid params
-	if len(service) == 0 {
+	if len(name) == 0 {
 		promise.Failed(errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil")))
 		return future
 
@@ -92,18 +92,18 @@ func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg A
 	}
 
 	// request
-	req := NewRequest(ctx, service, fn, arg, options...)
+	req := NewRequest(ctx, name, fn, arg, options...)
 
 	// endpoint
-	endpoint, inLocal := s.values[bytex.ToString(service)]
+	endpoint, inLocal := s.values[bytex.ToString(name)]
 	if inLocal {
 		// accept versions
-		accepted := req.Header().AcceptedVersions().Accept(service, s.version)
+		accepted := req.Header().AcceptedVersions().Accept(name, s.version)
 		if !accepted {
 			promise.Failed(
 				errors.NotFound("fns: endpoint was not found").
 					WithCause(fmt.Errorf("version was not match")).
-					WithMeta("service", bytex.ToString(service)).
+					WithMeta("service", bytex.ToString(name)).
 					WithMeta("fn", bytex.ToString(fn)),
 			)
 			return future
@@ -112,22 +112,25 @@ func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg A
 		if s.discovery == nil {
 			promise.Failed(
 				errors.NotFound("fns: endpoint was not found").
-					WithMeta("service", bytex.ToString(service)).
+					WithMeta("service", bytex.ToString(name)).
 					WithMeta("fn", bytex.ToString(fn)),
 			)
 			return future
 		}
-		remote, fetched := s.discovery.Get(ctx, service, EndpointVersions(req.Header().AcceptedVersions()))
+		remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()))
 		if !fetched {
 			promise.Failed(
 				errors.NotFound("fns: endpoint was not found").
-					WithMeta("service", bytex.ToString(service)).
+					WithMeta("service", bytex.ToString(name)).
 					WithMeta("fn", bytex.ToString(fn)),
 			)
 			return future
 		}
 		endpoint = remote
 	}
+
+	// set request in context
+	ctx = WithRequest(ctx, req)
 
 	// todo tracer begin span
 
@@ -141,7 +144,7 @@ func (s *Services) Request(ctx context.Context, service []byte, fn []byte, arg A
 	if !dispatched {
 		promise.Failed(
 			ErrServiceOverload.
-				WithMeta("service", bytex.ToString(service)).
+				WithMeta("service", bytex.ToString(name)).
 				WithMeta("fn", bytex.ToString(fn)),
 		)
 		return future

@@ -15,5 +15,5 @@ type Endpoint interface {
 }
 
 type Endpoints interface {
-	Request(ctx context.Context, service []byte, fn []byte, argument Argument, options ...RequestOption) (future futures.Future, err error)
+	Request(ctx context.Context, name []byte, fn []byte, argument Argument, options ...RequestOption) (future futures.Future)
 }

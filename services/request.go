@@ -208,6 +208,6 @@ func LoadRequest(ctx context.Context) Request {
 	return r
 }
 
-func withRequest(ctx context.Context, r Request) context.Context {
+func WithRequest(ctx context.Context, r Request) context.Context {
 	return context.WithValue(ctx, contextRequestKey, r)
 }

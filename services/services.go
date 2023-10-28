@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/services/metrics"
 	"github.com/aacfactory/fns/services/tracing"
 	"github.com/aacfactory/logs"
@@ -39,6 +40,7 @@ func New(id []byte, version versions.Version, log logs.Logger, config Config, wo
 		config:    config,
 		id:        id,
 		version:   version,
+		doc:       documents.NewDocuments(),
 		values:    make(map[string]Endpoint),
 		listeners: make([]Listenable, 0, 1),
 		discovery: discovery,
@@ -52,6 +54,7 @@ type Services struct {
 	config    Config
 	id        []byte
 	version   versions.Version
+	doc       documents.Documents
 	values    map[string]Endpoint
 	listeners []Listenable
 	discovery Discovery
@@ -83,6 +86,15 @@ func (s *Services) Add(service Service) (err error) {
 	if ok {
 		s.listeners = append(s.listeners, ln)
 	}
+	doc := service.Document()
+	if doc != nil {
+		s.doc.Add(doc)
+	}
+	return
+}
+
+func (s *Services) Documents() (v documents.Documents) {
+	v = s.doc
 	return
 }
 
@@ -125,25 +137,13 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 			}
 			endpoint = local
 		} else {
-			if s.discovery == nil {
-				promise.Failed(
-					errors.NotFound("fns: endpoint was not found").
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)),
-				)
-				return future
+			if req.Header().Internal() && s.discovery != nil {
+				remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()))
+				if fetched {
+					endpoint = remote
+					remoted = true
+				}
 			}
-			remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()))
-			if !fetched {
-				promise.Failed(
-					errors.NotFound("fns: endpoint was not found").
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)),
-				)
-				return future
-			}
-			endpoint = remote
-			remoted = true
 		}
 	} else {
 		if bytex.Equal(s.id, req.Header().EndpointId()) {
@@ -162,38 +162,25 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 					return future
 				}
 				endpoint = local
-			} else {
-				promise.Failed(
-					errors.NotFound("fns: endpoint was not found").
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)).
-						WithMeta("endpointId", bytex.ToString(req.Header().EndpointId())),
-				)
-				return future
 			}
 		} else {
-			if s.discovery == nil {
-				promise.Failed(
-					errors.NotFound("fns: endpoint was not found").
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)).
-						WithMeta("endpointId", bytex.ToString(req.Header().EndpointId())),
-				)
-				return future
+			if req.Header().Internal() && s.discovery != nil {
+				remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()), EndpointId(req.Header().EndpointId()))
+				if fetched {
+					endpoint = remote
+					remoted = true
+				}
 			}
-			remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()), EndpointId(req.Header().EndpointId()))
-			if !fetched {
-				promise.Failed(
-					errors.NotFound("fns: endpoint was not found").
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)).
-						WithMeta("endpointId", bytex.ToString(req.Header().EndpointId())),
-				)
-				return future
-			}
-			endpoint = remote
-			remoted = true
 		}
+	}
+
+	if endpoint == nil {
+		promise.Failed(
+			errors.NotFound("fns: endpoint was not found").
+				WithMeta("service", bytex.ToString(name)).
+				WithMeta("fn", bytex.ToString(fn)),
+		)
+		return future
 	}
 
 	// tracer begin

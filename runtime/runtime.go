@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"github.com/aacfactory/fns/barriers"
+	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/logger"
@@ -22,6 +23,7 @@ type Runtime struct {
 	endpoints  services.Endpoints
 	barrier    barriers.Barrier
 	shared     shareds.Shared
+	signature  signatures.Signature
 }
 
 func (rt *Runtime) AppId() string {
@@ -58,6 +60,10 @@ func (rt *Runtime) Barrier() barriers.Barrier {
 
 func (rt *Runtime) Shared() shareds.Shared {
 	return rt.shared
+}
+
+func (rt *Runtime) Signature() signatures.Signature {
+	return rt.signature
 }
 
 func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {

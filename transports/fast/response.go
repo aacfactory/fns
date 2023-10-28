@@ -65,16 +65,17 @@ func (w *responseWriter) Succeed(v interface{}) {
 	return
 }
 
-func (w *responseWriter) Failed(cause errors.CodeError) {
+func (w *responseWriter) Failed(cause error) {
 	if cause == nil {
 		cause = errors.Warning("fns: error is lost")
 	}
-	body, encodeErr := json.Marshal(cause)
+	err := errors.Map(cause)
+	body, encodeErr := json.Marshal(err)
 	if encodeErr != nil {
 		body = []byte(`{"message": "fns: transport write failed result failed"}`)
 		return
 	}
-	w.status = cause.Code()
+	w.status = err.Code()
 	bodyLen := len(body)
 	if bodyLen > 0 {
 		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))

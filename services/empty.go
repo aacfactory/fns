@@ -16,15 +16,8 @@
 
 package services
 
-const (
-	emptyJson      = "{}"
-	nilJson        = "null"
-	emptyArrayJson = "[]"
-)
-
 var (
-	emptyBytes = make([]byte, 0, 1)
-	empty      = Empty{}
+	empty = Empty{}
 )
 
 // Empty

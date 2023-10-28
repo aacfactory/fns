@@ -30,7 +30,7 @@ type ResponseWriter interface {
 	SetStatus(status int)
 	Header() Header
 	Succeed(v interface{})
-	Failed(cause errors.CodeError)
+	Failed(cause error)
 	Write(body []byte) (int, error)
 	Body() []byte
 	Hijack(func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error)

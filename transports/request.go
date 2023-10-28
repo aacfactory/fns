@@ -34,7 +34,8 @@ var (
 )
 
 type Request interface {
-	Context() context.Context
+	context.Context
+	UserValues
 	TLS() bool
 	TLSConnectionState() *tls.ConnectionState
 	RemoteAddr() []byte

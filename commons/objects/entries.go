@@ -63,3 +63,7 @@ func (entries *Entries) Foreach(fn func(key []byte, value any)) {
 func (entries *Entries) Len() int {
 	return len(*entries)
 }
+
+func (entries *Entries) Reset() {
+	*entries = (*entries)[:]
+}

@@ -200,12 +200,12 @@ func (documents Documents) Merge(o Documents) Documents {
 	return documents
 }
 
-func (documents Documents) Openapi(openapiVersion string, appId string, appName string, appVersion versions.Version) (api *oas2.API) {
+func (documents Documents) Openapi(openapiVersion string, appId string, appName string, appVersion versions.Version) (api oas2.API) {
 	if openapiVersion == "" {
 		openapiVersion = "3.1.0"
 	}
 	// oas
-	api = &oas2.API{
+	api = oas2.API{
 		Openapi: openapiVersion,
 		Info: &oas2.Info{
 			Title:          appName,

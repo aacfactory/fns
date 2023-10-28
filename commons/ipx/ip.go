@@ -41,3 +41,26 @@ func GetGlobalUniCastIpFromHostname() (v net.IP) {
 	}
 	return
 }
+
+func CanonicalizeIp(ip string) string {
+	isIPv6 := false
+	for i := 0; !isIPv6 && i < len(ip); i++ {
+		switch ip[i] {
+		case '.':
+			// IPv4
+			return ip
+		case ':':
+			// IPv6
+			isIPv6 = true
+			break
+		}
+	}
+	if !isIPv6 {
+		return ip
+	}
+	ipv6 := net.ParseIP(ip)
+	if ipv6 == nil {
+		return ip
+	}
+	return ipv6.Mask(net.CIDRMask(64, 128)).String()
+}

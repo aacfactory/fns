@@ -1,14 +1,15 @@
 package standard
 
 import (
-	"context"
 	"crypto/tls"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -17,11 +18,55 @@ const (
 
 type Request struct {
 	maxBodySize int
+	userValues  objects.Entries
 	request     *http.Request
 }
 
-func (r *Request) Context() context.Context {
-	return r.request.Context()
+func (r *Request) Deadline() (time.Time, bool) {
+	return r.request.Context().Deadline()
+}
+
+func (r *Request) Done() <-chan struct{} {
+	return r.request.Context().Done()
+}
+
+func (r *Request) Err() error {
+	return r.request.Context().Err()
+}
+
+func (r *Request) Value(key any) any {
+	switch k := key.(type) {
+	case []byte:
+		v := r.userValues.Get(k)
+		if v == nil {
+			return r.request.Context().Value(key)
+		}
+		return v
+	case string:
+		v := r.userValues.Get(bytex.FromString(k))
+		if v == nil {
+			return r.request.Context().Value(key)
+		}
+		return v
+	default:
+		return r.request.Context().Value(key)
+	}
+}
+
+func (r *Request) UserValue(key []byte) any {
+	return r.userValues.Get(key)
+}
+
+func (r *Request) SetUserValue(key []byte, val any) {
+	r.userValues.Set(key, val)
+}
+
+func (r *Request) RemoveUserValue(key []byte) {
+	r.userValues.Remove(key)
+}
+
+func (r *Request) ForeachUserValues(fn func(key []byte, val any)) {
+	r.userValues.Foreach(fn)
 }
 
 func (r *Request) TLS() bool {

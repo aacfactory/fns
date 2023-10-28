@@ -7,15 +7,15 @@ import (
 )
 
 const (
-	contextKey = "@fns:runtime"
+	ContextKey = "@fns:runtime"
 )
 
 func With(ctx context.Context, rt *Runtime) context.Context {
-	return context.WithValue(ctx, contextKey, rt)
+	return context.WithValue(ctx, ContextKey, rt)
 }
 
 func Load(ctx context.Context) *Runtime {
-	v := ctx.Value(contextKey)
+	v := ctx.Value(ContextKey)
 	if v == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no runtime in context")))
 		return nil

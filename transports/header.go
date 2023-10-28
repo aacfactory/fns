@@ -69,7 +69,6 @@ const (
 	ResponseTimingAllowOriginHeaderName          = "Timing-Allow-Origin"
 	ResponseXFrameOptionsHeaderName              = "X-Frame-Options"
 	ResponseXFrameOptionsSameOriginHeaderName    = "SAMEORIGIN"
-	RequestHashHeaderHeaderName                  = "X-Fns-Request-Hash"
 )
 
 type Header interface {

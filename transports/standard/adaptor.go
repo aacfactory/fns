@@ -1,6 +1,7 @@
 package standard
 
 import (
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/bytebufferpool"
 	"net/http"
@@ -11,6 +12,7 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 
 		r := &Request{
 			maxBodySize: maxRequestBody,
+			userValues:  make(objects.Entries, 0, 1),
 			request:     request,
 		}
 

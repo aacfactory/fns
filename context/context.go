@@ -68,8 +68,9 @@ func AfterFunc(ctx Context, f func()) (stop func() bool) {
 type Context interface {
 	context.Context
 	Log() logs.Logger
-	Request() services.Request
 	Runtime() *runtime.Runtime
+	Request() services.Request
+	Components() services.Components
 }
 
 type context_ struct {
@@ -80,14 +81,14 @@ func (c *context_) Log() logs.Logger {
 	return logger.Load(c)
 }
 
+func (c *context_) Runtime() *runtime.Runtime {
+	return runtime.Load(c)
+}
+
 func (c *context_) Request() services.Request {
 	return services.LoadRequest(c)
 }
 
 func (c *context_) Components() services.Components {
 	return services.LoadComponents(c)
-}
-
-func (c *context_) Runtime() *runtime.Runtime {
-	return runtime.Load(c)
 }

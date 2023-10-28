@@ -38,9 +38,6 @@ func (header Header) Authorization() []byte {
 }
 
 func (header Header) AcceptedVersions() versions.Intervals {
-	if len(header.acceptedVersions) == 0 {
-		return versions.AllowAllIntervals()
-	}
 	return header.acceptedVersions
 }
 

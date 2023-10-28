@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/configs"
+	"github.com/aacfactory/fns/hooks"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
@@ -38,7 +40,7 @@ var (
 		id:                    "",
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
-		configRetrieverOption: services.DefaultConfigRetrieverOption(),
+		configRetrieverOption: configs.DefaultConfigRetrieverOption(),
 		transportOptions:      TransportOption(fast.New()),
 		proxyOptions:          nil,
 		hooks:                 nil,
@@ -85,7 +87,7 @@ type Options struct {
 	configRetrieverOption configures.RetrieverOption
 	transportOptions      *TransportOptions
 	proxyOptions          *TransportOptions
-	hooks                 []Hook
+	hooks                 []hooks.Hook
 	shutdownTimeout       time.Duration
 }
 
@@ -171,15 +173,15 @@ func RegisterValidator(register validators.ValidateRegister) Option {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func Hooks(hooks ...Hook) Option {
+func Hooks(h ...hooks.Hook) Option {
 	return func(options *Options) error {
-		if hooks == nil || len(hooks) == 0 {
+		if h == nil || len(h) == 0 {
 			return fmt.Errorf("customize hooks failed for nil")
 		}
 		if options.hooks == nil {
-			options.hooks = make([]Hook, 0, 1)
+			options.hooks = make([]hooks.Hook, 0, 1)
 		}
-		for _, hook := range hooks {
+		for _, hook := range h {
 			if hook == nil {
 				continue
 			}

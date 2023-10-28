@@ -30,36 +30,6 @@ type Options struct {
 	Config configures.Config
 }
 
-const (
-	contextComponentsKey = "@fns:service:components"
-)
-
-type Component interface {
-	Name() (name string)
-	Construct(options Options) (err error)
-	Close()
-}
-
-type Components map[string]Component
-
-func WithComponents(ctx context.Context, components Components) context.Context {
-	ctx = context.WithValue(ctx, contextComponentsKey, components)
-	return ctx
-}
-
-func LoadComponents(ctx context.Context) Components {
-	v := ctx.Value(contextComponentsKey)
-	if v == nil {
-		return nil
-	}
-	c, ok := v.(Components)
-	if !ok {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: components in context is not github.com/aacfactory/fns/services.Components")))
-		return nil
-	}
-	return c
-}
-
 type Service interface {
 	Endpoint
 	Construct(options Options) (err error)
@@ -78,14 +48,14 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 		name:       name,
 		internal:   internal,
 		log:        nil,
-		components: make(map[string]Component),
+		components: make(Components, 0, 1),
 	}
 	if components != nil && len(components) > 0 {
 		for _, component := range components {
 			if component == nil {
 				continue
 			}
-			svc.components[component.Name()] = component
+			svc.components = append(svc.components, component)
 		}
 	}
 	return svc
@@ -95,7 +65,7 @@ type Abstract struct {
 	name       string
 	internal   bool
 	log        logs.Logger
-	components map[string]Component
+	components Components
 }
 
 func (abstract *Abstract) Construct(options Options) (err error) {

@@ -20,14 +20,17 @@ import (
 	"context"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/futures"
+	"github.com/aacfactory/fns/logger"
 	"github.com/aacfactory/fns/services/metrics"
 	"github.com/aacfactory/fns/services/tracing"
+	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"golang.org/x/sync/singleflight"
 	"strconv"
 )
 
 type fnTask struct {
+	log            logs.Logger
 	group          *singleflight.Group
 	worker         workers.Workers
 	traceEndpoint  Endpoint
@@ -52,6 +55,11 @@ func (f fnTask) Execute(ctx context.Context) {
 				ctx = WithComponents(ctx, components)
 			}
 		}
+		// set request into context
+		ctx = WithRequest(ctx, req)
+		// set log into context
+		ctx = logger.With(ctx, f.log)
+		// get fn
 		_, fn := f.request.Fn()
 		return f.endpoint.Handle(ctx, fn, f.request.Argument())
 	})

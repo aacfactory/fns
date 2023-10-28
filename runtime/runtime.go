@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"github.com/aacfactory/fns/barriers"
+	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/logger"
 	"github.com/aacfactory/fns/services"
@@ -15,6 +16,7 @@ type Runtime struct {
 	appId      string
 	appName    string
 	appVersion versions.Version
+	status     *switchs.Switch
 	log        logs.Logger
 	worker     workers.Workers
 	endpoints  services.Endpoints
@@ -32,6 +34,10 @@ func (rt *Runtime) AppName() string {
 
 func (rt *Runtime) AppVersion() versions.Version {
 	return rt.appVersion
+}
+
+func (rt *Runtime) Running() (running bool, upped bool) {
+	return rt.status.IsOn()
 }
 
 func (rt *Runtime) RootLog() logs.Logger {

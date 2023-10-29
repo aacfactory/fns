@@ -67,5 +67,7 @@ func (entries *Entries) Len() int {
 }
 
 func (entries *Entries) Reset() {
-	*entries = (*entries)[:]
+	s := *entries
+	s = s[:0]
+	*entries = s
 }

@@ -10,7 +10,7 @@ import (
 func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 
-		ctx := context.Wrap(request.Context())
+		ctx := context.Acquire(request.Context())
 		r := &Request{
 			ctx:         ctx,
 			maxBodySize: maxRequestBody,
@@ -38,5 +38,6 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 		}
 
 		bytebufferpool.Put(buf)
+		context.Release(ctx)
 	})
 }

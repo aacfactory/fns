@@ -1,6 +1,7 @@
 package transports
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/valyala/bytebufferpool"
@@ -15,66 +16,102 @@ type Params interface {
 	Encode() (p []byte)
 }
 
-func NewParams() Params {
-	return make(defaultParams)
+type param struct {
+	key []byte
+	val []byte
 }
 
-type defaultParams map[string][]byte
+func NewParams() Params {
+	pp := make(defaultParams, 0, 1)
+	return &pp
+}
 
-func (params defaultParams) Get(name []byte) []byte {
+type defaultParams []param
+
+func (params *defaultParams) Less(i, j int) bool {
+	pp := *params
+	return bytes.Compare(pp[i].key, pp[j].key) < 0
+}
+
+func (params *defaultParams) Swap(i, j int) {
+	pp := *params
+	pp[i], pp[j] = pp[j], pp[i]
+	*params = pp
+}
+
+func (params *defaultParams) Get(name []byte) []byte {
 	if name == nil {
 		return nil
 	}
 	if len(name) == 0 {
 		return nil
 	}
-	value, has := params[bytex.ToString(name)]
-	if !has {
-		return nil
+	pp := *params
+	for _, p := range pp {
+		if bytes.Equal(p.key, name) {
+			return p.val
+		}
 	}
-	return value
+	return nil
 }
 
-func (params defaultParams) Set(name []byte, value []byte) {
+func (params *defaultParams) Set(name []byte, value []byte) {
 	if name == nil || value == nil {
 		return
 	}
 	if len(name) == 0 {
 		return
 	}
-	params[bytex.ToString(name)] = value
+	pp := *params
+	for _, p := range pp {
+		if bytes.Equal(p.key, name) {
+			p.val = value
+			*params = pp
+			return
+		}
+	}
+	pp = append(pp, param{
+		key: name,
+		val: value,
+	})
+	*params = pp
 }
 
-func (params defaultParams) Remove(name []byte) {
+func (params *defaultParams) Remove(name []byte) {
 	if name == nil {
 		return
 	}
 	if len(name) == 0 {
 		return
 	}
-	delete(params, bytex.ToString(name))
+	pp := *params
+	n := -1
+	for i, p := range pp {
+		if bytes.Equal(p.key, name) {
+			n = i
+			break
+		}
+	}
+	if n == -1 {
+		return
+	}
+	pp = append(pp[:n], pp[n+1:]...)
+	*params = pp
 }
 
-func (params defaultParams) Len() int {
-	return len(params)
+func (params *defaultParams) Len() int {
+	return len(*params)
 }
 
-func (params defaultParams) Encode() []byte {
-	size := len(params)
-	if size == 0 {
+func (params *defaultParams) Encode() []byte {
+	if params.Len() == 0 {
 		return nil
 	}
-	names := make([]string, 0, size)
-	for name := range params {
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	sort.Sort(params)
+	pp := *params
 	buf := bytebufferpool.Get()
-	for _, name := range names {
-		_, _ = buf.WriteString(fmt.Sprintf("&%s=%s", name, bytex.ToString(params[name])))
+	for _, p := range pp {
+		_, _ = buf.WriteString(fmt.Sprintf("&%s=%s", bytex.ToString(p.key), bytex.ToString(p.val)))
 	}
 	p := buf.Bytes()[1:]
 	bytebufferpool.Put(buf)

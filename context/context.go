@@ -2,29 +2,46 @@ package context
 
 import (
 	"context"
+	"sync"
 	"unsafe"
 )
 
-func Wrap(ctx context.Context) Context {
-	v, ok := ctx.(Context)
-	if ok {
-		return v
+var (
+	pool = sync.Pool{}
+)
+
+func Acquire(ctx context.Context) Context {
+	cached := pool.Get()
+	if cached == nil {
+		return &context_{
+			Context: ctx,
+			entries: make(Entries, 0, 1),
+		}
 	}
-	return &context_{
-		Context: ctx,
-		entries: make(Entries, 0, 1),
-	}
+	v := cached.(*context_)
+	v.Context = ctx
+	return v
 }
 
-func Fork(parent Context) Context {
-	return &context_{
-		Context: parent,
-		entries: make(Entries, 0, 1),
+func Release(ctx context.Context) {
+	v, ok := ctx.(*context_)
+	if ok {
+		v.Context = nil
+		v.entries.Reset()
+		pool.Put(v)
 	}
 }
 
 func WithValue(parent context.Context, key []byte, val any) Context {
-	ctx := Wrap(parent)
+	ctx, ok := parent.(Context)
+	if ok {
+		ctx.SetUserValue(key, val)
+		return ctx
+	}
+	ctx = &context_{
+		Context: ctx,
+		entries: make(Entries, 0, 1),
+	}
 	ctx.SetUserValue(key, val)
 	return ctx
 }

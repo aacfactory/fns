@@ -32,8 +32,7 @@ func (components Components) Get(key string) (v Component, has bool) {
 }
 
 func WithComponents(ctx sc.Context, components Components) sc.Context {
-	ctx = context.WithValue(ctx, bytex.FromString(contextComponentsKey), components)
-	return ctx
+	return context.WithValue(ctx, bytex.FromString(contextComponentsKey), components)
 }
 
 func LoadComponents(ctx sc.Context) Components {

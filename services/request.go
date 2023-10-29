@@ -118,9 +118,9 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 	if len(opt.header.processId) == 0 {
 		opt.header.processId = uid.Bytes()
 	}
-	prev, hasPrev := tryLoadRequest(ctx)
-	if hasPrev {
-		header := prev.Header()
+	parent, hasParent := tryLoadRequest(ctx)
+	if hasParent {
+		header := parent.Header()
 		if len(opt.header.requestId) == 0 {
 			opt.header.requestId = header.requestId
 		}
@@ -153,7 +153,7 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 	} else {
 		r = cached.(*request)
 	}
-	r.ctx = context.Fork(context.Wrap(ctx))
+	r.ctx = context.Acquire(ctx)
 	r.header = opt.header
 	r.service = service
 	r.fn = fn
@@ -168,6 +168,7 @@ func ReleaseRequest(r Request) {
 	if !ok {
 		return
 	}
+	context.Release(req.ctx)
 	req.ctx = nil
 	requestPool.Put(req)
 }

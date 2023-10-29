@@ -5,11 +5,16 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
+	"sync"
 )
 
 type Promise interface {
 	Succeed(v interface{})
 	Failed(err error)
+}
+
+type Future interface {
+	Get(ctx context.Context) (result Result, err error)
 }
 
 type Result interface {
@@ -18,16 +23,23 @@ type Result interface {
 	Scan(v interface{}) (err error)
 }
 
-type Future interface {
-	Get(ctx context.Context) (result Result, err error)
-}
-
-func New() (p Promise, f Future) {
-	fp := pipe{
-		ch: make(chan result, 1),
+var (
+	pool = sync.Pool{
+		New: func() any {
+			return make(chan result, 1)
+		},
 	}
-	p = fp
-	f = fp
+)
+
+func New(callback ...func()) (p Promise, f Future) {
+	ch := pool.Get().(chan result)
+	p = promise{
+		ch: ch,
+	}
+	f = future{
+		ch:        ch,
+		callbacks: callback,
+	}
 	return
 }
 
@@ -36,42 +48,51 @@ type result struct {
 	err error
 }
 
-type pipe struct {
+type promise struct {
 	ch chan result
 }
 
-func (p pipe) Succeed(v interface{}) {
+func (p promise) Succeed(v interface{}) {
 	p.ch <- result{
 		val: v,
 	}
-	close(p.ch)
 }
 
-func (p pipe) Failed(err error) {
+func (p promise) Failed(err error) {
 	if err == nil {
-		err = errors.Warning("fns: empty failed result").WithMeta("fns", "future")
+		err = errors.Warning("fns: empty failed result").WithMeta("fns", "futures")
 	}
 	p.ch <- result{
 		err: err,
 	}
-	close(p.ch)
 }
 
-func (p pipe) Get(ctx context.Context) (r Result, err error) {
+type future struct {
+	ch        chan result
+	callbacks []func()
+}
+
+func (f future) Get(ctx context.Context) (r Result, err error) {
 	select {
 	case <-ctx.Done():
-		err = errors.Timeout("fns: get result value timeout").WithMeta("fns", "future")
-		return
-	case data, ok := <-p.ch:
+		err = errors.Timeout("fns: get result value from future timeout").WithMeta("fns", "futures")
+		break
+	case data, ok := <-f.ch:
+		pool.Put(f.ch)
 		if !ok {
-			err = errors.Warning("fns: future was closed").WithMeta("fns", "future")
-			return
+			err = errors.Warning("fns: future was closed").WithMeta("fns", "futures")
+			break
 		}
 		if data.err != nil {
 			err = data.err
-			return
+			break
 		}
 		r = objects.NewScanner(data.val)
-		return
+		break
 	}
+
+	for _, callback := range f.callbacks {
+		callback()
+	}
+	return
 }

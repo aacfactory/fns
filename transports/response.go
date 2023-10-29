@@ -18,7 +18,8 @@ package transports
 
 import (
 	"bufio"
-	"context"
+	sc "context"
+	"github.com/aacfactory/fns/context"
 	"io"
 	"net"
 )
@@ -41,7 +42,7 @@ type WriteBuffer interface {
 	Bytes() []byte
 }
 
-func LoadResponseWriter(ctx context.Context) ResponseWriter {
+func LoadResponseWriter(ctx sc.Context) ResponseWriter {
 	w, ok := ctx.(ResponseWriter)
 	if ok {
 		return w

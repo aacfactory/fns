@@ -2,93 +2,66 @@ package context
 
 import (
 	"context"
-	"github.com/aacfactory/fns/log"
-	"github.com/aacfactory/fns/runtime"
-	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/logs"
-	"time"
+	"unsafe"
 )
 
-type CancelFunc context.CancelFunc
-type CancelCauseFunc context.CancelCauseFunc
-
 func Wrap(ctx context.Context) Context {
+	v, ok := ctx.(Context)
+	if ok {
+		return v
+	}
 	return &context_{
-		ctx,
+		Context: ctx,
+		entries: make(Entries, 0, 1),
 	}
 }
 
-func WithValue(parent context.Context, key interface{}, value interface{}) Context {
-	return Wrap(context.WithValue(parent, key, value))
-}
-
-func WithCancel(parent context.Context) (Context, CancelFunc) {
-	ctx, cancel := context.WithCancel(parent)
-	return Wrap(ctx), CancelFunc(cancel)
-}
-
-func WithCancelCause(parent context.Context) (Context, CancelCauseFunc) {
-	ctx, cancel := context.WithCancelCause(parent)
-	return Wrap(ctx), CancelCauseFunc(cancel)
-}
-
-func WithoutCancel(parent context.Context) Context {
-	return Wrap(context.WithoutCancel(parent))
-}
-
-func WithTimeout(parent context.Context, timeout time.Duration) (Context, CancelFunc) {
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	return Wrap(ctx), CancelFunc(cancel)
-}
-
-func WithTimeoutCause(parent context.Context, timeout time.Duration, cause error) (Context, CancelFunc) {
-	ctx, cancel := context.WithTimeoutCause(parent, timeout, cause)
-	return Wrap(ctx), CancelFunc(cancel)
-}
-
-func WithDeadline(parent context.Context, d time.Time) (Context, CancelFunc) {
-	ctx, cancel := context.WithDeadline(parent, d)
-	return Wrap(ctx), CancelFunc(cancel)
-}
-
-func WithDeadlineCause(parent context.Context, d time.Time, cause error) (Context, CancelFunc) {
-	ctx, cancel := context.WithDeadlineCause(parent, d, cause)
-	return Wrap(ctx), CancelFunc(cancel)
-}
-
-func Cause(parent context.Context) error {
-	return context.Cause(parent)
-}
-
-func AfterFunc(ctx Context, f func()) (stop func() bool) {
-	stop = context.AfterFunc(ctx, f)
-	return
+func WithValue(parent context.Context, key []byte, val any) Context {
+	ctx := Wrap(parent)
+	ctx.SetUserValue(key, val)
+	return ctx
 }
 
 type Context interface {
 	context.Context
-	Log() logs.Logger
-	Runtime() *runtime.Runtime
-	Request() services.Request
-	Components() services.Components
+	UserValue(key []byte) any
+	SetUserValue(key []byte, val any)
+	UserValues(fn func(key []byte, val any))
 }
 
 type context_ struct {
 	context.Context
+	entries Entries
 }
 
-func (c *context_) Log() logs.Logger {
-	return log.Load(c)
+func (c *context_) UserValue(key []byte) any {
+	return c.entries.Get(key)
 }
 
-func (c *context_) Runtime() *runtime.Runtime {
-	return runtime.Load(c)
+func (c *context_) SetUserValue(key []byte, val any) {
+	c.entries.Set(key, val)
 }
 
-func (c *context_) Request() services.Request {
-	return services.LoadRequest(c)
+func (c *context_) UserValues(fn func(key []byte, val any)) {
+	c.entries.Foreach(fn)
 }
 
-func (c *context_) Components() services.Components {
-	return services.LoadComponents(c)
+func (c *context_) Value(key any) any {
+	switch k := key.(type) {
+	case []byte:
+		v := c.entries.Get(k)
+		if v == nil {
+			return c.Context.Value(key)
+		}
+		return v
+	case string:
+		v := c.entries.Get(unsafe.Slice(unsafe.StringData(k), len(k)))
+		if v == nil {
+			return c.Context.Value(key)
+		}
+		return v
+	default:
+		break
+	}
+	return c.Context.Value(key)
 }

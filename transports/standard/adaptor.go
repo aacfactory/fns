@@ -1,7 +1,7 @@
 package standard
 
 import (
-	"github.com/aacfactory/fns/commons/objects"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/bytebufferpool"
 	"net/http"
@@ -10,14 +10,15 @@ import (
 func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 
+		ctx := context.Wrap(request.Context())
 		r := &Request{
+			ctx:         ctx,
 			maxBodySize: maxRequestBody,
-			userValues:  make(objects.Entries, 0, 1),
 			request:     request,
 		}
 
 		buf := bytebufferpool.Get()
-		w := convertHttpResponseWriterToResponseWriter(request.Context(), writer, buf)
+		w := convertHttpResponseWriterToResponseWriter(ctx, writer, buf)
 
 		h.Handle(w, r)
 

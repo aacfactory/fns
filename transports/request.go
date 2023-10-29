@@ -17,9 +17,10 @@
 package transports
 
 import (
-	"context"
+	sc "context"
 	"crypto/tls"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"net/http"
 )
 
@@ -34,7 +35,6 @@ var (
 
 type Request interface {
 	context.Context
-	UserValues
 	TLS() bool
 	TLSConnectionState() *tls.ConnectionState
 	RemoteAddr() []byte
@@ -47,7 +47,7 @@ type Request interface {
 	Body() ([]byte, error)
 }
 
-func LoadRequest(ctx context.Context) Request {
+func LoadRequest(ctx sc.Context) Request {
 	r, ok := ctx.(Request)
 	if ok {
 		return r

@@ -2,9 +2,9 @@ package standard
 
 import (
 	"bufio"
-	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"net"
@@ -47,6 +47,18 @@ func (w *responseWriter) Err() error {
 
 func (w *responseWriter) Value(key any) any {
 	return w.ctx.Value(key)
+}
+
+func (w *responseWriter) UserValue(key []byte) any {
+	return w.ctx.UserValue(key)
+}
+
+func (w *responseWriter) SetUserValue(key []byte, val any) {
+	w.ctx.SetUserValue(key, val)
+}
+
+func (w *responseWriter) UserValues(fn func(key []byte, val any)) {
+	w.ctx.UserValues(fn)
 }
 
 func (w *responseWriter) Status() int {

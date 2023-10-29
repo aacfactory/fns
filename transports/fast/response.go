@@ -48,6 +48,18 @@ func (w *responseWriter) Value(key any) any {
 	return w.ctx.Value(key)
 }
 
+func (w *responseWriter) UserValue(key []byte) (val any) {
+	return w.ctx.UserValueBytes(key)
+}
+
+func (w *responseWriter) SetUserValue(key []byte, val any) {
+	w.ctx.SetUserValueBytes(key, val)
+}
+
+func (w *responseWriter) UserValues(fn func(key []byte, val any)) {
+	w.ctx.VisitUserValues(fn)
+}
+
 func (w *responseWriter) Status() int {
 	return w.status
 }

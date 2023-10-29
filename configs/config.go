@@ -2,7 +2,7 @@ package configs
 
 import (
 	"github.com/aacfactory/fns/clusters"
-	"github.com/aacfactory/fns/logger"
+	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
@@ -22,7 +22,7 @@ type Config struct {
 	SecretKey string             `json:"secretKey" yaml:"secretKey,omitempty"`
 	Procs     *ProcsConfig       `json:"procs" yaml:"procs,omitempty"`
 	Workers   *WorkersConfig     `json:"workers" yaml:"workers,omitempty"`
-	Log       *logger.Config     `json:"log" yaml:"log,omitempty"`
+	Log       *log.Config        `json:"log" yaml:"log,omitempty"`
 	Cluster   clusters.Config    `json:"cluster" yaml:"cluster,omitempty"`
 	Transport *transports.Config `json:"transport" yaml:"transport,omitempty"`
 	Proxy     *proxies.Config    `json:"proxy" yaml:"proxy,omitempty"`

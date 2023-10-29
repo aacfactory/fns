@@ -31,14 +31,13 @@ var (
 	}
 )
 
-func New(callback ...func()) (p Promise, f Future) {
+func New() (p Promise, f Future) {
 	ch := pool.Get().(chan result)
 	p = promise{
 		ch: ch,
 	}
 	f = future{
-		ch:        ch,
-		callbacks: callback,
+		ch: ch,
 	}
 	return
 }
@@ -68,8 +67,7 @@ func (p promise) Failed(err error) {
 }
 
 type future struct {
-	ch        chan result
-	callbacks []func()
+	ch chan result
 }
 
 func (f future) Get(ctx context.Context) (r Result, err error) {
@@ -89,10 +87,6 @@ func (f future) Get(ctx context.Context) (r Result, err error) {
 		}
 		r = objects.NewScanner(data.val)
 		break
-	}
-
-	for _, callback := range f.callbacks {
-		callback()
 	}
 	return
 }

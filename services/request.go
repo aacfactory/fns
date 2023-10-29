@@ -21,22 +21,16 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
 	"strconv"
+	"sync"
+	"time"
 )
-
-// +-------------------------------------------------------------------------------------------------------------------+
-
-type Request interface {
-	Fn() (service []byte, fn []byte)
-	Header() (header Header)
-	Argument() (argument Argument)
-	Hash() (p []byte)
-}
 
 type RequestOption func(*RequestOptions)
 
@@ -92,19 +86,23 @@ type RequestOptions struct {
 	header Header
 }
 
-func hashRequest(service []byte, fn []byte, arg Argument, intervals versions.Intervals) []byte {
-	body, _ := json.Marshal(arg)
-	buf := bytebufferpool.Get()
-	_, _ = buf.Write(service)
-	_, _ = buf.Write(fn)
-	_, _ = buf.Write(intervals.Bytes())
-	_, _ = buf.Write(body)
-	b := buf.Bytes()
-	bytebufferpool.Put(buf)
-	return b
+// +-------------------------------------------------------------------------------------------------------------------+
+
+var (
+	requestPool = sync.Pool{}
+)
+
+type Request interface {
+	context.Context
+	UserValue(key []byte) (val any)
+	SetUserValue(key []byte, val any)
+	Fn() (service []byte, fn []byte)
+	Header() (header Header)
+	Argument() (argument Argument)
+	Hash() (p []byte)
 }
 
-func NewRequest(ctx context.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) (v Request) {
+func AcquireRequest(ctx context.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		header: Header{},
 	}
@@ -147,73 +145,116 @@ func NewRequest(ctx context.Context, service []byte, fn []byte, arg Argument, op
 	_, _ = buf.Write(body)
 	b := buf.Bytes()
 	bytebufferpool.Put(buf)
-	v = request{
-		header:   opt.header,
-		service:  service,
-		fn:       fn,
-		argument: arg,
-		hash:     bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16)),
+	var r *request
+	cached := requestPool.Get()
+	if cached == nil {
+		r = new(request)
+		r.userValues = objects.NewEntries()
+	} else {
+		r = cached.(*request)
 	}
+	r.ctx = ctx
+	r.userValues = objects.NewEntries()
+	r.header = opt.header
+	r.service = service
+	r.fn = fn
+	r.argument = arg
+	r.hash = bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16))
+	v = r
 	return
 }
 
-type request struct {
-	header   Header
-	service  []byte
-	fn       []byte
-	argument Argument
-	hash     []byte
+func ReleaseRequest(r Request) {
+	req, ok := r.(*request)
+	if !ok {
+		return
+	}
+	req.ctx = nil
+	req.userValues.Reset()
+	requestPool.Put(req)
 }
 
-func (r request) Fn() (service []byte, fn []byte) {
+type request struct {
+	ctx        context.Context
+	userValues objects.Entries
+	header     Header
+	service    []byte
+	fn         []byte
+	argument   Argument
+	hash       []byte
+}
+
+func (r *request) Deadline() (time.Time, bool) {
+	return r.ctx.Deadline()
+}
+
+func (r *request) Done() <-chan struct{} {
+	return r.ctx.Done()
+}
+
+func (r *request) Err() error {
+	return r.ctx.Err()
+}
+
+func (r *request) Value(key any) any {
+	switch k := key.(type) {
+	case []byte:
+		v := r.userValues.Get(k)
+		if v == nil {
+			return r.ctx.Value(key)
+		}
+		return v
+	case string:
+		v := r.userValues.Get(bytex.FromString(k))
+		if v == nil {
+			return r.ctx.Value(key)
+		}
+		return v
+	default:
+		return r.ctx.Value(key)
+	}
+}
+
+func (r *request) UserValue(key []byte) (val any) {
+	return r.userValues.Get(key)
+}
+
+func (r *request) SetUserValue(key []byte, val any) {
+	r.userValues.Set(key, val)
+}
+
+func (r *request) Fn() (service []byte, fn []byte) {
 	service, fn = r.service, r.fn
 	return
 }
 
-func (r request) Header() (header Header) {
+func (r *request) Header() (header Header) {
 	header = r.header
 	return
 }
 
-func (r request) Argument() (argument Argument) {
+func (r *request) Argument() (argument Argument) {
 	argument = r.argument
 	return
 }
 
-func (r request) Hash() (p []byte) {
+func (r *request) Hash() (p []byte) {
 	p = r.hash
 	return
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-const (
-	contextRequestKey = "@fns:services:request"
-)
-
-func tryLoadRequest(ctx context.Context) (r Request, has bool) {
-	v := ctx.Value(contextRequestKey)
-	if v == nil {
-		return
-	}
-	r, has = v.(Request)
+func tryLoadRequest(ctx context.Context) (r Request, ok bool) {
+	r, ok = ctx.(Request)
 	return
 }
 
 func LoadRequest(ctx context.Context) Request {
-	v := ctx.Value(contextRequestKey)
-	if v == nil {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no service request in context")))
-		return nil
+	r, ok := ctx.(Request)
+	if ok {
+		return r
 	}
-	r, ok := v.(Request)
-	if !ok {
-		panic(fmt.Sprintf("%+v", errors.Warning("fns: request in context is not github.com/aacfactory/fns/services.Request")))
-		return nil
-	}
+	panic(fmt.Sprintf("%+v", errors.Warning("fns: can not convert context to request")))
 	return r
-}
-
-func WithRequest(ctx context.Context, r Request) context.Context {
-	return context.WithValue(ctx, contextRequestKey, r)
 }

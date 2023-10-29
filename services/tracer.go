@@ -28,5 +28,12 @@ type traceReportTask struct {
 }
 
 func (task traceReportTask) Execute(ctx context.Context) {
-	_, _ = task.endpoint.Handle(ctx, bytex.FromString(tracing.ReportFnName), NewArgument(task.tracer))
+	req := AcquireRequest(
+		ctx,
+		bytex.FromString(tracing.ServiceName), bytex.FromString(tracing.ReportFnName),
+		NewArgument(task.tracer),
+		WithInternalRequest(),
+	)
+	_, _ = task.endpoint.Handle(req)
+	ReleaseRequest(req)
 }

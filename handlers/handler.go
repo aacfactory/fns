@@ -137,28 +137,21 @@ func (h *Handler) handleRequest(w transports.ResponseWriter, r transports.Reques
 
 	// header <<<
 
-	// ctx
-	ctx := transports.WithRequest(r, r)
-	ctx = transports.WithResponse(ctx, w)
-
-	// do
-	future := h.rt.Endpoints().Request(
-		ctx, service, fn,
+	// handle
+	response, err := h.rt.Endpoints().Request(
+		r, service, fn,
 		services.NewArgument(body),
 		options...,
 	)
-
-	result, err := future.Get(ctx)
 	if err != nil {
 		w.Failed(err)
 		return
 	}
-	if result.Exist() {
-		w.Succeed(result)
+	if response.Exist() {
+		w.Succeed(response)
 	} else {
 		w.Succeed(nil)
 	}
-
 }
 
 func (h *Handler) handleInternalRequest(w transports.ResponseWriter, r transports.Request) {

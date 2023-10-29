@@ -7,6 +7,10 @@ type Entry struct {
 	val any
 }
 
+func NewEntries() Entries {
+	return make(Entries, 0, 1)
+}
+
 type Entries []Entry
 
 func (entries *Entries) Get(key []byte) (val any) {

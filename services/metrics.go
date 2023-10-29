@@ -12,5 +12,12 @@ type metricReportTask struct {
 }
 
 func (task metricReportTask) Execute(ctx context.Context) {
-	_, _ = task.endpoint.Handle(ctx, bytex.FromString(metrics.ReportFnName), NewArgument(task.metric))
+	req := AcquireRequest(
+		ctx,
+		bytex.FromString(metrics.ServiceName), bytex.FromString(metrics.ReportFnName),
+		NewArgument(task.metric),
+		WithInternalRequest(),
+	)
+	_, _ = task.endpoint.Handle(req)
+	ReleaseRequest(req)
 }

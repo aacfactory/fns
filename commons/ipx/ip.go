@@ -17,6 +17,7 @@
 package ipx
 
 import (
+	"github.com/aacfactory/fns/commons/bytex"
 	"net"
 	"os"
 )
@@ -42,7 +43,7 @@ func GetGlobalUniCastIpFromHostname() (v net.IP) {
 	return
 }
 
-func CanonicalizeIp(ip string) string {
+func CanonicalizeIp(ip []byte) []byte {
 	isIPv6 := false
 	for i := 0; !isIPv6 && i < len(ip); i++ {
 		switch ip[i] {
@@ -58,9 +59,9 @@ func CanonicalizeIp(ip string) string {
 	if !isIPv6 {
 		return ip
 	}
-	ipv6 := net.ParseIP(ip)
+	ipv6 := net.ParseIP(bytex.ToString(ip))
 	if ipv6 == nil {
 		return ip
 	}
-	return ipv6.Mask(net.CIDRMask(64, 128)).String()
+	return bytex.FromString(ipv6.Mask(net.CIDRMask(64, 128)).String())
 }

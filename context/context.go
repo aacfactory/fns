@@ -2,7 +2,7 @@ package context
 
 import (
 	"context"
-	"github.com/aacfactory/fns/logger"
+	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/logs"
@@ -78,7 +78,7 @@ type context_ struct {
 }
 
 func (c *context_) Log() logs.Logger {
-	return logger.Load(c)
+	return log.Load(c)
 }
 
 func (c *context_) Runtime() *runtime.Runtime {

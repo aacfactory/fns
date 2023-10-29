@@ -98,25 +98,22 @@ func (s *Services) Documents() (v documents.Documents) {
 	return
 }
 
-func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argument, options ...RequestOption) futures.Future {
-	// promise
-	promise, future := futures.New()
+func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argument, options ...RequestOption) (response Response, err error) {
 	// valid params
 	if len(name) == 0 {
-		promise.Failed(errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil")))
-		return future
-
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
+		return
 	}
 	if len(fn) == 0 {
-		promise.Failed(errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil")))
-		return future
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
+		return
 	}
 	if arg == nil {
 		arg = NewArgument(nil)
 	}
 
 	// request
-	req := NewRequest(ctx, name, fn, arg, options...)
+	req := AcquireRequest(ctx, name, fn, arg, options...)
 
 	// endpoint
 	var endpoint Endpoint
@@ -127,13 +124,12 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 			// accept versions
 			accepted := req.Header().AcceptedVersions().Accept(name, s.version)
 			if !accepted {
-				promise.Failed(
-					errors.NotFound("fns: endpoint was not found").
-						WithCause(fmt.Errorf("version was not match")).
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)),
-				)
-				return future
+				err = errors.NotFound("fns: endpoint was not found").
+					WithCause(fmt.Errorf("version was not match")).
+					WithMeta("service", bytex.ToString(name)).
+					WithMeta("fn", bytex.ToString(fn))
+				ReleaseRequest(req)
+				return
 			}
 			endpoint = local
 		} else {
@@ -152,14 +148,13 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 				// accept versions
 				accepted := req.Header().AcceptedVersions().Accept(name, s.version)
 				if !accepted {
-					promise.Failed(
-						errors.NotFound("fns: endpoint was not found").
-							WithCause(fmt.Errorf("version was not match")).
-							WithMeta("service", bytex.ToString(name)).
-							WithMeta("fn", bytex.ToString(fn)).
-							WithMeta("endpointId", bytex.ToString(req.Header().EndpointId())),
-					)
-					return future
+					err = errors.NotFound("fns: endpoint was not found").
+						WithCause(fmt.Errorf("version was not match")).
+						WithMeta("service", bytex.ToString(name)).
+						WithMeta("fn", bytex.ToString(fn)).
+						WithMeta("endpointId", bytex.ToString(req.Header().EndpointId()))
+					ReleaseRequest(req)
+					return
 				}
 				endpoint = local
 			}
@@ -175,12 +170,11 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 	}
 
 	if endpoint == nil {
-		promise.Failed(
-			errors.NotFound("fns: endpoint was not found").
-				WithMeta("service", bytex.ToString(name)).
-				WithMeta("fn", bytex.ToString(fn)),
-		)
-		return future
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("service", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		ReleaseRequest(req)
+		return
 	}
 
 	// tracer begin
@@ -205,6 +199,8 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 		ctx = metrics.Begin(ctx, name, fn, req.Header().DeviceId(), req.Header().DeviceIp(), remoted)
 	}
 
+	// promise
+	promise, future := futures.New()
 	// dispatch
 	dispatched := s.worker.Dispatch(ctx, fnTask{
 		log:            s.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)),
@@ -213,31 +209,34 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 		traceEndpoint:  traceEndpoint,
 		metricEndpoint: metricEndpoint,
 		endpoint:       endpoint,
-		request:        req,
 		promise:        promise,
 	})
 	if !dispatched {
 		promise.Failed(
-			ErrServiceOverload.
+			errors.Unavailable("fns: service is overload").WithMeta("fns", "overload").
 				WithMeta("service", bytex.ToString(name)).
 				WithMeta("fn", bytex.ToString(fn)),
 		)
-		return future
 	}
-
-	return future
+	response, err = future.Get(ctx)
+	ReleaseRequest(req)
+	return
 }
 
 func (s *Services) Listen(ctx context.Context) (err error) {
 	errs := errors.MakeErrors()
 	for _, ln := range s.listeners {
 		errCh := make(chan error, 1)
+		lnCtx := context.WithValue(ctx, "listener", ln.Name())
+		if components := ln.Components(); len(components) > 0 {
+			lnCtx = WithComponents(lnCtx, components)
+		}
 		go func(ctx context.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)
 			if lnErr != nil {
 				errCh <- lnErr
 			}
-		}(context.WithValue(ctx, "listener", ln.Name()), ln, errCh)
+		}(lnCtx, ln, errCh)
 		select {
 		case lnErr := <-errCh:
 			errs.Append(lnErr)

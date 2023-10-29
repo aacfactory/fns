@@ -11,9 +11,7 @@ import (
 func TestNew(t *testing.T) {
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
-	p, f := futures.New(func() {
-		fmt.Println("cb")
-	})
+	p, f := futures.New()
 	go func(wg *sync.WaitGroup, p futures.Promise) {
 		p.Succeed(1)
 		wg.Done()
@@ -36,13 +34,5 @@ func BenchmarkNew(b *testing.B) {
 		p, f := futures.New()
 		p.Succeed(1)
 		_, _ = f.Get(context.TODO())
-	}
-}
-
-func BenchmarkCh(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		s := make(chan int, 1)
-		close(s)
 	}
 }

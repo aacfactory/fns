@@ -17,13 +17,13 @@
 package services
 
 import (
-	"context"
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
@@ -96,13 +96,14 @@ type Request interface {
 	context.Context
 	UserValue(key []byte) (val any)
 	SetUserValue(key []byte, val any)
+	UserValues(fn func(key []byte, val any))
 	Fn() (service []byte, fn []byte)
 	Header() (header Header)
 	Argument() (argument Argument)
 	Hash() (p []byte)
 }
 
-func AcquireRequest(ctx context.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) (v Request) {
+func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		header: Header{},
 	}
@@ -149,12 +150,10 @@ func AcquireRequest(ctx context.Context, service []byte, fn []byte, arg Argument
 	cached := requestPool.Get()
 	if cached == nil {
 		r = new(request)
-		r.userValues = objects.NewEntries()
 	} else {
 		r = cached.(*request)
 	}
-	r.ctx = ctx
-	r.userValues = objects.NewEntries()
+	r.ctx = context.Fork(context.Wrap(ctx))
 	r.header = opt.header
 	r.service = service
 	r.fn = fn
@@ -170,18 +169,16 @@ func ReleaseRequest(r Request) {
 		return
 	}
 	req.ctx = nil
-	req.userValues.Reset()
 	requestPool.Put(req)
 }
 
 type request struct {
-	ctx        context.Context
-	userValues objects.Entries
-	header     Header
-	service    []byte
-	fn         []byte
-	argument   Argument
-	hash       []byte
+	ctx      context.Context
+	header   Header
+	service  []byte
+	fn       []byte
+	argument Argument
+	hash     []byte
 }
 
 func (r *request) Deadline() (time.Time, bool) {
@@ -197,30 +194,19 @@ func (r *request) Err() error {
 }
 
 func (r *request) Value(key any) any {
-	switch k := key.(type) {
-	case []byte:
-		v := r.userValues.Get(k)
-		if v == nil {
-			return r.ctx.Value(key)
-		}
-		return v
-	case string:
-		v := r.userValues.Get(bytex.FromString(k))
-		if v == nil {
-			return r.ctx.Value(key)
-		}
-		return v
-	default:
-		return r.ctx.Value(key)
-	}
+	return r.ctx.Value(key)
 }
 
 func (r *request) UserValue(key []byte) (val any) {
-	return r.userValues.Get(key)
+	return r.ctx.UserValue(key)
 }
 
 func (r *request) SetUserValue(key []byte, val any) {
-	r.userValues.Set(key, val)
+	r.ctx.SetUserValue(key, val)
+}
+
+func (r *request) UserValues(fn func(key []byte, val any)) {
+	r.ctx.UserValues(fn)
 }
 
 func (r *request) Fn() (service []byte, fn []byte) {
@@ -245,12 +231,12 @@ func (r *request) Hash() (p []byte) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func tryLoadRequest(ctx context.Context) (r Request, ok bool) {
+func tryLoadRequest(ctx sc.Context) (r Request, ok bool) {
 	r, ok = ctx.(Request)
 	return
 }
 
-func LoadRequest(ctx context.Context) Request {
+func LoadRequest(ctx sc.Context) Request {
 	r, ok := ctx.(Request)
 	if ok {
 		return r

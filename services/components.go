@@ -1,9 +1,11 @@
 package services
 
 import (
-	"context"
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 )
 
 const (
@@ -29,12 +31,12 @@ func (components Components) Get(key string) (v Component, has bool) {
 	return
 }
 
-func WithComponents(ctx context.Context, components Components) context.Context {
-	ctx = context.WithValue(ctx, contextComponentsKey, components)
+func WithComponents(ctx sc.Context, components Components) sc.Context {
+	ctx = context.WithValue(ctx, bytex.FromString(contextComponentsKey), components)
 	return ctx
 }
 
-func LoadComponents(ctx context.Context) Components {
+func LoadComponents(ctx sc.Context) Components {
 	v := ctx.Value(contextComponentsKey)
 	if v == nil {
 		return nil
@@ -45,4 +47,12 @@ func LoadComponents(ctx context.Context) Components {
 		return nil
 	}
 	return c
+}
+
+func LoadLoadComponent(ctx sc.Context, name string) (Component, bool) {
+	v := LoadComponents(ctx)
+	if len(v) == 0 {
+		return nil, false
+	}
+	return v.Get(name)
 }

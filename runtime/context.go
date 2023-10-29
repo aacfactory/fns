@@ -1,21 +1,23 @@
 package runtime
 
 import (
-	"context"
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 )
 
 const (
-	ContextKey = "@fns:runtime"
+	contextKey = "@fns:runtime"
 )
 
-func With(ctx context.Context, rt *Runtime) context.Context {
-	return context.WithValue(ctx, ContextKey, rt)
+func With(ctx sc.Context, rt *Runtime) sc.Context {
+	return context.WithValue(ctx, bytex.FromString(contextKey), rt)
 }
 
-func Load(ctx context.Context) *Runtime {
-	v := ctx.Value(ContextKey)
+func Load(ctx sc.Context) *Runtime {
+	v := ctx.Value(contextKey)
 	if v == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no runtime in context")))
 		return nil

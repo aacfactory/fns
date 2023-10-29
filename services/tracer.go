@@ -17,7 +17,7 @@
 package services
 
 import (
-	"context"
+	sc "context"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/services/tracing"
 )
@@ -27,7 +27,7 @@ type traceReportTask struct {
 	tracer   tracing.Tracer
 }
 
-func (task traceReportTask) Execute(ctx context.Context) {
+func (task traceReportTask) Execute(ctx sc.Context) {
 	req := AcquireRequest(
 		ctx,
 		bytex.FromString(tracing.ServiceName), bytex.FromString(tracing.ReportFnName),

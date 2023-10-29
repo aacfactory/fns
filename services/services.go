@@ -17,7 +17,7 @@
 package services
 
 import (
-	"context"
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -98,7 +98,7 @@ func (s *Services) Documents() (v documents.Documents) {
 	return
 }
 
-func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argument, options ...RequestOption) (response Response, err error) {
+func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument, options ...RequestOption) (response Response, err error) {
 	// valid params
 	if len(name) == 0 {
 		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
@@ -223,15 +223,15 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, arg Argu
 	return
 }
 
-func (s *Services) Listen(ctx context.Context) (err error) {
+func (s *Services) Listen(ctx sc.Context) (err error) {
 	errs := errors.MakeErrors()
 	for _, ln := range s.listeners {
 		errCh := make(chan error, 1)
-		lnCtx := context.WithValue(ctx, "listener", ln.Name())
+		lnCtx := sc.WithValue(ctx, bytex.FromString("listener"), ln.Name())
 		if components := ln.Components(); len(components) > 0 {
 			lnCtx = WithComponents(lnCtx, components)
 		}
-		go func(ctx context.Context, ln Listenable, errCh chan error) {
+		go func(ctx sc.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)
 			if lnErr != nil {
 				errCh <- lnErr
@@ -252,7 +252,7 @@ func (s *Services) Listen(ctx context.Context) (err error) {
 	return
 }
 
-func (s *Services) traceEndpoint(ctx context.Context) Endpoint {
+func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {
 	local, has := s.values[tracing.ServiceName]
 	if has {
 		return local
@@ -267,7 +267,7 @@ func (s *Services) traceEndpoint(ctx context.Context) Endpoint {
 	return nil
 }
 
-func (s *Services) metricEndpoint(ctx context.Context) Endpoint {
+func (s *Services) metricEndpoint(ctx sc.Context) Endpoint {
 	local, has := s.values[metrics.ServiceName]
 	if has {
 		return local

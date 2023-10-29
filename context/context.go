@@ -16,6 +16,13 @@ func Wrap(ctx context.Context) Context {
 	}
 }
 
+func Fork(parent Context) Context {
+	return &context_{
+		Context: parent,
+		entries: make(Entries, 0, 1),
+	}
+}
+
 func WithValue(parent context.Context, key []byte, val any) Context {
 	ctx := Wrap(parent)
 	ctx.SetUserValue(key, val)

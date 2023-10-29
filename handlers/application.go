@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/transports"
 )
@@ -21,7 +20,7 @@ func (app *Application) Construct(options transports.MiddlewareOptions) error {
 
 func (app *Application) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r transports.Request) {
-		r.SetUserValue(bytex.FromString(runtime.ContextKey), app.rt)
+		runtime.With(r, app.rt)
 		next.Handle(w, r)
 	})
 }

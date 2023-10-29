@@ -55,7 +55,7 @@ func (f fnTask) Execute(ctx context.Context) {
 			}
 		}
 		// set log into context
-		req.SetUserValue(bytex.FromString(log.ContextKey), f.log)
+		log.With(req, f.log)
 
 		return f.endpoint.Handle(req)
 	})

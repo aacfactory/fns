@@ -1,7 +1,7 @@
 package services
 
 import (
-	"context"
+	sc "context"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/services/metrics"
 )
@@ -11,7 +11,7 @@ type metricReportTask struct {
 	metric   metrics.Metric
 }
 
-func (task metricReportTask) Execute(ctx context.Context) {
+func (task metricReportTask) Execute(ctx sc.Context) {
 	req := AcquireRequest(
 		ctx,
 		bytex.FromString(metrics.ServiceName), bytex.FromString(metrics.ReportFnName),

@@ -2,6 +2,7 @@ package standard
 
 import (
 	"bufio"
+	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/transports"
@@ -9,10 +10,12 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 )
 
-func convertHttpResponseWriterToResponseWriter(w http.ResponseWriter, buf transports.WriteBuffer) transports.ResponseWriter {
+func convertHttpResponseWriterToResponseWriter(ctx context.Context, w http.ResponseWriter, buf transports.WriteBuffer) transports.ResponseWriter {
 	return &responseWriter{
+		ctx:      ctx,
 		writer:   w,
 		status:   0,
 		header:   transports.WrapHttpHeader(w.Header()),
@@ -22,11 +25,28 @@ func convertHttpResponseWriterToResponseWriter(w http.ResponseWriter, buf transp
 }
 
 type responseWriter struct {
+	ctx      context.Context
 	writer   http.ResponseWriter
 	status   int
 	header   transports.Header
 	body     transports.WriteBuffer
 	hijacked bool
+}
+
+func (w *responseWriter) Deadline() (time.Time, bool) {
+	return w.ctx.Deadline()
+}
+
+func (w *responseWriter) Done() <-chan struct{} {
+	return w.ctx.Done()
+}
+
+func (w *responseWriter) Err() error {
+	return w.ctx.Err()
+}
+
+func (w *responseWriter) Value(key any) any {
+	return w.ctx.Value(key)
 }
 
 func (w *responseWriter) Status() int {

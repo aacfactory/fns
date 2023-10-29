@@ -17,7 +17,7 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 		}
 
 		buf := bytebufferpool.Get()
-		w := convertHttpResponseWriterToResponseWriter(writer, buf)
+		w := convertHttpResponseWriterToResponseWriter(request.Context(), writer, buf)
 
 		h.Handle(w, r)
 

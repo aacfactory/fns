@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func convertFastHttpRequestCtxToResponseWriter(ctx *fasthttp.RequestCtx, writer transports.WriteBuffer) (w transports.ResponseWriter) {
@@ -29,6 +30,22 @@ type responseWriter struct {
 	status int
 	header transports.Header
 	body   transports.WriteBuffer
+}
+
+func (w *responseWriter) Deadline() (time.Time, bool) {
+	return w.ctx.Deadline()
+}
+
+func (w *responseWriter) Done() <-chan struct{} {
+	return w.ctx.Done()
+}
+
+func (w *responseWriter) Err() error {
+	return w.ctx.Err()
+}
+
+func (w *responseWriter) Value(key any) any {
+	return w.ctx.Value(key)
 }
 
 func (w *responseWriter) Status() int {

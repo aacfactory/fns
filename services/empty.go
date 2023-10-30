@@ -18,6 +18,7 @@ package services
 
 var (
 	empty = Empty{}
+	null  = []byte{'n', 'u', 'l', 'l'}
 )
 
 // Empty

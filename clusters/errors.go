@@ -1,4 +1,4 @@
-package handlers
+package clusters
 
 import (
 	"github.com/aacfactory/errors"
@@ -12,9 +12,10 @@ var (
 	ErrNotFound               = errors.NotFound("fns: no handlers accept request")
 	ErrInvalidPath            = errors.Warning("fns: invalid path")
 	ErrInvalidBody            = errors.Warning("fns: invalid body")
+	ErrInvalidSignature       = errors.Warning("fns: invalid signature")
 	ErrInvalidRequestVersions = errors.Warning("fns: invalid request versions")
 	ErrTooMayRequest          = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.")
-	ErrLockedRequest          = errors.New(http.StatusLocked, "***REQUEST LOCKED***", "fns: request was locked for idempotent.")
+	ErrLockedRequest          = errors.New(http.StatusTooEarly, "***REQUEST LOCKED***", "fns: request was locked for idempotent.")
 	ErrSignatureLost          = errors.New(488, "***SIGNATURE LOST***", "X-Fns-Signature was required")
 	ErrSignatureUnverified    = errors.New(458, "***SIGNATURE INVALID***", "X-Fns-Signature was invalid")
 )

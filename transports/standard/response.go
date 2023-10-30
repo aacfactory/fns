@@ -10,55 +10,26 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 func convertHttpResponseWriterToResponseWriter(ctx context.Context, w http.ResponseWriter, buf transports.WriteBuffer) transports.ResponseWriter {
 	return &responseWriter{
-		ctx:      ctx,
+		Context:  ctx,
 		writer:   w,
 		status:   0,
-		header:   transports.WrapHttpHeader(w.Header()),
+		header:   WrapHttpHeader(w.Header()),
 		body:     buf,
 		hijacked: false,
 	}
 }
 
 type responseWriter struct {
-	ctx      context.Context
+	context.Context
 	writer   http.ResponseWriter
 	status   int
 	header   transports.Header
 	body     transports.WriteBuffer
 	hijacked bool
-}
-
-func (w *responseWriter) Deadline() (time.Time, bool) {
-	return w.ctx.Deadline()
-}
-
-func (w *responseWriter) Done() <-chan struct{} {
-	return w.ctx.Done()
-}
-
-func (w *responseWriter) Err() error {
-	return w.ctx.Err()
-}
-
-func (w *responseWriter) Value(key any) any {
-	return w.ctx.Value(key)
-}
-
-func (w *responseWriter) UserValue(key []byte) any {
-	return w.ctx.UserValue(key)
-}
-
-func (w *responseWriter) SetUserValue(key []byte, val any) {
-	w.ctx.SetUserValue(key, val)
-}
-
-func (w *responseWriter) UserValues(fn func(key []byte, val any)) {
-	w.ctx.UserValues(fn)
 }
 
 func (w *responseWriter) Status() int {

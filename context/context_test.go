@@ -4,7 +4,6 @@ import (
 	"bytes"
 	sc "context"
 	"fmt"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"testing"
 )
@@ -12,7 +11,7 @@ import (
 func BenchmarkE(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		bytex.Equal([]byte{'1'}, []byte{'2'})
+		bytes.Equal([]byte{'1'}, []byte{'2'})
 	}
 }
 

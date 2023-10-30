@@ -17,8 +17,8 @@
 package transports
 
 import (
+	"bytes"
 	"github.com/aacfactory/fns/commons/bytex"
-	"net/http"
 	"net/textproto"
 )
 
@@ -56,7 +56,7 @@ const (
 	XForwardedForHeaderName                      = "X-Forwarded-For"
 	RequestIdHeaderName                          = "X-Fns-Request-Id"
 	SignatureHeaderName                          = "X-Fns-Signature"
-	RequestInternalSignatureHeaderName           = "X-Fns-Request-Internal-Signature"
+	EndpointIdHeaderName                         = "X-Fns-Endpoint-Id"
 	RequestInternalHeaderName                    = "X-Fns-Request-Internal"
 	RequestTimeoutHeaderName                     = "X-Fns-Request-Timeout"
 	RequestVersionsHeaderName                    = "X-Fns-Request-Version"
@@ -81,52 +81,91 @@ type Header interface {
 }
 
 func NewHeader() Header {
-	return make(httpHeader)
+	hh := make(defaultHeader, 0, 1)
+	return &hh
 }
 
-func WrapHttpHeader(h http.Header) Header {
-	return httpHeader(h)
+type headerEntry struct {
+	name  []byte
+	value [][]byte
 }
 
-type httpHeader map[string][]string
+type defaultHeader []headerEntry
 
-func (h httpHeader) Add(key []byte, value []byte) {
-	textproto.MIMEHeader(h).Add(bytex.ToString(key), bytex.ToString(value))
-}
-
-func (h httpHeader) Set(key []byte, value []byte) {
-	textproto.MIMEHeader(h).Set(bytex.ToString(key), bytex.ToString(value))
-}
-
-func (h httpHeader) Get(key []byte) []byte {
-	return bytex.FromString(textproto.MIMEHeader(h).Get(bytex.ToString(key)))
-}
-
-func (h httpHeader) Del(key []byte) {
-	textproto.MIMEHeader(h).Del(bytex.ToString(key))
-}
-
-func (h httpHeader) Values(key []byte) [][]byte {
-	vv := textproto.MIMEHeader(h).Values(bytex.ToString(key))
-	if len(vv) == 0 {
-		return nil
+func (h *defaultHeader) Add(key []byte, value []byte) {
+	hh := *h
+	key = bytex.FromString(textproto.CanonicalMIMEHeaderKey(bytex.ToString(key)))
+	for _, entry := range hh {
+		if bytes.Equal(entry.name, key) {
+			entry.value = append(entry.value, value)
+			return
+		}
 	}
-	values := make([][]byte, 0, 1)
-	for _, v := range vv {
-		values = append(values, bytex.FromString(v))
-	}
-	return values
+	hh = append(hh, headerEntry{
+		name:  key,
+		value: [][]byte{value},
+	})
+	*h = hh
 }
 
-func (h httpHeader) Foreach(fn func(key []byte, values [][]byte)) {
-	if fn == nil {
+func (h *defaultHeader) Set(key []byte, value []byte) {
+	hh := *h
+	key = bytex.FromString(textproto.CanonicalMIMEHeaderKey(bytex.ToString(key)))
+	for _, entry := range hh {
+		if bytes.Equal(entry.name, key) {
+			entry.value = [][]byte{value}
+			return
+		}
+	}
+	hh = append(hh, headerEntry{
+		name:  key,
+		value: [][]byte{value},
+	})
+	*h = hh
+}
+
+func (h *defaultHeader) Get(key []byte) []byte {
+	hh := *h
+	key = bytex.FromString(textproto.CanonicalMIMEHeaderKey(bytex.ToString(key)))
+	for _, entry := range hh {
+		if bytes.Equal(entry.name, key) {
+			return entry.value[0]
+		}
+	}
+	return nil
+}
+
+func (h *defaultHeader) Del(key []byte) {
+	hh := *h
+	key = bytex.FromString(textproto.CanonicalMIMEHeaderKey(bytex.ToString(key)))
+	n := -1
+	for i, entry := range hh {
+		if bytes.Equal(entry.name, key) {
+			n = i
+			break
+		}
+	}
+	if n == -1 {
 		return
 	}
-	for key, values := range h {
-		vv := make([][]byte, 0, 1)
-		for _, value := range values {
-			vv = append(vv, bytex.FromString(value))
+	hh = append(hh[:n], hh[n+1:]...)
+	*h = hh
+}
+
+func (h *defaultHeader) Values(key []byte) [][]byte {
+	hh := *h
+	key = bytex.FromString(textproto.CanonicalMIMEHeaderKey(bytex.ToString(key)))
+	for _, entry := range hh {
+		if bytes.Equal(entry.name, key) {
+			return entry.value
 		}
-		fn(bytex.FromString(key), vv)
+	}
+	return nil
+}
+
+func (h *defaultHeader) Foreach(fn func(key []byte, values [][]byte)) {
+	hh := *h
+	for _, entry := range hh {
+		fn(entry.name, entry.value)
 	}
 }

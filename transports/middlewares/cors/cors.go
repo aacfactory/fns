@@ -70,7 +70,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 			transports.XForwardedForHeaderName, transports.TrueClientIpHeaderName, transports.XRealIpHeaderName,
 			transports.DeviceIpHeaderName, transports.DeviceIdHeaderName,
 			transports.RequestIdHeaderName,
-			transports.RequestInternalSignatureHeaderName, transports.RequestTimeoutHeaderName, transports.RequestVersionsHeaderName,
+			transports.RequestTimeoutHeaderName, transports.RequestVersionsHeaderName,
 			transports.ETagHeaderName, transports.CacheControlHeaderIfNonMatch, transports.ClearSiteDataHeaderName, transports.ResponseRetryAfterHeaderName, transports.SignatureHeaderName,
 		}
 		for _, header := range defaultAllowedHeaders {
@@ -113,7 +113,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
 	defaultExposedHeaders := []string{
-		transports.RequestIdHeaderName, transports.RequestInternalSignatureHeaderName, transports.HandleLatencyHeaderName,
+		transports.RequestIdHeaderName, transports.HandleLatencyHeaderName,
 		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.ResponseRetryAfterHeaderName, transports.ResponseCacheTTLHeaderName, transports.SignatureHeaderName,
 	}
 	for _, header := range defaultExposedHeaders {
@@ -149,7 +149,7 @@ func (c *corsMiddleware) Close() {
 }
 
 func (c *corsMiddleware) Handle(w transports.ResponseWriter, r transports.Request) {
-	if bytex.Equal(r.Method(), methodOptions) && len(r.Header().Get(accessControlRequestMethodHeader)) > 0 {
+	if bytes.Equal(r.Method(), methodOptions) && len(r.Header().Get(accessControlRequestMethodHeader)) > 0 {
 		c.handlePreflight(w, r)
 		w.SetStatus(http.StatusNoContent)
 	} else {
@@ -162,7 +162,7 @@ func (c *corsMiddleware) handlePreflight(w transports.ResponseWriter, r transpor
 	headers := w.Header()
 	origin := r.Header().Get(originHeader)
 
-	if !bytex.Equal(r.Method(), methodOptions) {
+	if !bytes.Equal(r.Method(), methodOptions) {
 		return
 	}
 	headers.Add(varyHeader, originHeader)
@@ -199,7 +199,7 @@ func (c *corsMiddleware) handlePreflight(w transports.ResponseWriter, r transpor
 	if c.allowCredentials {
 		headers.Set(accessControlAllowCredentialsHeader, trueBytes)
 	}
-	if c.allowPrivateNetwork && bytex.Equal(r.Header().Get(accessControlRequestPrivateNetworkHeader), trueBytes) {
+	if c.allowPrivateNetwork && bytes.Equal(r.Header().Get(accessControlRequestPrivateNetworkHeader), trueBytes) {
 		headers.Set(accessControlAllowPrivateNetworkHeader, trueBytes)
 	}
 	if c.maxAge > 0 {
@@ -241,7 +241,7 @@ func (c *corsMiddleware) isOriginAllowed(origin []byte) bool {
 	}
 	origin = bytes.ToLower(origin)
 	for _, o := range c.allowedOrigins {
-		if bytex.Equal(o, origin) {
+		if bytes.Equal(o, origin) {
 			return true
 		}
 	}
@@ -258,11 +258,11 @@ func (c *corsMiddleware) isMethodAllowed(method []byte) bool {
 		return false
 	}
 	ms := bytes.ToUpper(method)
-	if bytex.Equal(ms, methodOptions) {
+	if bytes.Equal(ms, methodOptions) {
 		return true
 	}
 	for _, m := range c.allowedMethods {
-		if bytex.Equal(ms, m) {
+		if bytes.Equal(ms, m) {
 			return true
 		}
 	}
@@ -277,7 +277,7 @@ func (c *corsMiddleware) areHeadersAllowed(requestedHeaders [][]byte) bool {
 		hs := bytex.FromString(http.CanonicalHeaderKey(bytex.ToString(header)))
 		found := false
 		for _, h := range c.allowedHeaders {
-			if bytex.Equal(hs, h) {
+			if bytes.Equal(hs, h) {
 				found = true
 				break
 			}

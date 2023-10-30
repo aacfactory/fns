@@ -17,6 +17,7 @@
 package services
 
 import (
+	"bytes"
 	stdjson "encoding/json"
 	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
@@ -43,6 +44,12 @@ func NewArgument(v interface{}) (arg Argument) {
 		arg = EmptyArgument()
 		return
 	}
+	p, ok := v.([]byte)
+	if ok {
+		if bytes.Equal(null, p) {
+			v = nil
+		}
+	}
 	arg = argument{
 		value: v,
 	}
@@ -54,7 +61,14 @@ type argument struct {
 }
 
 func (arg argument) MarshalJSON() (data []byte, err error) {
+	if arg.value == nil {
+		data = null
+		return
+	}
 	switch arg.value.(type) {
+	case Empty, *Empty:
+		data = null
+		break
 	case []byte:
 		value := arg.value.([]byte)
 		if !json.Validate(value) {

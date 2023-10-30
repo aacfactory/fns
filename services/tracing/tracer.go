@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -32,7 +33,8 @@ func Begin(ctx sc.Context, tid []byte, sid []byte, service []byte, fn []byte, ta
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: begin trace failed cause tags is invalid")))
 		return ctx
 	}
-	span := loadSpan(ctx)
+
+	span := LoadSpan(ctx)
 	if span == nil {
 		// init
 		span = &Span{
@@ -51,6 +53,9 @@ func Begin(ctx sc.Context, tid []byte, sid []byte, service []byte, fn []byte, ta
 		span.Tags.Merge(tags)
 		ctx = context.WithValue(ctx, bytex.FromString(contextTracerIdKey), tid)
 	} else {
+		if bytes.Equal(sid, span.Id) {
+			return ctx
+		}
 		child := &Span{
 			Id:       sid,
 			Service:  service,
@@ -78,7 +83,7 @@ func Begin(ctx sc.Context, tid []byte, sid []byte, service []byte, fn []byte, ta
 }
 
 func MarkBeginHandling(ctx sc.Context, tags ...string) {
-	span := loadSpan(ctx)
+	span := LoadSpan(ctx)
 	if span == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace mark begin handling failed cause not begin")))
 		return
@@ -97,7 +102,7 @@ func MountSpan(ctx sc.Context, span *Span) {
 	if span == nil {
 		return
 	}
-	parent := loadSpan(ctx)
+	parent := LoadSpan(ctx)
 	if parent == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace mark begin handling failed cause not begin")))
 		return
@@ -116,7 +121,7 @@ func Tagging(ctx sc.Context, tags ...string) {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace add tags failed cause tags is invalid")))
 		return
 	}
-	span := loadSpan(ctx)
+	span := LoadSpan(ctx)
 	if span == nil {
 		return
 	}
@@ -124,7 +129,7 @@ func Tagging(ctx sc.Context, tags ...string) {
 }
 
 func End(ctx sc.Context, tags ...string) (tracer Tracer, finished bool) {
-	span := loadSpan(ctx)
+	span := LoadSpan(ctx)
 	if span == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace end failed cause not begin")))
 		return

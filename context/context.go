@@ -2,6 +2,9 @@ package context
 
 import (
 	"context"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"sync"
 	"unsafe"
 )
@@ -44,6 +47,21 @@ func WithValue(parent context.Context, key []byte, val any) Context {
 	}
 	ctx.SetUserValue(key, val)
 	return ctx
+}
+
+func ScanValue(ctx context.Context, key []byte, val any) (has bool, err error) {
+	v := ctx.Value(key)
+	if v == nil {
+		return
+	}
+	s := objects.NewScanner(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
 }
 
 type Context interface {

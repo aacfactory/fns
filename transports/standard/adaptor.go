@@ -12,7 +12,7 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 
 		ctx := context.Acquire(request.Context())
 		r := &Request{
-			ctx:         ctx,
+			Context:     ctx,
 			maxBodySize: maxRequestBody,
 			request:     request,
 		}

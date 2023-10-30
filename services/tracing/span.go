@@ -56,7 +56,7 @@ func (span *Span) mountChildrenParent() {
 	}
 }
 
-func loadSpan(ctx sc.Context) *Span {
+func LoadSpan(ctx sc.Context) *Span {
 	v := ctx.Value(contextSpanKey)
 	if v == nil {
 		return nil

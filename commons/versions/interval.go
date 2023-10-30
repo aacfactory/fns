@@ -89,7 +89,7 @@ func (intervals Intervals) Accept(name []byte, target Version) (ok bool) {
 		return
 	}
 	for _, interval := range intervals {
-		if bytex.Equal(name, interval.Name) {
+		if bytes.Equal(name, interval.Name) {
 			ok = interval.Value.Accept(target)
 			break
 		}

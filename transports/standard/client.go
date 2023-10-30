@@ -234,7 +234,7 @@ func (c Client) Do(ctx context.Context, method []byte, path []byte, header trans
 		}
 	}
 	status = resp.StatusCode
-	responseHeader = transports.WrapHttpHeader(resp.Header)
+	responseHeader = WrapHttpHeader(resp.Header)
 	responseBody = b.Bytes()
 
 	return

@@ -2,7 +2,6 @@ package wildcard
 
 import (
 	"bytes"
-	"github.com/aacfactory/fns/commons/bytex"
 )
 
 func Match(pattern []byte, target []byte) (ok bool) {
@@ -40,7 +39,7 @@ type Wildcard struct {
 
 func (w *Wildcard) Match(s []byte) bool {
 	if len(w.suffix) == 0 {
-		return bytex.Equal(w.prefix, s)
+		return bytes.Equal(w.prefix, s)
 	}
 	return len(s) >= len(w.prefix)+len(w.suffix) && bytes.HasPrefix(s, w.prefix) && bytes.HasSuffix(s, w.suffix)
 }

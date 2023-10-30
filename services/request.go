@@ -17,6 +17,7 @@
 package services
 
 import (
+	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -29,7 +30,6 @@ import (
 	"github.com/valyala/bytebufferpool"
 	"strconv"
 	"sync"
-	"time"
 )
 
 type RequestOption func(*RequestOptions)
@@ -89,14 +89,12 @@ type RequestOptions struct {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 var (
-	requestPool = sync.Pool{}
+	requestPool               = sync.Pool{}
+	requestUserValueKeyPrefix = bytex.FromString("@fns:request:user_value:")
 )
 
 type Request interface {
 	context.Context
-	UserValue(key []byte) (val any)
-	SetUserValue(key []byte, val any)
-	UserValues(fn func(key []byte, val any))
 	Fn() (service []byte, fn []byte)
 	Header() (header Header)
 	Argument() (argument Argument)
@@ -153,7 +151,7 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 	} else {
 		r = cached.(*request)
 	}
-	r.ctx = context.Acquire(ctx)
+	r.Context = context.Acquire(ctx)
 	r.header = opt.header
 	r.service = service
 	r.fn = fn
@@ -168,13 +166,13 @@ func ReleaseRequest(r Request) {
 	if !ok {
 		return
 	}
-	context.Release(req.ctx)
-	req.ctx = nil
+	context.Release(req)
+	req.Context = nil
 	requestPool.Put(req)
 }
 
 type request struct {
-	ctx      context.Context
+	context.Context
 	header   Header
 	service  []byte
 	fn       []byte
@@ -182,32 +180,23 @@ type request struct {
 	hash     []byte
 }
 
-func (r *request) Deadline() (time.Time, bool) {
-	return r.ctx.Deadline()
-}
-
-func (r *request) Done() <-chan struct{} {
-	return r.ctx.Done()
-}
-
-func (r *request) Err() error {
-	return r.ctx.Err()
-}
-
-func (r *request) Value(key any) any {
-	return r.ctx.Value(key)
-}
-
-func (r *request) UserValue(key []byte) (val any) {
-	return r.ctx.UserValue(key)
+func (r *request) UserValue(key []byte) any {
+	key = append(requestUserValueKeyPrefix, key...)
+	return r.Context.UserValue(key)
 }
 
 func (r *request) SetUserValue(key []byte, val any) {
-	r.ctx.SetUserValue(key, val)
+	key = append(requestUserValueKeyPrefix, key...)
+	r.Context.SetUserValue(key, val)
 }
 
 func (r *request) UserValues(fn func(key []byte, val any)) {
-	r.ctx.UserValues(fn)
+	r.Context.UserValues(func(key []byte, val any) {
+		k, ok := bytes.CutPrefix(key, requestUserValueKeyPrefix)
+		if ok {
+			fn(k, val)
+		}
+	})
 }
 
 func (r *request) Fn() (service []byte, fn []byte) {

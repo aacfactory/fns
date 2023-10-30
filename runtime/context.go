@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	contextKey = "@fns:runtime"
+	contextKey = "@fns:context:runtime"
 )
 
 func With(ctx sc.Context, rt *Runtime) sc.Context {

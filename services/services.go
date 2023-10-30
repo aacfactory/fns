@@ -17,6 +17,7 @@
 package services
 
 import (
+	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -29,6 +30,7 @@ import (
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"golang.org/x/sync/singleflight"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -142,7 +144,7 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 			}
 		}
 	} else {
-		if bytex.Equal(s.id, req.Header().EndpointId()) {
+		if bytes.Equal(s.id, req.Header().EndpointId()) {
 			local, inLocal := s.values[bytex.ToString(name)]
 			if inLocal {
 				// accept versions
@@ -216,7 +218,7 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 	})
 	if !dispatched {
 		promise.Failed(
-			errors.Unavailable("fns: service is overload").WithMeta("fns", "overload").
+			errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
 				WithMeta("service", bytex.ToString(name)).
 				WithMeta("fn", bytex.ToString(fn)),
 		)

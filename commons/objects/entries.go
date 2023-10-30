@@ -1,6 +1,8 @@
 package objects
 
-import "github.com/aacfactory/fns/commons/bytex"
+import (
+	"bytes"
+)
 
 type Entry struct {
 	key []byte
@@ -16,7 +18,7 @@ type Entries []Entry
 func (entries *Entries) Get(key []byte) (val any) {
 	s := *entries
 	for _, entry := range s {
-		if bytex.Equal(key, entry.key) {
+		if bytes.Equal(key, entry.key) {
 			val = entry.val
 			return
 		}
@@ -27,7 +29,7 @@ func (entries *Entries) Get(key []byte) (val any) {
 func (entries *Entries) Set(key []byte, val any) {
 	s := *entries
 	for _, entry := range s {
-		if bytex.Equal(key, entry.key) {
+		if bytes.Equal(key, entry.key) {
 			entry.val = val
 			*entries = s
 			return
@@ -45,7 +47,7 @@ func (entries *Entries) Remove(key []byte) {
 	s := *entries
 	n := -1
 	for i, entry := range s {
-		if bytex.Equal(key, entry.key) {
+		if bytes.Equal(key, entry.key) {
 			n = i
 			break
 		}

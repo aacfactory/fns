@@ -9,7 +9,6 @@ import (
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"net/http"
-	"time"
 )
 
 const (
@@ -17,37 +16,9 @@ const (
 )
 
 type Request struct {
-	ctx         context.Context
+	context.Context
 	maxBodySize int
 	request     *http.Request
-}
-
-func (r *Request) Deadline() (time.Time, bool) {
-	return r.ctx.Deadline()
-}
-
-func (r *Request) Done() <-chan struct{} {
-	return r.ctx.Done()
-}
-
-func (r *Request) Err() error {
-	return r.ctx.Err()
-}
-
-func (r *Request) Value(key any) any {
-	return r.ctx.Value(key)
-}
-
-func (r *Request) UserValue(key []byte) any {
-	return r.ctx.UserValue(key)
-}
-
-func (r *Request) SetUserValue(key []byte, val any) {
-	r.ctx.SetUserValue(key, val)
-}
-
-func (r *Request) UserValues(fn func(key []byte, val any)) {
-	r.ctx.UserValues(fn)
 }
 
 func (r *Request) TLS() bool {
@@ -75,7 +46,7 @@ func (r *Request) Method() []byte {
 }
 
 func (r *Request) Header() transports.Header {
-	return transports.WrapHttpHeader(r.request.Header)
+	return WrapHttpHeader(r.request.Header)
 }
 
 func (r *Request) Path() []byte {

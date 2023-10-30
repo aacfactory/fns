@@ -119,7 +119,7 @@ func (h *Handler) handleRequest(w transports.ResponseWriter, r transports.Reques
 	}
 	options = append(options, services.WithDeviceId(deviceId))
 	// device ip
-	deviceIp := r.Header().Get(bytex.FromString(transports.DeviceIpHeaderName))
+	deviceIp := transports.DeviceIp(r)
 	if len(deviceIp) > 0 {
 		options = append(options, services.WithDeviceIp(deviceIp))
 	}

@@ -1,9 +1,11 @@
 package tracing
 
 import (
-	"context"
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"time"
 )
 
@@ -45,7 +47,16 @@ type Span struct {
 	parent   *Span
 }
 
-func loadSpan(ctx context.Context) *Span {
+func (span *Span) mountChildrenParent() {
+	for _, child := range span.Children {
+		if child.parent == nil {
+			child.parent = span
+		}
+		child.mountChildrenParent()
+	}
+}
+
+func loadSpan(ctx sc.Context) *Span {
 	v := ctx.Value(contextSpanKey)
 	if v == nil {
 		return nil
@@ -58,6 +69,6 @@ func loadSpan(ctx context.Context) *Span {
 	return sp
 }
 
-func withSpan(ctx context.Context, span *Span) context.Context {
-	return context.WithValue(ctx, contextSpanKey, span)
+func withSpan(ctx sc.Context, span *Span) sc.Context {
+	return context.WithValue(ctx, bytex.FromString(contextSpanKey), span)
 }

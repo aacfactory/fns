@@ -19,7 +19,6 @@ type ProcsConfig struct {
 }
 
 type Config struct {
-	SecretKey string             `json:"secretKey" yaml:"secretKey,omitempty"`
 	Procs     *ProcsConfig       `json:"procs" yaml:"procs,omitempty"`
 	Workers   *WorkersConfig     `json:"workers" yaml:"workers,omitempty"`
 	Log       *log.Config        `json:"log" yaml:"log,omitempty"`

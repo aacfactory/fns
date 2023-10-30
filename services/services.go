@@ -177,6 +177,9 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 		return
 	}
 
+	// ctx
+	ctx = req
+
 	// tracer begin
 	var traceEndpoint Endpoint
 	if len(req.Header().RequestId()) > 0 {

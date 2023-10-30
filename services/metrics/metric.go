@@ -1,8 +1,10 @@
 package metrics
 
 import (
-	"context"
+	sc "context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"time"
 )
 
@@ -29,7 +31,7 @@ type Metric struct {
 	beg       time.Time
 }
 
-func Begin(ctx context.Context, service []byte, fn []byte, deviceId []byte, deviceIp []byte, remoted bool) context.Context {
+func Begin(ctx sc.Context, service []byte, fn []byte, deviceId []byte, deviceIp []byte, remoted bool) sc.Context {
 	metric := Metric{
 		Service:   service,
 		Fn:        fn,
@@ -43,10 +45,10 @@ func Begin(ctx context.Context, service []byte, fn []byte, deviceId []byte, devi
 		Remoted:   remoted,
 		beg:       time.Now(),
 	}
-	return context.WithValue(ctx, contextKey, &metric)
+	return context.WithValue(ctx, bytex.FromString(contextKey), &metric)
 }
 
-func Finish(ctx context.Context, succeed bool, err error, shared bool) (Metric, bool) {
+func Finish(ctx sc.Context, succeed bool, err error, shared bool) (Metric, bool) {
 	v := ctx.Value(contextKey)
 	if v == nil {
 		return Metric{}, false

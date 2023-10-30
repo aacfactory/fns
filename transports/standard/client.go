@@ -1,6 +1,7 @@
 package standard
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -196,7 +197,7 @@ func (c Client) Do(ctx context.Context, method []byte, path []byte, header trans
 	} else {
 		url = fmt.Sprintf("http://%s%s", c.address, bytex.ToString(path))
 	}
-	r, rErr := http.NewRequestWithContext(ctx, bytex.ToString(method), url, nil)
+	r, rErr := http.NewRequestWithContext(ctx, bytex.ToString(method), url, bytes.NewReader(body))
 	if rErr != nil {
 		err = errors.Warning("http: create request failed").WithCause(rErr)
 		return

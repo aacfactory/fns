@@ -35,7 +35,6 @@ import (
 type Application interface {
 	Deploy(service ...services.Service) (err error)
 	Run(ctx context.Context) (err error)
-	Execute(ctx context.Context, serviceName string, fn string, argument interface{}, options ...ExecuteOption) (result services.FutureResult, err errors.CodeError)
 	Log() (log logs.Logger)
 	Sync() (err error)
 	Quit()

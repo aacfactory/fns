@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/configs"
 	"github.com/aacfactory/fns/hooks"
+	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
@@ -85,8 +86,10 @@ type Options struct {
 	name                  string
 	version               versions.Version
 	configRetrieverOption configures.RetrieverOption
-	transportOptions      *TransportOptions
-	proxyOptions          *TransportOptions
+	transport             transports.Transport
+	middlewares           []transports.Middleware
+	handlers              []transports.MuxHandler
+	proxy                 *proxies.Proxy
 	hooks                 []hooks.Hook
 	shutdownTimeout       time.Duration
 }

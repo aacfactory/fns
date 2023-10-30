@@ -26,31 +26,40 @@ var (
 
 type Handler struct {
 	rt      *runtime.Runtime
+	group   *singleflight.Group
 	doc     documents.Documents
 	openapi oas.API
 	once    sync.Once
-	group   singleflight.Group
+}
+
+func (h *Handler) Match(method []byte, path []byte, header transports.Header) bool {
+	matchDocument := bytes.Equal(method, methodGet) &&
+		(bytes.Equal(path, bytex.FromString(documents.ServicesDocumentsPath)) || bytes.Equal(path, bytex.FromString(documents.ServicesOpenapiPath)))
+	if matchDocument {
+		return true
+	}
+	matchService := bytes.Equal(method, methodPost) &&
+		len(bytes.Split(path, slashBytes)) == 3 &&
+		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+	if matchService {
+		return true
+	}
+	return false
 }
 
 func (h *Handler) Handle(w transports.ResponseWriter, r transports.Request) {
-	if bytex.Equal(r.Method(), methodGet) {
-		if bytex.Equal(r.Path(), bytex.FromString(documents.ServicesDocumentsPath)) {
+	if bytes.Equal(r.Method(), methodGet) {
+		if bytes.Equal(r.Path(), bytex.FromString(documents.ServicesDocumentsPath)) {
 			h.handleDocuments(w, r)
-		} else if bytex.Equal(r.Path(), bytex.FromString(documents.ServicesOpenapiPath)) {
+		} else if bytes.Equal(r.Path(), bytex.FromString(documents.ServicesOpenapiPath)) {
 			h.handleOpenapi(w, r)
 		} else {
 			w.Failed(ErrNotFound)
 		}
 		return
 	}
-	if bytex.Equal(r.Method(), methodPost) {
-
-		internalHeader := r.Header().Get(bytex.FromString(transports.RequestInternalHeaderName))
-		if len(internalHeader) == 0 {
-			h.handleRequest(w, r)
-		} else {
-			h.handleInternalRequest(w, r)
-		}
+	if bytes.Equal(r.Method(), methodPost) {
+		h.handleRequest(w, r)
 		return
 	}
 }
@@ -152,23 +161,4 @@ func (h *Handler) handleRequest(w transports.ResponseWriter, r transports.Reques
 	} else {
 		w.Succeed(nil)
 	}
-}
-
-func (h *Handler) handleInternalRequest(w transports.ResponseWriter, r transports.Request) {
-	// path
-	path := r.Path()
-	pathItems := bytes.Split(path, slashBytes)
-	if len(pathItems) != 3 {
-		w.Failed(ErrInvalidPath.WithMeta("path", bytex.ToString(path)))
-		return
-	}
-	service := pathItems[1]
-	fn := pathItems[2]
-	// body
-	body, bodyErr := r.Body()
-	if bodyErr != nil {
-		w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
-		return
-	}
-
 }

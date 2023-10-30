@@ -1,9 +1,11 @@
 package tracing
 
 import (
-	"context"
+	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"time"
 )
 
@@ -21,7 +23,7 @@ type Tracer struct {
 	Span *Span  `json:"span"`
 }
 
-func Begin(ctx context.Context, tid []byte, sid []byte, service []byte, fn []byte, tags ...string) context.Context {
+func Begin(ctx sc.Context, tid []byte, sid []byte, service []byte, fn []byte, tags ...string) sc.Context {
 	if len(tid) == 0 || len(sid) == 0 || len(service) == 0 || len(fn) == 0 {
 		return ctx
 	}
@@ -47,7 +49,7 @@ func Begin(ctx context.Context, tid []byte, sid []byte, service []byte, fn []byt
 			parent:   nil,
 		}
 		span.Tags.Merge(tags)
-		ctx = context.WithValue(ctx, contextTracerIdKey, tid)
+		ctx = context.WithValue(ctx, bytex.FromString(contextTracerIdKey), tid)
 	} else {
 		child := &Span{
 			Id:       sid,
@@ -75,7 +77,7 @@ func Begin(ctx context.Context, tid []byte, sid []byte, service []byte, fn []byt
 	return withSpan(ctx, span)
 }
 
-func MarkBeginHandling(ctx context.Context, tags ...string) {
+func MarkBeginHandling(ctx sc.Context, tags ...string) {
 	span := loadSpan(ctx)
 	if span == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace mark begin handling failed cause not begin")))
@@ -91,7 +93,21 @@ func MarkBeginHandling(ctx context.Context, tags ...string) {
 	return
 }
 
-func Tagging(ctx context.Context, tags ...string) {
+func MountSpan(ctx sc.Context, span *Span) {
+	if span == nil {
+		return
+	}
+	parent := loadSpan(ctx)
+	if parent == nil {
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace mark begin handling failed cause not begin")))
+		return
+	}
+	span.mountChildrenParent()
+	span.parent = parent
+	parent.Children = append(parent.Children, span)
+}
+
+func Tagging(ctx sc.Context, tags ...string) {
 	tagsLen := len(tags)
 	if tagsLen == 0 {
 		return
@@ -107,7 +123,7 @@ func Tagging(ctx context.Context, tags ...string) {
 	span.Tags.Merge(tags)
 }
 
-func End(ctx context.Context, tags ...string) (tracer Tracer, finished bool) {
+func End(ctx sc.Context, tags ...string) (tracer Tracer, finished bool) {
 	span := loadSpan(ctx)
 	if span == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: trace end failed cause not begin")))

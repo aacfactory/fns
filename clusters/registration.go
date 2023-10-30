@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
+// Registration
+// implement endpoint
 // 直接调client，不再workers
+// 如果是internal 则签名，如果不是，可能是proxy的
 type Registration struct {
 	hostId   string
 	id       string
@@ -23,7 +26,7 @@ type Registration struct {
 	address  string
 	name     string
 	document *documents.Document
-	devMode  bool // todo remove
+	devMode  bool
 	client   transports.Client
 	signer   signatures.Signature
 	worker   workers.Workers

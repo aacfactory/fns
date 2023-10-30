@@ -21,3 +21,19 @@ func (config Config) Get(name string) (v configures.Config, err error) {
 	}
 	return
 }
+
+func (config Config) Secret() (v []byte, err error) {
+	raw, has := config["secret"]
+	if !has {
+		v = []byte("fns+-")
+		return
+	}
+	s := ""
+	err = json.Unmarshal(raw, &s)
+	if err != nil {
+		err = errors.Warning("fns: get secret from cluster config failed").WithCause(err)
+		return
+	}
+	v = []byte(s)
+	return
+}

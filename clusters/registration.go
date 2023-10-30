@@ -54,7 +54,10 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 	// internal
 	header.Set(bytex.FromString(transports.RequestInternalHeaderName), []byte{'1'})
 	// endpoint id
-	header.Set(bytex.FromString(transports.EndpointIdHeaderName), registration.id)
+	endpointId := ctx.Header().EndpointId()
+	if len(endpointId) > 0 {
+		header.Set(bytex.FromString(transports.EndpointIdHeaderName), endpointId)
+	}
 	// device id
 	deviceId := ctx.Header().DeviceId()
 	if len(deviceId) > 0 {

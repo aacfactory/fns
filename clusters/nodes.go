@@ -2,11 +2,18 @@ package clusters
 
 import "github.com/aacfactory/fns/commons/versions"
 
+type EndpointInfo struct {
+	Name       string `json:"name"`
+	Internal   bool   `json:"internal"`
+	Listenable bool   `json:"listenable"`
+}
+
 type Node struct {
-	Id      string           `json:"id"`
-	Name    string           `json:"name"`
-	Version versions.Version `json:"version"`
-	Address string           `json:"address"`
+	Id        string           `json:"id"`
+	Name      string           `json:"name"`
+	Version   versions.Version `json:"version"`
+	Address   string           `json:"address"`
+	Endpoints []EndpointInfo   `json:"endpoints"`
 }
 
 type Nodes []*Node

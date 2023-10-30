@@ -3,24 +3,20 @@ package clusters
 import (
 	"context"
 	"github.com/aacfactory/configures"
-	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/logs"
 )
 
 type Cluster interface {
-	Join(ctx context.Context) (err error)
+	Join(ctx context.Context, node Node) (err error)
 	Leave(ctx context.Context) (err error)
 	Nodes(ctx context.Context) (nodes Nodes, err error)
 	Shared() (shared shareds.Shared)
 }
 
 type ClusterBuilderOptions struct {
-	Config     configures.Config
-	Log        logs.Logger
-	AppId      string
-	AppName    string
-	AppVersion versions.Version
+	Config configures.Config
+	Log    logs.Logger
 }
 
 type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)

@@ -98,7 +98,11 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	// internal
 	options = append(options, services.WithInternalRequest())
 	// endpoint id
-	options = append(options, services.WithEndpointId(handler.id))
+	endpointId := r.Header().Get(bytex.FromString(transports.EndpointIdHeaderName))
+	if len(endpointId) == 0 {
+		endpointId = handler.id
+	}
+	options = append(options, services.WithEndpointId(endpointId))
 	// device id
 	deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
 	if len(deviceId) == 0 {

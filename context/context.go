@@ -67,6 +67,10 @@ func (c *context_) SetUserValue(key []byte, val any) {
 }
 
 func (c *context_) UserValues(fn func(key []byte, val any)) {
+	parent, ok := c.Context.(Context)
+	if ok {
+		parent.UserValues(fn)
+	}
 	c.entries.Foreach(fn)
 }
 

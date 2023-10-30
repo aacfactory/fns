@@ -59,7 +59,15 @@ type context_ struct {
 }
 
 func (c *context_) UserValue(key []byte) any {
-	return c.entries.Get(key)
+	v := c.entries.Get(key)
+	if v != nil {
+		return v
+	}
+	parent, ok := c.Context.(Context)
+	if ok {
+		return parent.UserValue(key)
+	}
+	return nil
 }
 
 func (c *context_) SetUserValue(key []byte, val any) {

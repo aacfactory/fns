@@ -69,7 +69,10 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 
 	// sign
 	sign := r.Header().Get(bytex.FromString(transports.RequestInternalHeaderName))
-
+	if len(sign) == 0 {
+		w.Failed(ErrSignatureLost.WithMeta("path", bytex.ToString(path)))
+		return
+	}
 	// body
 	body, bodyErr := r.Body()
 	if bodyErr != nil {
@@ -78,7 +81,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 
 	if !handler.signature.Verify(body, sign) {
-		w.Failed(ErrInvalidSignature.WithMeta("path", bytex.ToString(path)))
+		w.Failed(ErrSignatureUnverified.WithMeta("path", bytex.ToString(path)))
 		return
 	}
 

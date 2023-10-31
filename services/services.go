@@ -89,7 +89,7 @@ func (s *Services) Add(service Service) (err error) {
 		s.listeners = append(s.listeners, ln)
 	}
 	doc := service.Document()
-	if doc != nil {
+	if doc != nil && !service.Internal() {
 		s.doc.Add(doc)
 	}
 	return
@@ -183,19 +183,16 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 	ctx = req
 
 	// tracer begin
-	var traceEndpoint Endpoint
-	if len(req.Header().RequestId()) > 0 {
-		traceEndpoint = s.traceEndpoint(ctx)
-		if traceEndpoint != nil {
-			ctx = tracing.Begin(
-				ctx,
-				req.Header().RequestId(), req.Header().ProcessId(),
-				name, fn,
-				"internal", strconv.FormatBool(req.Header().Internal()),
-				"hostId", bytex.ToString(s.id),
-				"remoted", strconv.FormatBool(remoted),
-			)
-		}
+	traceEndpoint := s.traceEndpoint(ctx)
+	if traceEndpoint != nil && len(req.Header().RequestId()) > 0 {
+		ctx = tracing.Begin(
+			ctx,
+			req.Header().RequestId(), req.Header().ProcessId(),
+			name, fn,
+			"internal", strconv.FormatBool(req.Header().Internal()),
+			"hostId", bytex.ToString(s.id),
+			"remoted", strconv.FormatBool(remoted),
+		)
 	}
 
 	// metric begin

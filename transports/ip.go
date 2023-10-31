@@ -35,5 +35,6 @@ func DeviceIp(ctx context.Context) (ip []byte) {
 		ip = bytex.FromString(remoteIp)
 	}
 	ip = ipx.CanonicalizeIp(ip)
+	r.Header().Set(bytex.FromString(DeviceIpHeaderName), ip)
 	return
 }

@@ -11,8 +11,6 @@ require (
 	github.com/aacfactory/gcg v1.0.4
 	github.com/aacfactory/json v1.14.0
 	github.com/aacfactory/logs v1.13.0
-	github.com/aacfactory/rings v1.1.2
-	github.com/aacfactory/systems v0.2.0
 	github.com/aacfactory/workers v1.8.3
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dgrr/http2 v0.3.5

@@ -4,10 +4,20 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/logs"
 	"sync"
 )
 
+func NewApplicationMiddleware(rt *runtime.Runtime) transports.Middleware {
+	return &Application{
+		log:     nil,
+		rt:      rt,
+		counter: sync.WaitGroup{},
+	}
+}
+
 type Application struct {
+	log     logs.Logger
 	rt      *runtime.Runtime
 	counter sync.WaitGroup
 }
@@ -17,7 +27,7 @@ func (app *Application) Name() string {
 }
 
 func (app *Application) Construct(options transports.MiddlewareOptions) error {
-
+	app.log = options.Log
 	return nil
 }
 
@@ -36,9 +46,11 @@ func (app *Application) Handler(next transports.Handler) transports.Handler {
 		}
 		// header >>>
 		// device id
-		r.Header()
-
-		// request id
+		deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
+		if len(deviceId) == 0 {
+			w.Failed(ErrDeviceId)
+			return
+		}
 
 		// header <<<
 		app.counter.Add(1)
@@ -51,12 +63,7 @@ func (app *Application) Handler(next transports.Handler) transports.Handler {
 			app.counter.Done()
 			return
 		}
-		// header >>>
-		// request id
 
-		// latency
-
-		// header <<<
 		// done
 		app.counter.Done()
 	})

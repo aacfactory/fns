@@ -145,7 +145,7 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 			err = errors.Warning("fns: internal endpoint handle failed").WithCause(decodeErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
 			return
 		}
-		if rsb.Span != nil {
+		if rsb.Span != nil && len(rsb.Span.Id) > 0 {
 			tracing.MountSpan(ctx, rsb.Span)
 		}
 		if rsb.Succeed {

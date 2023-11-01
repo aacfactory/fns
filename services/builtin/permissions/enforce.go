@@ -18,26 +18,27 @@ package permissions
 
 import (
 	"context"
-	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/authorizations"
 )
 
-func EnforceContext(ctx context.Context, serviceName string, fn string) (err errors.CodeError) {
-	request, hasRequest := services.GetRequest(ctx)
-	if !hasRequest {
-		err = errors.Warning("permissions: enforce failed").WithCause(fmt.Errorf("there is no request in context"))
-		return
-	}
-	userId := request.User().Id
-	if !userId.Exist() {
-		err = errors.Warning("permissions: enforce failed").WithCause(fmt.Errorf("there is no user id in request"))
+var (
+	ErrForbidden = errors.Forbidden("permissions: forbidden")
+)
+
+func EnforceContext(ctx context.Context, endpoint []byte, fn []byte) (err error) {
+	authorization := authorizations.Load(ctx)
+	if !authorization.Validate() {
+		err = ErrForbidden
 		return
 	}
 	ok, enforceErr := Enforce(ctx, EnforceParam{
-		UserId:  userId,
-		Service: serviceName,
-		Fn:      fn,
+		Account:  authorization.Account,
+		Endpoint: endpoint,
+		Fn:       fn,
 	})
 	if enforceErr != nil {
 		err = errors.Warning("permissions: enforce failed").WithCause(enforceErr)
@@ -50,18 +51,18 @@ func EnforceContext(ctx context.Context, serviceName string, fn string) (err err
 	return
 }
 
-func Enforce(ctx context.Context, param EnforceParam) (ok bool, err errors.CodeError) {
-	endpoint, hasEndpoint := services.GetEndpoint(ctx, name)
-	if !hasEndpoint {
-		err = errors.Warning("permissions: enforce failed").WithCause(errors.Warning("permissions: service was not deployed"))
+func Enforce(ctx context.Context, param EnforceParam) (ok bool, err error) {
+	rt := runtime.Load(ctx)
+	response, handleErr := rt.Endpoints().Request(
+		ctx,
+		bytex.FromString(name), bytex.FromString(enforceFn),
+		services.NewArgument(param),
+	)
+	if handleErr != nil {
+		err = handleErr
 		return
 	}
-	future, requestErr := endpoint.RequestSync(ctx, services.NewRequest(ctx, name, enforceFn, services.NewArgument(param), services.WithInternalRequest()))
-	if requestErr != nil {
-		err = requestErr
-		return
-	}
-	scanErr := future.Scan(&ok)
+	scanErr := response.Scan(&ok)
 	if scanErr != nil {
 		err = errors.Warning("permissions: enforce failed").WithCause(scanErr)
 		return

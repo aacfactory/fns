@@ -23,20 +23,15 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/authorizations"
 	"github.com/aacfactory/json"
 	"strings"
 )
 
-type Token []byte
-
-func (token Token) String() string {
-	return string(token)
-}
-
 type TokenEncoder interface {
 	services.Component
-	Encode(ctx context.Context, param Authorization) (token Token, err error)
-	Decode(ctx context.Context, token Token) (result Authorization, err error)
+	Encode(ctx context.Context, param authorizations.Authorization) (token authorizations.Token, err error)
+	Decode(ctx context.Context, token authorizations.Token) (result authorizations.Authorization, err error)
 }
 
 type defaultTokenEncoderConfig struct {
@@ -59,12 +54,12 @@ func (encoder *defaultTokenEncoder) Construct(options services.Options) (err err
 	config := defaultTokenEncoderConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
-		err = errors.Warning("fns: build default token encoder failed").WithMeta("service", name).WithCause(configErr)
+		err = errors.Warning("fns: build default token encoder failed").WithMeta("encoder", encoder.Name()).WithCause(configErr)
 		return
 	}
 	key := strings.TrimSpace(config.Key)
 	if key == "" {
-		err = errors.Warning("fns: build default token encoder failed").WithMeta("service", name).WithCause(errors.Warning("key is require"))
+		err = errors.Warning("fns: build default token encoder failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("key is require"))
 		return
 	}
 	encoder.signature = signatures.HMAC([]byte(key))
@@ -75,10 +70,10 @@ func (encoder *defaultTokenEncoder) Close() {
 	return
 }
 
-func (encoder *defaultTokenEncoder) Encode(_ context.Context, param Authorization) (token Token, err error) {
+func (encoder *defaultTokenEncoder) Encode(_ context.Context, param authorizations.Authorization) (token authorizations.Token, err error) {
 	p, encodeErr := json.Marshal(param)
 	if encodeErr != nil {
-		err = errors.Warning("fns: encode token failed").WithMeta("service", name).WithCause(encodeErr)
+		err = errors.Warning("fns: encode token failed").WithMeta("encoder", encoder.Name()).WithCause(encodeErr)
 		return
 	}
 	pb := make([]byte, base64.URLEncoding.EncodedLen(len(p)))
@@ -90,10 +85,10 @@ func (encoder *defaultTokenEncoder) Encode(_ context.Context, param Authorizatio
 	base64.URLEncoding.Encode(sb, s)
 	sbl := len(sb)
 
-	token = make(Token, 4+pbl+1+sbl)
+	token = make(authorizations.Token, 4+pbl+1+sbl)
 	token[0] = 'F'
-	token[1] = 'N'
-	token[2] = 'S'
+	token[1] = 'n'
+	token[2] = 's'
 	token[3] = ' '
 
 	copy(token[4:4+pbl], pb)
@@ -103,38 +98,38 @@ func (encoder *defaultTokenEncoder) Encode(_ context.Context, param Authorizatio
 	return
 }
 
-func (encoder *defaultTokenEncoder) Decode(_ context.Context, token Token) (result Authorization, err error) {
+func (encoder *defaultTokenEncoder) Decode(_ context.Context, token authorizations.Token) (result authorizations.Authorization, err error) {
 	if len(token) < 4 {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	after, found := bytes.CutPrefix(token, []byte{'F', 'N', 'S', ' '})
+	after, found := bytes.CutPrefix(token, []byte{'F', 'n', 's', ' '})
 	if !found {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	pos := bytes.IndexByte(after, '.')
 	if pos < 1 {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	p, pErr := base64.URLEncoding.DecodeString(string(after[0:pos]))
 	if pErr != nil {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(pErr)
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(pErr)
 		return
 	}
 	s, sErr := base64.URLEncoding.DecodeString(string(after[pos+1:]))
 	if sErr != nil {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(sErr)
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(sErr)
 		return
 	}
 	if !encoder.signature.Verify(p, s) {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	decodeErr := json.Unmarshal(p, &result)
 	if decodeErr != nil {
-		err = errors.Warning("fns: decode token failed").WithMeta("service", name).WithCause(decodeErr)
+		err = errors.Warning("fns: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(decodeErr)
 		return
 	}
 	return

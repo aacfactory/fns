@@ -17,9 +17,9 @@
 package permissions
 
 import (
-	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/services"
 )
 
@@ -44,19 +44,19 @@ type service struct {
 	enforcer Enforcer
 }
 
-func (svc *service) Build(options services.Options) (err error) {
-	err = svc.Abstract.Build(options)
+func (svc *service) Construct(options services.Options) (err error) {
+	err = svc.Abstract.Construct(options)
 	if err != nil {
 		return
 	}
 	if svc.Components() == nil || len(svc.Components()) != 1 {
-		err = errors.Warning("permissions: build failed").WithCause(errors.Warning("permissions: enforcer is required"))
+		err = errors.Warning("permissions: construct failed").WithMeta("endpoint", svc.Name()).WithCause(errors.Warning("permissions: enforcer is required"))
 		return
 	}
 	for _, component := range svc.Components() {
 		enforcer, ok := component.(Enforcer)
 		if !ok {
-			err = errors.Warning("permissions: build failed").WithCause(errors.Warning("permissions: enforcer is required"))
+			err = errors.Warning("permissions: construct failed").WithMeta("endpoint", svc.Name()).WithCause(errors.Warning("permissions: enforcer is required"))
 			return
 		}
 		svc.enforcer = enforcer
@@ -64,19 +64,20 @@ func (svc *service) Build(options services.Options) (err error) {
 	return
 }
 
-func (svc *service) Handle(ctx context.Context, fn string, argument services.Argument) (v interface{}, err errors.CodeError) {
-	switch fn {
+func (svc *service) Handle(ctx services.Request) (v interface{}, err error) {
+	_, fn := ctx.Fn()
+	switch bytex.ToString(fn) {
 	case enforceFn:
 		param := EnforceParam{}
-		paramErr := argument.As(&param)
+		paramErr := ctx.Argument().As(&param)
 		if paramErr != nil {
-			err = errors.Warning("permissions: enforce failed").WithCause(paramErr)
+			err = errors.Warning("permissions: enforce failed").WithMeta("endpoint", svc.Name()).WithMeta("fn", string(fn)).WithCause(paramErr)
 			break
 		}
 		v, err = svc.enforcer.Enforce(ctx, param)
 		break
 	default:
-		err = errors.Warning("permissions: fn was not found")
+		err = errors.NotFound("permissions: fn was not found").WithMeta("endpoint", svc.Name()).WithMeta("fn", string(fn))
 		break
 	}
 	return

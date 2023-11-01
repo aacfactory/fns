@@ -137,7 +137,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	// authorization
 	authorization := r.Header().Get(bytex.FromString(transports.AuthorizationHeaderName))
 	if len(authorization) > 0 {
-		options = append(options, services.WithAuthorization(authorization))
+		options = append(options, services.WithToken(authorization))
 	}
 
 	// header <<<

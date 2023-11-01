@@ -8,7 +8,7 @@ type Header struct {
 	endpointId       []byte
 	deviceId         []byte
 	deviceIp         []byte
-	authorization    []byte
+	token            []byte
 	acceptedVersions versions.Intervals
 	internal         bool
 }
@@ -33,8 +33,8 @@ func (header Header) DeviceIp() []byte {
 	return header.deviceIp
 }
 
-func (header Header) Authorization() []byte {
-	return header.authorization
+func (header Header) Token() []byte {
+	return header.token
 }
 
 func (header Header) AcceptedVersions() versions.Intervals {

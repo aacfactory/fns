@@ -17,104 +17,71 @@
 package tracings
 
 import (
-	"context"
 	"fmt"
-	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/fns/services/documents"
+	"github.com/aacfactory/fns/services/tracing"
 	"github.com/aacfactory/fns/services/validators"
 )
 
-const (
-	name = "tracings"
-)
-
-func Service(components ...services.Component) (v services.Service) {
-	var reporter services.Component
-	for _, component := range components {
-		if component.Name() == "reporter" {
-			reporter = component
-			continue
-		}
-		if reporter != nil {
-			break
-		}
-	}
+func Service(reporter Reporter) (v services.Service) {
 	if reporter == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("tracings: create tracings service failed").WithCause(fmt.Errorf("reporter is nil"))))
 	}
 	v = &service{
-		components: map[string]services.Component{"reporter": reporter},
+		Abstract: services.NewAbstract(tracing.EndpointName, true, reporter),
 	}
 	return
 }
 
 type service struct {
-	components map[string]services.Component
+	services.Abstract
+	reporter Reporter
 }
 
-func (svc *service) Build(options services.Options) (err error) {
-	if svc.components != nil {
-		for cn, component := range svc.components {
-			if component == nil {
-				continue
-			}
-			componentCfg, hasConfig := options.Config.Node(cn)
-			if !hasConfig {
-				componentCfg, _ = configures.NewJsonConfig([]byte("{}"))
-			}
-			err = component.Build(services.ComponentOptions{
-				Log:    options.Log.With("component", cn),
-				Config: componentCfg,
-			})
-			if err != nil {
-				err = errors.Warning("tracings: build tracings service failed").WithCause(err)
-				return
-			}
+func (svc *service) Construct(options services.Options) (err error) {
+	err = svc.Abstract.Construct(options)
+	if err != nil {
+		return
+	}
+	if svc.Components() == nil || len(svc.Components()) != 1 {
+		err = errors.Warning("tracings: construct failed").WithMeta("endpoint", svc.Name()).WithCause(errors.Warning("tracings: reporter is required"))
+		return
+	}
+	for _, component := range svc.Components() {
+		reporter, ok := component.(Reporter)
+		if !ok {
+			err = errors.Warning("tracings: construct failed").WithMeta("endpoint", svc.Name()).WithCause(errors.Warning("tracings: reporter is required"))
+			return
 		}
+		svc.reporter = reporter
 	}
 	return
 }
 
-func (svc *service) Name() string {
-	return name
-}
-
-func (svc *service) Internal() bool {
-	return true
-}
-
-func (svc *service) Components() (components map[string]services.Component) {
-	components = svc.components
-	return
-}
-
-func (svc *service) Document() (doc *documents.Document) {
-	return
-}
-
-func (svc *service) Handle(context context.Context, fn string, argument services.Argument) (v interface{}, err errors.CodeError) {
-	switch fn {
-	case "report":
-		tracer := &Tracer{}
-		asErr := argument.As(tracer)
-		if asErr != nil {
-			err = errors.Warning("tracings: decode argument failed").WithCause(asErr).WithMeta("service", name).WithMeta("fn", fn)
+func (svc *service) Handle(ctx services.Request) (v interface{}, err error) {
+	_, fn := ctx.Fn()
+	switch bytex.ToString(fn) {
+	case tracing.ReportFnName:
+		tracer := tracing.Tracer{}
+		paramErr := ctx.Argument().As(&tracer)
+		if paramErr != nil {
+			err = errors.Warning("tracings: decode param failed").WithCause(paramErr).WithMeta("service", svc.Name()).WithMeta("fn", string(fn))
 			break
 		}
 		validErr := validators.Validate(tracer)
 		if validErr != nil {
-			err = validErr.WithMeta("service", name).WithMeta("fn", fn)
+			err = validErr.WithMeta("service", svc.Name()).WithMeta("fn", string(fn))
 			break
 		}
-		err = report(context, tracer)
+		err = svc.reporter.Report(ctx, tracer)
 		if err != nil {
-			err = err.WithMeta("service", name).WithMeta("fn", fn)
+			err = errors.Warning("tracings: report failed").WithMeta("service", svc.Name()).WithMeta("fn", string(fn)).WithCause(err)
 		}
 		break
 	default:
-		err = errors.Warning("tracings: fn was not found").WithMeta("fn", fn)
+		err = errors.NotFound("tracings: fn was not found").WithMeta("fn", string(fn))
 		break
 	}
 	return

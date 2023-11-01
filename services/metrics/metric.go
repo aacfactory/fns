@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	ServiceName  = "metrics"
+	EndpointName = "metrics"
 	ReportFnName = "report"
 )
 

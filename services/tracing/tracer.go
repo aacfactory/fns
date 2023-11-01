@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ServiceName  = "tracings"
+	EndpointName = "tracings"
 	ReportFnName = "report"
 )
 

@@ -255,14 +255,14 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 }
 
 func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {
-	local, has := s.values[tracing.ServiceName]
+	local, has := s.values[tracing.EndpointName]
 	if has {
 		return local
 	}
 	if s.discovery == nil {
 		return nil
 	}
-	remote, fetched := s.discovery.Get(ctx, bytex.FromString(tracing.ServiceName))
+	remote, fetched := s.discovery.Get(ctx, bytex.FromString(tracing.EndpointName))
 	if fetched {
 		return remote
 	}
@@ -270,14 +270,14 @@ func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {
 }
 
 func (s *Services) metricEndpoint(ctx sc.Context) Endpoint {
-	local, has := s.values[metrics.ServiceName]
+	local, has := s.values[metrics.EndpointName]
 	if has {
 		return local
 	}
 	if s.discovery == nil {
 		return nil
 	}
-	remote, fetched := s.discovery.Get(ctx, bytex.FromString(metrics.ServiceName))
+	remote, fetched := s.discovery.Get(ctx, bytex.FromString(metrics.EndpointName))
 	if fetched {
 		return remote
 	}

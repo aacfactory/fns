@@ -30,7 +30,7 @@ type traceReportTask struct {
 func (task traceReportTask) Execute(ctx sc.Context) {
 	req := AcquireRequest(
 		ctx,
-		bytex.FromString(tracing.ServiceName), bytex.FromString(tracing.ReportFnName),
+		bytex.FromString(tracing.EndpointName), bytex.FromString(tracing.ReportFnName),
 		NewArgument(task.tracer),
 		WithInternalRequest(),
 	)

@@ -52,9 +52,9 @@ func WithEndpointId(id []byte) RequestOption {
 	}
 }
 
-func WithAuthorization(authorization []byte) RequestOption {
+func WithToken(token []byte) RequestOption {
 	return func(options *RequestOptions) {
-		options.header.authorization = authorization
+		options.header.token = token
 	}
 }
 
@@ -128,8 +128,8 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 		if len(opt.header.deviceIp) == 0 {
 			opt.header.deviceIp = header.deviceIp
 		}
-		if len(opt.header.authorization) == 0 {
-			opt.header.authorization = header.authorization
+		if len(opt.header.token) == 0 {
+			opt.header.token = header.token
 		}
 		if len(opt.header.acceptedVersions) == 0 {
 			opt.header.acceptedVersions = header.acceptedVersions

@@ -43,5 +43,5 @@ func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 }
 
 type Discovery interface {
-	Get(ctx context.Context, service []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
+	Get(ctx context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
 }

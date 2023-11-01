@@ -1,6 +1,7 @@
 package clusters
 
 import (
+	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
@@ -15,10 +16,6 @@ import (
 	"sync/atomic"
 )
 
-// Registration
-// implement endpoint
-// 直接调client，不再workers
-// 如果是internal 则签名，如果不是，可能是proxy的
 type Registration struct {
 	id        []byte
 	address   []byte
@@ -43,6 +40,11 @@ func (registration *Registration) Internal() (ok bool) {
 
 func (registration *Registration) Document() (document *documents.Document) {
 	document = registration.document
+	return
+}
+
+func (registration *Registration) Dispatch(ctx context.Context, method []byte, path []byte, header transports.Header, body []byte) (status int, responseHeader transports.Header, responseBody []byte, err error) {
+	status, responseHeader, responseBody, err = registration.client.Do(ctx, method, path, header, body)
 	return
 }
 
@@ -79,9 +81,9 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 		header.Set(bytex.FromString(transports.RequestVersionsHeaderName), requestVersion.Bytes())
 	}
 	// authorization
-	authorization := ctx.Header().Authorization()
-	if len(authorization) > 0 {
-		header.Set(bytex.FromString(transports.AuthorizationHeaderName), authorization)
+	token := ctx.Header().Token()
+	if len(token) > 0 {
+		header.Set(bytex.FromString(transports.AuthorizationHeaderName), token)
 	}
 	// header <<<
 
@@ -238,4 +240,16 @@ func (list SortedRegistrations) MaxVersion() (r []*Registration) {
 		break
 	}
 	return
+}
+
+type NamedRegistrations []SortedRegistrations
+
+func (names NamedRegistrations) Get(name []byte) (v SortedRegistrations, has bool) {
+
+	return
+}
+
+func (names NamedRegistrations) Add(registration Registration) NamedRegistrations {
+
+	return names
 }

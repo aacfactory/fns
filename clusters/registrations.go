@@ -20,7 +20,24 @@ func (rs *Registrations) Add(name string, internal bool, listenable bool) {
 	return
 }
 
-func (rs *Registrations) Get(ctx context.Context, service []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
+func (rs *Registrations) Find(ctx context.Context, name []byte, options ...services.EndpointGetOption) (registration *Registration, has bool) {
 
+	return
+}
+
+func (rs *Registrations) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
+	endpoint, has = rs.Find(ctx, name, options...)
+	return
+}
+
+func (rs *Registrations) Watching(ctx context.Context) {
+	// set current (refresh ttl)
+	// get nodes from cluster
+	// hash nodes
+	// compare hash
+	// when same then discard
+	// else make new registration(fetch doc)
+	// make new names with new registrations
+	// lock and swap names
 	return
 }

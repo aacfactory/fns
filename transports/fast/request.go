@@ -2,7 +2,9 @@ package fast
 
 import (
 	"crypto/tls"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"time"
@@ -30,6 +32,21 @@ func (r *Request) Value(key any) any {
 
 func (r *Request) UserValue(key []byte) (val any) {
 	return r.ctx.UserValueBytes(key)
+}
+
+func (r *Request) ScanUserValue(key []byte, val any) (has bool, err error) {
+	v := r.UserValue(key)
+	if v == nil {
+		return
+	}
+	s := objects.NewScanner(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
 }
 
 func (r *Request) SetUserValue(key []byte, val any) {

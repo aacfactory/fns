@@ -25,19 +25,14 @@ func With(ctx sc.Context, authorization Authorization) sc.Context {
 }
 
 func Load(ctx sc.Context) Authorization {
+	authorization := Authorization{}
 	fc, ok := ctx.(context.Context)
 	if ok {
-		v := fc.UserValue(bytex.FromString(contextUserKey))
-		if v == nil {
-			return Authorization{}
-		}
-		return v.(Authorization)
+		_, _ = fc.ScanUserValue(bytex.FromString(contextUserKey), &authorization)
+		return authorization
 	}
-	v := ctx.Value(contextKey)
-	if v == nil {
-		return Authorization{}
-	}
-	return v.(Authorization)
+	_, _ = context.ScanValue(ctx, bytex.FromString(contextKey), &authorization)
+	return authorization
 }
 
 type Authorization struct {

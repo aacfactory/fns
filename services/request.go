@@ -185,6 +185,12 @@ func (r *request) UserValue(key []byte) any {
 	return r.Context.UserValue(key)
 }
 
+func (r *request) ScanUserValue(key []byte, val any) (has bool, err error) {
+	key = append(requestUserValueKeyPrefix, key...)
+	has, err = r.Context.ScanUserValue(key, val)
+	return
+}
+
 func (r *request) SetUserValue(key []byte, val any) {
 	key = append(requestUserValueKeyPrefix, key...)
 	r.Context.SetUserValue(key, val)

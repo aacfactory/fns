@@ -67,6 +67,7 @@ func ScanValue(ctx context.Context, key []byte, val any) (has bool, err error) {
 type Context interface {
 	context.Context
 	UserValue(key []byte) any
+	ScanUserValue(key []byte, val any) (has bool, err error)
 	SetUserValue(key []byte, val any)
 	UserValues(fn func(key []byte, val any))
 }
@@ -86,6 +87,21 @@ func (c *context_) UserValue(key []byte) any {
 		return parent.UserValue(key)
 	}
 	return nil
+}
+
+func (c *context_) ScanUserValue(key []byte, val any) (has bool, err error) {
+	v := c.UserValue(key)
+	if v == nil {
+		return
+	}
+	s := objects.NewScanner(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
 }
 
 func (c *context_) SetUserValue(key []byte, val any) {

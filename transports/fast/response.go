@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/valyala/fasthttp"
@@ -50,6 +51,21 @@ func (w *responseWriter) Value(key any) any {
 
 func (w *responseWriter) UserValue(key []byte) (val any) {
 	return w.ctx.UserValueBytes(key)
+}
+
+func (w *responseWriter) ScanUserValue(key []byte, val any) (has bool, err error) {
+	v := w.UserValue(key)
+	if v == nil {
+		return
+	}
+	s := objects.NewScanner(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
 }
 
 func (w *responseWriter) SetUserValue(key []byte, val any) {

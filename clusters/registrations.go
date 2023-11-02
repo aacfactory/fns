@@ -3,18 +3,100 @@ package clusters
 import (
 	"context"
 	"fmt"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/handlers"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
+	"strings"
 	"sync"
 	"time"
 )
 
+type Options struct {
+	Id      string
+	Name    string
+	Version versions.Version
+	Port    int
+	Log     logs.Logger
+	Dialer  transports.Dialer
+	Config  Config
+}
+
+func New(options Options) (rs *Registrations, err error) {
+	// host
+	hostRetrieverName := strings.TrimSpace(options.Config.HostRetriever)
+	if hostRetrieverName == "" {
+		hostRetrieverName = "default"
+	}
+	hostRetriever, hasHostRetriever := getHostRetriever(hostRetrieverName)
+	if !hasHostRetriever {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(fmt.Errorf("host retriever was not found")).WithMeta("name", hostRetrieverName)
+		return
+	}
+	host, hostErr := hostRetriever()
+	if hostErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(hostErr)
+		return
+	}
+	// node
+	node := &Node{
+		Id:        options.Id,
+		Name:      options.Name,
+		Version:   options.Version,
+		Address:   fmt.Sprintf("%s:%d", host, options.Port),
+		Endpoints: make([]EndpointInfo, 0, 1),
+	}
+	// signature
+	secret := options.Config.Secret
+	if secret == "" {
+		secret = "FNS+-"
+	}
+	signature := signatures.HMAC([]byte(secret))
+	// cluster
+	cluster, hasCluster := loadCluster(options.Config.Kind)
+	if !hasCluster {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(fmt.Errorf("cluster was not found")).WithMeta("name", options.Config.Kind)
+		return
+	}
+	if options.Config.Option == nil && len(options.Config.Option) < 2 {
+		options.Config.Option = []byte{'{', '}'}
+	}
+	clusterConfig, clusterConfigErr := configures.NewJsonConfig(options.Config.Option)
+	if clusterConfigErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(clusterConfigErr).WithMeta("name", options.Config.Kind)
+		return
+	}
+	clusterErr := cluster.Construct(ClusterOptions{
+		Log:    options.Log.With("cluster", options.Config.Kind),
+		Config: clusterConfig,
+	})
+	if clusterErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(clusterErr).WithMeta("name", options.Config.Kind)
+		return
+	}
+
+	rs = &Registrations{
+		log:       options.Log.With("fns", "registrations"),
+		cluster:   cluster,
+		dialer:    options.Dialer,
+		signature: signature,
+		closeFn:   nil,
+		closedCh:  make(chan struct{}, 1),
+		node:      node,
+		names:     make(NamedRegistrations, 0, 1),
+		locker:    sync.RWMutex{},
+	}
+	return
+}
+
+// Registrations
+// implement discovery + handler
 type Registrations struct {
 	log       logs.Logger
 	cluster   Cluster
@@ -74,7 +156,12 @@ func (rs *Registrations) Get(ctx context.Context, name []byte, options ...servic
 	return
 }
 
-func (rs *Registrations) Watching(ctx context.Context) {
+func (rs *Registrations) Watching(ctx context.Context) (err error) {
+	joinErr := rs.cluster.Join(ctx, *rs.node)
+	if joinErr != nil {
+		err = errors.Warning("fns: watching registrations failed").WithCause(joinErr)
+		return
+	}
 	ctx, rs.closeFn = context.WithCancel(ctx)
 	go func(ctx context.Context, rs *Registrations) {
 		closed := false
@@ -153,11 +240,15 @@ func (rs *Registrations) Watching(ctx context.Context) {
 				break
 			}
 		}
+		_ = rs.cluster.Leave(ctx)
+		rs.closedCh <- struct{}{}
+		close(rs.closedCh)
 	}(ctx, rs)
 	return
 }
 
-func (node Node) makeRegistration(ctx context.Context) (v *Registration, err error) {
-
+func (rs *Registrations) Close() {
+	rs.closeFn()
+	<-rs.closedCh
 	return
 }

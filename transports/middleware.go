@@ -19,7 +19,7 @@ type Middleware interface {
 	Close()
 }
 
-func WaveMiddlewares(log logs.Logger, config *Config, middlewares []Middleware) (v Middlewares, err error) {
+func WaveMiddlewares(log logs.Logger, config Config, middlewares []Middleware) (v Middlewares, err error) {
 	for _, middleware := range middlewares {
 		name := strings.TrimSpace(middleware.Name())
 		mc, mcErr := config.Middleware(name)

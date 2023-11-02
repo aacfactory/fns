@@ -7,7 +7,13 @@ import (
 	"github.com/aacfactory/logs"
 )
 
+type ClusterOptions struct {
+	Log    logs.Logger
+	Config configures.Config
+}
+
 type Cluster interface {
+	Construct(options ClusterOptions) (err error)
 	Join(ctx context.Context, node Node) (err error)
 	Leave(ctx context.Context) (err error)
 	NodeEvents() (events <-chan NodeEvent)
@@ -19,17 +25,15 @@ type ClusterBuilderOptions struct {
 	Log    logs.Logger
 }
 
-type ClusterBuilder func(options ClusterBuilderOptions) (cluster Cluster, err error)
-
 var (
-	builders = make(map[string]ClusterBuilder)
+	clusterMap = make(map[string]Cluster)
 )
 
-func RegisterClusterBuilder(name string, builder ClusterBuilder) {
-	builders[name] = builder
+func RegisterCluster(name string, cluster Cluster) {
+	clusterMap[name] = cluster
 }
 
-func LoadClusterBuilder(name string) (builder ClusterBuilder, has bool) {
-	builder, has = builders[name]
+func loadCluster(name string) (cluster Cluster, has bool) {
+	cluster, has = clusterMap[name]
 	return
 }

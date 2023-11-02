@@ -38,9 +38,15 @@ type ResponseBody struct {
 	Span    *tracing.Span   `json:"span"`
 }
 
+func NewInternalHandler(id []byte, signature signatures.Signature) transports.Handler {
+	return &InternalHandler{
+		id:        id,
+		signature: signature,
+	}
+}
+
 type InternalHandler struct {
 	id        []byte
-	rt        *runtime.Runtime
 	signature signatures.Signature
 }
 
@@ -164,8 +170,10 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 		options = append(options, services.WithProcessId(pid))
 	}
 
+	// runtime
+	rt := runtime.Load(r)
 	// handle
-	response, err := handler.rt.Endpoints().Request(
+	response, err := rt.Endpoints().Request(
 		ctx, service, fn,
 		services.NewArgument(rb.Argument),
 		options...,

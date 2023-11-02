@@ -23,7 +23,7 @@ import (
 
 type Options struct {
 	Log         logs.Logger
-	Config      *Config
+	Config      Config
 	Middlewares []Middleware
 	Handler     Handler
 }

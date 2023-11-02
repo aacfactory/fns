@@ -97,6 +97,20 @@ func (intervals Intervals) Accept(name []byte, target Version) (ok bool) {
 	return
 }
 
+func (intervals Intervals) Get(name []byte) (interval Interval, has bool) {
+	if len(intervals) == 0 {
+		return
+	}
+	for _, namedInterval := range intervals {
+		if bytes.Equal(name, namedInterval.Name) {
+			interval = namedInterval.Value
+			has = true
+			return
+		}
+	}
+	return
+}
+
 func (intervals Intervals) Bytes() []byte {
 	if len(intervals) == 0 {
 		return []byte{}

@@ -11,9 +11,10 @@ const (
 )
 
 type Cluster struct {
+	events chan clusters.NodeEvent
 }
 
-func (cluster *Cluster) Join(ctx context.Context) (err error) {
+func (cluster *Cluster) Join(ctx context.Context, node clusters.Node) (err error) {
 	return
 }
 
@@ -21,7 +22,8 @@ func (cluster *Cluster) Leave(ctx context.Context) (err error) {
 	return
 }
 
-func (cluster *Cluster) Nodes(ctx context.Context) (nodes clusters.Nodes, err error) {
+func (cluster *Cluster) NodeEvents() (events <-chan clusters.NodeEvent) {
+	events = cluster.events
 	return
 }
 

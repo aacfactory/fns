@@ -1,6 +1,8 @@
 package clusters
 
-import "github.com/aacfactory/fns/commons/versions"
+import (
+	"github.com/aacfactory/fns/commons/versions"
+)
 
 type EndpointInfo struct {
 	Name       string `json:"name"`
@@ -16,7 +18,19 @@ type Node struct {
 	Endpoints []EndpointInfo   `json:"endpoints"`
 }
 
-type Nodes []*Node
+const (
+	Add    = NodeEventKind(1)
+	Remove = NodeEventKind(2)
+)
+
+type NodeEventKind int
+
+type NodeEvent struct {
+	Kind NodeEventKind
+	Node Node
+}
+
+type Nodes []Node
 
 func (nodes Nodes) Len() int {
 	return len(nodes)

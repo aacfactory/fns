@@ -28,6 +28,14 @@ type EndpointGetOptions struct {
 	requestVersions versions.Intervals
 }
 
+func (options EndpointGetOptions) Id() []byte {
+	return options.id
+}
+
+func (options EndpointGetOptions) Versions() versions.Intervals {
+	return options.requestVersions
+}
+
 func EndpointId(id []byte) EndpointGetOption {
 	return func(options *EndpointGetOptions) {
 		options.id = id

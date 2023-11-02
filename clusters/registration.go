@@ -1,6 +1,7 @@
 package clusters
 
 import (
+	"bytes"
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -13,13 +14,28 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"net/http"
+	"sort"
 	"sync/atomic"
+	"time"
 )
+
+func NewRegistration(id []byte, name []byte, version versions.Version, document *documents.Document, client transports.Client, signature signatures.Signature) (v *Registration) {
+	v = &Registration{
+		id:        id,
+		name:      name,
+		version:   version,
+		document:  document,
+		client:    client,
+		signature: signature,
+		closed:    new(atomic.Bool),
+		errs:      window.NewTimes(10 * time.Second),
+	}
+	return
+}
 
 type Registration struct {
 	id        []byte
-	address   []byte
-	name      string
+	name      []byte
 	version   versions.Version
 	document  *documents.Document
 	client    transports.Client
@@ -29,7 +45,7 @@ type Registration struct {
 }
 
 func (registration *Registration) Name() (name string) {
-	name = registration.name
+	name = bytex.ToString(registration.name)
 	return
 }
 
@@ -195,61 +211,128 @@ func (list SortedRegistrations) Swap(i, j int) {
 	return
 }
 
-func (list SortedRegistrations) Get(version versions.Version) (r *Registration) {
-	size := len(list)
-	if size == 0 {
+type NamedRegistration struct {
+	name   []byte
+	length uint64
+	pos    uint64
+	values SortedRegistrations
+}
+
+func (named *NamedRegistration) Add(registration *Registration) {
+	_, exist := named.Get(registration.id)
+	if exist {
 		return
 	}
-	for _, registration := range list {
-		if version.Equals(registration.version) {
+	named.values = append(named.values, registration)
+	sort.Sort(named.values)
+	named.length = uint64(len(named.values))
+}
+
+func (named *NamedRegistration) Remove(id []byte) {
+	n := -1
+	for i, value := range named.values {
+		if bytes.Equal(value.id, id) {
+			n = i
+			break
+		}
+	}
+	if n == -1 {
+		return
+	}
+	named.values = append(named.values[:n], named.values[n+1:]...)
+	named.length = uint64(len(named.values))
+}
+
+func (named *NamedRegistration) Get(id []byte) (r *Registration, has bool) {
+	if named.length == 0 {
+		return
+	}
+	for _, registration := range named.values {
+		if bytes.Equal(registration.id, id) {
 			r = registration
+			has = true
 			break
 		}
 	}
 	return
 }
 
-func (list SortedRegistrations) Range(interval versions.Interval) (r []*Registration) {
-	size := len(list)
-	if size == 0 {
+func (named *NamedRegistration) Range(interval versions.Interval) (v *Registration, has bool) {
+	if named.length == 0 {
 		return
 	}
-	r = make([]*Registration, 0, 1)
-	for _, registration := range list {
+	targets := make([]*Registration, 0, 1)
+	for _, registration := range named.values {
 		if interval.Accept(registration.version) {
-			r = append(r, registration)
+			targets = append(targets, registration)
 		}
 	}
+	n := uint64(len(targets))
+	pos := int(atomic.AddUint64(&named.pos, 1) % n)
+	v = targets[pos]
+	has = true
 	return
 }
 
-func (list SortedRegistrations) MaxVersion() (r []*Registration) {
-	size := len(list)
-	if size == 0 {
+func (named *NamedRegistration) MaxOne() (v *Registration, has bool) {
+	if named.length == 0 {
 		return
 	}
-	r = make([]*Registration, 0, 1)
-	maxed := list[size-1]
-	r = append(r, maxed)
-	for i := size - 2; i < 0; i-- {
-		prev := list[i]
+	targets := make([]*Registration, 0, 1)
+	maxed := named.values[named.length-1]
+	targets = append(targets, maxed)
+	for i := named.length - 2; i > -1; i-- {
+		prev := named.values[i]
 		if prev.version.Equals(maxed.version) {
-			r = append(r, prev)
+			targets = append(targets, prev)
 			continue
 		}
 		break
 	}
+	n := uint64(len(targets))
+	pos := int(atomic.AddUint64(&named.pos, 1) % n)
+	v = targets[pos]
+	has = true
 	return
 }
 
-type NamedRegistrations []SortedRegistrations
+type NamedRegistrations []NamedRegistration
 
-func (names NamedRegistrations) Get(name []byte) (v SortedRegistrations, has bool) {
-
+func (names NamedRegistrations) Get(name []byte) (v NamedRegistration, has bool) {
+	for _, named := range names {
+		if named.length > 0 && bytes.Equal(named.name, name) {
+			v = named
+			has = true
+			break
+		}
+	}
 	return
 }
 
-func (names NamedRegistrations) Add(registration Registration) NamedRegistrations {
+func (names NamedRegistrations) Add(registration *Registration) NamedRegistrations {
+	name := registration.name
+	for i, named := range names {
+		if named.length > 0 && bytes.Equal(named.name, name) {
+			named.Add(registration)
+			names[i] = named
+			return names
+		}
+	}
+	named := NamedRegistration{}
+	named.Add(registration)
+	return append(names, named)
+}
 
+func (names NamedRegistrations) Remove(name []byte, id []byte) NamedRegistrations {
+	for i, named := range names {
+		if named.length > 0 && bytes.Equal(named.name, name) {
+			named.Remove(id)
+			if named.length == 0 {
+				return append(names[:i], names[i+1:]...)
+			}
+			names[i] = named
+			return names
+		}
+	}
 	return names
 }

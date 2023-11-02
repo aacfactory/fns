@@ -10,7 +10,7 @@ import (
 type Cluster interface {
 	Join(ctx context.Context, node Node) (err error)
 	Leave(ctx context.Context) (err error)
-	Nodes(ctx context.Context) (nodes Nodes, err error)
+	NodeEvents() (events <-chan NodeEvent)
 	Shared() (shared shareds.Shared)
 }
 

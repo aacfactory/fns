@@ -121,7 +121,7 @@ func requestHeadersOpenapiParams() []*oas.Parameter {
 		{
 			Name:        "X-Fns-Request-Version",
 			In:          "header",
-			Description: "Applicable version range, e.g.: endpointName1=0.0.1:1.0.0, endpointName2=0.0.1:1.0.0, ...",
+			Description: "Applicable version range, e.g.: endpointName1=v0.0.1:v1.0.0, endpointName2=v0.0.1:v1.0.0, ...",
 			Required:    false,
 		},
 	}

@@ -19,14 +19,12 @@ package fns
 import (
 	"fmt"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/configs"
 	"github.com/aacfactory/fns/hooks"
-	"github.com/aacfactory/fns/proxies"
-	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/fns/transports/fast"
 	"os"
 	"strings"
 	"time"
@@ -42,42 +40,13 @@ var (
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
 		configRetrieverOption: configs.DefaultConfigRetrieverOption(),
-		transportOptions:      TransportOption(fast.New()),
-		proxyOptions:          nil,
+		transport:             nil,
+		middlewares:           nil,
+		handlers:              nil,
 		hooks:                 nil,
 		shutdownTimeout:       60 * time.Second,
 	}
 )
-
-func TransportOption(transport transports.Transport) *TransportOptions {
-	return &TransportOptions{
-		transport:   transport,
-		handlers:    make([]services.TransportHandler, 0, 1),
-		middlewares: make([]services.TransportMiddleware, 0, 1),
-	}
-}
-
-type TransportOptions struct {
-	transport   transports.Transport
-	handlers    []services.TransportHandler
-	middlewares []services.TransportMiddleware
-}
-
-func (options *TransportOptions) Append(handlers ...services.TransportHandler) *TransportOptions {
-	if handlers == nil || len(handlers) == 0 {
-		return options
-	}
-	options.handlers = append(options.handlers, handlers...)
-	return options
-}
-
-func (options *TransportOptions) Use(middlewares ...services.TransportMiddleware) *TransportOptions {
-	if middlewares == nil || len(middlewares) == 0 {
-		return options
-	}
-	options.middlewares = append(options.middlewares, middlewares...)
-	return options
-}
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
@@ -89,7 +58,6 @@ type Options struct {
 	transport             transports.Transport
 	middlewares           []transports.Middleware
 	handlers              []transports.MuxHandler
-	proxy                 *proxies.Proxy
 	hooks                 []hooks.Hook
 	shutdownTimeout       time.Duration
 }
@@ -153,7 +121,7 @@ func Version(version string) Option {
 		if version == "" {
 			return fmt.Errorf("customize version failed for empty")
 		}
-		ver, parseErr := versions.Parse(version)
+		ver, parseErr := versions.Parse(bytex.FromString(version))
 		if parseErr != nil {
 			return parseErr
 		}
@@ -207,23 +175,3 @@ func ShutdownTimeout(timeout time.Duration) Option {
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
-
-func Transport(tr *TransportOptions) Option {
-	return func(options *Options) error {
-		if options == nil {
-			return fmt.Errorf("customize transport options failed for nil")
-		}
-		options.transportOptions = tr
-		return nil
-	}
-}
-
-func Proxy(tr *TransportOptions) Option {
-	return func(options *Options) error {
-		if options == nil {
-			return fmt.Errorf("customize proxy transport options failed for nil")
-		}
-		options.proxyOptions = tr
-		return nil
-	}
-}

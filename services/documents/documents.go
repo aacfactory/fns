@@ -17,7 +17,9 @@
 package documents
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/aacfactory/fns/commons/bytex"
 	oas2 "github.com/aacfactory/fns/commons/oas"
 	"github.com/aacfactory/fns/commons/versions"
 	"sort"
@@ -38,169 +40,40 @@ func (documents NameSortedDocuments) Swap(i, j int) {
 	return
 }
 
-type VersionSortedDocuments []*Document
-
-func (documents VersionSortedDocuments) Get(version versions.Version) (document *Document, has bool) {
-	if documents == nil || len(documents) == 0 {
-		return
+func NewDocuments(id []byte, name []byte, version versions.Version) *Documents {
+	return &Documents{
+		Id:        string(id),
+		Name:      string(name),
+		Version:   version,
+		Endpoints: make(NameSortedDocuments, 0, 1),
 	}
-	for _, document = range documents {
-		if document.Version.Equals(version) {
-			has = true
-			return
-		}
-	}
-	document = nil
-	return
 }
 
-func (documents VersionSortedDocuments) Merge(o VersionSortedDocuments) VersionSortedDocuments {
-	if o == nil || len(o) == 0 {
-		return documents
-	}
-	deltas := make([]int, 0, 1)
-	for i, document := range o {
-		pos := sort.Search(len(documents), func(i int) bool {
-			return documents[i].Version.Equals(document.Version)
-		})
-		if pos == len(documents) {
-			deltas = append(deltas, i)
-		}
-	}
-	if len(deltas) == 0 {
-		return documents
-	}
-	merged := VersionSortedDocuments(make([]*Document, 0, 1))
-	for _, document := range documents {
-		merged = append(merged, document)
-	}
-	for _, delta := range deltas {
-		merged = append(merged, o[delta])
-	}
-	sort.Sort(merged)
-	return merged
+type Documents struct {
+	Id        string              `json:"id"`
+	Name      string              `json:"name"`
+	Version   versions.Version    `json:"version"`
+	Endpoints NameSortedDocuments `json:"endpoints"`
 }
 
-func (documents VersionSortedDocuments) Len() int {
-	return len(documents)
-}
-
-func (documents VersionSortedDocuments) Less(i, j int) bool {
-	return documents[i].Version.LessThan(documents[j].Version)
-}
-
-func (documents VersionSortedDocuments) Swap(i, j int) {
-	documents[i], documents[j] = documents[j], documents[i]
-	return
-}
-
-func NewDocuments() Documents {
-	return make(map[string]VersionSortedDocuments)
-}
-
-type Documents map[string]VersionSortedDocuments
-
-func (documents Documents) Add(doc *Document) (ok bool) {
+func (documents *Documents) Add(doc *Document) {
 	if doc == nil {
 		return
 	}
-	name := doc.Name
-	sorts, has := documents[name]
-	if has {
-		size := documents.Len()
-		pos := sort.Search(size, func(i int) bool {
-			return sorts[i].Version.Equals(doc.Version)
-		})
-		if pos < size {
-			return
-		}
-		sorts = append(sorts, doc)
-		sort.Sort(sorts)
-		documents[name] = sorts
-		ok = true
-		return
-	}
-	sorts = make([]*Document, 0, 1)
-	sorts = append(sorts, doc)
-	documents[name] = sorts
-	ok = true
-	return
+	documents.Endpoints = append(documents.Endpoints, doc)
+	sort.Sort(documents.Endpoints)
 }
 
-func (documents Documents) Remove(name string, version versions.Version) {
-	list, has := documents[name]
-	if !has {
-		return
-	}
-	target, exist := list.Get(version)
-	if !exist {
-		return
-	}
-	newList := make(VersionSortedDocuments, 0, len(list))
-	for _, doc := range list {
-		if doc.Version == target.Version {
-			continue
+func (documents *Documents) Get(name []byte) (v *Document) {
+	for _, endpoint := range documents.Endpoints {
+		if bytes.Equal(name, bytex.FromString(endpoint.Name)) {
+			return endpoint
 		}
-		newList = append(newList, doc)
 	}
-	if len(newList) == 0 {
-		delete(documents, name)
-	} else {
-		documents[name] = newList
-	}
+	return nil
 }
 
-func (documents Documents) Len() int {
-	return len(documents)
-}
-
-func (documents Documents) FindByVersion(version versions.Version) (v NameSortedDocuments) {
-	if documents == nil || len(documents) == 0 {
-		return
-	}
-	v = make([]*Document, 0, 1)
-	for _, sorts := range documents {
-		if sorts == nil || len(sorts) == 0 {
-			continue
-		}
-		var document *Document
-		var has bool
-		if version.IsLatest() {
-			document = sorts[len(sorts)-1]
-			has = true
-		} else {
-			document, has = sorts.Get(version)
-		}
-		if has {
-			v = append(v, document)
-		}
-	}
-	if len(v) > 0 {
-		sort.Sort(v)
-	}
-	return
-}
-
-func (documents Documents) Merge(o Documents) Documents {
-	if o == nil || len(o) == 0 {
-		return documents
-	}
-	for name, versionedDocuments := range o {
-		if versionedDocuments == nil || len(versionedDocuments) == 0 {
-			continue
-		}
-		doc, has := documents[name]
-		if !has {
-			documents[name] = doc
-			continue
-		}
-		merged := doc.Merge(versionedDocuments)
-		documents[name] = merged
-	}
-	return documents
-}
-
-func (documents Documents) Openapi(openapiVersion string, appId string, appName string, appVersion versions.Version) (api oas2.API) {
+func (documents *Documents) Openapi(openapiVersion string) (api oas2.API) {
 	if openapiVersion == "" {
 		openapiVersion = "3.1.0"
 	}
@@ -208,12 +81,12 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 	api = oas2.API{
 		Openapi: openapiVersion,
 		Info: &oas2.Info{
-			Title:          appName,
-			Description:    fmt.Sprintf("%s(%s)", appName, appId),
+			Title:          documents.Name,
+			Description:    fmt.Sprintf("%s(%s)", documents.Name, documents.Id),
 			TermsOfService: "",
 			Contact:        nil,
 			License:        nil,
-			Version:        appVersion.String(),
+			Version:        documents.Version.String(),
 		},
 		Servers: []*oas2.Server{},
 		Paths:   make(map[string]*oas2.Path),
@@ -242,23 +115,10 @@ func (documents Documents) Openapi(openapiVersion string, appId string, appName 
 	api.Paths[healthURI] = healthPathSchema
 
 	// documents
-	if documents != nil || len(documents) > 0 {
-		for _, sorts := range documents {
-			if sorts == nil || len(sorts) == 0 {
-				continue
-			}
-			var document *Document
-			var matched bool
-			if appVersion.IsLatest() {
-				document = sorts[len(sorts)-1]
-				matched = true
-			} else {
-				document, matched = sorts.Get(appVersion)
-			}
-			if !matched {
-				continue
-			}
-			if document.Internal {
+	endpoints := documents.Endpoints
+	if endpoints != nil || len(endpoints) > 0 {
+		for _, document := range endpoints {
+			if document == nil || document.Internal || len(document.Fns) == 0 {
 				continue
 			}
 			// tags

@@ -36,13 +36,13 @@ import (
 	"time"
 )
 
-func New(id []byte, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
+func New(id []byte, name []byte, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
 	return &Services{
 		log:       log.With("fns", "services"),
 		config:    config,
 		id:        id,
 		version:   version,
-		doc:       documents.NewDocuments(),
+		doc:       documents.NewDocuments(id, name, version),
 		values:    make(map[string]Endpoint),
 		listeners: make([]Listenable, 0, 1),
 		discovery: discovery,
@@ -56,7 +56,7 @@ type Services struct {
 	config    Config
 	id        []byte
 	version   versions.Version
-	doc       documents.Documents
+	doc       *documents.Documents
 	values    map[string]Endpoint
 	listeners []Listenable
 	discovery Discovery
@@ -95,7 +95,7 @@ func (s *Services) Add(service Service) (err error) {
 	return
 }
 
-func (s *Services) Documents() (v documents.Documents) {
+func (s *Services) Documents() (v *documents.Documents) {
 	v = s.doc
 	return
 }

@@ -14,6 +14,6 @@ type Endpoint interface {
 }
 
 type Endpoints interface {
-	Documents() (v documents.Documents)
+	Documents() (v *documents.Documents)
 	Request(ctx context.Context, name []byte, fn []byte, argument Argument, options ...RequestOption) (response Response, err error)
 }

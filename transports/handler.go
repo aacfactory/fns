@@ -1,6 +1,10 @@
 package transports
 
-import "github.com/aacfactory/errors"
+import (
+	"github.com/aacfactory/configures"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/logs"
+)
 
 type Handler interface {
 	Handle(w ResponseWriter, r Request)
@@ -12,7 +16,14 @@ func (f HandlerFunc) Handle(w ResponseWriter, r Request) {
 	f(w, r)
 }
 
+type MuxHandlerOptions struct {
+	Log    logs.Logger
+	Config configures.Config
+}
+
 type MuxHandler interface {
+	Name() string
+	Construct(options MuxHandlerOptions) error
 	Match(method []byte, path []byte, header Header) bool
 	Handler
 }

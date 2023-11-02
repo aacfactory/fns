@@ -6,11 +6,13 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/handlers"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"sync"
+	"time"
 )
 
 type Registrations struct {
@@ -86,7 +88,6 @@ func (rs *Registrations) Watching(ctx context.Context) {
 					closed = true
 					break
 				}
-
 				switch event.Kind {
 				case Add:
 					registrations := make([]*Registration, 0, 1)
@@ -95,15 +96,40 @@ func (rs *Registrations) Watching(ctx context.Context) {
 						if rs.log.WarnEnabled() {
 							rs.log.Warn().
 								With("cluster", "registrations").
-								Cause(errors.Warning(fmt.Sprintf("fns: dialer %s failed", event.Node.Address)).WithMeta("address", event.Node.Address).WithCause(clientErr)).
-								Message(fmt.Sprintf("fns: dialer %s failed", event.Node.Address))
+								Cause(errors.Warning(fmt.Sprintf("fns: dial %s failed", event.Node.Address)).WithMeta("address", event.Node.Address).WithCause(clientErr)).
+								Message(fmt.Sprintf("fns: dial %s failed", event.Node.Address))
 						}
 						break
 					}
+					// check health
+					active := false
+					for i := 0; i < 10; i++ {
+						if handlers.CheckHealth(ctx, client) {
+							active = true
+							break
+						}
+						time.Sleep(1 * time.Second)
+					}
+					if !active {
+						break
+					}
 					// get document
-					var document documents.Documents
+					document, documentErr := handlers.FetchDocuments(ctx, client)
+					if documentErr != nil {
+						if rs.log.WarnEnabled() {
+							rs.log.Warn().
+								With("cluster", "registrations").
+								Cause(errors.Warning(fmt.Sprintf("fns: get documents from %s failed", event.Node.Address)).WithMeta("address", event.Node.Address).WithCause(clientErr)).
+								Message(fmt.Sprintf("fns: get documents from %s failed", event.Node.Address))
+						}
+						break
+					}
 					for _, endpoint := range event.Node.Endpoints {
-						r := NewRegistration(bytex.FromString(event.Node.Id), bytex.FromString(endpoint.Name), event.Node.Version, client, rs.signature)
+						var doc *documents.Document
+						if document != nil {
+							doc = document.Get(bytex.FromString(endpoint.Name))
+						}
+						r := NewRegistration(bytex.FromString(event.Node.Id), bytex.FromString(endpoint.Name), event.Node.Version, doc, client, rs.signature)
 						registrations = append(registrations, r)
 					}
 					rs.locker.Lock()

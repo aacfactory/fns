@@ -13,7 +13,6 @@ import (
 	"github.com/aacfactory/fns/services/tracing"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
-	"golang.org/x/sync/singleflight"
 	"net/http"
 )
 
@@ -42,8 +41,15 @@ type ResponseBody struct {
 type InternalHandler struct {
 	id        []byte
 	rt        *runtime.Runtime
-	group     *singleflight.Group
 	signature signatures.Signature
+}
+
+func (handler *InternalHandler) Name() string {
+	return "internal"
+}
+
+func (handler *InternalHandler) Construct(_ transports.MuxHandlerOptions) error {
+	return nil
 }
 
 func (handler *InternalHandler) Match(method []byte, path []byte, header transports.Header) bool {

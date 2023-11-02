@@ -164,11 +164,13 @@ func (client *Client) Do(ctx context.Context, method []byte, path []byte, header
 	// method
 	req.Header.SetMethodBytes(method)
 	// header
-	header.Foreach(func(key []byte, values [][]byte) {
-		for _, value := range values {
-			req.Header.AddBytesKV(key, value)
-		}
-	})
+	if header != nil {
+		header.Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				req.Header.AddBytesKV(key, value)
+			}
+		})
+	}
 	// uri
 	uri := req.URI()
 	if client.secured {

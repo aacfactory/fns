@@ -113,6 +113,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
 	defaultExposedHeaders := []string{
+		transports.EndpointIdHeaderName, transports.EndpointVersionHeaderName,
 		transports.RequestIdHeaderName, transports.HandleLatencyHeaderName,
 		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.ResponseRetryAfterHeaderName, transports.ResponseCacheTTLHeaderName, transports.SignatureHeaderName,
 	}

@@ -202,11 +202,13 @@ func (c Client) Do(ctx context.Context, method []byte, path []byte, header trans
 		err = errors.Warning("http: create request failed").WithCause(rErr)
 		return
 	}
-	header.Foreach(func(key []byte, values [][]byte) {
-		for _, value := range values {
-			r.Header.Add(bytex.ToString(key), bytex.ToString(value))
-		}
-	})
+	if header != nil {
+		header.Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				r.Header.Add(bytex.ToString(key), bytex.ToString(value))
+			}
+		})
+	}
 
 	resp, doErr := c.host.Do(r)
 	if doErr != nil {

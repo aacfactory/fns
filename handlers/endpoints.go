@@ -2,15 +2,11 @@ package handlers
 
 import (
 	"bytes"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/oas"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
-	"golang.org/x/sync/singleflight"
 	"net/http"
 	"sync"
 )
@@ -24,75 +20,37 @@ var (
 	slashBytes = []byte{'/'}
 )
 
-type Handler struct {
-	rt      *runtime.Runtime
-	group   *singleflight.Group
-	doc     documents.Documents
-	openapi oas.API
-	once    sync.Once
+func NewEndpointsHandler() transports.Handler {
+	return &EndpointsHandler{
+		rt:   nil,
+		once: new(sync.Once),
+	}
 }
 
-func (h *Handler) Match(method []byte, path []byte, header transports.Header) bool {
-	matchDocument := bytes.Equal(method, methodGet) &&
-		(bytes.Equal(path, bytex.FromString(documents.ServicesDocumentsPath)) || bytes.Equal(path, bytex.FromString(documents.ServicesOpenapiPath)))
-	if matchDocument {
-		return true
-	}
-	matchService := bytes.Equal(method, methodPost) &&
+type EndpointsHandler struct {
+	rt   *runtime.Runtime
+	once *sync.Once
+}
+
+func (handler *EndpointsHandler) Name() string {
+	return "endpoints"
+}
+
+func (handler *EndpointsHandler) Construct(_ transports.MuxHandlerOptions) error {
+	return nil
+}
+
+func (handler *EndpointsHandler) Match(method []byte, path []byte, header transports.Header) bool {
+	ok := bytes.Equal(method, methodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), bytex.FromString(transports.ContentTypeJsonHeaderValue))
-	if matchService {
-		return true
-	}
-	return false
+	return ok
 }
 
-func (h *Handler) Handle(w transports.ResponseWriter, r transports.Request) {
-	if bytes.Equal(r.Method(), methodGet) {
-		if bytes.Equal(r.Path(), bytex.FromString(documents.ServicesDocumentsPath)) {
-			h.handleDocuments(w, r)
-		} else if bytes.Equal(r.Path(), bytex.FromString(documents.ServicesOpenapiPath)) {
-			h.handleOpenapi(w, r)
-		} else {
-			w.Failed(ErrNotFound)
-		}
-		return
-	}
-	if bytes.Equal(r.Method(), methodPost) {
-		h.handleRequest(w, r)
-		return
-	}
-}
-
-func (h *Handler) prepareDocuments() {
-	h.once.Do(func() {
-		h.doc = h.rt.Endpoints().Documents()
-		h.openapi = h.doc.Openapi("", h.rt.AppId(), h.rt.AppName(), h.rt.AppVersion())
+func (handler *EndpointsHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+	handler.once.Do(func() {
+		handler.rt = runtime.Load(r)
 	})
-}
-
-func (h *Handler) handleDocuments(w transports.ResponseWriter, _ transports.Request) {
-	h.prepareDocuments()
-	w.Succeed(h.doc)
-}
-
-func (h *Handler) handleOpenapi(w transports.ResponseWriter, _ transports.Request) {
-	v, err, _ := h.group.Do("documents", func() (interface{}, error) {
-		h.prepareDocuments()
-		p, err := h.openapi.Encode()
-		if err != nil {
-			return nil, errors.Warning("fns: encode openapi failed").WithCause(err)
-		}
-		return p, nil
-	})
-	if err != nil {
-		w.Failed(errors.Map(err))
-		return
-	}
-	w.Succeed(v)
-}
-
-func (h *Handler) handleRequest(w transports.ResponseWriter, r transports.Request) {
 	// path
 	path := r.Path()
 	pathItems := bytes.Split(path, slashBytes)
@@ -147,7 +105,7 @@ func (h *Handler) handleRequest(w transports.ResponseWriter, r transports.Reques
 	// header <<<
 
 	// handle
-	response, err := h.rt.Endpoints().Request(
+	response, err := handler.rt.Endpoints().Request(
 		r, service, fn,
 		services.NewArgument(body),
 		options...,

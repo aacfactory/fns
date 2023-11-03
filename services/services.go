@@ -36,13 +36,13 @@ import (
 	"time"
 )
 
-func New(id []byte, name []byte, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
+func New(id string, name string, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
 	return &Services{
 		log:       log.With("fns", "services"),
 		config:    config,
-		id:        id,
+		id:        bytex.FromString(id),
 		version:   version,
-		doc:       documents.NewDocuments(id, name, version),
+		doc:       documents.NewDocuments(bytex.FromString(id), bytex.FromString(name), version),
 		values:    make(map[string]Endpoint),
 		listeners: make([]Listenable, 0, 1),
 		discovery: discovery,
@@ -252,6 +252,12 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 		err = errs.Error()
 	}
 	return
+}
+
+func (s *Services) Close() {
+	for _, endpoint := range s.values {
+		endpoint.Close()
+	}
 }
 
 func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {

@@ -5,9 +5,8 @@ import (
 )
 
 type EndpointInfo struct {
-	Name       string `json:"name"`
-	Internal   bool   `json:"internal"`
-	Listenable bool   `json:"listenable"`
+	Name     string `json:"name"`
+	Internal bool   `json:"internal"`
 }
 
 type Node struct {

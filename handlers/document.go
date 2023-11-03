@@ -35,7 +35,7 @@ func FetchDocuments(ctx context.Context, client transports.Client) (v *documents
 	return
 }
 
-func NewDocumentHandler() transports.Handler {
+func NewDocumentHandler() transports.MuxHandler {
 	return &DocumentsHandler{
 		doc:  nil,
 		once: new(sync.Once),

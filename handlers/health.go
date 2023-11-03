@@ -19,7 +19,7 @@ func CheckHealth(ctx context.Context, client transports.Client) (ok bool) {
 	return
 }
 
-func NewHealthHandler() transports.Handler {
+func NewHealthHandler() transports.MuxHandler {
 	return &HealthHandler{
 		launch: time.Now(),
 	}

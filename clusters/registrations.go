@@ -11,6 +11,7 @@ import (
 	"github.com/aacfactory/fns/handlers"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
+	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"strings"
@@ -111,13 +112,20 @@ type Registrations struct {
 
 // Add
 // 在services.Add后立即调用
-func (rs *Registrations) Add(name string, internal bool, listenable bool) {
+func (rs *Registrations) Add(name string, internal bool) {
 	rs.node.Endpoints = append(rs.node.Endpoints, EndpointInfo{
-		Name:       name,
-		Internal:   internal,
-		Listenable: listenable,
+		Name:     name,
+		Internal: internal,
 	})
 	return
+}
+
+func (rs *Registrations) Shared() shareds.Shared {
+	return rs.cluster.Shared()
+}
+
+func (rs *Registrations) Signature() signatures.Signature {
+	return rs.signature
 }
 
 func (rs *Registrations) Find(_ context.Context, name []byte, options ...services.EndpointGetOption) (registration *Registration, has bool) {

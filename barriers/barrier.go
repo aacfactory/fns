@@ -6,51 +6,43 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
+	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/json"
 	"golang.org/x/sync/singleflight"
 	"time"
 )
 
-func New(store Store, ttl time.Duration, interval time.Duration, errorReporter ErrorReporter) (b *Barrier) {
-	standalone := store == nil
+func Cluster(store shareds.Store, ttl time.Duration, interval time.Duration) (b *Barrier) {
 	loops := 0
-	if !standalone {
-		if ttl < 1 {
-			ttl = 10 * time.Second
-		}
-		if interval < 1 {
-			interval = 100 * time.Millisecond
-		}
-		if interval >= ttl {
-			loops = 10
-			interval = ttl / time.Duration(loops)
-		} else {
-			loops = int(ttl / interval)
-		}
+	if ttl < 1 {
+		ttl = 10 * time.Second
+	}
+	if interval < 1 {
+		interval = 100 * time.Millisecond
+	}
+	if interval >= ttl {
+		loops = 10
+		interval = ttl / time.Duration(loops)
+	} else {
+		loops = int(ttl / interval)
 	}
 	b = &Barrier{
-		group:         new(singleflight.Group),
-		standalone:    standalone,
-		store:         store,
-		ttl:           ttl,
-		interval:      interval,
-		loops:         loops,
-		errorReporter: errorReporter,
+		group:      new(singleflight.Group),
+		standalone: false,
+		store:      store,
+		ttl:        ttl,
+		interval:   interval,
+		loops:      loops,
 	}
 	return
 }
 
 func Standalone() (b *Barrier) {
-	b = New(nil, 0, 0, nil)
+	b = &Barrier{
+		group:      new(singleflight.Group),
+		standalone: true,
+	}
 	return
-}
-
-type Store interface {
-	Incr(ctx context.Context, key []byte, delta int64) (value int64, err error)
-	Get(ctx context.Context, key []byte) (value []byte, has bool, err error)
-	Set(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error)
-	TTL(ctx context.Context, key []byte, ttl time.Duration) (err error)
-	Remove(ctx context.Context, key []byte) (err error)
 }
 
 type ErrorReporter func(ctx context.Context, cause error)
@@ -61,15 +53,14 @@ type Result struct {
 
 // Barrier
 // @barrier
-// 当@authorization 存在时，则key增加user，不存在时，不加user
+// todo 当@authorization 存在时，则key增加user，不存在时，不加user
 type Barrier struct {
-	group         *singleflight.Group
-	standalone    bool
-	store         Store
-	ttl           time.Duration
-	interval      time.Duration
-	loops         int
-	errorReporter ErrorReporter
+	group      *singleflight.Group
+	standalone bool
+	store      shareds.Store
+	ttl        time.Duration
+	interval   time.Duration
+	loops      int
 }
 
 func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error) {
@@ -84,21 +75,15 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 		times, incrErr := b.store.Incr(ctx, key, 1)
 		if incrErr != nil {
 			err = errors.Warning("fns: barrier failed").WithCause(incrErr)
-			if b.errorReporter != nil {
-				b.errorReporter(ctx, errors.Warning("fns: barrier incr failed").WithCause(incrErr))
-			}
 			return
 		}
 
 		valueKey := append(key, bytex.FromString("-value")...)
 		value := make([]byte, 0, 1)
 		if times == 1 {
-			ttlErr := b.store.TTL(ctx, key, b.ttl)
+			ttlErr := b.store.ExpireKey(ctx, key, b.ttl)
 			if ttlErr != nil {
 				err = errors.Warning("fns: barrier failed").WithCause(incrErr)
-				if b.errorReporter != nil {
-					b.errorReporter(ctx, errors.Warning("fns: barrier ttl failed").WithCause(ttlErr))
-				}
 				return
 			}
 			r, err = fn()
@@ -126,21 +111,13 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 					value = append(value, bytex.FromString(err.Error())...)
 				}
 			}
-			setErr := b.store.Set(ctx, valueKey, value, b.ttl)
-			if setErr != nil {
-				if b.errorReporter != nil {
-					b.errorReporter(ctx, errors.Warning("fns: barrier set value failed").WithCause(setErr))
-				}
-			}
+			_ = b.store.SetWithTTL(ctx, valueKey, value, b.ttl)
 		} else {
 			fetched := false
 			for i := 0; i < b.loops; i++ {
 				p, exist, getErr := b.store.Get(ctx, valueKey)
 				if getErr != nil {
 					err = errors.Warning("fns: barrier failed").WithCause(getErr)
-					if b.errorReporter != nil {
-						b.errorReporter(ctx, errors.Warning("fns: barrier get value failed").WithCause(getErr))
-					}
 					return
 				}
 				if !exist {
@@ -149,9 +126,6 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 				}
 				if len(p) < 2 {
 					err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-					if b.errorReporter != nil {
-						b.errorReporter(ctx, errors.Warning("fns: barrier get value failed").WithCause(fmt.Errorf("invalid value")))
-					}
 					return
 				}
 				if p[0] == 'T' {
@@ -161,9 +135,6 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 						r = p[2:]
 					} else {
 						err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-						if b.errorReporter != nil {
-							b.errorReporter(ctx, errors.Warning("fns: barrier get value failed").WithCause(fmt.Errorf("invalid value")))
-						}
 						return
 					}
 				} else if p[0] == 'F' {
@@ -173,16 +144,10 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 						err = fmt.Errorf(bytex.ToString(p[2:]))
 					} else {
 						err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-						if b.errorReporter != nil {
-							b.errorReporter(ctx, errors.Warning("fns: barrier get value failed").WithCause(fmt.Errorf("invalid value")))
-						}
 						return
 					}
 				} else {
 					err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-					if b.errorReporter != nil {
-						b.errorReporter(ctx, errors.Warning("fns: barrier get value failed").WithCause(fmt.Errorf("invalid value")))
-					}
 					return
 				}
 				fetched = true
@@ -215,18 +180,12 @@ func (b *Barrier) Forget(ctx context.Context, key []byte) {
 	for i := 0; i < b.loops; i++ {
 		n, incrErr := b.store.Incr(ctx, key, -1)
 		if incrErr != nil {
-			if b.errorReporter != nil {
-				b.errorReporter(ctx, errors.Warning("fns: barrier incr failed").WithCause(incrErr))
-			}
 			continue
 		}
 		if n < 1 {
 			valueKey := append(key, bytex.FromString("-value")...)
 			rmErr := b.store.Remove(ctx, valueKey)
 			if rmErr != nil {
-				if b.errorReporter != nil {
-					b.errorReporter(ctx, errors.Warning("fns: barrier remove cached value failed").WithCause(rmErr))
-				}
 				continue
 			}
 		}

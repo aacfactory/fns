@@ -17,7 +17,6 @@
 package shareds
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"github.com/aacfactory/errors"
@@ -28,13 +27,13 @@ import (
 )
 
 type Store interface {
-	Keys(ctx context.Context, prefix []byte, options ...Option) (keys [][]byte, err errors.CodeError)
-	Get(ctx context.Context, key []byte, options ...Option) (value []byte, has bool, err errors.CodeError)
-	Set(ctx context.Context, key []byte, value []byte, options ...Option) (err errors.CodeError)
-	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...Option) (err errors.CodeError)
-	Incr(ctx context.Context, key []byte, delta int64, options ...Option) (v int64, err errors.CodeError)
-	ExpireKey(ctx context.Context, key []byte, ttl time.Duration, options ...Option) (err errors.CodeError)
-	Remove(ctx context.Context, key []byte, options ...Option) (err errors.CodeError)
+	Keys(ctx context.Context, prefix []byte) (keys [][]byte, err error)
+	Get(ctx context.Context, key []byte) (value []byte, has bool, err error)
+	Set(ctx context.Context, key []byte, value []byte) (err error)
+	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error)
+	Incr(ctx context.Context, key []byte, delta int64) (v int64, err error)
+	ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err error)
+	Remove(ctx context.Context, key []byte) (err error)
 	Close()
 }
 
@@ -56,16 +55,10 @@ type localStore struct {
 	values sync.Map
 }
 
-func (store *localStore) Keys(ctx context.Context, prefix []byte, options ...Option) (keys [][]byte, err errors.CodeError) {
+func (store *localStore) Keys(ctx context.Context, prefix []byte) (keys [][]byte, err error) {
 	if len(prefix) == 0 {
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store list keys failed").WithCause(optErr)
-		return
-	}
-	prefix = bytes.Join([][]byte{bytex.FromString(opt.Scope), prefix}, []byte{'/'})
 	all := make([]string, 0, 1)
 	store.values.Range(func(key, value any) bool {
 		if k, ok := key.(string); ok {
@@ -87,17 +80,11 @@ func (store *localStore) Keys(ctx context.Context, prefix []byte, options ...Opt
 	return
 }
 
-func (store *localStore) Set(ctx context.Context, key []byte, value []byte, options ...Option) (err errors.CodeError) {
+func (store *localStore) Set(ctx context.Context, key []byte, value []byte) (err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store set failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store set failed").WithCause(optErr)
-		return
-	}
-	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	store.values.Store(bytex.ToString(key), &entry{
 		lock:     new(sync.Mutex),
 		value:    value,
@@ -106,17 +93,11 @@ func (store *localStore) Set(ctx context.Context, key []byte, value []byte, opti
 	return
 }
 
-func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration, options ...Option) (err errors.CodeError) {
+func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store set failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store set failed").WithCause(optErr)
-		return
-	}
-	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	store.values.Store(bytex.ToString(key), &entry{
 		value:    value,
 		deadline: time.Now().Add(ttl),
@@ -124,17 +105,11 @@ func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byt
 	return
 }
 
-func (store *localStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration, options ...Option) (err errors.CodeError) {
+func (store *localStore) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store expire key failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store expire key failed").WithCause(optErr)
-		return
-	}
-	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	k := bytex.ToString(key)
 	x, loaded := store.values.Load(k)
 	if !loaded {
@@ -147,17 +122,11 @@ func (store *localStore) ExpireKey(ctx context.Context, key []byte, ttl time.Dur
 	return
 }
 
-func (store *localStore) Incr(ctx context.Context, key []byte, delta int64, options ...Option) (v int64, err errors.CodeError) {
+func (store *localStore) Incr(ctx context.Context, key []byte, delta int64) (v int64, err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store incr failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store incr failed").WithCause(optErr)
-		return
-	}
-	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	k := bytex.ToString(key)
 	x, _ := store.values.LoadOrStore(k, &entry{value: make([]byte, 10)})
 	e := x.(*entry)
@@ -173,17 +142,11 @@ func (store *localStore) Incr(ctx context.Context, key []byte, delta int64, opti
 	return
 }
 
-func (store *localStore) Get(ctx context.Context, key []byte, options ...Option) (value []byte, has bool, err errors.CodeError) {
+func (store *localStore) Get(ctx context.Context, key []byte) (value []byte, has bool, err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store get failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store get failed").WithCause(optErr)
-		return
-	}
-	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	k := bytex.ToString(key)
 	x, loaded := store.values.Load(k)
 	if !loaded {
@@ -199,17 +162,11 @@ func (store *localStore) Get(ctx context.Context, key []byte, options ...Option)
 	return
 }
 
-func (store *localStore) Remove(ctx context.Context, key []byte, options ...Option) (err errors.CodeError) {
+func (store *localStore) Remove(ctx context.Context, key []byte) (err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store remove failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	opt, optErr := NewOptions(options)
-	if optErr != nil {
-		err = errors.Warning("fns: shared store remove failed").WithCause(optErr)
-		return
-	}
-	key = bytes.Join([][]byte{bytex.FromString(opt.Scope), key}, []byte{'/'})
 	k := bytex.ToString(key)
 	store.values.Delete(k)
 	return

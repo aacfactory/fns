@@ -10,7 +10,9 @@ import (
 	"sync"
 )
 
-func NewOpenapiHandler() transports.Handler {
+// NewOpenapiHandler
+// todo move into contrib with viewer
+func NewOpenapiHandler() transports.MuxHandler {
 	return &OpenapiHandler{
 		doc:  nil,
 		once: new(sync.Once),

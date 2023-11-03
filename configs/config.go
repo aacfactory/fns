@@ -2,6 +2,7 @@ package configs
 
 import (
 	"github.com/aacfactory/fns/clusters"
+	"github.com/aacfactory/fns/hooks"
 	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services"
@@ -19,11 +20,12 @@ type ProcsConfig struct {
 }
 
 type Config struct {
-	Procs     *ProcsConfig       `json:"procs" yaml:"procs,omitempty"`
-	Workers   *WorkersConfig     `json:"workers" yaml:"workers,omitempty"`
-	Log       *log.Config        `json:"log" yaml:"log,omitempty"`
-	Cluster   clusters.Config    `json:"cluster" yaml:"cluster,omitempty"`
-	Transport *transports.Config `json:"transport" yaml:"transport,omitempty"`
-	Proxy     *proxies.Config    `json:"proxy" yaml:"proxy,omitempty"`
-	Services  services.Config    `json:"services" yaml:"services,omitempty"`
+	Procs     ProcsConfig       `json:"procs" yaml:"procs,omitempty"`
+	Workers   WorkersConfig     `json:"workers" yaml:"workers,omitempty"`
+	Log       log.Config        `json:"log" yaml:"log,omitempty"`
+	Cluster   *clusters.Config  `json:"cluster" yaml:"cluster,omitempty"`
+	Transport transports.Config `json:"transport" yaml:"transport,omitempty"`
+	Proxy     *proxies.Config   `json:"proxy" yaml:"proxy,omitempty"`
+	Services  services.Config   `json:"services" yaml:"services,omitempty"`
+	Hooks     hooks.Config      `json:"hooks" yaml:"hooks"`
 }

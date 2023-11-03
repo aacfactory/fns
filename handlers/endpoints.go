@@ -20,7 +20,7 @@ var (
 	slashBytes = []byte{'/'}
 )
 
-func NewEndpointsHandler() transports.Handler {
+func NewEndpointsHandler() transports.MuxHandler {
 	return &EndpointsHandler{
 		rt:   nil,
 		once: new(sync.Once),

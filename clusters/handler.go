@@ -38,9 +38,9 @@ type ResponseBody struct {
 	Span    *tracing.Span   `json:"span"`
 }
 
-func NewInternalHandler(id []byte, signature signatures.Signature) transports.Handler {
+func NewInternalHandler(id string, signature signatures.Signature) transports.MuxHandler {
 	return &InternalHandler{
-		id:        id,
+		id:        bytex.FromString(id),
 		signature: signature,
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/aacfactory/fns/hooks"
 	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/fns/transports/fast"
 	"os"
 	"strings"
 	"time"
@@ -40,9 +41,9 @@ var (
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
 		configRetrieverOption: configs.DefaultConfigRetrieverOption(),
-		transport:             nil,
-		middlewares:           nil,
-		handlers:              nil,
+		transport:             fast.New(),
+		middlewares:           make([]transports.Middleware, 0, 1),
+		handlers:              make([]transports.MuxHandler, 0, 1),
 		hooks:                 nil,
 		shutdownTimeout:       60 * time.Second,
 	}
@@ -175,3 +176,24 @@ func ShutdownTimeout(timeout time.Duration) Option {
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
+
+func Transport(transport transports.Transport) Option {
+	return func(options *Options) error {
+		options.transport = transport
+		return nil
+	}
+}
+
+func Middleware(middleware transports.Middleware) Option {
+	return func(options *Options) error {
+		options.middlewares = append(options.middlewares, middleware)
+		return nil
+	}
+}
+
+func Handler(handler transports.MuxHandler) Option {
+	return func(options *Options) error {
+		options.handlers = append(options.handlers, handler)
+		return nil
+	}
+}

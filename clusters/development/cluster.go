@@ -7,18 +7,22 @@ import (
 )
 
 const (
-	clusterBuilderName = "dev"
+	clusterName = "dev"
 )
 
 type Cluster struct {
 	events chan clusters.NodeEvent
 }
 
-func (cluster *Cluster) Join(ctx context.Context, node clusters.Node) (err error) {
+func (cluster *Cluster) Construct(options clusters.ClusterOptions) (err error) {
 	return
 }
 
-func (cluster *Cluster) Leave(ctx context.Context) (err error) {
+func (cluster *Cluster) Join(_ context.Context, _ clusters.Node) (err error) {
+	return
+}
+
+func (cluster *Cluster) Leave(_ context.Context) (err error) {
 	return
 }
 

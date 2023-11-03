@@ -12,6 +12,21 @@ import (
 	"github.com/aacfactory/workers"
 )
 
+func New(id string, name string, version versions.Version, status *switchs.Switch, log logs.Logger, worker workers.Workers, endpoints services.Endpoints, discovery services.Discovery, barrier *barriers.Barrier, shared shareds.Shared) *Runtime {
+	return &Runtime{
+		appId:      id,
+		appName:    name,
+		appVersion: version,
+		status:     status,
+		log:        log,
+		worker:     worker,
+		endpoints:  endpoints,
+		discovery:  discovery,
+		barrier:    barrier,
+		shared:     shared,
+	}
+}
+
 type Runtime struct {
 	appId      string
 	appName    string
@@ -21,7 +36,7 @@ type Runtime struct {
 	worker     workers.Workers
 	endpoints  services.Endpoints
 	discovery  services.Discovery
-	barrier    barriers.Barrier
+	barrier    *barriers.Barrier
 	shared     shareds.Shared
 }
 
@@ -57,7 +72,7 @@ func (rt *Runtime) Discovery() services.Discovery {
 	return rt.discovery
 }
 
-func (rt *Runtime) Barrier() barriers.Barrier {
+func (rt *Runtime) Barrier() *barriers.Barrier {
 	return rt.barrier
 }
 

@@ -255,8 +255,13 @@ func (rs *Registrations) Watching(ctx context.Context) (err error) {
 	return
 }
 
-func (rs *Registrations) Close() {
+func (rs *Registrations) Shutdown(ctx context.Context) {
 	rs.closeFn()
-	<-rs.closedCh
+	select {
+	case <-ctx.Done():
+		break
+	case <-rs.closedCh:
+		break
+	}
 	return
 }

@@ -66,7 +66,7 @@ func (encoder *defaultTokenEncoder) Construct(options services.Options) (err err
 	return
 }
 
-func (encoder *defaultTokenEncoder) Close() {
+func (encoder *defaultTokenEncoder) Shutdown(_ context.Context) {
 	return
 }
 

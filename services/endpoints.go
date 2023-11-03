@@ -10,7 +10,7 @@ type Endpoint interface {
 	Internal() (ok bool)
 	Document() (document *documents.Document)
 	Handle(ctx Request) (v interface{}, err error)
-	Close()
+	Shutdown(ctx context.Context)
 }
 
 type Endpoints interface {

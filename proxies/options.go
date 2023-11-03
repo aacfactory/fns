@@ -4,10 +4,31 @@ import (
 	"github.com/aacfactory/fns/transports"
 )
 
-type DefaultOptions struct {
-	tr          transports.Transport
-	middlewares []transports.Middlewares
+type Options struct {
+	transport   transports.Transport
+	middlewares []transports.Middleware
 	handlers    []transports.Handler
 }
 
-type Option func(*DefaultOptions) error
+type Option func(*Options) error
+
+func Transport(transport transports.Transport) Option {
+	return func(options *Options) error {
+		options.transport = transport
+		return nil
+	}
+}
+
+func Middleware(middleware transports.Middleware) Option {
+	return func(options *Options) error {
+		options.middlewares = append(options.middlewares, middleware)
+		return nil
+	}
+}
+
+func Handler(handler transports.MuxHandler) Option {
+	return func(options *Options) error {
+		options.handlers = append(options.handlers, handler)
+		return nil
+	}
+}

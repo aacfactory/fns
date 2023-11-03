@@ -40,7 +40,7 @@ type Dialer interface {
 type Server interface {
 	Port() (port int)
 	ListenAndServe() (err error)
-	Shutdown() (err error)
+	Shutdown(ctx context.Context)
 }
 
 type Transport interface {

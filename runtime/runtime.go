@@ -8,11 +8,12 @@ import (
 	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
+	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 )
 
-func New(id string, name string, version versions.Version, status *switchs.Switch, log logs.Logger, worker workers.Workers, endpoints services.Endpoints, discovery services.Discovery, barrier *barriers.Barrier, shared shareds.Shared) *Runtime {
+func New(id string, name string, version versions.Version, status *switchs.Switch, log logs.Logger, worker workers.Workers, endpoints services.Endpoints, discovery services.Discovery, barrier *barriers.Barrier, shared shareds.Shared, dialer transports.Dialer) *Runtime {
 	return &Runtime{
 		appId:      id,
 		appName:    name,
@@ -24,6 +25,7 @@ func New(id string, name string, version versions.Version, status *switchs.Switc
 		discovery:  discovery,
 		barrier:    barrier,
 		shared:     shared,
+		dialer:     dialer,
 	}
 }
 
@@ -38,6 +40,7 @@ type Runtime struct {
 	discovery  services.Discovery
 	barrier    *barriers.Barrier
 	shared     shareds.Shared
+	dialer     transports.Dialer
 }
 
 func (rt *Runtime) AppId() string {
@@ -78,6 +81,10 @@ func (rt *Runtime) Barrier() *barriers.Barrier {
 
 func (rt *Runtime) Shared() shareds.Shared {
 	return rt.shared
+}
+
+func (rt *Runtime) Dialer() transports.Dialer {
+	return rt.dialer
 }
 
 func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {

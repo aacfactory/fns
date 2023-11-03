@@ -1,6 +1,7 @@
 package fast
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -178,11 +179,11 @@ func (srv *Server) ListenAndServe() (err error) {
 	return
 }
 
-func (srv *Server) Shutdown() (err error) {
+func (srv *Server) Shutdown(ctx context.Context) (err error) {
 	if len(srv.middlewares) > 0 {
 		srv.middlewares.Close()
 	}
-	err = srv.srv.Shutdown()
+	err = srv.srv.ShutdownWithContext(ctx)
 	if err != nil {
 		err = errors.Warning("fns: transport shutdown failed").WithCause(err).WithMeta("transport", transportName)
 	}

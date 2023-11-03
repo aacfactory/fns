@@ -1,6 +1,7 @@
 package standard
 
 import (
+	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/transports"
@@ -121,8 +122,8 @@ func (tr *Transport) ListenAndServe() (err error) {
 	return
 }
 
-func (tr *Transport) Shutdown() (err error) {
+func (tr *Transport) Shutdown(ctx context.Context) {
 	tr.dialer.Close()
-	err = tr.server.Shutdown()
+	_ = tr.server.Shutdown(ctx)
 	return
 }

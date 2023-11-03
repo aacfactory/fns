@@ -17,6 +17,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
@@ -38,9 +39,7 @@ type Config struct {
 	Writer    WriterConfig `json:"writer" yaml:"writer"`
 }
 
-type CloseFunc func()
-
-func New(name string, config Config) (v logs.Logger, fn CloseFunc, err error) {
+func New(name string, config Config) (v *Logger, err error) {
 	formatter := logs.ConsoleFormatter
 	if strings.ToLower(strings.TrimSpace(config.Formatter)) == "json" {
 		formatter = logs.JsonFormatter
@@ -79,7 +78,7 @@ func New(name string, config Config) (v logs.Logger, fn CloseFunc, err error) {
 		err = errors.Warning("fns: new log failed").WithCause(writerErr).WithMeta("writer", config.Writer.Name)
 		return
 	}
-	v, err = logs.New(
+	core, coreErr := logs.New(
 		logs.WithFormatter(formatter),
 		logs.Name(name),
 		logs.WithLevel(level),
@@ -87,13 +86,23 @@ func New(name string, config Config) (v logs.Logger, fn CloseFunc, err error) {
 		logs.Color(config.Color),
 		logs.Writer(writer),
 	)
-	if err != nil {
-		_ = writer.Close()
-		err = errors.Warning("fns: new log failed").WithCause(err).WithMeta("writer", config.Writer.Name)
+	if coreErr != nil {
+		writer.Shutdown(context.Background())
+		err = errors.Warning("fns: new log failed").WithCause(coreErr).WithMeta("writer", config.Writer.Name)
 		return
 	}
-	fn = func() {
-		_ = writer.Close()
+	v = &Logger{
+		Logger: core,
+		w:      writer,
 	}
 	return
+}
+
+type Logger struct {
+	logs.Logger
+	w Writer
+}
+
+func (l *Logger) Shutdown(ctx context.Context) {
+	l.w.Shutdown(ctx)
 }

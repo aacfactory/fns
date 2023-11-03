@@ -129,11 +129,11 @@ func (srv *Server) ListenAndServe() (err error) {
 	return
 }
 
-func (srv *Server) Shutdown() (err error) {
+func (srv *Server) Shutdown(ctx context.Context) (err error) {
 	if len(srv.middlewares) > 0 {
 		srv.middlewares.Close()
 	}
-	err = srv.srv.Shutdown(context.Background())
+	err = srv.srv.Shutdown(ctx)
 	if err != nil {
 		err = errors.Warning("fns: transport shutdown failed").WithCause(err).WithMeta("transport", transportName)
 	}

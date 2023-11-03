@@ -111,10 +111,10 @@ func (abstract *Abstract) Document() (document *documents.Document) {
 	return
 }
 
-func (abstract *Abstract) Close() {
+func (abstract *Abstract) Shutdown(ctx context.Context) {
 	if abstract.components != nil && len(abstract.components) > 0 {
 		for _, component := range abstract.components {
-			component.Close()
+			component.Shutdown(ctx)
 		}
 	}
 	if abstract.log.DebugEnabled() {

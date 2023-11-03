@@ -25,7 +25,7 @@ type Config struct {
 	Log       log.Config        `json:"log" yaml:"log,omitempty"`
 	Cluster   *clusters.Config  `json:"cluster" yaml:"cluster,omitempty"`
 	Transport transports.Config `json:"transport" yaml:"transport,omitempty"`
-	Proxy     *proxies.Config   `json:"proxy" yaml:"proxy,omitempty"`
+	Proxy     proxies.Config    `json:"proxy" yaml:"proxy,omitempty"`
 	Services  services.Config   `json:"services" yaml:"services,omitempty"`
 	Hooks     hooks.Config      `json:"hooks" yaml:"hooks"`
 }

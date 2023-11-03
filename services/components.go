@@ -15,7 +15,7 @@ const (
 type Component interface {
 	Name() (name string)
 	Construct(options Options) (err error)
-	Close()
+	Shutdown(ctx sc.Context)
 }
 
 type Components []Component

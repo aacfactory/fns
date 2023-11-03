@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/configs"
 	"github.com/aacfactory/fns/hooks"
+	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/fast"
@@ -46,6 +47,7 @@ var (
 		handlers:              make([]transports.MuxHandler, 0, 1),
 		hooks:                 nil,
 		shutdownTimeout:       60 * time.Second,
+		proxyOptions:          make([]proxies.Option, 0, 1),
 	}
 )
 
@@ -61,6 +63,7 @@ type Options struct {
 	handlers              []transports.MuxHandler
 	hooks                 []hooks.Hook
 	shutdownTimeout       time.Duration
+	proxyOptions          []proxies.Option
 }
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -194,6 +197,15 @@ func Middleware(middleware transports.Middleware) Option {
 func Handler(handler transports.MuxHandler) Option {
 	return func(options *Options) error {
 		options.handlers = append(options.handlers, handler)
+		return nil
+	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func Proxy(options ...proxies.Option) Option {
+	return func(opts *Options) error {
+		opts.proxyOptions = append(opts.proxyOptions, options...)
 		return nil
 	}
 }

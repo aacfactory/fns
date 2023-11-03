@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -254,9 +255,28 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 	return
 }
 
-func (s *Services) Close() {
+func (s *Services) Shutdown(ctx sc.Context) {
+	wg := new(sync.WaitGroup)
+	ch := make(chan struct{}, 1)
 	for _, endpoint := range s.values {
-		endpoint.Close()
+		wg.Add(1)
+		go func(ctx sc.Context, endpoint Endpoint, wg *sync.WaitGroup) {
+			ec, ecc := sc.WithCancel(ctx)
+			endpoint.Shutdown(ec)
+			ecc()
+			wg.Done()
+		}(ctx, endpoint, wg)
+	}
+	go func(ch chan struct{}, wg *sync.WaitGroup) {
+		wg.Wait()
+		ch <- struct{}{}
+		close(ch)
+	}(ch, wg)
+	select {
+	case <-ctx.Done():
+		break
+	case <-ch:
+		break
 	}
 }
 

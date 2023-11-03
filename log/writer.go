@@ -1,6 +1,7 @@
 package log
 
 import (
+	"context"
 	"github.com/aacfactory/configures"
 	"io"
 	"os"
@@ -11,7 +12,8 @@ type WriterOptions struct {
 }
 
 type Writer interface {
-	io.WriteCloser
+	io.Writer
+	Shutdown(ctx context.Context)
 	Construct(options WriterOptions) (err error)
 }
 
@@ -43,8 +45,7 @@ func (s *StdOut) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (s *StdOut) Close() error {
-	return nil
+func (s *StdOut) Shutdown(_ context.Context) {
 }
 
 func (s *StdOut) Construct(_ WriterOptions) (err error) {
@@ -61,8 +62,7 @@ func (s *StdErr) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (s *StdErr) Close() error {
-	return nil
+func (s *StdErr) Shutdown(_ context.Context) {
 }
 
 func (s *StdErr) Construct(_ WriterOptions) (err error) {

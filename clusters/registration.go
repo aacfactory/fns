@@ -192,8 +192,9 @@ func (registration *Registration) Enabled() bool {
 	return registration.closed.Load()
 }
 
-func (registration *Registration) Close() {
+func (registration *Registration) Shutdown(_ context.Context) {
 	registration.closed.Store(true)
+	registration.client.Close()
 }
 
 type SortedRegistrations []*Registration

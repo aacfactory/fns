@@ -1,4 +1,4 @@
-package proxies
+package development
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
+	"net/http"
 )
 
 var (
@@ -15,24 +16,39 @@ var (
 	sharedProxyEndpointName = "shared"
 )
 
-type DevelopmentHandlerConfig struct {
+var (
+	ErrDeviceId               = errors.New(http.StatusNotAcceptable, "***NOT ACCEPTABLE**", "fns: X-Fns-Device-Id is required")
+	ErrInvalidPath            = errors.Warning("fns: invalid path")
+	ErrInvalidBody            = errors.Warning("fns: invalid body")
+	ErrInvalidRequestVersions = errors.Warning("fns: invalid request versions")
+)
+
+var (
+	methodPost = bytex.FromString(http.MethodPost)
+)
+
+var (
+	slashBytes = []byte{'/'}
+)
+
+type ProxyHandlerConfig struct {
 	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 
-func NewDevelopmentHandler() transports.MuxHandler {
-	return &DevelopmentHandler{}
+func NewProxyHandler() transports.MuxHandler {
+	return &ProxyHandler{}
 }
 
-type DevelopmentHandler struct {
+type ProxyHandler struct {
 	enabled bool
 }
 
-func (handler *DevelopmentHandler) Name() string {
+func (handler *ProxyHandler) Name() string {
 	return "development"
 }
 
-func (handler *DevelopmentHandler) Construct(options transports.MuxHandlerOptions) error {
-	config := DevelopmentHandlerConfig{}
+func (handler *ProxyHandler) Construct(options transports.MuxHandlerOptions) error {
+	config := ProxyHandlerConfig{}
 	err := options.Config.As(&config)
 	if err != nil {
 		err = errors.Warning("fns: construct development handler failed").WithCause(err)
@@ -42,7 +58,7 @@ func (handler *DevelopmentHandler) Construct(options transports.MuxHandlerOption
 	return nil
 }
 
-func (handler *DevelopmentHandler) Match(method []byte, path []byte, header transports.Header) bool {
+func (handler *ProxyHandler) Match(method []byte, path []byte, header transports.Header) bool {
 	ok := handler.enabled && bytes.Equal(method, methodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
@@ -50,7 +66,7 @@ func (handler *DevelopmentHandler) Match(method []byte, path []byte, header tran
 	return ok
 }
 
-func (handler *DevelopmentHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+func (handler *ProxyHandler) Handle(w transports.ResponseWriter, r transports.Request) {
 	rt := runtime.Load(r)
 	// path
 	path := r.Path()
@@ -86,12 +102,12 @@ func (handler *DevelopmentHandler) Handle(w transports.ResponseWriter, r transpo
 	w.Succeed(v)
 }
 
-func (handler *DevelopmentHandler) handleSharedProxy(shared shareds.Shared, fn []byte, body []byte) (v interface{}, err error) {
+func (handler *ProxyHandler) handleSharedProxy(shared shareds.Shared, fn []byte, body []byte) (v interface{}, err error) {
 
 	return
 }
 
-func (handler *DevelopmentHandler) handleProxy(discovery services.Discovery, service []byte, fn []byte, body []byte, header transports.Header) (v interface{}, err error) {
+func (handler *ProxyHandler) handleProxy(discovery services.Discovery, service []byte, fn []byte, body []byte, header transports.Header) (v interface{}, err error) {
 	// todo same as internal handler
 	// internal request and internal response
 

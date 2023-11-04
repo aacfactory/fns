@@ -8,7 +8,6 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
 	"net/http"
-	"sync"
 )
 
 var (
@@ -21,15 +20,10 @@ var (
 )
 
 func NewEndpointsHandler() transports.MuxHandler {
-	return &EndpointsHandler{
-		rt:   nil,
-		once: new(sync.Once),
-	}
+	return &EndpointsHandler{}
 }
 
 type EndpointsHandler struct {
-	rt   *runtime.Runtime
-	once *sync.Once
 }
 
 func (handler *EndpointsHandler) Name() string {
@@ -48,9 +42,7 @@ func (handler *EndpointsHandler) Match(method []byte, path []byte, header transp
 }
 
 func (handler *EndpointsHandler) Handle(w transports.ResponseWriter, r transports.Request) {
-	handler.once.Do(func() {
-		handler.rt = runtime.Load(r)
-	})
+	rt := runtime.Load(r)
 	// path
 	path := r.Path()
 	pathItems := bytes.Split(path, slashBytes)
@@ -105,7 +97,7 @@ func (handler *EndpointsHandler) Handle(w transports.ResponseWriter, r transport
 	// header <<<
 
 	// handle
-	response, err := handler.rt.Endpoints().Request(
+	response, err := rt.Endpoints().Request(
 		r, service, fn,
 		services.NewArgument(body),
 		options...,

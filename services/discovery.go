@@ -19,6 +19,7 @@ package services
 import (
 	"context"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/services/documents"
 )
 
 type EndpointGetOption func(options *EndpointGetOptions)
@@ -50,6 +51,15 @@ func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 	}
 }
 
+type EndpointInfo struct {
+	Id       []byte
+	Name     []byte
+	Version  versions.Version
+	Internal bool
+	Document *documents.Document
+}
+
 type Discovery interface {
+	Endpoints(ctx context.Context) (infos []EndpointInfo)
 	Get(ctx context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
 }

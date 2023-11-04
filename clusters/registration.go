@@ -3,6 +3,7 @@ package clusters
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
@@ -19,11 +20,12 @@ import (
 	"time"
 )
 
-func NewRegistration(id []byte, name []byte, version versions.Version, document *documents.Document, client transports.Client, signature signatures.Signature) (v *Registration) {
+func NewRegistration(id []byte, name []byte, version versions.Version, internal bool, document *documents.Document, client transports.Client, signature signatures.Signature) (v *Registration) {
 	v = &Registration{
 		id:        id,
 		name:      name,
 		version:   version,
+		internal:  internal,
 		document:  document,
 		client:    client,
 		signature: signature,
@@ -37,6 +39,7 @@ type Registration struct {
 	id        []byte
 	name      []byte
 	version   versions.Version
+	internal  bool
 	document  *documents.Document
 	client    transports.Client
 	signature signatures.Signature
@@ -50,7 +53,7 @@ func (registration *Registration) Name() (name string) {
 }
 
 func (registration *Registration) Internal() (ok bool) {
-	ok = true
+	ok = registration.internal
 	return
 }
 
@@ -59,18 +62,124 @@ func (registration *Registration) Document() (document *documents.Document) {
 	return
 }
 
-func (registration *Registration) Dispatch(ctx context.Context, method []byte, path []byte, header transports.Header, body []byte) (status int, responseHeader transports.Header, responseBody []byte, err error) {
-	status, responseHeader, responseBody, err = registration.client.Do(ctx, method, path, header, body)
+func (registration *Registration) Dispatch(ctx services.Request) (v interface{}, err error) {
+	transportRequestHeader, hasTransportRequestHeader := transports.TryLoadRequestHeader(ctx)
+	if !hasTransportRequestHeader {
+		err = errors.Warning("fns: registration dispatch request failed").WithCause(fmt.Errorf("can not load transport request from context"))
+		return
+	}
+	transportResponseHeader, hasTransportResponseHeader := transports.TryLoadResponseHeader(ctx)
+	if !hasTransportResponseHeader {
+		err = errors.Warning("fns: registration dispatch request failed").WithCause(fmt.Errorf("can not load transport response from context"))
+		return
+	}
+	// header >>>
+	header := transports.AcquireHeader()
+	defer transports.ReleaseHeader(header)
+	transportRequestHeader.Foreach(func(key []byte, values [][]byte) {
+		for _, value := range values {
+			header.Add(key, value)
+		}
+	})
+	// content-type
+	header.Set(bytex.FromString(transports.ContentTypeHeaderName), dispatchContentType)
+	// device id
+	deviceId := ctx.Header().DeviceId()
+	if len(deviceId) > 0 {
+		header.Set(bytex.FromString(transports.DeviceIdHeaderName), deviceId)
+	}
+	// device ip
+	deviceIp := ctx.Header().DeviceIp()
+	if len(deviceIp) > 0 {
+		header.Set(bytex.FromString(transports.DeviceIpHeaderName), deviceIp)
+	}
+	// request id
+	requestId := ctx.Header().RequestId()
+	if len(requestId) > 0 {
+		header.Set(bytex.FromString(transports.RequestIdHeaderName), requestId)
+	}
+	// request version
+	requestVersion := ctx.Header().AcceptedVersions()
+	if len(requestVersion) > 0 {
+		header.Set(bytex.FromString(transports.RequestVersionsHeaderName), requestVersion.Bytes())
+	}
+	// authorization
+	token := ctx.Header().Token()
+	if len(token) > 0 {
+		header.Set(bytex.FromString(transports.AuthorizationHeaderName), token)
+	}
+	// header <<<
+
+	// path
+	service, fn := ctx.Fn()
+	sln := len(service)
+	fln := len(fn)
+	path := make([]byte, sln+fln+2)
+	path[0] = '/'
+	path[sln+1] = '/'
+	copy(path[1:], service)
+	copy(path[sln+2:], fn)
+
+	// body
+	var body []byte
+	argument, argumentErr := ctx.Argument().MarshalJSON()
+	if argumentErr != nil {
+		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+		return
+	}
+	const (
+		null = "null"
+	)
+	if !bytes.Equal(argument, bytex.FromString(null)) {
+		body = argument
+	}
+	// do
+	status, respHeader, respBody, doErr := registration.client.Do(ctx, methodPost, path, header, body)
+	if doErr != nil {
+		n := registration.errs.Incr()
+		if n > 10 {
+			registration.closed.Store(true)
+		}
+		err = errors.Warning("fns: registration dispatch request failed").WithCause(doErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+		return
+	}
+	if status == 200 {
+		if registration.errs.Value() > 0 {
+			registration.errs.Decr()
+		}
+		respHeader.Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				transportResponseHeader.Add(key, value)
+			}
+		})
+		v = respBody
+		return
+	}
+	switch status {
+	case http.StatusServiceUnavailable:
+		registration.closed.Store(true)
+		err = ErrUnavailable
+		break
+	case http.StatusTooManyRequests:
+		err = ErrTooMayRequest
+		break
+	case http.StatusTooEarly:
+		err = ErrTooEarly
+		break
+	}
 	return
 }
 
 func (registration *Registration) Handle(ctx services.Request) (v interface{}, err error) {
+	if !ctx.Header().Internal() {
+		v, err = registration.Dispatch(ctx)
+		return
+	}
 	// header >>>
-	header := transports.NewHeader()
+	header := transports.AcquireHeader()
+	defer transports.ReleaseHeader(header)
 	// content-type
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
-	// internal
-	header.Set(bytex.FromString(transports.RequestInternalHeaderName), []byte{'1'})
+	header.Set(bytex.FromString(transports.ContentTypeHeaderName), internalContentType)
 	// endpoint id
 	endpointId := ctx.Header().EndpointId()
 	if len(endpointId) > 0 {

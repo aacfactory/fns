@@ -1,4 +1,4 @@
-package handlers
+package proxies
 
 import (
 	"github.com/aacfactory/errors"

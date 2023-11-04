@@ -57,3 +57,7 @@ func (h httpHeader) Foreach(fn func(key []byte, values [][]byte)) {
 		fn(bytex.FromString(key), vv)
 	}
 }
+
+func (h httpHeader) Reset() {
+	clear(h)
+}

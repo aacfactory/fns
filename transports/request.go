@@ -21,16 +21,10 @@ import (
 	"crypto/tls"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/context"
-	"net/http"
 )
 
 var (
 	ErrTooBigRequestBody = errors.Warning("fns: request body is too big")
-)
-
-var (
-	MethodGET  = []byte(http.MethodGet)
-	MethodPost = []byte(http.MethodPost)
 )
 
 type Request interface {
@@ -53,4 +47,17 @@ func LoadRequest(ctx sc.Context) Request {
 		return r
 	}
 	return nil
+}
+
+func TryLoadRequest(ctx sc.Context) (Request, bool) {
+	r, ok := ctx.(Request)
+	return r, ok
+}
+
+func TryLoadRequestHeader(ctx sc.Context) (Header, bool) {
+	r, ok := ctx.(Request)
+	if !ok {
+		return nil, false
+	}
+	return r.Header(), ok
 }

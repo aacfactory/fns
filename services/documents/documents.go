@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/aacfactory/fns/commons/bytex"
-	oas2 "github.com/aacfactory/fns/commons/oas"
+	"github.com/aacfactory/fns/commons/oas"
 	"github.com/aacfactory/fns/commons/versions"
 	"sort"
 )
@@ -40,10 +40,37 @@ func (documents NameSortedDocuments) Swap(i, j int) {
 	return
 }
 
-func NewDocuments(id []byte, name []byte, version versions.Version) *Documents {
+type VersionSortedDocuments []*Documents
+
+func (documents VersionSortedDocuments) Len() int {
+	return len(documents)
+}
+
+func (documents VersionSortedDocuments) Less(i, j int) bool {
+	return documents[i].Version.LessThan(documents[j].Version)
+}
+
+func (documents VersionSortedDocuments) Swap(i, j int) {
+	documents[i], documents[j] = documents[j], documents[i]
+}
+
+func (documents VersionSortedDocuments) Add(id []byte, doc *Document) VersionSortedDocuments {
+	for _, document := range documents {
+		if document.Id == bytex.ToString(id) {
+			document.Add(doc)
+			return documents
+		}
+	}
+	document := NewDocuments(id, doc.Version)
+	document.Add(doc)
+	n := append(documents, document)
+	sort.Sort(n)
+	return n
+}
+
+func NewDocuments(id []byte, version versions.Version) *Documents {
 	return &Documents{
 		Id:        string(id),
-		Name:      string(name),
 		Version:   version,
 		Endpoints: make(NameSortedDocuments, 0, 1),
 	}
@@ -51,7 +78,6 @@ func NewDocuments(id []byte, name []byte, version versions.Version) *Documents {
 
 type Documents struct {
 	Id        string              `json:"id"`
-	Name      string              `json:"name"`
 	Version   versions.Version    `json:"version"`
 	Endpoints NameSortedDocuments `json:"endpoints"`
 }
@@ -73,28 +99,28 @@ func (documents *Documents) Get(name []byte) (v *Document) {
 	return nil
 }
 
-func (documents *Documents) Openapi(openapiVersion string) (api oas2.API) {
+func (documents *Documents) Openapi(title string, description string, term string, openapiVersion string) (api oas.API) {
 	if openapiVersion == "" {
 		openapiVersion = "3.1.0"
 	}
 	// oas
-	api = oas2.API{
+	api = oas.API{
 		Openapi: openapiVersion,
-		Info: &oas2.Info{
-			Title:          documents.Name,
-			Description:    fmt.Sprintf("%s(%s)", documents.Name, documents.Id),
-			TermsOfService: "",
+		Info: &oas.Info{
+			Title:          title,
+			Description:    description,
+			TermsOfService: term,
 			Contact:        nil,
 			License:        nil,
 			Version:        documents.Version.String(),
 		},
-		Servers: []*oas2.Server{},
-		Paths:   make(map[string]*oas2.Path),
-		Components: &oas2.Components{
-			Schemas:   make(map[string]*oas2.Schema),
-			Responses: make(map[string]*oas2.Response),
+		Servers: []*oas.Server{},
+		Paths:   make(map[string]*oas.Path),
+		Components: &oas.Components{
+			Schemas:   make(map[string]*oas.Schema),
+			Responses: make(map[string]*oas.Response),
 		},
-		Tags: make([]*oas2.Tag, 0, 1),
+		Tags: make([]*oas.Tag, 0, 1),
 	}
 	// schemas
 	codeErr := codeErrOpenapiSchema()
@@ -107,7 +133,7 @@ func (documents *Documents) Openapi(openapiVersion string) (api oas2.API) {
 	for status, response := range responseStatusOpenapi() {
 		api.Components.Responses[status] = response
 	}
-	api.Tags = append(api.Tags, &oas2.Tag{
+	api.Tags = append(api.Tags, &oas.Tag{
 		Name:        "builtin",
 		Description: "fns builtins",
 	})
@@ -122,7 +148,7 @@ func (documents *Documents) Openapi(openapiVersion string) (api oas2.API) {
 				continue
 			}
 			// tags
-			api.Tags = append(api.Tags, &oas2.Tag{
+			api.Tags = append(api.Tags, &oas.Tag{
 				Name:        document.Name,
 				Description: document.Description,
 			})
@@ -152,14 +178,14 @@ func (documents *Documents) Openapi(openapiVersion string) (api oas2.API) {
 						}
 					}
 				}
-				path := &oas2.Path{
-					Post: &oas2.Operation{
+				path := &oas.Path{
+					Post: &oas.Operation{
 						OperationId: fmt.Sprintf("%s_%s", document.Name, fn.Name),
 						Tags:        []string{document.Name},
 						Summary:     fn.Title,
 						Description: description,
 						Deprecated:  fn.Deprecated,
-						Parameters: func() []*oas2.Parameter {
+						Parameters: func() []*oas.Parameter {
 							params := requestHeadersOpenapiParams()
 							if fn.Authorization {
 								params = append(params, requestAuthHeadersOpenapiParams()...)
@@ -167,25 +193,25 @@ func (documents *Documents) Openapi(openapiVersion string) (api oas2.API) {
 							}
 							return params
 						}(),
-						RequestBody: &oas2.RequestBody{
+						RequestBody: &oas.RequestBody{
 							Required:    func() bool { return fn.Argument != nil }(),
 							Description: "",
-							Content: func() (c map[string]*oas2.MediaType) {
+							Content: func() (c map[string]*oas.MediaType) {
 								if fn.Argument == nil {
 									return
 								}
-								c = oas2.ApplicationJsonContent(fn.Argument.Schema())
+								c = oas.ApplicationJsonContent(fn.Argument.Schema())
 								return
 							}(),
 						},
-						Responses: map[string]oas2.Response{
+						Responses: map[string]oas.Response{
 							"200": {
-								Content: func() (c map[string]*oas2.MediaType) {
+								Content: func() (c map[string]*oas.MediaType) {
 									if fn.Result == nil {
-										c = oas2.ApplicationJsonContent(oas2.RefSchema("github.com/aacfactory/fns/service.Empty"))
+										c = oas.ApplicationJsonContent(oas.RefSchema("github.com/aacfactory/fns/service.Empty"))
 										return
 									}
-									c = oas2.ApplicationJsonContent(fn.Result.Schema())
+									c = oas.ApplicationJsonContent(fn.Result.Schema())
 									return
 								}(),
 							},

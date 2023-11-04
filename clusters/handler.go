@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	slashBytes  = []byte{'/'}
-	methodPost  = bytex.FromString(http.MethodPost)
-	contentType = bytex.FromString("application/json+fns")
+	slashBytes          = []byte{'/'}
+	methodPost          = bytex.FromString(http.MethodPost)
+	dispatchContentType = bytex.FromString("application/json")
+	internalContentType = bytex.FromString("application/json+fns")
 )
 
 type Entry struct {
@@ -61,8 +62,7 @@ func (handler *InternalHandler) Construct(_ transports.MuxHandlerOptions) error 
 func (handler *InternalHandler) Match(method []byte, path []byte, header transports.Header) bool {
 	matched := bytes.Equal(method, methodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
-		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), contentType) &&
-		len(header.Get(bytex.FromString(transports.RequestInternalHeaderName))) != 0 &&
+		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), internalContentType) &&
 		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
 		bytes.Equal(header.Get(bytex.FromString(transports.EndpointIdHeaderName)), handler.id)
 	return matched
@@ -80,7 +80,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	fn := pathItems[2]
 
 	// sign
-	sign := r.Header().Get(bytex.FromString(transports.RequestInternalHeaderName))
+	sign := r.Header().Get(bytex.FromString(transports.SignatureHeaderName))
 	if len(sign) == 0 {
 		w.Failed(ErrSignatureLost.WithMeta("path", bytex.ToString(path)))
 		return

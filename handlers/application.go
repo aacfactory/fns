@@ -44,15 +44,7 @@ func (app *Application) Handler(next transports.Handler) transports.Handler {
 			w.Failed(ErrTooEarly)
 			return
 		}
-		// header >>>
-		// device id
-		deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
-		if len(deviceId) == 0 {
-			w.Failed(ErrDeviceId)
-			return
-		}
 
-		// header <<<
 		app.counter.Add(1)
 		// set runtime into request context
 		runtime.With(r, app.rt)

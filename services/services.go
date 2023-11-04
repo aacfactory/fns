@@ -43,7 +43,7 @@ func New(id string, name string, version versions.Version, log logs.Logger, conf
 		config:    config,
 		id:        bytex.FromString(id),
 		version:   version,
-		doc:       documents.NewDocuments(bytex.FromString(id), bytex.FromString(name), version),
+		doc:       documents.NewDocuments(bytex.FromString(id), version),
 		values:    make(map[string]Endpoint),
 		listeners: make([]Listenable, 0, 1),
 		discovery: discovery,
@@ -124,6 +124,17 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 	if len(req.Header().EndpointId()) == 0 {
 		local, inLocal := s.values[bytex.ToString(name)]
 		if inLocal {
+			// internal
+			if local.Internal() {
+				if !req.Header().Internal() {
+					err = errors.NotFound("fns: endpoint was not found").
+						WithCause(fmt.Errorf("version was not match")).
+						WithMeta("service", bytex.ToString(name)).
+						WithMeta("fn", bytex.ToString(fn))
+					ReleaseRequest(req)
+					return
+				}
+			}
 			// accept versions
 			accepted := req.Header().AcceptedVersions().Accept(name, s.version)
 			if !accepted {
@@ -148,6 +159,17 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 		if bytes.Equal(s.id, req.Header().EndpointId()) {
 			local, inLocal := s.values[bytex.ToString(name)]
 			if inLocal {
+				// internal
+				if local.Internal() {
+					if !req.Header().Internal() {
+						err = errors.NotFound("fns: endpoint was not found").
+							WithCause(fmt.Errorf("version was not match")).
+							WithMeta("service", bytex.ToString(name)).
+							WithMeta("fn", bytex.ToString(fn))
+						ReleaseRequest(req)
+						return
+					}
+				}
 				// accept versions
 				accepted := req.Header().AcceptedVersions().Accept(name, s.version)
 				if !accepted {

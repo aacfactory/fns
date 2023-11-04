@@ -96,8 +96,6 @@ func New(options Options) (rs *Registrations, err error) {
 	return
 }
 
-// Registrations
-// implement discovery + handler
 type Registrations struct {
 	log       logs.Logger
 	cluster   Cluster
@@ -110,13 +108,13 @@ type Registrations struct {
 	locker    sync.RWMutex
 }
 
-// Add
-// 在services.Add后立即调用
-func (rs *Registrations) Add(name string, internal bool) {
-	rs.node.Endpoints = append(rs.node.Endpoints, EndpointInfo{
-		Name:     name,
-		Internal: internal,
-	})
+func (rs *Registrations) Add(name string, internal bool, document *documents.Document) (err error) {
+	info, infoErr := NewEndpointInfo(name, internal, document)
+	if infoErr != nil {
+		err = errors.Warning("fns: registrations add endpoint info failed").WithCause(infoErr)
+		return
+	}
+	rs.node.Endpoints = append(rs.node.Endpoints, info)
 	return
 }
 
@@ -128,7 +126,25 @@ func (rs *Registrations) Signature() signatures.Signature {
 	return rs.signature
 }
 
-func (rs *Registrations) Find(_ context.Context, name []byte, options ...services.EndpointGetOption) (registration *Registration, has bool) {
+func (rs *Registrations) Endpoints(_ context.Context) (infos []services.EndpointInfo) {
+	rs.locker.RLock()
+	defer rs.locker.RUnlock()
+	infos = make([]services.EndpointInfo, 0, 1)
+	for _, name := range rs.names {
+		for _, value := range name.values {
+			infos = append(infos, services.EndpointInfo{
+				Id:       value.id,
+				Name:     value.name,
+				Version:  value.version,
+				Internal: value.internal,
+				Document: value.document,
+			})
+		}
+	}
+	return
+}
+
+func (rs *Registrations) Get(_ context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
 	rs.locker.RLock()
 	named, exist := rs.names.Get(name)
 	if !exist {
@@ -140,27 +156,22 @@ func (rs *Registrations) Find(_ context.Context, name []byte, options ...service
 		option(&opt)
 	}
 	if id := opt.Id(); len(id) > 0 {
-		registration, has = named.Get(id)
+		endpoint, has = named.Get(id)
 		rs.locker.RUnlock()
 		return
 	}
 	intervals := opt.Versions()
 	if len(intervals) == 0 {
-		registration, has = named.MaxOne()
+		endpoint, has = named.MaxOne()
 	} else {
 		interval, got := intervals.Get(name)
 		if got {
-			registration, has = named.Range(interval)
+			endpoint, has = named.Range(interval)
 		} else {
-			registration, has = named.MaxOne()
+			endpoint, has = named.MaxOne()
 		}
 	}
 	rs.locker.RUnlock()
-	return
-}
-
-func (rs *Registrations) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
-	endpoint, has = rs.Find(ctx, name, options...)
 	return
 }
 
@@ -209,22 +220,18 @@ func (rs *Registrations) Watching(ctx context.Context) (err error) {
 						break
 					}
 					// get document
-					document, documentErr := handlers.FetchDocuments(ctx, client)
-					if documentErr != nil {
-						if rs.log.WarnEnabled() {
-							rs.log.Warn().
-								With("cluster", "registrations").
-								Cause(errors.Warning(fmt.Sprintf("fns: get documents from %s failed", event.Node.Address)).WithMeta("address", event.Node.Address).WithCause(clientErr)).
-								Message(fmt.Sprintf("fns: get documents from %s failed", event.Node.Address))
-						}
-						break
-					}
 					for _, endpoint := range event.Node.Endpoints {
-						var doc *documents.Document
-						if document != nil {
-							doc = document.Get(bytex.FromString(endpoint.Name))
+						document, documentErr := endpoint.Document()
+						if documentErr != nil {
+							if rs.log.WarnEnabled() {
+								rs.log.Warn().
+									With("cluster", "registrations").
+									Cause(errors.Warning("fns: get endpoint document failed").WithMeta("address", event.Node.Address).WithCause(documentErr)).
+									Message(fmt.Sprintf("fns: dial %s failed", event.Node.Address))
+							}
+							continue
 						}
-						r := NewRegistration(bytex.FromString(event.Node.Id), bytex.FromString(endpoint.Name), event.Node.Version, doc, client, rs.signature)
+						r := NewRegistration(bytex.FromString(event.Node.Id), bytex.FromString(endpoint.Name), event.Node.Version, endpoint.Internal, document, client, rs.signature)
 						registrations = append(registrations, r)
 					}
 					rs.locker.Lock()

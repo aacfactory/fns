@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"github.com/aacfactory/fns/commons/bytex"
 	"net/textproto"
+	"sync"
 )
 
 const (
@@ -58,7 +59,6 @@ const (
 	SignatureHeaderName                          = "X-Fns-Signature"
 	EndpointIdHeaderName                         = "X-Fns-Endpoint-Id"
 	EndpointVersionHeaderName                    = "X-Fns-Endpoint-Version"
-	RequestInternalHeaderName                    = "X-Fns-Request-Internal"
 	RequestTimeoutHeaderName                     = "X-Fns-Request-Timeout"
 	RequestVersionsHeaderName                    = "X-Fns-Request-Version"
 	HandleLatencyHeaderName                      = "X-Fns-Handle-Latency"
@@ -78,9 +78,27 @@ type Header interface {
 	Del(key []byte)
 	Values(key []byte) [][]byte
 	Foreach(fn func(key []byte, values [][]byte))
+	Reset()
 }
 
-func NewHeader() Header {
+var (
+	headerPool = sync.Pool{}
+)
+
+func AcquireHeader() Header {
+	cached := headerPool.Get()
+	if cached == nil {
+		return newHeader()
+	}
+	return cached.(Header)
+}
+
+func ReleaseHeader(h Header) {
+	h.Reset()
+	headerPool.Put(h)
+}
+
+func newHeader() Header {
 	hh := make(defaultHeader, 0, 1)
 	return &hh
 }
@@ -168,4 +186,10 @@ func (h *defaultHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	for _, entry := range hh {
 		fn(entry.name, entry.value)
 	}
+}
+
+func (h *defaultHeader) Reset() {
+	hh := *h
+	hh = hh[:0]
+	*h = hh
 }

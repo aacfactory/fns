@@ -178,7 +178,6 @@ func New(options ...Option) (app Application) {
 	mux := transports.NewMux()
 	mux.Add(handlers.NewEndpointsHandler())
 	mux.Add(handlers.NewHealthHandler())
-	mux.Add(handlers.NewDocumentHandler())
 	if registrations != nil {
 		mux.Add(clusters.NewInternalHandler(appId, registrations.Signature()))
 	}
@@ -294,7 +293,11 @@ func (app *application) Deploy(s ...services.Service) Application {
 			return app
 		}
 		if app.registrations != nil {
-			app.registrations.Add(service.Name(), service.Internal())
+			addErr := app.registrations.Add(service.Name(), service.Internal(), service.Document())
+			if addErr != nil {
+				panic(fmt.Sprintf("%+v", errors.Warning("fns: deploy failed").WithCause(addErr)))
+				return app
+			}
 		}
 	}
 	return app

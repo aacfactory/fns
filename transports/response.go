@@ -49,3 +49,16 @@ func LoadResponseWriter(ctx sc.Context) ResponseWriter {
 	}
 	return w
 }
+
+func TryLoadResponseWriter(ctx sc.Context) (ResponseWriter, bool) {
+	w, ok := ctx.(ResponseWriter)
+	return w, ok
+}
+
+func TryLoadResponseHeader(ctx sc.Context) (Header, bool) {
+	w, ok := ctx.(ResponseWriter)
+	if !ok {
+		return nil, false
+	}
+	return w.Header(), ok
+}

@@ -99,14 +99,9 @@ func New(options ...Option) (app Application) {
 	// dev client mode
 	if config.Dev.Enabled {
 		if config.Dev.Mode == development.Client {
-			devErr := development.Register(config.Dev.Address, opt.transport)
-			if devErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(devErr)))
-				return
-			}
 			if config.Cluster == nil {
 				config.Cluster = &clusters.Config{
-					Secret:        "",
+					Secret:        "FNS+-",
 					HostRetriever: "",
 					Shared:        nil,
 					Barrier:       nil,
@@ -115,6 +110,11 @@ func New(options ...Option) (app Application) {
 				}
 			} else {
 				config.Cluster.Name = development.Name
+			}
+			devErr := development.Register(config.Cluster.Secret, config.Dev.Address, opt.transport)
+			if devErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(devErr)))
+				return
 			}
 		} else if config.Dev.Mode == development.Server {
 			opt.handlers = append(opt.handlers, development.NewHandler())

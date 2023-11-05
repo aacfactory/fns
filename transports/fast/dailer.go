@@ -2,6 +2,7 @@ package fast
 
 import (
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/transports"
 	"golang.org/x/sync/singleflight"
 	"sync"
@@ -22,7 +23,8 @@ type Dialer struct {
 	clients sync.Map
 }
 
-func (dialer *Dialer) Dial(address string) (client transports.Client, err error) {
+func (dialer *Dialer) Dial(addressBytes []byte) (client transports.Client, err error) {
+	address := bytex.ToString(addressBytes)
 	cc, doErr, _ := dialer.group.Do(address, func() (clients interface{}, err error) {
 		hosted, has := dialer.clients.Load(address)
 		if has {

@@ -34,7 +34,7 @@ type Client interface {
 }
 
 type Dialer interface {
-	Dial(address string) (client Client, err error)
+	Dial(address []byte) (client Client, err error)
 }
 
 type Server interface {

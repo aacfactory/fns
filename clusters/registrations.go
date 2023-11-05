@@ -243,7 +243,7 @@ func (rs *Registrations) Watching(ctx context.Context) (err error) {
 				switch event.Kind {
 				case Add:
 					registrations := make([]*Registration, 0, 1)
-					client, clientErr := rs.dialer.Dial(event.Node.Address)
+					client, clientErr := rs.dialer.Dial(bytex.FromString(event.Node.Address))
 					if clientErr != nil {
 						if rs.log.WarnEnabled() {
 							rs.log.Warn().

@@ -107,7 +107,7 @@ func (tr *Transport) Construct(options transports.Options) (err error) {
 	return
 }
 
-func (tr *Transport) Dial(address string) (client transports.Client, err error) {
+func (tr *Transport) Dial(address []byte) (client transports.Client, err error) {
 	client, err = tr.dialer.Dial(address)
 	return
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/logs"
 	"net/http"
 )
 
@@ -31,42 +32,32 @@ var (
 	slashBytes = []byte{'/'}
 )
 
-type ProxyHandlerConfig struct {
-	Enabled bool `json:"enabled" yaml:"enabled"`
+func NewHandler() transports.MuxHandler {
+	return &Handler{}
 }
 
-func NewProxyHandler() transports.MuxHandler {
-	return &ProxyHandler{}
+type Handler struct {
+	log logs.Logger
 }
 
-type ProxyHandler struct {
-	enabled bool
-}
-
-func (handler *ProxyHandler) Name() string {
+func (handler *Handler) Name() string {
 	return "development"
 }
 
-func (handler *ProxyHandler) Construct(options transports.MuxHandlerOptions) error {
-	config := ProxyHandlerConfig{}
-	err := options.Config.As(&config)
-	if err != nil {
-		err = errors.Warning("fns: construct development handler failed").WithCause(err)
-		return err
-	}
-	handler.enabled = config.Enabled
+func (handler *Handler) Construct(options transports.MuxHandlerOptions) error {
+	handler.log = options.Log
 	return nil
 }
 
-func (handler *ProxyHandler) Match(method []byte, path []byte, header transports.Header) bool {
-	ok := handler.enabled && bytes.Equal(method, methodPost) &&
+func (handler *Handler) Match(method []byte, path []byte, header transports.Header) bool {
+	ok := bytes.Equal(method, methodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
 		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), proxyDevContentType)
 	return ok
 }
 
-func (handler *ProxyHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+func (handler *Handler) Handle(w transports.ResponseWriter, r transports.Request) {
 	rt := runtime.Load(r)
 	// path
 	path := r.Path()
@@ -102,12 +93,12 @@ func (handler *ProxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 	w.Succeed(v)
 }
 
-func (handler *ProxyHandler) handleSharedProxy(shared shareds.Shared, fn []byte, body []byte) (v interface{}, err error) {
+func (handler *Handler) handleSharedProxy(shared shareds.Shared, fn []byte, body []byte) (v interface{}, err error) {
 
 	return
 }
 
-func (handler *ProxyHandler) handleProxy(discovery services.Discovery, service []byte, fn []byte, body []byte, header transports.Header) (v interface{}, err error) {
+func (handler *Handler) handleProxy(discovery services.Discovery, service []byte, fn []byte, body []byte, header transports.Header) (v interface{}, err error) {
 	// todo same as internal handler
 	// internal request and internal response
 

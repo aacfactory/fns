@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters"
+	"github.com/aacfactory/fns/clusters/development"
 	"github.com/aacfactory/fns/commons/procs"
 	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/uid"
@@ -90,10 +91,18 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	// log
-	loggger, loggerErr := log.New(appName, config.Log)
+	logger, loggerErr := log.New(appName, config.Log)
 	if loggerErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(loggerErr)))
 		return
+	}
+	// dev client mode
+	if config.Dev.Enabled && config.Dev.Mode == development.Client {
+		devErr := development.Register(config.Dev.Address, opt.transport)
+		if devErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(devErr)))
+			return
+		}
 	}
 
 	// proc
@@ -109,7 +118,7 @@ func New(options ...Option) (app Application) {
 	worker := workers.New(workerOptions...)
 
 	// barrier
-	var barrier *barriers.Barrier
+	var barrier barriers.Barrier
 	// cluster
 	var registrations *clusters.Registrations
 	var shared shareds.Shared
@@ -120,12 +129,12 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		var registrationsErr error
-		registrations, registrationsErr = clusters.New(clusters.Options{
+		registrations, shared, barrier, registrationsErr = clusters.New(clusters.Options{
 			Id:      appId,
 			Name:    appName,
 			Version: appVersion,
 			Port:    port,
-			Log:     loggger.Logger,
+			Log:     logger.Logger,
 			Dialer:  opt.transport,
 			Config:  *clusterConfig,
 		})
@@ -133,27 +142,21 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new cluster failed").WithCause(registrationsErr)))
 			return
 		}
-		shared = registrations.Shared()
-		if barrierConfig := clusterConfig.Barrier; barrierConfig != nil {
-			barrier = barriers.Cluster(shared.Store(), barrierConfig.TTL, barrierConfig.Interval)
-		} else {
-			shared = shareds.Local()
-		}
 	} else {
 		shared = shareds.Local()
-		barrier = barriers.Standalone()
+		barrier = barriers.New()
 	}
 	// endpoints
 	endpoints := services.New(
 		appId, appName, appVersion,
-		loggger.Logger, config.Services, worker,
+		logger.Logger, config.Services, worker,
 		registrations,
 	)
 
 	// runtime
 	rt := runtime.New(
 		appId, appName, appVersion,
-		status, loggger.Logger, worker,
+		status, logger.Logger, worker,
 		endpoints, registrations,
 		barrier, shared,
 		opt.transport,
@@ -181,9 +184,13 @@ func New(options ...Option) (app Application) {
 	if registrations != nil {
 		mux.Add(clusters.NewInternalHandler(appId, registrations.Signature()))
 	}
+	// dev server mode
+	if config.Dev.Enabled && config.Dev.Mode == development.Server {
+		mux.Add(development.NewHandler())
+	}
 	transport := opt.transport
 	transportErr := transport.Construct(transports.Options{
-		Log:         loggger.Logger,
+		Log:         logger.Logger,
 		Config:      config.Transport,
 		Middlewares: middlewares,
 		Handler:     mux,
@@ -204,7 +211,7 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		constructErr := proxy.Construct(proxies.ProxyOptions{
-			Log:     loggger.Logger.With("fns", "proxy"),
+			Log:     logger.Logger.With("fns", "proxy"),
 			Config:  config.Proxy,
 			Runtime: rt,
 		})
@@ -223,7 +230,7 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		hookErr := hook.Construct(hooks.Options{
-			Log:    loggger.Logger.With("hook", hook.Name()),
+			Log:    logger.Logger.With("hook", hook.Name()),
 			Config: hookConfig,
 		})
 		if hookErr != nil {
@@ -247,7 +254,7 @@ func New(options ...Option) (app Application) {
 		version:         appVersion,
 		rt:              rt,
 		status:          status,
-		log:             loggger,
+		log:             logger,
 		config:          config,
 		amp:             amp,
 		worker:          worker,

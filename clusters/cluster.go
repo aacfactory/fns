@@ -3,6 +3,7 @@ package clusters
 import (
 	"context"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/logs"
 )
@@ -18,6 +19,7 @@ type Cluster interface {
 	Leave(ctx context.Context) (err error)
 	NodeEvents() (events <-chan NodeEvent)
 	Shared() (shared shareds.Shared)
+	Barrier() (barrier barriers.Barrier)
 }
 
 type ClusterBuilderOptions struct {

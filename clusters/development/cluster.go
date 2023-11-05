@@ -2,19 +2,50 @@ package development
 
 import (
 	"context"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/shareds"
+	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/logs"
+	"strings"
 )
 
 const (
 	clusterName = "dev"
 )
 
+func New(address string, dialer transports.Dialer) (clusters.Cluster, error) {
+	address = strings.TrimSpace(address)
+	if len(address) == 0 {
+		return nil, errors.Warning("fns: new development cluster failed, address is required")
+	}
+	return &Cluster{
+		address: []byte(address),
+		dialer:  dialer,
+		events:  make(chan clusters.NodeEvent, 1024),
+	}, nil
+}
+
+func Register(address string, dialer transports.Transport) (err error) {
+	c, cErr := New(address, dialer)
+	if cErr != nil {
+		err = cErr
+		return
+	}
+	clusters.RegisterCluster(clusterName, c)
+	return nil
+}
+
 type Cluster struct {
-	events chan clusters.NodeEvent
+	log     logs.Logger
+	address []byte
+	dialer  transports.Dialer
+	events  chan clusters.NodeEvent
 }
 
 func (cluster *Cluster) Construct(options clusters.ClusterOptions) (err error) {
+	cluster.log = options.Log
 	return
 }
 
@@ -32,5 +63,11 @@ func (cluster *Cluster) NodeEvents() (events <-chan clusters.NodeEvent) {
 }
 
 func (cluster *Cluster) Shared() (shared shareds.Shared) {
+	// use dialer
+	return
+}
+
+func (cluster *Cluster) Barrier() (barrier barriers.Barrier) {
+	// use dialer
 	return
 }

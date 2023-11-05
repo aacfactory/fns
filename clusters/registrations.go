@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
@@ -29,7 +30,7 @@ type Options struct {
 	Config  Config
 }
 
-func New(options Options) (rs *Registrations, err error) {
+func New(options Options) (rs *Registrations, shared shareds.Shared, barrier barriers.Barrier, err error) {
 	// host
 	hostRetrieverName := strings.TrimSpace(options.Config.HostRetriever)
 	if hostRetrieverName == "" {
@@ -60,9 +61,9 @@ func New(options Options) (rs *Registrations, err error) {
 	}
 	signature := signatures.HMAC([]byte(secret))
 	// cluster
-	cluster, hasCluster := loadCluster(options.Config.Kind)
+	cluster, hasCluster := loadCluster(options.Config.Name)
 	if !hasCluster {
-		err = errors.Warning("fns: new cluster registrations failed").WithCause(fmt.Errorf("cluster was not found")).WithMeta("name", options.Config.Kind)
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(fmt.Errorf("cluster was not found")).WithMeta("name", options.Config.Name)
 		return
 	}
 	if options.Config.Option == nil && len(options.Config.Option) < 2 {
@@ -70,18 +71,63 @@ func New(options Options) (rs *Registrations, err error) {
 	}
 	clusterConfig, clusterConfigErr := configures.NewJsonConfig(options.Config.Option)
 	if clusterConfigErr != nil {
-		err = errors.Warning("fns: new cluster registrations failed").WithCause(clusterConfigErr).WithMeta("name", options.Config.Kind)
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(clusterConfigErr).WithMeta("name", options.Config.Name)
 		return
 	}
 	clusterErr := cluster.Construct(ClusterOptions{
-		Log:    options.Log.With("cluster", options.Config.Kind),
+		Log:    options.Log.With("cluster", options.Config.Name),
 		Config: clusterConfig,
 	})
 	if clusterErr != nil {
-		err = errors.Warning("fns: new cluster registrations failed").WithCause(clusterErr).WithMeta("name", options.Config.Kind)
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(clusterErr).WithMeta("name", options.Config.Name)
 		return
 	}
-
+	// shared
+	shared = cluster.Shared()
+	if shared == nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(fmt.Errorf("cluster return a nil shared")).WithMeta("name", options.Config.Name)
+		return
+	}
+	sharedConfigBytes := options.Config.Shared
+	if len(sharedConfigBytes) == 0 {
+		sharedConfigBytes = []byte{'{', '}'}
+	}
+	sharedConfig, sharedConfigErr := configures.NewJsonConfig(sharedConfigBytes)
+	if sharedConfigErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(sharedConfigErr).WithMeta("name", options.Config.Name)
+		return
+	}
+	sharedErr := shared.Construct(shareds.Options{
+		Log:    options.Log.With("shared", "cluster"),
+		Config: sharedConfig,
+	})
+	if sharedErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(sharedErr).WithMeta("name", options.Config.Name)
+		return
+	}
+	// barrier
+	barrier = cluster.Barrier()
+	if barrier == nil {
+		barrier = NewDefaultBarrier()
+	}
+	barrierConfigBytes := options.Config.Barrier
+	if len(barrierConfigBytes) == 0 {
+		barrierConfigBytes = []byte{'{', '}'}
+	}
+	barrierConfig, barrierConfigErr := configures.NewJsonConfig(barrierConfigBytes)
+	if barrierConfigErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(barrierConfigErr).WithMeta("name", options.Config.Name)
+		return
+	}
+	barrierErr := barrier.Construct(barriers.Options{
+		Log:    options.Log.With("barrier", "cluster"),
+		Config: barrierConfig,
+	})
+	if barrierErr != nil {
+		err = errors.Warning("fns: new cluster registrations failed").WithCause(barrierErr).WithMeta("name", options.Config.Name)
+		return
+	}
+	// rs
 	rs = &Registrations{
 		log:       options.Log.With("fns", "registrations"),
 		cluster:   cluster,

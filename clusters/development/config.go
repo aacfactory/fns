@@ -1,9 +1,14 @@
 package development
 
-import "github.com/aacfactory/fns/transports"
+const (
+	Server = Mode("server")
+	Client = Mode("client")
+)
+
+type Mode string
 
 type Config struct {
-	ProxyTransportName string                `json:"proxyTransportName"`
-	ProxyAddress       string                `json:"proxyAddress"`
-	TLS                *transports.TLSConfig `json:"tls"`
+	Enabled bool   `json:"enabled"`
+	Mode    Mode   `json:"mode"`
+	Address string `json:"address"`
 }

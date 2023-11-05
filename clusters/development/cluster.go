@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	clusterName = "dev"
+	Name = "dev"
 )
 
 func New(address string, dialer transports.Dialer) (clusters.Cluster, error) {
@@ -33,7 +33,7 @@ func Register(address string, dialer transports.Transport) (err error) {
 		err = cErr
 		return
 	}
-	clusters.RegisterCluster(clusterName, c)
+	clusters.RegisterCluster(Name, c)
 	return nil
 }
 

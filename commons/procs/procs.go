@@ -17,7 +17,6 @@
 package procs
 
 import (
-	"github.com/aacfactory/errors"
 	"go.uber.org/automaxprocs/maxprocs"
 	"runtime"
 )
@@ -42,11 +41,10 @@ type AutoMaxProcs struct {
 	resetFn func()
 }
 
-func (p *AutoMaxProcs) Enable() (err error) {
+func (p *AutoMaxProcs) Enable() {
 	if p.min > 0 {
 		reset, setErr := maxprocs.Set(maxprocs.Min(p.min), maxprocs.Logger(func(s string, i ...interface{}) {}))
 		if setErr != nil {
-			err = errors.Warning("fns: set automaxprocs failed, use runtime.GOMAXPROCS(0) insteadof").WithCause(setErr)
 			runtime.GOMAXPROCS(0)
 			return
 		}

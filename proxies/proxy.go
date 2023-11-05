@@ -19,6 +19,6 @@ type Proxy interface {
 }
 
 func New(options ...Option) (proxy Proxy, err error) {
-
+	// todo handle cors
 	return
 }

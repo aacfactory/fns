@@ -97,10 +97,29 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	// dev client mode
-	if config.Dev.Enabled && config.Dev.Mode == development.Client {
-		devErr := development.Register(config.Dev.Address, opt.transport)
-		if devErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(devErr)))
+	if config.Dev.Enabled {
+		if config.Dev.Mode == development.Client {
+			devErr := development.Register(config.Dev.Address, opt.transport)
+			if devErr != nil {
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(devErr)))
+				return
+			}
+			if config.Cluster == nil {
+				config.Cluster = &clusters.Config{
+					Secret:        "",
+					HostRetriever: "",
+					Shared:        nil,
+					Barrier:       nil,
+					Name:          development.Name,
+					Option:        nil,
+				}
+			} else {
+				config.Cluster.Name = development.Name
+			}
+		} else if config.Dev.Mode == development.Server {
+			opt.handlers = append(opt.handlers, development.NewHandler())
+		} else {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(fmt.Errorf("develpoment is enabled but mod is invalid"))))
 			return
 		}
 	}
@@ -184,9 +203,21 @@ func New(options ...Option) (app Application) {
 	if registrations != nil {
 		mux.Add(clusters.NewInternalHandler(appId, registrations.Signature()))
 	}
-	// dev server mode
-	if config.Dev.Enabled && config.Dev.Mode == development.Server {
-		mux.Add(development.NewHandler())
+	for _, handler := range opt.handlers {
+		handlerConfig, handlerConfigErr := config.Transport.Handler(handler.Name())
+		if handlerConfigErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport handler failed").WithCause(handlerConfigErr).WithMeta("handler", handler.Name())))
+			return
+		}
+		handlerErr := handler.Construct(transports.MuxHandlerOptions{
+			Log:    logger.Logger.With("handler", handler.Name()),
+			Config: handlerConfig,
+		})
+		if handlerErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport handler failed").WithCause(handlerErr).WithMeta("handler", handler.Name())))
+			return
+		}
+		mux.Add(handler)
 	}
 	transport := opt.transport
 	transportErr := transport.Construct(transports.Options{
@@ -311,6 +342,7 @@ func (app *application) Deploy(s ...services.Service) Application {
 }
 
 func (app *application) Run(ctx context.Context) Application {
+	app.amp.Enable()
 	// transport
 	trErrs := make(chan error, 1)
 	go func(ctx context.Context, transport transports.Transport, errs chan error) {
@@ -322,6 +354,7 @@ func (app *application) Run(ctx context.Context) Application {
 	}(ctx, app.transport, trErrs)
 	select {
 	case trErr := <-trErrs:
+		app.amp.Reset()
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(trErr)))
 		return app
 	case <-time.After(3 * time.Second):
@@ -382,6 +415,7 @@ func (app *application) Sync() {
 }
 
 func (app *application) shutdown() {
+	defer app.amp.Reset()
 	timeout := app.shutdownTimeout
 	if timeout < 1 {
 		timeout = 10 * time.Minute

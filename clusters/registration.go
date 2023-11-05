@@ -178,6 +178,15 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 	// header >>>
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
+	// try copy transport request header
+	transportRequestHeader, hasTransportRequestHeader := transports.TryLoadRequestHeader(ctx)
+	if hasTransportRequestHeader {
+		transportRequestHeader.Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				header.Add(key, value)
+			}
+		})
+	}
 	// content-type
 	header.Set(bytex.FromString(transports.ContentTypeHeaderName), internalContentType)
 	// endpoint id
@@ -262,6 +271,7 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 		err = errors.Warning("fns: internal endpoint handle failed").WithCause(doErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
 		return
 	}
+
 	if status == 200 {
 		if registration.errs.Value() > 0 {
 			registration.errs.Decr()

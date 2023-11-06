@@ -20,11 +20,15 @@ var (
 	commaBytes = []byte{','}
 )
 
+func NewProxyHandler() transports.MuxHandler {
+	return &ProxyHandler{}
+}
+
 type ProxyHandler struct {
 }
 
 func (handler *ProxyHandler) Name() string {
-	return "endpoints"
+	return "proxy"
 }
 
 func (handler *ProxyHandler) Construct(_ transports.MuxHandlerOptions) error {

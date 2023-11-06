@@ -7,7 +7,7 @@ import (
 type Options struct {
 	transport   transports.Transport
 	middlewares []transports.Middleware
-	handlers    []transports.Handler
+	handlers    []transports.MuxHandler
 }
 
 type Option func(*Options) error

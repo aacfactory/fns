@@ -93,14 +93,14 @@ func (handler *Handler) Handle(w transports.ResponseWriter, r transports.Request
 	w.Succeed(v)
 }
 
-func (handler *Handler) handleSharedProxy(shared shareds.Shared, fn []byte, body []byte) (v interface{}, err error) {
+func (handler *Handler) handleProxy(discovery services.Discovery, service []byte, fn []byte, body []byte, header transports.Header) (v interface{}, err error) {
+	// todo same as internal handler
+	// internal request and internal response
 
 	return
 }
 
-func (handler *Handler) handleProxy(discovery services.Discovery, service []byte, fn []byte, body []byte, header transports.Header) (v interface{}, err error) {
-	// todo same as internal handler
-	// internal request and internal response
+func (handler *Handler) handleSharedProxy(shared shareds.Shared, fn []byte, body []byte) (v interface{}, err error) {
 
 	return
 }

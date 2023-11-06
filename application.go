@@ -98,22 +98,15 @@ func New(options ...Option) (app Application) {
 	}
 	// dev client mode
 	if config.Dev.Enabled {
+		if config.Cluster == nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, enable dev mode failed").WithCause(fmt.Errorf("application was not in cluster mode"))))
+			return
+		}
 		if config.Dev.Mode == development.Client {
-			if config.Cluster == nil {
-				config.Cluster = &clusters.Config{
-					Secret:        "FNS+-",
-					HostRetriever: "",
-					Shared:        nil,
-					Barrier:       nil,
-					Name:          development.Name,
-					Option:        nil,
-				}
-			} else {
-				config.Cluster.Name = development.Name
-			}
+			config.Cluster.Name = development.Name
 			devErr := development.Register(config.Cluster.Secret, config.Dev.Address, opt.transport)
 			if devErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(devErr)))
+				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, enable dev mode failed").WithCause(devErr)))
 				return
 			}
 		} else if config.Dev.Mode == development.Server {
@@ -235,6 +228,10 @@ func New(options ...Option) (app Application) {
 	// proxy >>>
 	var proxy proxies.Proxy
 	if proxyOptions := opt.proxyOptions; len(proxyOptions) > 0 {
+		if registrations == nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new proxy failed").WithCause(fmt.Errorf("application was not in cluster mode"))))
+			return
+		}
 		var proxyErr error
 		proxy, proxyErr = proxies.New(proxyOptions...)
 		if proxyErr != nil {

@@ -97,6 +97,7 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	// dev client mode
+	var devClusterNodeEvents chan clusters.NodeEvent
 	if config.Dev.Enabled {
 		if config.Cluster == nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, enable dev mode failed").WithCause(fmt.Errorf("application was not in cluster mode"))))
@@ -110,7 +111,18 @@ func New(options ...Option) (app Application) {
 				return
 			}
 		} else if config.Dev.Mode == development.Server {
-			opt.handlers = append(opt.handlers, development.NewHandler())
+			secret := config.Cluster.Secret
+			if secret == "" {
+				secret = "FNS+-"
+			}
+			devClusterNodeEvents = make(chan clusters.NodeEvent, 1024)
+			opt.handlers = append(
+				opt.handlers,
+				development.NewEndpointsHandler(secret),
+				development.NewSharedHandler(secret),
+				development.NewBarrierHandler(secret),
+				development.NewNodesHandler(secret, devClusterNodeEvents),
+			)
 		} else {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(fmt.Errorf("develpoment is enabled but mod is invalid"))))
 			return
@@ -149,6 +161,7 @@ func New(options ...Option) (app Application) {
 			Log:     logger.Logger,
 			Dialer:  opt.transport,
 			Config:  *clusterConfig,
+			Events:  devClusterNodeEvents,
 		})
 		if registrationsErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new cluster failed").WithCause(registrationsErr)))

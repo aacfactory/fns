@@ -6,7 +6,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
-	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
@@ -155,20 +154,6 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	// header <<<
 
 	var ctx context.Context = r
-
-	// trace
-	if hasRequestId {
-		pid := uid.Bytes()
-		ctx = tracing.Begin(
-			ctx,
-			requestId, pid,
-			service, fn,
-			"internal", "true",
-			"hostId", bytex.ToString(handler.id),
-			"remoted", "false",
-		)
-		options = append(options, services.WithProcessId(pid))
-	}
 
 	// runtime
 	rt := runtime.Load(r)

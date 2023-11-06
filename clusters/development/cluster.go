@@ -1,10 +1,12 @@
 package development
 
 import (
+	"bytes"
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
@@ -53,10 +55,12 @@ func (cluster *Cluster) Construct(options clusters.ClusterOptions) (err error) {
 }
 
 func (cluster *Cluster) Join(_ context.Context, _ clusters.Node) (err error) {
+	// todo get nodes from remote and send into events
 	return
 }
 
 func (cluster *Cluster) Leave(_ context.Context) (err error) {
+	close(cluster.events)
 	return
 }
 
@@ -66,11 +70,53 @@ func (cluster *Cluster) NodeEvents() (events <-chan clusters.NodeEvent) {
 }
 
 func (cluster *Cluster) Shared() (shared shareds.Shared) {
-	// use dialer
+	shared = NewShared(cluster.dialer, cluster.address, cluster.signature)
 	return
 }
 
 func (cluster *Cluster) Barrier() (barrier barriers.Barrier) {
-	// use dialer
+	barrier = NewBarrier(cluster.dialer, cluster.address, cluster.signature)
 	return
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+var (
+	nodesContentType = bytex.FromString("application/json+dev+nodes")
+	nodesPathPrefix  = []byte("/nodes/")
+)
+
+func NewNodesHandler(secret string, events <-chan clusters.NodeEvent) transports.MuxHandler {
+	return &NodesHandler{
+		signature: signatures.HMAC([]byte(secret)),
+		events:    events,
+	}
+}
+
+type NodesHandler struct {
+	log       logs.Logger
+	signature signatures.Signature
+	events    <-chan clusters.NodeEvent
+}
+
+func (handler *NodesHandler) Name() string {
+	return "development_nodes"
+}
+
+func (handler *NodesHandler) Construct(options transports.MuxHandlerOptions) error {
+	handler.log = options.Log
+	return nil
+}
+
+func (handler *NodesHandler) Match(method []byte, path []byte, header transports.Header) bool {
+	ok := bytes.Equal(method, methodPost) &&
+		len(bytes.Split(path, slashBytes)) == 3 && bytes.LastIndex(path, nodesPathPrefix) == 0 &&
+		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
+		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), nodesContentType)
+	return ok
+}
+
+func (handler *NodesHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+	//TODO implement me
+	panic("implement me")
 }

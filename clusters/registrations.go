@@ -28,6 +28,7 @@ type Options struct {
 	Log     logs.Logger
 	Dialer  transports.Dialer
 	Config  Config
+	Events  chan<- NodeEvent
 }
 
 func New(options Options) (rs *Registrations, shared shareds.Shared, barrier barriers.Barrier, err error) {
@@ -152,6 +153,7 @@ type Registrations struct {
 	node      *Node
 	names     NamedRegistrations
 	locker    sync.RWMutex
+	events    chan<- NodeEvent
 }
 
 func (rs *Registrations) Add(name string, internal bool, document *documents.Document) (err error) {
@@ -227,6 +229,12 @@ func (rs *Registrations) Watching(ctx context.Context) (err error) {
 		err = errors.Warning("fns: watching registrations failed").WithCause(joinErr)
 		return
 	}
+	if rs.events != nil {
+		rs.events <- NodeEvent{
+			Kind: Add,
+			Node: *rs.node,
+		}
+	}
 	ctx, rs.closeFn = context.WithCancel(ctx)
 	go func(ctx context.Context, rs *Registrations) {
 		closed := false
@@ -285,6 +293,9 @@ func (rs *Registrations) Watching(ctx context.Context) (err error) {
 						rs.names = rs.names.Add(registration)
 					}
 					rs.locker.Unlock()
+					if rs.events != nil {
+						rs.events <- event
+					}
 					break
 				case Remove:
 					rs.locker.Lock()
@@ -292,12 +303,21 @@ func (rs *Registrations) Watching(ctx context.Context) (err error) {
 						rs.names = rs.names.Remove(bytex.FromString(endpoint.Name), bytex.FromString(event.Node.Id))
 					}
 					rs.locker.Unlock()
+					if rs.events != nil {
+						rs.events <- event
+					}
 					break
 				}
-
 				break
 			}
 			if closed {
+				if rs.events != nil {
+					rs.events <- NodeEvent{
+						Kind: Remove,
+						Node: *rs.node,
+					}
+					close(rs.events)
+				}
 				break
 			}
 		}

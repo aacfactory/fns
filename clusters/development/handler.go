@@ -35,38 +35,38 @@ var (
 )
 
 var (
-	endpointsContentType = bytex.FromString("application/json+dev+endpoints")
+	contentType = bytex.FromString("application/json+dev")
 )
 
-func NewEndpointsHandler(secret string) transports.MuxHandler {
-	return &EndpointsHandler{
-		signature: signatures.HMAC([]byte(secret)),
+func NewHandler(signature signatures.Signature) transports.MuxHandler {
+	return &Handler{
+		signature: signature,
 	}
 }
 
-type EndpointsHandler struct {
+type Handler struct {
 	log       logs.Logger
 	signature signatures.Signature
 }
 
-func (handler *EndpointsHandler) Name() string {
-	return "development_endpoints"
+func (handler *Handler) Name() string {
+	return "development"
 }
 
-func (handler *EndpointsHandler) Construct(options transports.MuxHandlerOptions) error {
+func (handler *Handler) Construct(options transports.MuxHandlerOptions) error {
 	handler.log = options.Log
 	return nil
 }
 
-func (handler *EndpointsHandler) Match(method []byte, path []byte, header transports.Header) bool {
+func (handler *Handler) Match(method []byte, path []byte, header transports.Header) bool {
 	ok := bytes.Equal(method, methodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
-		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), endpointsContentType)
+		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), contentType)
 	return ok
 }
 
-func (handler *EndpointsHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+func (handler *Handler) Handle(w transports.ResponseWriter, r transports.Request) {
 	// path
 	path := r.Path()
 	pathItems := bytes.Split(path, slashBytes)

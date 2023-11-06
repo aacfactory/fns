@@ -39,12 +39,12 @@ type barrier struct {
 	group *singleflight.Group
 }
 
-func (b *barrier) Construct(options Options) (err error) {
+func (b *barrier) Construct(_ Options) (err error) {
 	b.group = new(singleflight.Group)
 	return
 }
 
-func (b *barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error) {
+func (b *barrier) Do(_ context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
@@ -62,7 +62,7 @@ func (b *barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 	return
 }
 
-func (b *barrier) Forget(ctx context.Context, key []byte) {
+func (b *barrier) Forget(_ context.Context, key []byte) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}

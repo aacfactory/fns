@@ -104,6 +104,7 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		if config.Dev.Mode == development.Client {
+			// todo 使用dev discovery，不在是cluster
 			config.Cluster.Name = development.Name
 			devErr := development.Register(config.Cluster.Secret, config.Dev.Address, opt.transport)
 			if devErr != nil {
@@ -120,8 +121,6 @@ func New(options ...Option) (app Application) {
 				opt.handlers,
 				development.NewEndpointsHandler(secret),
 				development.NewSharedHandler(secret),
-				development.NewBarrierHandler(secret),
-				development.NewNodesHandler(secret, devClusterNodeEvents),
 			)
 		} else {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(fmt.Errorf("develpoment is enabled but mod is invalid"))))

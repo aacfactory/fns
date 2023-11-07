@@ -218,22 +218,14 @@ func (handler *EndpointsHandler) Handle(w transports.ResponseWriter, r transport
 	}
 	service := pathItems[1]
 	fn := pathItems[2]
-	// sign
-	sign := r.Header().Get(bytex.FromString(transports.SignatureHeaderName))
-	if len(sign) == 0 {
-		w.Failed(ErrSignatureLost.WithMeta("path", bytex.ToString(path)))
-		return
-	}
+
 	// body
 	body, bodyErr := r.Body()
 	if bodyErr != nil {
 		w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
 		return
 	}
-	if !handler.signature.Verify(body, sign) {
-		w.Failed(ErrSignatureUnverified.WithMeta("path", bytex.ToString(path)))
-		return
-	}
+
 	rb := RequestBody{}
 	decodeRequestBodyErr := json.Unmarshal(body, &rb)
 	if decodeRequestBodyErr != nil {

@@ -74,6 +74,15 @@ func (handler *Handler) Handle(w transports.ResponseWriter, r transports.Request
 		w.Failed(ErrSignatureLost.WithMeta("path", bytex.ToString(path)))
 		return
 	}
+	body, bodyErr := r.Body()
+	if bodyErr != nil {
+		w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
+		return
+	}
+	if !handler.signature.Verify(body, sign) {
+		w.Failed(ErrSignatureUnverified.WithMeta("path", bytex.ToString(path)))
+		return
+	}
 	// match
 	if bytes.Index(path, discoveryHandlePathPrefix) == 0 {
 		handler.discovery.Handle(w, r)

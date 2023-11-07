@@ -5,6 +5,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"net/http"
@@ -26,11 +27,11 @@ var (
 	developmentPathPrefix = []byte("/development/")
 )
 
-func NewHandler(signature signatures.Signature) transports.MuxHandler {
+func NewHandler(signature signatures.Signature, discovery services.Discovery) transports.MuxHandler {
 	return &Handler{
 		log:       nil,
 		signature: signature,
-		discovery: NewDiscoveryHandler(signature),
+		discovery: NewDiscoveryHandler(signature, discovery),
 		shared:    NewSharedHandler(signature),
 		endpoints: NewEndpointsHandler(signature),
 	}

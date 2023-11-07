@@ -77,7 +77,7 @@ func NewDevelopment(options Options) (discovery services.Discovery, cluster Clus
 		return
 	}
 	// discovery
-	discovery = development.NewDiscovery(address, options.Dialer, signature)
+	discovery = development.NewDiscovery(options.Log.With("cluster", "discovery"), address, options.Dialer, signature)
 	return
 }
 

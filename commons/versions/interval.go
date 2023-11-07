@@ -77,8 +77,8 @@ func ParseInterval(source []byte) (interval Interval, err error) {
 }
 
 type NamedInterval struct {
-	Name  []byte
-	Value Interval
+	Name  []byte   `json:"name"`
+	Value Interval `json:"value"`
 }
 
 type Intervals []NamedInterval

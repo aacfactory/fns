@@ -15,6 +15,15 @@ import (
 	"github.com/aacfactory/json"
 )
 
+func NewEndpoint(name []byte, internal bool, document *documents.Document, client transports.Client) services.Endpoint {
+	return &Endpoint{
+		name:     bytex.ToString(name),
+		internal: internal,
+		document: document,
+		client:   client,
+	}
+}
+
 type Endpoint struct {
 	name     string
 	internal bool

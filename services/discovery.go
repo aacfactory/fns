@@ -52,11 +52,11 @@ func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 }
 
 type EndpointInfo struct {
-	Id       []byte
-	Name     []byte
-	Version  versions.Version
-	Internal bool
-	Document *documents.Document
+	Id       []byte              `json:"id"`
+	Name     []byte              `json:"name"`
+	Version  versions.Version    `json:"version"`
+	Internal bool                `json:"internal"`
+	Document *documents.Document `json:"document"`
 }
 
 type Discovery interface {

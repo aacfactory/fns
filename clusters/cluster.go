@@ -141,7 +141,7 @@ func New(options Options) (discovery services.Discovery, cluster Cluster, barrie
 	handlers = append(handlers, NewInternalHandler(options.Id, signature))
 	if options.Config.DevMode {
 		// append dev handler
-		handlers = append(handlers, development.NewHandler(signature, discovery))
+		handlers = append(handlers, development.NewHandler(signature, discovery, cluster.Shared()))
 	}
 	return
 }

@@ -27,62 +27,6 @@ type Store struct {
 	signature signatures.Signature
 }
 
-type StoreKeysParam struct {
-	Prefix []byte `json:"prefix"`
-}
-
-type StoreKeysResult struct {
-	Keys  [][]byte        `json:"keys"`
-	Error json.RawMessage `json:"error"`
-}
-
-func (store *Store) Keys(ctx context.Context, prefix []byte) (keys [][]byte, err error) {
-	client, clientErr := store.dialer.Dial(store.address)
-	if clientErr != nil {
-		err = clientErr
-		return
-	}
-	defer client.Close()
-	// param
-	param := StoreKeysParam{
-		Prefix: prefix,
-	}
-	p, _ := json.Marshal(param)
-	command := StoreCommand{
-		Command: "keys",
-		Payload: p,
-	}
-	body, _ := json.Marshal(command)
-
-	header := transports.AcquireHeader()
-	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
-	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
-	// do
-	status, _, responseBody, doErr := client.Do(ctx, methodPost, shardHandleStorePath, header, body)
-	if doErr != nil {
-		err = errors.Warning("fns: development store keys failed").WithCause(doErr)
-		return
-	}
-	if status == 200 {
-		result := StoreKeysResult{}
-		decodeErr := json.Unmarshal(responseBody, &result)
-		if decodeErr != nil {
-			err = errors.Warning("fns: development store keys failed").WithCause(decodeErr)
-			return
-		}
-		if len(result.Error) > 0 {
-			err = errors.Decode(result.Error)
-			return
-		}
-		keys = result.Keys
-		return
-	}
-	err = errors.Warning("fns: development store keys failed").WithMeta("status", strconv.Itoa(status))
-	return
-}
-
 type StoreGetParam struct {
 	Key []byte `json:"key"`
 }
@@ -313,62 +257,6 @@ func (store *Store) Incr(ctx context.Context, key []byte, delta int64) (v int64,
 	return
 }
 
-type StoreExpireKeyParam struct {
-	Key []byte        `json:"key"`
-	TTL time.Duration `json:"ttl"`
-}
-
-type StoreExpireKeyResult struct {
-	Error json.RawMessage `json:"error"`
-}
-
-func (store *Store) ExpireKey(ctx context.Context, key []byte, ttl time.Duration) (err error) {
-	client, clientErr := store.dialer.Dial(store.address)
-	if clientErr != nil {
-		err = clientErr
-		return
-	}
-	defer client.Close()
-	// param
-	param := StoreExpireKeyParam{
-		Key: key,
-		TTL: ttl,
-	}
-	p, _ := json.Marshal(param)
-	command := StoreCommand{
-		Command: "expireKey",
-		Payload: p,
-	}
-	body, _ := json.Marshal(command)
-
-	header := transports.AcquireHeader()
-	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
-	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
-	// do
-	status, _, responseBody, doErr := client.Do(ctx, methodPost, shardHandleStorePath, header, body)
-	if doErr != nil {
-		err = errors.Warning("fns: development store expire key failed").WithCause(doErr)
-		return
-	}
-	if status == 200 {
-		result := StoreExpireKeyResult{}
-		decodeErr := json.Unmarshal(responseBody, &result)
-		if decodeErr != nil {
-			err = errors.Warning("fns: development store expire key failed").WithCause(decodeErr)
-			return
-		}
-		if len(result.Error) > 0 {
-			err = errors.Decode(result.Error)
-			return
-		}
-		return
-	}
-	err = errors.Warning("fns: development store expire key failed").WithMeta("status", strconv.Itoa(status))
-	return
-}
-
 type StoreRemoveParam struct {
 	Key []byte `json:"key"`
 }
@@ -452,22 +340,6 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		return
 	}
 	switch cmd.Command {
-	case "keys":
-		param := StoreKeysParam{}
-		paramErr := json.Unmarshal(cmd.Payload, &param)
-		if paramErr != nil {
-			w.Failed(ErrInvalidBody.WithCause(paramErr))
-			return
-		}
-		result := StoreKeysResult{}
-		keys, err := handler.store.Keys(r, param.Prefix)
-		if err == nil {
-			result.Keys = keys
-		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
-		}
-		w.Succeed(result)
-		break
 	case "get":
 		param := StoreGetParam{}
 		paramErr := json.Unmarshal(cmd.Payload, &param)
@@ -526,21 +398,6 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		n, err := handler.store.Incr(r, param.Key, param.Delta)
 		if err == nil {
 			result.N = n
-		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
-		}
-		w.Succeed(result)
-		break
-	case "expireKey":
-		param := StoreExpireKeyParam{}
-		paramErr := json.Unmarshal(cmd.Payload, &param)
-		if paramErr != nil {
-			w.Failed(ErrInvalidBody.WithCause(paramErr))
-			return
-		}
-		result := StoreExpireKeyResult{}
-		err := handler.store.ExpireKey(r, param.Key, param.TTL)
-		if err == nil {
 		} else {
 			result.Error, _ = json.Marshal(errors.Map(err))
 		}

@@ -98,11 +98,6 @@ func (b *DefaultBarrier) doRemote(ctx context.Context, key []byte, fn func() (re
 	valueKey := append(key, bytex.FromString("-value")...)
 	value := make([]byte, 0, 1)
 	if times == 1 {
-		ttlErr := store.ExpireKey(ctx, key, b.ttl)
-		if ttlErr != nil {
-			err = errors.Warning("fns: barrier failed").WithCause(incrErr)
-			return
-		}
 		r, err = fn()
 		if err == nil {
 			value = append(value, 'T')
@@ -185,6 +180,16 @@ func (b *DefaultBarrier) Forget(ctx context.Context, key []byte) {
 	if b.standalone {
 		return
 	}
+	// todo
+	// 多个计数器，
+	// 一个是value的，
+	// 一个是window的
+	// 1、wc incr，当1时，vc incr，它的值放在vc incr的value作为key里
+	// 2、wc，incr，大于1时，vc 取值，取value
+	// 3、forget：wc清零。
+	//
+	// 不用times
+	// 第一次进来，拿key取状态，如果是forget，则自己做
 	key = append(prefix, key...)
 	store := runtime.Load(ctx).Shared().Store()
 	for i := 0; i < b.loops; i++ {

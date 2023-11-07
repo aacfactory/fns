@@ -153,7 +153,6 @@ func New(options ...Option) (app Application) {
 		status, logger.Logger, worker,
 		endpoints, discovery,
 		barrier, shared,
-		opt.transport,
 	)
 
 	// transport >>>

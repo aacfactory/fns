@@ -4,8 +4,12 @@ import (
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/shareds"
+	"github.com/aacfactory/workers"
+	"time"
 )
 
 const (
@@ -28,4 +32,34 @@ func Load(ctx sc.Context) *Runtime {
 		return nil
 	}
 	return rt
+}
+
+func TryExecute(ctx sc.Context, task workers.Task) bool {
+	rt := Load(ctx)
+	return rt.TryExecute(ctx, task)
+}
+
+func Execute(ctx sc.Context, task workers.Task) {
+	rt := Load(ctx)
+	rt.Execute(ctx, task)
+}
+
+func Barrier(ctx sc.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {
+	rt := Load(ctx)
+	barrier := rt.Barrier()
+	result, err = barrier.Do(ctx, key, fn)
+	barrier.Forget(ctx, key)
+	return
+}
+
+func AcquireLocker(ctx sc.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
+	rt := Load(ctx)
+	locker, err = rt.Shared().Lockers().Acquire(ctx, key, ttl)
+	return
+}
+
+func SharedStore(ctx sc.Context) (store shareds.Store) {
+	rt := Load(ctx)
+	store = rt.Shared().Store()
+	return
 }

@@ -17,32 +17,81 @@ var (
 	prefix = []byte("fns/barrier/")
 )
 
-func NewDefaultBarrier() (b barriers.Barrier) {
-	b = &DefaultBarrier{}
+func NewBarrierValue() BarrierValue {
+	p := make([]byte, 0, 1)
+	return append(p, 'X')
+}
+
+type BarrierValue []byte
+
+func (bv BarrierValue) Exist() bool {
+	return len(bv) > 1
+}
+
+func (bv BarrierValue) Forgot() bool {
+	return len(bv) > 1 && bv[0] == 'G' && bv[1] == 'G'
+}
+
+func (bv BarrierValue) Forget() BarrierValue {
+	n := bv[:1]
+	n[0] = 'G'
+	return append(n, 'G')
+}
+
+func (bv BarrierValue) Value() (data []byte, err error) {
+	if len(bv) < 2 {
+		return
+	}
+	succeed := bv[0] == 'T'
+	if succeed {
+		if bv[1] == 'N' {
+			return
+		}
+		data = bv[2:]
+		return
+	}
+	if bv[1] == 'C' {
+		err = errors.Decode(bv[2:])
+	} else if bv[1] == 'S' {
+		err = fmt.Errorf(bytex.ToString(bv[2:]))
+	}
 	return
 }
 
-type DefaultBarrierConfig struct {
-	TTL        time.Duration `json:"ttl"`
-	Interval   time.Duration `json:"interval"`
-	Standalone bool          `json:"standalone"`
-}
-
-type DefaultBarrier struct {
-	group      *singleflight.Group
-	standalone bool
-	ttl        time.Duration
-	interval   time.Duration
-	loops      int
-}
-
-func (b *DefaultBarrier) Construct(options barriers.Options) (err error) {
-	config := DefaultBarrierConfig{}
-	configErr := options.Config.As(&config)
-	if configErr != nil {
-		err = errors.Warning("fns: default cluster barrier construct failed").WithCause(configErr)
+func (bv BarrierValue) Succeed(v interface{}) (n BarrierValue, err error) {
+	if v == nil {
+		n = bv[:1]
+		n[0] = 'T'
+		n = append(n, 'N')
 		return
 	}
+	p, encodeErr := json.Marshal(v)
+	if encodeErr != nil {
+		err = errors.Warning("fns: set succeed value into barrier value failed").WithCause(encodeErr)
+		return
+	}
+	n = bv[:1]
+	n = append(n, 'V')
+	n = append(n, p...)
+	return
+}
+
+func (bv BarrierValue) Failed(v error) (n BarrierValue) {
+	n = bv[:1]
+	n[0] = 'F'
+	codeErr, ok := v.(errors.CodeError)
+	if ok {
+		n = append(n, 'C')
+		p, _ := json.Marshal(codeErr)
+		n = append(n, p...)
+	} else {
+		n = append(n, 'S')
+		n = append(n, bytex.FromString(v.Error())...)
+	}
+	return
+}
+
+func NewBarrier(config BarrierConfig) (b barriers.Barrier) {
 	ttl := config.TTL
 	interval := config.Interval
 	loops := 0
@@ -58,12 +107,31 @@ func (b *DefaultBarrier) Construct(options barriers.Options) (err error) {
 	} else {
 		loops = int(ttl / interval)
 	}
-	b.standalone = config.Standalone
-	b.group = new(singleflight.Group)
+	b = &Barrier{
+		group:      new(singleflight.Group),
+		standalone: config.Standalone,
+		ttl:        ttl,
+		interval:   interval,
+		loops:      loops,
+	}
 	return
 }
 
-func (b *DefaultBarrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {
+type BarrierConfig struct {
+	TTL        time.Duration `json:"ttl"`
+	Interval   time.Duration `json:"interval"`
+	Standalone bool          `json:"standalone"`
+}
+
+type Barrier struct {
+	group      *singleflight.Group
+	standalone bool
+	ttl        time.Duration
+	interval   time.Duration
+	loops      int
+}
+
+func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
@@ -87,92 +155,83 @@ func (b *DefaultBarrier) Do(ctx context.Context, key []byte, fn func() (result i
 	return
 }
 
-func (b *DefaultBarrier) doRemote(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (r interface{}, err error) {
-	store := runtime.Load(ctx).Shared().Store()
-	times, incrErr := store.Incr(ctx, key, 1)
-	if incrErr != nil {
-		err = errors.Warning("fns: barrier failed").WithCause(incrErr)
+func (b *Barrier) doRemote(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (r interface{}, err error) {
+	shared := runtime.Load(ctx).Shared()
+	lockers := shared.Lockers()
+	store := shared.Store()
+
+	locker, lockerErr := lockers.Acquire(ctx, key, b.ttl)
+	if lockerErr != nil {
+		err = errors.Warning("fns: barrier failed").WithCause(lockerErr)
+		return
+	}
+	lockErr := locker.Lock(ctx)
+	if lockErr != nil {
+		err = errors.Warning("fns: barrier failed").WithCause(lockErr)
 		return
 	}
 
-	valueKey := append(key, bytex.FromString("-value")...)
-	value := make([]byte, 0, 1)
-	if times == 1 {
-		r, err = fn()
-		if err == nil {
-			value = append(value, 'T')
-			if r == nil {
-				value = append(value, 'N')
-			} else {
-				value = append(value, 'V')
-				p, encodeErr := json.Marshal(r)
-				if encodeErr != nil {
-					panic(fmt.Sprintf("%+v", errors.Warning("fns: barrier failed").WithCause(encodeErr)))
-				}
-				value = append(value, p...)
-			}
-		} else {
-			value = append(value, 'F')
-			codeErr, isCodeErr := err.(errors.CodeError)
-			if isCodeErr {
-				p, _ := json.Marshal(codeErr)
-				value = append(value, 'C')
-				value = append(value, p...)
-			} else {
-				value = append(value, 'S')
-				value = append(value, bytex.FromString(err.Error())...)
-			}
-		}
-		_ = store.SetWithTTL(ctx, valueKey, value, b.ttl)
-	} else {
-		fetched := false
-		for i := 0; i < b.loops; i++ {
-			p, exist, getErr := store.Get(ctx, valueKey)
-			if getErr != nil {
-				err = errors.Warning("fns: barrier failed").WithCause(getErr)
-				return
-			}
-			if !exist {
-				time.Sleep(b.interval)
-				continue
-			}
-			if len(p) < 2 {
-				err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-				return
-			}
-			if p[0] == 'T' {
-				if p[1] == 'N' {
-					r = nil
-				} else if p[1] == 'V' {
-					r = p[2:]
-				} else {
-					err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-					return
-				}
-			} else if p[0] == 'F' {
-				if p[1] == 'C' {
-					err = errors.Decode(p[2:])
-				} else if p[1] == 'S' {
-					err = fmt.Errorf(bytex.ToString(p[2:]))
-				} else {
-					err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-					return
-				}
-			} else {
-				err = errors.Warning("fns: barrier failed").WithCause(fmt.Errorf("invalid value"))
-				return
-			}
-			fetched = true
-			break
-		}
-		if !fetched {
-			r, err = b.doRemote(ctx, key, fn)
+	value, has, getErr := store.Get(ctx, key)
+	if getErr != nil {
+		_ = locker.Unlock(ctx)
+		err = errors.Warning("fns: barrier failed").WithCause(getErr)
+		return
+	}
+	if !has {
+		bv := NewBarrierValue()
+		setErr := store.SetWithTTL(ctx, key, bv, b.ttl)
+		if setErr != nil {
+			_ = locker.Unlock(ctx)
+			err = errors.Warning("fns: barrier failed").WithCause(setErr)
+			return
 		}
 	}
+	unlockErr := locker.Unlock(ctx)
+	if unlockErr != nil {
+		err = errors.Warning("fns: barrier failed").WithCause(unlockErr)
+		return
+	}
+
+	if has {
+		bv := BarrierValue(value)
+		exist := false
+		for i := 0; i < b.loops; i++ {
+			if exist = bv.Exist(); exist {
+				if bv.Forgot() {
+					exist = false
+					break
+				}
+				r, err = bv.Value()
+				break
+			}
+			time.Sleep(b.interval)
+		}
+		if !exist {
+			r, err = b.doRemote(ctx, key, fn)
+		}
+	} else {
+		bv := NewBarrierValue()
+		r, err = fn()
+		if err != nil {
+			bv.Failed(err)
+		} else {
+			bv, err = bv.Succeed(r)
+			if err != nil {
+				err = errors.Warning("fns: barrier failed").WithCause(err)
+				return
+			}
+		}
+		setErr := store.SetWithTTL(ctx, key, bv, b.ttl)
+		if setErr != nil {
+			err = errors.Warning("fns: barrier failed").WithCause(setErr)
+			return
+		}
+	}
+
 	return
 }
 
-func (b *DefaultBarrier) Forget(ctx context.Context, key []byte) {
+func (b *Barrier) Forget(ctx context.Context, key []byte) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
@@ -180,30 +239,8 @@ func (b *DefaultBarrier) Forget(ctx context.Context, key []byte) {
 	if b.standalone {
 		return
 	}
-	// todo
-	// 多个计数器，
-	// 一个是value的，
-	// 一个是window的
-	// 1、wc incr，当1时，vc incr，它的值放在vc incr的value作为key里
-	// 2、wc，incr，大于1时，vc 取值，取value
-	// 3、forget：wc清零。
-	//
-	// 不用times
-	// 第一次进来，拿key取状态，如果是forget，则自己做
-	key = append(prefix, key...)
+
 	store := runtime.Load(ctx).Shared().Store()
-	for i := 0; i < b.loops; i++ {
-		n, incrErr := store.Incr(ctx, key, -1)
-		if incrErr != nil {
-			continue
-		}
-		if n < 1 {
-			valueKey := append(key, bytex.FromString("-value")...)
-			rmErr := store.Remove(ctx, valueKey)
-			if rmErr != nil {
-				continue
-			}
-		}
-		break
-	}
+	key = append(prefix, key...)
+	_ = store.SetWithTTL(ctx, key, NewBarrierValue().Forget(), b.ttl)
 }

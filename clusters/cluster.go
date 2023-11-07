@@ -116,24 +116,7 @@ func New(options Options) (discovery services.Discovery, cluster Cluster, barrie
 		return
 	}
 	// barrier
-	barrier = NewDefaultBarrier()
-	barrierConfigBytes := options.Config.Barrier
-	if len(barrierConfigBytes) == 0 {
-		barrierConfigBytes = []byte{'{', '}'}
-	}
-	barrierConfig, barrierConfigErr := configures.NewJsonConfig(barrierConfigBytes)
-	if barrierConfigErr != nil {
-		err = errors.Warning("fns: new cluster failed").WithCause(barrierConfigErr).WithMeta("name", options.Config.Name)
-		return
-	}
-	barrierErr := barrier.Construct(barriers.Options{
-		Log:    options.Log.With("barrier", "cluster"),
-		Config: barrierConfig,
-	})
-	if barrierErr != nil {
-		err = errors.Warning("fns: new cluster failed").WithCause(barrierErr).WithMeta("name", options.Config.Name)
-		return
-	}
+	barrier = NewBarrier(options.Config.Barrier)
 	// discovery
 	discovery = NewDiscovery(options.Log, options.Dialer, signature, cluster.NodeEvents())
 	// handlers

@@ -7,7 +7,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters/development"
-	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
@@ -88,11 +87,7 @@ func New(options Options) (discovery services.Discovery, cluster Cluster, barrie
 		return
 	}
 	// signature
-	secret := options.Config.Secret
-	if secret == "" {
-		secret = "FNS+-"
-	}
-	signature := signatures.HMAC([]byte(secret))
+	signature := NewSignature(options.Config.Secret)
 	// cluster
 	hasCluster := false
 	cluster, hasCluster = loadCluster(options.Config.Name)

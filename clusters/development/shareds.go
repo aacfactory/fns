@@ -1,13 +1,10 @@
 package development
 
 import (
-	"bytes"
 	"context"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/logs"
 	"time"
 )
 
@@ -118,36 +115,17 @@ func (shared *Shared) Store() (store shareds.Store) {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 var (
-	sharedContentType = bytex.FromString("application/json+dev+shared")
-	sharedPathPrefix  = []byte("/shared/")
+	shardHandlePathPrefix = []byte("/development/shared/")
 )
 
-func NewSharedHandler(secret string) transports.MuxHandler {
+func NewSharedHandler(signature signatures.Signature) transports.Handler {
 	return &SharedHandler{
-		signature: signatures.HMAC([]byte(secret)),
+		signature: signature,
 	}
 }
 
 type SharedHandler struct {
-	log       logs.Logger
 	signature signatures.Signature
-}
-
-func (handler *SharedHandler) Name() string {
-	return "development_shared"
-}
-
-func (handler *SharedHandler) Construct(options transports.MuxHandlerOptions) error {
-	handler.log = options.Log
-	return nil
-}
-
-func (handler *SharedHandler) Match(method []byte, path []byte, header transports.Header) bool {
-	ok := bytes.Equal(method, methodPost) &&
-		len(bytes.Split(path, slashBytes)) == 3 && bytes.LastIndex(path, sharedPathPrefix) == 0 &&
-		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
-		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), sharedContentType)
-	return ok
 }
 
 func (handler *SharedHandler) Handle(w transports.ResponseWriter, r transports.Request) {

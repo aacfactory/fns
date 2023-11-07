@@ -23,7 +23,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters"
-	"github.com/aacfactory/fns/clusters/development"
 	"github.com/aacfactory/fns/commons/procs"
 	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/uid"
@@ -96,37 +95,6 @@ func New(options ...Option) (app Application) {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(loggerErr)))
 		return
 	}
-	// dev client mode
-	var devClusterNodeEvents chan clusters.NodeEvent
-	if config.Dev.Enabled {
-		if config.Cluster == nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, enable dev mode failed").WithCause(fmt.Errorf("application was not in cluster mode"))))
-			return
-		}
-		if config.Dev.Mode == development.Client {
-			// todo 使用dev discovery，不在是cluster
-			config.Cluster.Name = development.Name
-			devErr := development.Register(config.Cluster.Secret, config.Dev.Address, opt.transport)
-			if devErr != nil {
-				panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, enable dev mode failed").WithCause(devErr)))
-				return
-			}
-		} else if config.Dev.Mode == development.Server {
-			secret := config.Cluster.Secret
-			if secret == "" {
-				secret = "FNS+-"
-			}
-			devClusterNodeEvents = make(chan clusters.NodeEvent, 1024)
-			opt.handlers = append(
-				opt.handlers,
-				development.NewEndpointsHandler(secret),
-				development.NewSharedHandler(secret),
-			)
-		} else {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(fmt.Errorf("develpoment is enabled but mod is invalid"))))
-			return
-		}
-	}
 
 	// proc
 	amp := procs.New(config.Procs.Min, config.Procs.Max)
@@ -143,16 +111,18 @@ func New(options ...Option) (app Application) {
 	// barrier
 	var barrier barriers.Barrier
 	// cluster
-	var registrations *clusters.Registrations
+	var discovery services.Discovery
+	var cluster clusters.Cluster
+	var clusterHandlers []transports.MuxHandler
 	var shared shareds.Shared
 	if clusterConfig := config.Cluster; clusterConfig != nil {
 		port, portErr := config.Transport.Port()
 		if portErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new cluster failed").WithCause(portErr)))
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(portErr)))
 			return
 		}
-		var registrationsErr error
-		registrations, shared, barrier, registrationsErr = clusters.New(clusters.Options{
+		var clusterErr error
+		discovery, cluster, barrier, clusterHandlers, clusterErr = clusters.New(clusters.Options{
 			Id:      appId,
 			Name:    appName,
 			Version: appVersion,
@@ -160,12 +130,12 @@ func New(options ...Option) (app Application) {
 			Log:     logger.Logger,
 			Dialer:  opt.transport,
 			Config:  *clusterConfig,
-			Events:  devClusterNodeEvents,
 		})
-		if registrationsErr != nil {
-			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new cluster failed").WithCause(registrationsErr)))
+		if clusterErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(clusterErr)))
 			return
 		}
+		shared = cluster.Shared()
 	} else {
 		shared = shareds.Local()
 		barrier = barriers.New()
@@ -174,14 +144,14 @@ func New(options ...Option) (app Application) {
 	endpoints := services.New(
 		appId, appName, appVersion,
 		logger.Logger, config.Services, worker,
-		registrations,
+		discovery,
 	)
 
 	// runtime
 	rt := runtime.New(
 		appId, appName, appVersion,
 		status, logger.Logger, worker,
-		endpoints, registrations,
+		endpoints, discovery,
 		barrier, shared,
 		opt.transport,
 	)
@@ -205,9 +175,10 @@ func New(options ...Option) (app Application) {
 	mux := transports.NewMux()
 	mux.Add(handlers.NewEndpointsHandler())
 	mux.Add(handlers.NewHealthHandler())
-	if registrations != nil {
-		mux.Add(clusters.NewInternalHandler(appId, registrations.Signature()))
+	for _, handler := range clusterHandlers {
+		mux.Add(handler)
 	}
+
 	for _, handler := range opt.handlers {
 		handlerConfig, handlerConfigErr := config.Transport.Handler(handler.Name())
 		if handlerConfigErr != nil {
@@ -240,7 +211,7 @@ func New(options ...Option) (app Application) {
 	// proxy >>>
 	var proxy proxies.Proxy
 	if proxyOptions := opt.proxyOptions; len(proxyOptions) > 0 {
-		if registrations == nil {
+		if cluster == nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new proxy failed").WithCause(fmt.Errorf("application was not in cluster mode"))))
 			return
 		}
@@ -299,7 +270,8 @@ func New(options ...Option) (app Application) {
 		amp:             amp,
 		worker:          worker,
 		endpoints:       endpoints,
-		registrations:   registrations,
+		discovery:       discovery,
+		cluster:         cluster,
 		transport:       transport,
 		proxy:           proxy,
 		hooks:           opt.hooks,
@@ -323,7 +295,8 @@ type application struct {
 	amp             *procs.AutoMaxProcs
 	worker          workers.Workers
 	endpoints       *services.Services
-	registrations   *clusters.Registrations
+	discovery       services.Discovery
+	cluster         clusters.Cluster
 	transport       transports.Transport
 	proxy           proxies.Proxy
 	hooks           []hooks.Hook
@@ -339,12 +312,13 @@ func (app *application) Deploy(s ...services.Service) Application {
 			panic(fmt.Sprintf("%+v", errors.Warning("fns: deploy failed").WithCause(err)))
 			return app
 		}
-		if app.registrations != nil {
-			addErr := app.registrations.Add(service.Name(), service.Internal(), service.Document())
-			if addErr != nil {
-				panic(fmt.Sprintf("%+v", errors.Warning("fns: deploy failed").WithCause(addErr)))
+		if app.cluster != nil {
+			info, infoErr := clusters.NewEndpointInfo(service.Name(), service.Internal(), service.Document())
+			if infoErr != nil {
+				panic(fmt.Sprintf("%+v", errors.Warning("fns: deploy failed").WithCause(infoErr)))
 				return app
 			}
+			app.cluster.AddEndpoint(info)
 		}
 	}
 	return app
@@ -371,12 +345,12 @@ func (app *application) Run(ctx context.Context) Application {
 	}
 	app.status.On()
 	app.status.Confirm()
-	// registrations
-	if app.registrations != nil {
-		watchErr := app.registrations.Watching(ctx)
-		if watchErr != nil {
+	// cluster
+	if app.cluster != nil {
+		joinErr := app.cluster.Join(ctx)
+		if joinErr != nil {
 			app.shutdown()
-			panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(watchErr)))
+			panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(joinErr)))
 			return app
 		}
 	}
@@ -435,25 +409,25 @@ func (app *application) shutdown() {
 	app.status.Confirm()
 	go func(ctx context.Context, app *application) {
 		// cluster
-		if app.registrations != nil {
+		if app.cluster != nil {
 			rc, rcc := context.WithCancel(ctx)
-			app.registrations.Shutdown(rc)
+			_ = app.cluster.Leave(rc)
 			rcc()
 		}
-		// endpoints
-		ec, ecc := context.WithCancel(ctx)
-		app.endpoints.Shutdown(ec)
-		ecc()
+		// transport
+		tc, tcc := context.WithCancel(ctx)
+		app.transport.Shutdown(tc)
+		tcc()
 		// proxy
 		if app.proxy != nil {
 			pc, pcc := context.WithCancel(ctx)
 			app.proxy.Shutdown(pc)
 			pcc()
 		}
-		// transport
-		tc, tcc := context.WithCancel(ctx)
-		app.transport.Shutdown(tc)
-		tcc()
+		// endpoints
+		ec, ecc := context.WithCancel(ctx)
+		app.endpoints.Shutdown(ec)
+		ecc()
 		// log
 		lc, lcc := context.WithCancel(ctx)
 		app.log.Shutdown(lc)

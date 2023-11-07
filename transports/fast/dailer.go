@@ -40,7 +40,7 @@ func (dialer *Dialer) Dial(addressBytes []byte) (client transports.Client, err e
 		return
 	})
 	if doErr != nil {
-		err = errors.Warning("http2: dial failed").WithMeta("address", address).WithCause(doErr)
+		err = errors.Warning("fast: dial failed").WithMeta("address", address).WithCause(doErr)
 		return
 	}
 	client = cc.(*Client)

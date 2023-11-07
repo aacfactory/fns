@@ -133,6 +133,7 @@ func (registration *Registration) Dispatch(ctx services.Request) (v interface{},
 	if !bytes.Equal(argument, bytex.FromString(null)) {
 		body = argument
 	}
+
 	// do
 	status, respHeader, respBody, doErr := registration.client.Do(ctx, methodPost, path, header, body)
 	if doErr != nil {

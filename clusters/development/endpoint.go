@@ -13,42 +13,165 @@ import (
 	"github.com/aacfactory/fns/services/tracing"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
+	"net/http"
 )
 
-func NewEndpoint(name []byte, internal bool, document *documents.Document, client transports.Client) services.Endpoint {
+func NewEndpoint(name []byte, internal bool, document *documents.Document, client transports.Client, signature signatures.Signature) services.Endpoint {
 	return &Endpoint{
-		name:     bytex.ToString(name),
-		internal: internal,
-		document: document,
-		client:   client,
+		name:      bytex.ToString(name),
+		internal:  internal,
+		document:  document,
+		client:    client,
+		signature: signature,
 	}
 }
 
 type Endpoint struct {
-	name     string
-	internal bool
-	document *documents.Document
-	client   transports.Client
+	name      string
+	internal  bool
+	document  *documents.Document
+	client    transports.Client
+	signature signatures.Signature
 }
 
 func (endpoint *Endpoint) Name() (name string) {
-	//TODO implement me
-	panic("implement me")
+	name = endpoint.name
+	return
 }
 
 func (endpoint *Endpoint) Internal() (ok bool) {
-	//TODO implement me
-	panic("implement me")
+	ok = endpoint.internal
+	return
 }
 
 func (endpoint *Endpoint) Document() (document *documents.Document) {
-	//TODO implement me
-	panic("implement me")
+	document = endpoint.document
+	return
 }
 
 func (endpoint *Endpoint) Handle(ctx services.Request) (v interface{}, err error) {
-	//TODO implement me
-	panic("implement me")
+	// header >>>
+	header := transports.AcquireHeader()
+	defer transports.ReleaseHeader(header)
+	// try copy transport request header
+	transportRequestHeader, hasTransportRequestHeader := transports.TryLoadRequestHeader(ctx)
+	if hasTransportRequestHeader {
+		transportRequestHeader.Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				header.Add(key, value)
+			}
+		})
+	}
+	// content-type
+	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	// endpoint id
+	endpointId := ctx.Header().EndpointId()
+	if len(endpointId) > 0 {
+		header.Set(bytex.FromString(transports.EndpointIdHeaderName), endpointId)
+	}
+	// device id
+	deviceId := ctx.Header().DeviceId()
+	if len(deviceId) > 0 {
+		header.Set(bytex.FromString(transports.DeviceIdHeaderName), deviceId)
+	}
+	// device ip
+	deviceIp := ctx.Header().DeviceIp()
+	if len(deviceIp) > 0 {
+		header.Set(bytex.FromString(transports.DeviceIpHeaderName), deviceIp)
+	}
+	// request id
+	requestId := ctx.Header().RequestId()
+	if len(requestId) > 0 {
+		header.Set(bytex.FromString(transports.RequestIdHeaderName), requestId)
+	}
+	// request version
+	requestVersion := ctx.Header().AcceptedVersions()
+	if len(requestVersion) > 0 {
+		header.Set(bytex.FromString(transports.RequestVersionsHeaderName), requestVersion.Bytes())
+	}
+	// authorization
+	token := ctx.Header().Token()
+	if len(token) > 0 {
+		header.Set(bytex.FromString(transports.AuthorizationHeaderName), token)
+	}
+	// header <<<
+
+	// path
+	service, fn := ctx.Fn()
+	sln := len(service)
+	fln := len(fn)
+	path := make([]byte, sln+fln+2)
+	path[0] = '/'
+	path[sln+1] = '/'
+	copy(path[1:], service)
+	copy(path[sln+2:], fn)
+
+	// body
+	userValues := make([]Entry, 0, 1)
+	ctx.UserValues(func(key []byte, val any) {
+		p, encodeErr := json.Marshal(val)
+		if encodeErr != nil {
+			return
+		}
+		userValues = append(userValues, Entry{
+			Key: key,
+			Val: p,
+		})
+	})
+	argument, argumentErr := ctx.Argument().MarshalJSON()
+	if argumentErr != nil {
+		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+		return
+	}
+	rb := RequestBody{
+		UserValues: userValues,
+		Argument:   argument,
+	}
+	body, bodyErr := json.Marshal(rb)
+	if bodyErr != nil {
+		err = errors.Warning("fns: encode body failed").WithCause(bodyErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+		return
+	}
+	// sign
+	signature := endpoint.signature.Sign(body)
+	header.Set(bytex.FromString(transports.SignatureHeaderName), signature)
+
+	// do
+	status, _, respBody, doErr := endpoint.client.Do(ctx, methodPost, path, header, body)
+	if doErr != nil {
+		err = errors.Warning("fns: development endpoint handle failed").WithCause(doErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+		return
+	}
+
+	if status == 200 {
+		rsb := ResponseBody{}
+		decodeErr := json.Unmarshal(respBody, &rsb)
+		if decodeErr != nil {
+			err = errors.Warning("fns: development endpoint handle failed").WithCause(decodeErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			return
+		}
+		if rsb.Span != nil && len(rsb.Span.Id) > 0 {
+			tracing.MountSpan(ctx, rsb.Span)
+		}
+		if rsb.Succeed {
+			v = rsb.Data
+		} else {
+			err = errors.Decode(rsb.Data)
+		}
+		return
+	}
+	switch status {
+	case http.StatusServiceUnavailable:
+		err = ErrUnavailable
+		break
+	case http.StatusTooManyRequests:
+		err = ErrTooMayRequest
+		break
+	case http.StatusTooEarly:
+		err = ErrTooEarly
+		break
+	}
+	return
 }
 
 func (endpoint *Endpoint) Shutdown(_ context.Context) {

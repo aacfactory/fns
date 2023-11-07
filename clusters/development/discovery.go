@@ -118,7 +118,7 @@ func (discovery *Discovery) Get(ctx context.Context, name []byte, options ...ser
 		}
 		has = result.Has
 		if has {
-			endpoint = NewEndpoint(name, result.Internal, result.Document, client)
+			endpoint = NewEndpoint(name, result.Internal, result.Document, client, discovery.signature)
 		}
 		return
 	}

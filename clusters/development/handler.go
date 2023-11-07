@@ -12,6 +12,9 @@ import (
 )
 
 var (
+	ErrTooEarly               = errors.New(http.StatusTooEarly, "***TOO EARLY***", "fns: service is not ready, try later again")
+	ErrUnavailable            = errors.Unavailable("fns: service is closed")
+	ErrTooMayRequest          = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.")
 	ErrDeviceId               = errors.New(http.StatusNotAcceptable, "***NOT ACCEPTABLE**", "fns: X-Fns-Device-Id is required")
 	ErrInvalidPath            = errors.Warning("fns: invalid path")
 	ErrInvalidBody            = errors.Warning("fns: invalid body")

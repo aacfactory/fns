@@ -13,6 +13,13 @@ const (
 	transportName = "fasthttp"
 )
 
+type Http2Config struct {
+	Enable               bool `json:"enable"`
+	PingSeconds          int  `json:"pingSeconds"`
+	MaxConcurrentStreams int  `json:"maxConcurrentStreams"`
+	MaxResponseSeconds   int  `json:"maxResponseSeconds"`
+}
+
 type Config struct {
 	ReadBufferSize        string       `json:"readBufferSize"`
 	ReadTimeout           string       `json:"readTimeout"`
@@ -27,7 +34,7 @@ type Config struct {
 	KeepHijackedConns     bool         `json:"keepHijackedConns"`
 	StreamRequestBody     bool         `json:"streamRequestBody"`
 	Prefork               bool         `json:"prefork"`
-	DisableHttp2          bool         `json:"disableHttp2"`
+	Http2                 Http2Config  `json:"http2"`
 	Client                ClientConfig `json:"client"`
 }
 
@@ -93,11 +100,15 @@ func (tr *Transport) Construct(options transports.Options) (err error) {
 	tr.server = srv
 
 	// dialer
-	clientConfig := &config.Client
+	clientConfig := config.Client
 	if tlsConfig != nil {
 		cliTLS, dialer := tlsConfig.Client()
 		clientConfig.TLSConfig = cliTLS
-		clientConfig.DisableHttp2 = config.DisableHttp2
+		clientConfig.http2 = ClientHttp2Config{
+			Enabled:            config.Http2.Enable,
+			PingSeconds:        config.Http2.PingSeconds,
+			MaxResponseSeconds: config.Http2.MaxResponseSeconds,
+		}
 		if dialer != nil {
 			clientConfig.TLSDialer = dialer
 		}

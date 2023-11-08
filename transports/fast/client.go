@@ -14,25 +14,31 @@ import (
 	"time"
 )
 
+type ClientHttp2Config struct {
+	Enabled            bool `json:"enabled"`
+	PingSeconds        int  `json:"pingSeconds"`
+	MaxResponseSeconds int  `json:"maxResponseSeconds"`
+}
+
 type ClientConfig struct {
-	DialDualStack             bool        `json:"dialDualStack"`
-	MaxConnsPerHost           int         `json:"maxConnsPerHost"`
-	MaxIdleConnDuration       string      `json:"maxIdleConnDuration"`
-	MaxConnDuration           string      `json:"maxConnDuration"`
-	MaxIdemponentCallAttempts int         `json:"maxIdemponentCallAttempts"`
-	ReadBufferSize            string      `json:"readBufferSize"`
-	ReadTimeout               string      `json:"readTimeout"`
-	WriteBufferSize           string      `json:"writeBufferSize"`
-	WriteTimeout              string      `json:"writeTimeout"`
-	MaxResponseBodySize       string      `json:"maxResponseBodySize"`
-	MaxConnWaitTimeout        string      `json:"maxConnWaitTimeout"`
-	IsTLS                     bool        `json:"isTLS"`
-	DisableHttp2              bool        `json:"disableHttp2"`
+	DialDualStack             bool   `json:"dialDualStack"`
+	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
+	MaxIdleConnDuration       string `json:"maxIdleConnDuration"`
+	MaxConnDuration           string `json:"maxConnDuration"`
+	MaxIdemponentCallAttempts int    `json:"maxIdemponentCallAttempts"`
+	ReadBufferSize            string `json:"readBufferSize"`
+	ReadTimeout               string `json:"readTimeout"`
+	WriteBufferSize           string `json:"writeBufferSize"`
+	WriteTimeout              string `json:"writeTimeout"`
+	MaxResponseBodySize       string `json:"maxResponseBodySize"`
+	MaxConnWaitTimeout        string `json:"maxConnWaitTimeout"`
+	IsTLS                     bool   `json:"isTLS"`
+	http2                     ClientHttp2Config
 	TLSConfig                 *tls.Config `json:"-"`
 	TLSDialer                 ssl.Dialer  `json:"-"`
 }
 
-func NewClient(address string, config *ClientConfig) (client *Client, err error) {
+func NewClient(address string, config ClientConfig) (client *Client, err error) {
 	maxIdleConnDuration := time.Duration(0)
 	if config.MaxIdleConnDuration != "" {
 		maxIdleConnDuration, err = time.ParseDuration(strings.TrimSpace(config.MaxIdleConnDuration))
@@ -133,10 +139,10 @@ func NewClient(address string, config *ClientConfig) (client *Client, err error)
 		Transport:                     nil,
 		ConnPoolStrategy:              fasthttp.FIFO,
 	}
-	if !config.DisableHttp2 && isTLS {
+	if config.http2.Enabled && isTLS {
 		configErr := http2.ConfigureClient(hc, http2.ClientOpts{
-			PingInterval:    0,
-			MaxResponseTime: 10 * time.Second,
+			PingInterval:    time.Duration(config.http2.PingSeconds) * time.Second,
+			MaxResponseTime: time.Duration(config.http2.MaxResponseSeconds) * time.Second,
 			OnRTT:           nil,
 		})
 		if configErr != nil {

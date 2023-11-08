@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-func NewDialer(opts *ClientConfig) (dialer *Dialer, err error) {
+func NewDialer(opts ClientConfig) (dialer *Dialer, err error) {
 	dialer = &Dialer{
 		config:  opts,
 		group:   &singleflight.Group{},
@@ -18,7 +18,7 @@ func NewDialer(opts *ClientConfig) (dialer *Dialer, err error) {
 }
 
 type Dialer struct {
-	config  *ClientConfig
+	config  ClientConfig
 	group   *singleflight.Group
 	clients sync.Map
 }

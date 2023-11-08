@@ -121,8 +121,12 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 		TLSConfig:                          srvTLS,
 	}
 	// http2
-	if !config.DisableHttp2 && srvTLS != nil {
-		http2.ConfigureServer(server, http2.ServerConfig{})
+	if config.Http2.Enable && srvTLS != nil {
+		http2.ConfigureServer(server, http2.ServerConfig{
+			PingInterval:         time.Duration(config.Http2.PingSeconds) * time.Second,
+			MaxConcurrentStreams: config.Http2.MaxConcurrentStreams,
+			Debug:                false,
+		})
 	}
 
 	srv = &Server{

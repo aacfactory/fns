@@ -2,6 +2,7 @@ package standard
 
 import (
 	"crypto/tls"
+	se "errors"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -43,6 +44,22 @@ func (r *Request) Host() []byte {
 
 func (r *Request) Method() []byte {
 	return bytex.FromString(r.request.Method)
+}
+
+func (r *Request) Cookie(key []byte) (value []byte) {
+	cookie, cookieErr := r.request.Cookie(bytex.ToString(key))
+	if se.Is(cookieErr, http.ErrNoCookie) {
+		return
+	}
+	value = bytex.FromString(cookie.Value)
+	return
+}
+
+func (r *Request) SetCookie(key []byte, value []byte) {
+	r.request.AddCookie(&http.Cookie{
+		Name:  bytex.ToString(key),
+		Value: bytex.ToString(value),
+	})
 }
 
 func (r *Request) Header() transports.Header {

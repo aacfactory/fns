@@ -120,19 +120,19 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 	parent, hasParent := tryLoadRequest(ctx)
 	if hasParent {
 		header := parent.Header()
-		if len(opt.header.requestId) == 0 {
+		if len(opt.header.requestId) == 0 && len(header.requestId) > 0 {
 			opt.header.requestId = header.requestId
 		}
-		if len(opt.header.deviceId) == 0 {
+		if len(opt.header.deviceId) == 0 && len(header.deviceId) > 0 {
 			opt.header.deviceId = header.deviceId
 		}
-		if len(opt.header.deviceIp) == 0 {
+		if len(opt.header.deviceIp) == 0 && len(header.deviceIp) > 0 {
 			opt.header.deviceIp = header.deviceIp
 		}
-		if len(opt.header.token) == 0 {
+		if len(opt.header.token) == 0 && len(header.token) > 0 {
 			opt.header.token = header.token
 		}
-		if len(opt.header.acceptedVersions) == 0 {
+		if len(opt.header.acceptedVersions) == 0 && len(header.acceptedVersions) > 0 {
 			opt.header.acceptedVersions = header.acceptedVersions
 		}
 		opt.header.internal = true

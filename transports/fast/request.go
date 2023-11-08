@@ -81,6 +81,15 @@ func (r *Request) Method() []byte {
 	return r.ctx.Method()
 }
 
+func (r *Request) Cookie(key []byte) (value []byte) {
+	value = r.ctx.Request.Header.CookieBytes(key)
+	return
+}
+
+func (r *Request) SetCookie(key []byte, value []byte) {
+	r.ctx.Request.Header.SetCookieBytesKV(key, value)
+}
+
 func (r *Request) Header() transports.Header {
 	return &RequestHeader{&r.ctx.Request.Header}
 }

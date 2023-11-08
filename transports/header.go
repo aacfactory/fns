@@ -28,6 +28,7 @@ const (
 	ContentTypeJsonHeaderValue                   = "application/json"
 	ContentLengthHeaderName                      = "Content-Length"
 	AuthorizationHeaderName                      = "Authorization"
+	CookieHeaderName                             = "Cookie"
 	ConnectionHeaderName                         = "Connection"
 	UpgradeHeaderName                            = "Upgrade"
 	CloseHeaderValue                             = "close"
@@ -65,10 +66,10 @@ const (
 	DeviceIdHeaderName                           = "X-Fns-Device-Id"
 	DeviceIpHeaderName                           = "X-Fns-Device-Ip"
 	ResponseRetryAfterHeaderName                 = "Retry-After"
-	ResponseCacheTTLHeaderName                   = "X-Fns-Cache-TTL"
 	ResponseTimingAllowOriginHeaderName          = "Timing-Allow-Origin"
 	ResponseXFrameOptionsHeaderName              = "X-Frame-Options"
 	ResponseXFrameOptionsSameOriginHeaderName    = "SAMEORIGIN"
+	UserHeaderNamePrefix                         = "XU-"
 )
 
 type Header interface {

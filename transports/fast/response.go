@@ -84,6 +84,21 @@ func (w *responseWriter) SetStatus(status int) {
 	w.status = status
 }
 
+func (w *responseWriter) SetCookie(cookie *transports.Cookie) {
+	c := fasthttp.AcquireCookie()
+	defer fasthttp.ReleaseCookie(c)
+	c.SetKeyBytes(cookie.Key())
+	c.SetValueBytes(cookie.Value())
+	c.SetExpire(cookie.Expire())
+	c.SetMaxAge(cookie.MaxAge())
+	c.SetDomainBytes(cookie.Domain())
+	c.SetPathBytes(cookie.Path())
+	c.SetHTTPOnly(cookie.HTTPOnly())
+	c.SetSecure(cookie.Secure())
+	c.SetSameSite(fasthttp.CookieSameSite(cookie.SameSite()))
+	w.ctx.Response.Header.SetCookie(c)
+}
+
 func (w *responseWriter) Header() transports.Header {
 	return w.header
 }

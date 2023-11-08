@@ -115,7 +115,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 	defaultExposedHeaders := []string{
 		transports.EndpointIdHeaderName, transports.EndpointVersionHeaderName,
 		transports.RequestIdHeaderName, transports.HandleLatencyHeaderName,
-		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.ResponseRetryAfterHeaderName, transports.ResponseCacheTTLHeaderName, transports.SignatureHeaderName,
+		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.ResponseRetryAfterHeaderName, transports.SignatureHeaderName,
 	}
 	for _, header := range defaultExposedHeaders {
 		if sort.SearchStrings(config.ExposedHeaders, header) < 0 {

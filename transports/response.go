@@ -28,6 +28,7 @@ type ResponseWriter interface {
 	context.Context
 	Status() int
 	SetStatus(status int)
+	SetCookie(cookie *Cookie)
 	Header() Header
 	Succeed(v interface{})
 	Failed(cause error)

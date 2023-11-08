@@ -40,6 +40,24 @@ func (w *responseWriter) SetStatus(status int) {
 	w.status = status
 }
 
+func (w *responseWriter) SetCookie(cookie *transports.Cookie) {
+	c := http.Cookie{
+		Name:       bytex.ToString(cookie.Key()),
+		Value:      bytex.ToString(cookie.Value()),
+		Path:       bytex.ToString(cookie.Path()),
+		Domain:     bytex.ToString(cookie.Domain()),
+		Expires:    cookie.Expire(),
+		RawExpires: "",
+		MaxAge:     cookie.MaxAge(),
+		Secure:     cookie.Secure(),
+		HttpOnly:   cookie.HTTPOnly(),
+		SameSite:   http.SameSite(cookie.SameSite()),
+		Raw:        "",
+		Unparsed:   nil,
+	}
+	http.SetCookie(w.writer, &c)
+}
+
 func (w *responseWriter) Header() transports.Header {
 	return w.header
 }

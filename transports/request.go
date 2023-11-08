@@ -36,6 +36,8 @@ type Request interface {
 	Host() []byte
 	Method() []byte
 	Header() Header
+	Cookie(key []byte) (value []byte)
+	SetCookie(key []byte, value []byte)
 	Path() []byte
 	Params() Params
 	Body() ([]byte, error)

@@ -183,8 +183,14 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 	transportRequestHeader, hasTransportRequestHeader := transports.TryLoadRequestHeader(ctx)
 	if hasTransportRequestHeader {
 		transportRequestHeader.Foreach(func(key []byte, values [][]byte) {
-			for _, value := range values {
-				header.Add(key, value)
+			ok := string(key) == transports.CookieHeaderName &&
+				string(key) == transports.XForwardedForHeaderName &&
+				string(key) == transports.OriginHeaderName &&
+				bytes.Index(key, bytex.FromString(transports.UserHeaderNamePrefix)) == 0
+			if ok {
+				for _, value := range values {
+					header.Add(key, value)
+				}
 			}
 		})
 	}
@@ -263,7 +269,7 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 	header.Set(bytex.FromString(transports.SignatureHeaderName), signature)
 
 	// do
-	status, _, respBody, doErr := registration.client.Do(ctx, methodPost, path, header, body)
+	status, respHeader, respBody, doErr := registration.client.Do(ctx, methodPost, path, header, body)
 	if doErr != nil {
 		n := registration.errs.Incr()
 		if n > 10 {
@@ -273,6 +279,19 @@ func (registration *Registration) Handle(ctx services.Request) (v interface{}, e
 		return
 	}
 
+	// try copy transport response header
+	transportResponseHeader, hasTransportResponseHeader := transports.TryLoadResponseHeader(ctx)
+	if hasTransportResponseHeader {
+		respHeader.Foreach(func(key []byte, values [][]byte) {
+			ok := string(key) == transports.CookieHeaderName &&
+				bytes.Index(key, bytex.FromString(transports.UserHeaderNamePrefix)) == 0
+			if ok {
+				for _, value := range values {
+					transportResponseHeader.Add(key, value)
+				}
+			}
+		})
+	}
 	if status == 200 {
 		if registration.errs.Value() > 0 {
 			registration.errs.Decr()

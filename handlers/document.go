@@ -5,6 +5,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/runtime"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"sync"
@@ -54,9 +55,12 @@ func (handler *DocumentsHandler) Match(method []byte, path []byte, _ transports.
 func (handler *DocumentsHandler) Handle(w transports.ResponseWriter, r transports.Request) {
 	handler.once.Do(func() {
 		rt := runtime.Load(r)
-		doc := rt.Endpoints().Documents()
-		p, _ := json.Marshal(doc)
-		handler.doc = p
+		host, ok := rt.Endpoints().(services.HostEndpoints)
+		if ok {
+			doc := host.Documents()
+			p, _ := json.Marshal(doc)
+			handler.doc = p
+		}
 	})
 	w.Succeed(handler.doc)
 }

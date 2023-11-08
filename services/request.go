@@ -32,6 +32,7 @@ import (
 	"sync"
 )
 
+// todo add cache control, handle cache in services.Request()
 type RequestOption func(*RequestOptions)
 
 func WithRequestId(id []byte) RequestOption {

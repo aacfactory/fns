@@ -367,9 +367,6 @@ func (app *application) Run(ctx context.Context) Application {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(lnErr)))
 		return app
 	}
-	if app.log.DebugEnabled() {
-		app.log.Debug().Message("fns: services are listening...")
-	}
 	// proxy
 	if app.proxy != nil {
 		prErrs := make(chan error, 1)

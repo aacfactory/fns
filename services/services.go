@@ -45,7 +45,6 @@ func New(id string, name string, version versions.Version, log logs.Logger, conf
 		version:   version,
 		doc:       documents.NewDocuments(bytex.FromString(id), version),
 		values:    make(map[string]Endpoint),
-		listeners: make([]Listenable, 0, 1),
 		discovery: discovery,
 		group:     new(singleflight.Group),
 		worker:    worker,
@@ -59,7 +58,6 @@ type Services struct {
 	version   versions.Version
 	doc       *documents.Documents
 	values    map[string]Endpoint
-	listeners []Listenable
 	discovery Discovery
 	group     *singleflight.Group
 	worker    workers.Workers
@@ -85,10 +83,6 @@ func (s *Services) Add(service Service) (err error) {
 		return
 	}
 	s.values[name] = service
-	ln, ok := service.(Listenable)
-	if ok {
-		s.listeners = append(s.listeners, ln)
-	}
 	doc := service.Document()
 	if doc != nil && !service.Internal() {
 		s.doc.Add(doc)
@@ -250,7 +244,11 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 
 func (s *Services) Listen(ctx sc.Context) (err error) {
 	errs := errors.MakeErrors()
-	for _, ln := range s.listeners {
+	for _, endpoint := range s.values {
+		ln, ok := endpoint.(Listenable)
+		if !ok {
+			continue
+		}
 		errCh := make(chan error, 1)
 		lnCtx := sc.WithValue(ctx, bytex.FromString("listener"), ln.Name())
 		if components := ln.Components(); len(components) > 0 {
@@ -270,6 +268,9 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 			break
 		}
 		close(errCh)
+		if s.log.DebugEnabled() {
+			s.log.Debug().With("service", endpoint.Name()).Message("fns: service is listening...")
+		}
 	}
 	if len(errs) > 0 {
 		err = errs.Error()

@@ -21,16 +21,12 @@ import (
 	"runtime"
 )
 
-func New(min int, max int) *AutoMaxProcs {
+func New(min int) *AutoMaxProcs {
 	if min < 0 {
 		min = 0
 	}
-	if max < 0 {
-		max = 0
-	}
 	return &AutoMaxProcs{
 		min:     min,
-		max:     max,
 		resetFn: nil,
 	}
 }
@@ -50,7 +46,6 @@ func (p *AutoMaxProcs) Enable() {
 		}
 		p.resetFn = reset
 	}
-	runtime.GOMAXPROCS(p.max)
 	return
 }
 

@@ -34,7 +34,11 @@ type Store interface {
 	Close()
 }
 
-func LocalStore() (store Store) {
+type LocalSharedStoreConfig struct {
+	CacheSize string `json:"cacheSize,omitempty" yaml:"cacheSize,omitempty"`
+}
+
+func LocalStore(config LocalSharedStoreConfig) (store Store) {
 	store = &localStore{
 		values: sync.Map{},
 	}
@@ -48,6 +52,7 @@ type entry struct {
 }
 
 type localStore struct {
+	// todo use smap + caches
 	values sync.Map
 }
 

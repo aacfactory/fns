@@ -98,14 +98,14 @@ func New(options ...Option) (app Application) {
 	}
 
 	// proc
-	amp := procs.New(config.Procs.Min, config.Procs.Max)
+	amp := procs.New(config.Runtime.Procs.Min)
 	// worker
 	workerOptions := make([]workers.Option, 0, 1)
-	if config.Workers.Max > 0 {
-		workerOptions = append(workerOptions, workers.MaxWorkers(config.Workers.Max))
+	if workersMax := config.Runtime.Workers.Max; workersMax > 0 {
+		workerOptions = append(workerOptions, workers.MaxWorkers(workersMax))
 	}
-	if config.Workers.MaxIdleSeconds > 0 {
-		workerOptions = append(workerOptions, workers.MaxIdleWorkerDuration(time.Duration(config.Workers.MaxIdleSeconds)*time.Second))
+	if workersMaxIdleSeconds := config.Runtime.Workers.MaxIdleSeconds; workersMaxIdleSeconds > 0 {
+		workerOptions = append(workerOptions, workers.MaxIdleWorkerDuration(time.Duration(workersMaxIdleSeconds)*time.Second))
 	}
 	worker := workers.New(workerOptions...)
 
@@ -138,7 +138,7 @@ func New(options ...Option) (app Application) {
 		}
 		shared = cluster.Shared()
 	} else {
-		shared = shareds.Local()
+		shared = shareds.Local(config.Runtime.Shared)
 		barrier = barriers.New()
 	}
 	// endpoints

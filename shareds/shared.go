@@ -16,10 +16,14 @@ type Shared interface {
 	Store() (store Store)
 }
 
-func Local() Shared {
+type LocalSharedConfig struct {
+	Store LocalSharedStoreConfig `json:"store,omitempty" yaml:"store,omitempty"`
+}
+
+func Local(config LocalSharedConfig) Shared {
 	return &localShared{
 		lockers: LocalLockers(),
-		store:   LocalStore(),
+		store:   LocalStore(config.Store),
 	}
 }
 

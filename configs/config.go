@@ -6,6 +6,7 @@ import (
 	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 )
 
@@ -16,12 +17,16 @@ type WorkersConfig struct {
 
 type ProcsConfig struct {
 	Min int `json:"min" yaml:"min,omitempty"`
-	Max int `json:"max" yaml:"max,omitempty"`
+}
+
+type RuntimeConfig struct {
+	Procs   ProcsConfig               `json:"procs,omitempty" yaml:"procs,omitempty"`
+	Workers WorkersConfig             `json:"workers,omitempty" yaml:"workers,omitempty"`
+	Shared  shareds.LocalSharedConfig `json:"shared,omitempty" yaml:"shared,omitempty"`
 }
 
 type Config struct {
-	Procs     ProcsConfig       `json:"procs,omitempty" yaml:"procs,omitempty"`
-	Workers   WorkersConfig     `json:"workers,omitempty" yaml:"workers,omitempty"`
+	Runtime   RuntimeConfig     `json:"runtime,omitempty" yaml:"runtime,omitempty"`
 	Log       log.Config        `json:"log,omitempty" yaml:"log,omitempty"`
 	Cluster   *clusters.Config  `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 	Transport transports.Config `json:"transport,omitempty" yaml:"transport,omitempty"`

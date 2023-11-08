@@ -39,6 +39,7 @@ import (
 	"github.com/aacfactory/workers"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -342,6 +343,9 @@ func (app *application) Run(ctx context.Context) Application {
 	case <-time.After(3 * time.Second):
 		break
 	}
+	if app.log.DebugEnabled() {
+		app.log.Debug().With("port", strconv.Itoa(app.transport.Port())).Message("fns: transport is serving...")
+	}
 	app.status.On()
 	app.status.Confirm()
 	// cluster
@@ -352,6 +356,9 @@ func (app *application) Run(ctx context.Context) Application {
 			panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(joinErr)))
 			return app
 		}
+		if app.log.DebugEnabled() {
+			app.log.Debug().Message("fns: cluster join succeed")
+		}
 	}
 	// endpoints
 	lnErr := app.endpoints.Listen(ctx)
@@ -359,6 +366,9 @@ func (app *application) Run(ctx context.Context) Application {
 		app.shutdown()
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(lnErr)))
 		return app
+	}
+	if app.log.DebugEnabled() {
+		app.log.Debug().Message("fns: services are listening...")
 	}
 	// proxy
 	if app.proxy != nil {
@@ -378,10 +388,20 @@ func (app *application) Run(ctx context.Context) Application {
 		case <-time.After(3 * time.Second):
 			break
 		}
+		if app.log.DebugEnabled() {
+			app.log.Debug().With("port", strconv.Itoa(app.proxy.Port())).Message("fns: proxy is serving...")
+		}
 	}
 	// hooks
 	for _, hook := range app.hooks {
 		app.worker.MustDispatch(runtime.With(ctx, app.rt), hook)
+		if app.log.DebugEnabled() {
+			app.log.Debug().With("hook", hook.Name()).Message("fns: hook is dispatched")
+		}
+	}
+	// log
+	if app.log.DebugEnabled() {
+		app.log.Debug().Message("fns: application is running...")
 	}
 	return app
 }
@@ -406,7 +426,7 @@ func (app *application) shutdown() {
 	// status
 	app.status.Off()
 	app.status.Confirm()
-	go func(ctx context.Context, app *application) {
+	go func(ctx context.Context, cancel context.CancelFunc, app *application) {
 		// cluster
 		if app.cluster != nil {
 			rc, rcc := context.WithCancel(ctx)
@@ -431,7 +451,11 @@ func (app *application) shutdown() {
 		lc, lcc := context.WithCancel(ctx)
 		app.log.Shutdown(lc)
 		lcc()
-	}(ctx, app)
+		cancel()
+	}(ctx, cancel, app)
 	<-ctx.Done()
-	cancel()
+	// log
+	if app.log.DebugEnabled() {
+		app.log.Debug().Message("fns: application is stopped!!!")
+	}
 }

@@ -334,7 +334,7 @@ func (list SortedRegistrations) Swap(i, j int) {
 
 type NamedRegistration struct {
 	name   []byte
-	length uint64
+	length int
 	pos    uint64
 	values SortedRegistrations
 }
@@ -346,7 +346,7 @@ func (named *NamedRegistration) Add(registration *Registration) {
 	}
 	named.values = append(named.values, registration)
 	sort.Sort(named.values)
-	named.length = uint64(len(named.values))
+	named.length = len(named.values)
 }
 
 func (named *NamedRegistration) Remove(id []byte) {
@@ -361,7 +361,7 @@ func (named *NamedRegistration) Remove(id []byte) {
 		return
 	}
 	named.values = append(named.values[:n], named.values[n+1:]...)
-	named.length = uint64(len(named.values))
+	named.length = len(named.values)
 }
 
 func (named *NamedRegistration) Get(id []byte) (r *Registration, has bool) {

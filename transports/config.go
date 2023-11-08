@@ -26,6 +26,9 @@ func (config *TLSConfig) Config() (conf ssl.Config, err error) {
 		err = errors.Warning(fmt.Sprintf("fns: can not get %s tls config", kind))
 		return
 	}
+	if len(config.Options) == 0 {
+		config.Options = []byte{'{', '}'}
+	}
 	confOptions, confOptionsErr := configures.NewJsonConfig(config.Options)
 	if confOptionsErr != nil {
 		err = errors.Warning(fmt.Sprintf("fns: can not get options of %s tls config", kind)).WithCause(confOptionsErr)
@@ -72,6 +75,9 @@ func (config *Config) TLS() (tls ssl.Config, err error) {
 }
 
 func (config *Config) Options() (options configures.Config, err error) {
+	if len(config.Options_) == 0 {
+		config.Options_ = []byte{'{', '}'}
+	}
 	options, err = configures.NewJsonConfig(config.Options_)
 	if err != nil {
 		err = errors.Warning("options is invalid").WithCause(err)
@@ -85,6 +91,9 @@ func (config *Config) Middleware(name string) (middleware configures.Config, err
 	if name == "" {
 		err = errors.Warning("middleware is invalid").WithCause(fmt.Errorf("name is nil")).WithMeta("middleware", name)
 		return
+	}
+	if len(config.Middlewares_) == 0 {
+		config.Middlewares_ = []byte{'{', '}'}
 	}
 	middlewares, middlewaresErr := configures.NewJsonConfig(config.Middlewares_)
 	if middlewaresErr != nil {
@@ -104,6 +113,9 @@ func (config *Config) Handler(name string) (handler configures.Config, err error
 	if name == "" {
 		err = errors.Warning("middleware is invalid").WithCause(fmt.Errorf("name is nil")).WithMeta("middleware", name)
 		return
+	}
+	if len(config.Handlers_) == 0 {
+		config.Handlers_ = []byte{'{', '}'}
 	}
 	handlers, handlersErr := configures.NewJsonConfig(config.Handlers_)
 	if handlersErr != nil {

@@ -17,6 +17,7 @@ type ProxyOptions struct {
 
 type Proxy interface {
 	Construct(options ProxyOptions) (err error)
+	Port() int
 	Run(ctx context.Context) (err error)
 	Shutdown(ctx context.Context)
 }
@@ -102,6 +103,10 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 		return
 	}
 	return
+}
+
+func (p *proxy) Port() int {
+	return p.transport.Port()
 }
 
 func (p *proxy) Run(_ context.Context) (err error) {

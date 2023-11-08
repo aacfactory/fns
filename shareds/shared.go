@@ -2,6 +2,8 @@ package shareds
 
 import (
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/errors"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 )
 
@@ -17,14 +19,28 @@ type Shared interface {
 }
 
 type LocalSharedConfig struct {
-	Store LocalSharedStoreConfig `json:"store,omitempty" yaml:"store,omitempty"`
+	Store json.RawMessage `json:"store,omitempty" yaml:"store,omitempty"`
 }
 
-func Local(config LocalSharedConfig) Shared {
-	return &localShared{
-		lockers: LocalLockers(),
-		store:   LocalStore(config.Store),
+func Local(log logs.Logger, config LocalSharedConfig) (v Shared, err error) {
+	if len(config.Store) == 0 {
+		config.Store = []byte{'{', '}'}
 	}
+	storeConfig, storeConfigErr := configures.NewJsonConfig(config.Store)
+	if storeConfigErr != nil {
+		err = errors.Warning("fns: build local shared failed").WithCause(storeConfigErr)
+		return
+	}
+	store, storeErr := localStoreBuilder(log, storeConfig)
+	if storeErr != nil {
+		err = errors.Warning("fns: build local shared failed").WithCause(storeErr)
+		return
+	}
+	v = &localShared{
+		lockers: LocalLockers(),
+		store:   store,
+	}
+	return
 }
 
 type localShared struct {

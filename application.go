@@ -138,7 +138,12 @@ func New(options ...Option) (app Application) {
 		}
 		shared = cluster.Shared()
 	} else {
-		shared = shareds.Local(config.Runtime.Shared)
+		var sharedErr error
+		shared, sharedErr = shareds.Local(logger.With("shared", "local"), config.Runtime.Shared)
+		if sharedErr != nil {
+			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(sharedErr)))
+			return
+		}
 		barrier = barriers.New()
 	}
 	// endpoints

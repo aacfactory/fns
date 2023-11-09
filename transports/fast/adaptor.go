@@ -33,9 +33,6 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 			w = cw.(*responseWriter)
 		}
 		w.ctx = ctx
-		w.header = ResponseHeader{
-			ResponseHeader: &ctx.Response.Header,
-		}
 		w.body = buf
 
 		h.Handle(w, r)
@@ -56,7 +53,6 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 
 		w.ctx = nil
 		w.status = 0
-		w.header = nil
 		w.body = nil
 		responsePool.Put(w)
 

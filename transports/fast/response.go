@@ -17,7 +17,6 @@ import (
 type responseWriter struct {
 	ctx    *fasthttp.RequestCtx
 	status int
-	header transports.Header
 	body   transports.WriteBuffer
 }
 
@@ -88,7 +87,9 @@ func (w *responseWriter) SetCookie(cookie *transports.Cookie) {
 }
 
 func (w *responseWriter) Header() transports.Header {
-	return w.header
+	return ResponseHeader{
+		&w.ctx.Response.Header,
+	}
 }
 
 func (w *responseWriter) Succeed(v interface{}) {

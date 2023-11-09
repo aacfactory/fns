@@ -19,6 +19,7 @@ package transports
 import (
 	"bufio"
 	sc "context"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"io"
 	"net"
@@ -43,21 +44,38 @@ type WriteBuffer interface {
 	Bytes() []byte
 }
 
+const (
+	responseContextKey = "@fns:context:transports:response"
+)
+
+func WithResponse(ctx context.Context, w ResponseWriter) context.Context {
+	ctx.SetUserValue(bytex.FromString(responseContextKey), w)
+	return ctx
+}
+
 func LoadResponseWriter(ctx sc.Context) ResponseWriter {
-	w, ok := ctx.(ResponseWriter)
+	w, ok := TryLoadResponseWriter(ctx)
 	if ok {
 		return w
 	}
-	return w
+	return nil
 }
 
 func TryLoadResponseWriter(ctx sc.Context) (ResponseWriter, bool) {
 	w, ok := ctx.(ResponseWriter)
+	if ok {
+		return w, ok
+	}
+	v := ctx.Value(responseContextKey)
+	if v == nil {
+		return nil, false
+	}
+	w, ok = v.(ResponseWriter)
 	return w, ok
 }
 
 func TryLoadResponseHeader(ctx sc.Context) (Header, bool) {
-	w, ok := ctx.(ResponseWriter)
+	w, ok := TryLoadResponseWriter(ctx)
 	if !ok {
 		return nil, false
 	}

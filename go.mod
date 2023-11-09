@@ -11,7 +11,7 @@ require (
 	github.com/aacfactory/gcg v1.0.4
 	github.com/aacfactory/json v1.14.0
 	github.com/aacfactory/logs v1.13.0
-	github.com/aacfactory/workers v1.8.3
+	github.com/aacfactory/workers v1.8.4
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dgrr/http2 v0.3.6-0.20231023141632-12370d352f5f
 	github.com/go-playground/validator/v10 v10.16.0
@@ -22,9 +22,9 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.50.0
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/crypto v0.14.0
+	golang.org/x/crypto v0.15.0
 	golang.org/x/mod v0.14.0
-	golang.org/x/net v0.17.0
+	golang.org/x/net v0.18.0
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.14.0
 )
@@ -52,6 +52,6 @@ require (
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.14.0 // indirect
+	golang.org/x/tools v0.15.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 )

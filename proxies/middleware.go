@@ -82,6 +82,9 @@ func (middleware *ProxyMiddleware) Handler(next transports.Handler) transports.H
 		middleware.counter.Add(1)
 		// set runtime into request context
 		runtime.With(r, middleware.rt)
+		// set request and response into context
+		transports.WithRequest(r, r)
+		transports.WithResponse(r, w)
 		// next
 		next.Handle(w, r)
 
@@ -90,10 +93,6 @@ func (middleware *ProxyMiddleware) Handler(next transports.Handler) transports.H
 			middleware.counter.Done()
 			return
 		}
-		// header >>>
-		w.Header().Set(bytex.FromString(transports.EndpointIdHeaderName), bytex.FromString(middleware.rt.AppId()))
-		w.Header().Set(bytex.FromString(transports.EndpointVersionHeaderName), bytex.FromString(middleware.rt.AppVersion().String()))
-		// header <<<
 		// done
 		middleware.counter.Done()
 	})

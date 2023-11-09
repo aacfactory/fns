@@ -48,6 +48,9 @@ func (app *Application) Handler(next transports.Handler) transports.Handler {
 		app.counter.Add(1)
 		// set runtime into request context
 		runtime.With(r, app.rt)
+		// set request and response into context
+		transports.WithRequest(r, r)
+		transports.WithResponse(r, w)
 		// next
 		next.Handle(w, r)
 		// check hijacked

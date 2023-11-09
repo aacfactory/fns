@@ -16,7 +16,9 @@
 
 package uid
 
-import "github.com/rs/xid"
+import (
+	"github.com/rs/xid"
+)
 
 func UID() (id string) {
 	id = xid.New().String()
@@ -24,6 +26,6 @@ func UID() (id string) {
 }
 
 func Bytes() (id []byte) {
-	id = xid.New().Bytes()
+	id, _ = xid.New().MarshalText()
 	return
 }

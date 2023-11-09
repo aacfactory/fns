@@ -150,7 +150,7 @@ func DecodeParams(params Params, dst interface{}) (err error) {
 		err = errors.Warning("fns: decode param failed").WithCause(fmt.Errorf("dst target is not pointer"))
 		return
 	}
-	rv := rv.Elem()
+	rv = rv.Elem()
 	if rv.Kind() != reflect.Struct {
 		err = errors.Warning("fns: decode param failed").WithCause(fmt.Errorf("dst target is not pointer struct"))
 		return

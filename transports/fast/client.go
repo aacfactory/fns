@@ -213,7 +213,7 @@ func (client *Client) Do(ctx context.Context, method []byte, path []byte, header
 	}
 
 	status = resp.StatusCode()
-	responseHeader = &ResponseHeader{
+	responseHeader = ResponseHeader{
 		&resp.Header,
 	}
 	responseBody = resp.Body()

@@ -18,7 +18,7 @@ func convertFastHttpRequestCtxToResponseWriter(ctx *fasthttp.RequestCtx, writer 
 	w = &responseWriter{
 		ctx:    ctx,
 		status: 0,
-		header: &ResponseHeader{
+		header: ResponseHeader{
 			ResponseHeader: &ctx.Response.Header,
 		},
 		body: writer,

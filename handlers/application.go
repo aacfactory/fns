@@ -55,9 +55,6 @@ func (app *Application) Handler(next transports.Handler) transports.Handler {
 			app.counter.Done()
 			return
 		}
-		// header
-		w.Header().Set(bytex.FromString(transports.EndpointIdHeaderName), bytex.FromString(app.rt.AppId()))
-		w.Header().Set(bytex.FromString(transports.EndpointVersionHeaderName), bytex.FromString(app.rt.AppVersion().String()))
 
 		// done
 		app.counter.Done()

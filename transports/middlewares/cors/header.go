@@ -1,47 +1,36 @@
 package cors
 
-func parseHeaderList(headerList []byte) [][]byte {
-	const (
-		toLower = 'a' - 'A'
-	)
-	l := len(headerList)
-	h := make([]byte, 0, l)
-	upper := true
-	t := 0
-	for i := 0; i < l; i++ {
-		if headerList[i] == ',' {
-			t++
-		}
-	}
-	headers := make([][]byte, 0, t)
-	for i := 0; i < l; i++ {
-		b := headerList[i]
-		switch {
-		case b >= 'a' && b <= 'z':
-			if upper {
-				h = append(h, b-toLower)
-			} else {
-				h = append(h, b)
-			}
-		case b >= 'A' && b <= 'Z':
-			if !upper {
-				h = append(h, b+toLower)
-			} else {
-				h = append(h, b)
-			}
-		case b == '-' || b == '_' || b == '.' || (b >= '0' && b <= '9'):
-			h = append(h, b)
-		}
+import "bytes"
 
-		if b == ' ' || b == ',' || i == l-1 {
-			if len(h) > 0 {
-				headers = append(headers, h)
-				h = h[:0]
-				upper = true
+var (
+	comma = []byte{','}
+)
+
+func parseHeaderList(headerList [][]byte) [][]byte {
+	out := headerList
+	copied := false
+	for i, v := range headerList {
+		needsSplit := bytes.IndexByte(v, ',') != -1
+		if !copied {
+			if needsSplit {
+				split := bytes.Split(v, comma)
+				out = make([][]byte, i, len(headerList)+len(split)-1)
+				copy(out, headerList[:i])
+				for _, s := range split {
+					out = append(out, bytes.TrimSpace(s))
+				}
+				copied = true
 			}
 		} else {
-			upper = b == '-' || b == '_'
+			if needsSplit {
+				split := bytes.Split(v, comma)
+				for _, s := range split {
+					out = append(out, bytes.TrimSpace(s))
+				}
+			} else {
+				out = append(out, v)
+			}
 		}
 	}
-	return headers
+	return out
 }

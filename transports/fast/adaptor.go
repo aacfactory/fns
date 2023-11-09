@@ -4,16 +4,39 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
+	"sync"
+)
+
+var (
+	requestPool  = sync.Pool{}
+	responsePool = sync.Pool{}
 )
 
 func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		r := &Request{
-			ctx: ctx,
+		var r *Request
+		cr := requestPool.Get()
+		if cr == nil {
+			r = new(Request)
+		} else {
+			r = cr.(*Request)
 		}
+		r.ctx = ctx
 
 		buf := bytebufferpool.Get()
-		w := convertFastHttpRequestCtxToResponseWriter(ctx, buf)
+
+		var w *responseWriter
+		cw := responsePool.Get()
+		if cw == nil {
+			w = new(responseWriter)
+		} else {
+			w = cw.(*responseWriter)
+		}
+		w.ctx = ctx
+		w.header = ResponseHeader{
+			ResponseHeader: &ctx.Response.Header,
+		}
+		w.body = buf
 
 		h.Handle(w, r)
 
@@ -31,6 +54,15 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 			}
 		}
 
+		w.ctx = nil
+		w.status = 0
+		w.header = nil
+		w.body = nil
+		responsePool.Put(w)
+
 		bytebufferpool.Put(buf)
+
+		r.ctx = nil
+		requestPool.Put(r)
 	}
 }

@@ -12,17 +12,6 @@ import (
 	"strconv"
 )
 
-func convertHttpResponseWriterToResponseWriter(ctx context.Context, w http.ResponseWriter, buf transports.WriteBuffer) transports.ResponseWriter {
-	return &responseWriter{
-		Context:  ctx,
-		writer:   w,
-		status:   0,
-		header:   WrapHttpHeader(w.Header()),
-		body:     buf,
-		hijacked: false,
-	}
-}
-
 type responseWriter struct {
 	context.Context
 	writer   http.ResponseWriter

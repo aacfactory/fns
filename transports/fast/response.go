@@ -14,18 +14,6 @@ import (
 	"time"
 )
 
-func convertFastHttpRequestCtxToResponseWriter(ctx *fasthttp.RequestCtx, writer transports.WriteBuffer) (w transports.ResponseWriter) {
-	w = &responseWriter{
-		ctx:    ctx,
-		status: 0,
-		header: ResponseHeader{
-			ResponseHeader: &ctx.Response.Header,
-		},
-		body: writer,
-	}
-	return
-}
-
 type responseWriter struct {
 	ctx    *fasthttp.RequestCtx
 	status int

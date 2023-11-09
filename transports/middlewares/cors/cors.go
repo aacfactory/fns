@@ -81,6 +81,9 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 			}
 		}
 	}
+	if len(config.AllowedOrigins) == 0 {
+		config.AllowedOrigins = []string{"*"}
+	}
 	for _, origin := range config.AllowedOrigins {
 		origin = strings.ToLower(origin)
 		if origin == "*" {

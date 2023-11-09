@@ -37,7 +37,7 @@ import (
 	"time"
 )
 
-func New(id string, name string, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
+func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
 	return &Services{
 		log:       log.With("fns", "services"),
 		config:    config,

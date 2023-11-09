@@ -148,7 +148,7 @@ func New(options ...Option) (app Application) {
 	}
 	// endpoints
 	endpoints := services.New(
-		appId, appName, appVersion,
+		appId, appVersion,
 		logger.Logger, config.Services, worker,
 		discovery,
 	)

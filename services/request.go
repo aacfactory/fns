@@ -206,6 +206,18 @@ func (r *request) UserValues(fn func(key []byte, val any)) {
 	})
 }
 
+func (r *request) Value(key any) any {
+	k, isBytes := key.([]byte)
+	if isBytes {
+		k = append(requestUserValueKeyPrefix, k...)
+		v := r.Context.UserValue(k)
+		if v != nil {
+			return v
+		}
+	}
+	return r.Context.Value(key)
+}
+
 func (r *request) Fn() (service []byte, fn []byte) {
 	service, fn = r.service, r.fn
 	return

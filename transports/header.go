@@ -34,6 +34,7 @@ const (
 	CloseHeaderValue                             = "close"
 	ClearSiteDataHeaderName                      = "Clear-Site-Data"
 	CacheControlHeaderName                       = "Cache-Control"
+	AgeHeaderName                                = "Age"
 	CacheControlHeaderEnabled                    = "public, max-age=0"
 	CacheControlHeaderNoStore                    = "no-store"
 	CacheControlHeaderNoCache                    = "no-cache"

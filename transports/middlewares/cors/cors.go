@@ -72,7 +72,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 			transports.DeviceIpHeaderName, transports.DeviceIdHeaderName,
 			transports.RequestIdHeaderName,
 			transports.RequestTimeoutHeaderName, transports.RequestVersionsHeaderName,
-			transports.ETagHeaderName, transports.CacheControlHeaderIfNonMatch, transports.ClearSiteDataHeaderName,
+			transports.CacheControlHeaderIfNonMatch, transports.CacheControlHeaderName,
 			transports.SignatureHeaderName,
 		}
 		for _, header := range defaultAllowedHeaders {
@@ -120,7 +120,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 		transports.DeviceIdHeaderName,
 		transports.EndpointIdHeaderName, transports.EndpointVersionHeaderName,
 		transports.RequestIdHeaderName, transports.HandleLatencyHeaderName,
-		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName,
+		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.AgeHeaderName,
 		transports.ResponseRetryAfterHeaderName, transports.SignatureHeaderName,
 	}
 	for _, header := range defaultExposedHeaders {

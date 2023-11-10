@@ -53,6 +53,9 @@ func (paths *Paths) WrapRequest(r transports.Request) (err error) {
 	if !bytes.Equal(r.Method(), bytex.FromString(http.MethodGet)) {
 		return
 	}
+	if len(r.Header().Get(bytex.FromString(transports.UpgradeHeaderName))) > 0 {
+		return
+	}
 	for _, path := range paths.values {
 		if bytes.Equal(path.Name, r.Path()) {
 			param := path.Param()
@@ -69,6 +72,7 @@ func (paths *Paths) WrapRequest(r transports.Request) (err error) {
 			r.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
 			r.SetMethod(bytex.FromString(http.MethodPost))
 			r.SetBody(p)
+			break
 		}
 	}
 	return

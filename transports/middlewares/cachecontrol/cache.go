@@ -139,6 +139,12 @@ type Entry struct {
 	ETag            []byte
 }
 
+// Make
+// write response header
+// 1. check internal, when true then pass
+// 2. check transport request, when cache is enabled and path match services.request.Fn() then next
+// 3. create entry
+// 4. encode entry and set into response header
 func Make(ctx context.Context, body interface{}, options ...MakeOption) (err error) {
 	if body == nil {
 		return
@@ -190,7 +196,7 @@ func Make(ctx context.Context, body interface{}, options ...MakeOption) (err err
 		err = errors.Warning("fns: make cache control failed").WithCause(encodeErr)
 		return
 	}
-
+	// todo set into response header, middleware check response header, when exit handle it and remove the header
 	setErr := store.SetWithTTL(ctx, ek, ep, 10*time.Second)
 	if setErr != nil {
 		err = errors.Warning("fns: make cache control failed").WithCause(setErr)

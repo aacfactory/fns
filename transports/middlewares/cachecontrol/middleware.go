@@ -16,8 +16,6 @@ func New() transports.Middleware {
 	return NewWithCache(new(DefaultCache))
 }
 
-// Middleware
-// enable wgp(middleware) before this.
 type Middleware struct {
 	log    logs.Logger
 	cache  Cache

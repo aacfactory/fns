@@ -81,6 +81,10 @@ func (r *Request) Method() []byte {
 	return r.ctx.Method()
 }
 
+func (r *Request) SetMethod(method []byte) {
+	r.ctx.Request.Header.SetMethodBytes(method)
+}
+
 func (r *Request) Cookie(key []byte) (value []byte) {
 	value = r.ctx.Request.Header.CookieBytes(key)
 	return
@@ -104,4 +108,8 @@ func (r *Request) Params() transports.Params {
 
 func (r *Request) Body() ([]byte, error) {
 	return r.ctx.PostBody(), nil
+}
+
+func (r *Request) SetBody(body []byte) {
+	r.ctx.Request.SetBody(body)
 }

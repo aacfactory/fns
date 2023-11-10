@@ -46,6 +46,10 @@ func (r *Request) Method() []byte {
 	return bytex.FromString(r.request.Method)
 }
 
+func (r *Request) SetMethod(method []byte) {
+	r.request.Method = bytex.ToString(method)
+}
+
 func (r *Request) Cookie(key []byte) (value []byte) {
 	cookie, cookieErr := r.request.Cookie(bytex.ToString(key))
 	if se.Is(cookieErr, http.ErrNoCookie) {
@@ -99,4 +103,14 @@ func (r *Request) Body() ([]byte, error) {
 		}
 	}
 	return buf.Bytes(), nil
+}
+
+func (r *Request) SetBody(body []byte) {
+	if len(body) == 0 {
+		return
+	}
+	if r.request.Body != nil {
+		_ = r.request.Body.Close()
+	}
+	r.request.Body = bytex.NewReadCloser(body)
 }

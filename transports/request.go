@@ -36,12 +36,14 @@ type Request interface {
 	Proto() []byte
 	Host() []byte
 	Method() []byte
+	SetMethod(method []byte)
 	Header() Header
 	Cookie(key []byte) (value []byte)
 	SetCookie(key []byte, value []byte)
 	Path() []byte
 	Params() Params
 	Body() ([]byte, error)
+	SetBody(body []byte)
 }
 
 const (

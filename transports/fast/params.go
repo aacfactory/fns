@@ -17,6 +17,14 @@ func (params *Params) Set(name []byte, value []byte) {
 	params.args.SetBytesKV(name, value)
 }
 
+func (params *Params) Add(name []byte, value []byte) {
+	params.args.AddBytesKV(name, value)
+}
+
+func (params *Params) Values(name []byte) [][]byte {
+	return params.args.PeekMultiBytes(name)
+}
+
 func (params *Params) Remove(name []byte) {
 	params.args.DelBytes(name)
 }

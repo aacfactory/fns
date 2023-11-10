@@ -17,6 +17,22 @@ func (params *Params) Set(name []byte, value []byte) {
 	params.values.Set(bytex.ToString(name), bytex.ToString(value))
 }
 
+func (params *Params) Add(name []byte, value []byte) {
+	params.values.Add(bytex.ToString(name), bytex.ToString(value))
+}
+
+func (params *Params) Values(name []byte) [][]byte {
+	svv, has := params.values[bytex.ToString(name)]
+	if !has {
+		return nil
+	}
+	values := make([][]byte, 0, len(svv))
+	for _, s := range svv {
+		values = append(values, bytex.FromString(s))
+	}
+	return values
+}
+
 func (params *Params) Remove(name []byte) {
 	params.values.Del(bytex.ToString(name))
 }

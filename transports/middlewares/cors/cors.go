@@ -66,6 +66,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 	if len(config.AllowedHeaders) == 0 || config.AllowedHeaders[0] != "*" {
 		defaultAllowedHeaders := []string{
 			transports.OriginHeaderName, transports.AcceptHeaderName, transports.ContentTypeHeaderName,
+			transports.AcceptEncodingHeaderName,
 			transports.XRequestedWithHeaderName,
 			transports.ConnectionHeaderName, transports.UpgradeHeaderName,
 			transports.XForwardedForHeaderName, transports.TrueClientIpHeaderName, transports.XRealIpHeaderName,
@@ -119,6 +120,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 	defaultExposedHeaders := []string{
 		transports.DeviceIdHeaderName,
 		transports.EndpointIdHeaderName, transports.EndpointVersionHeaderName,
+		transports.ContentEncodingHeaderName,
 		transports.RequestIdHeaderName, transports.HandleLatencyHeaderName,
 		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.AgeHeaderName,
 		transports.ResponseRetryAfterHeaderName, transports.SignatureHeaderName,

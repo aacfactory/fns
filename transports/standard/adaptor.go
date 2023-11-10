@@ -3,7 +3,6 @@ package standard
 import (
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
-	"github.com/valyala/bytebufferpool"
 	"net/http"
 	"sync"
 )
@@ -28,8 +27,6 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 		r.maxBodySize = maxRequestBody
 		r.request = request
 
-		buf := bytebufferpool.Get()
-
 		var w *responseWriter
 		cw := responsePool.Get()
 		if cw == nil {
@@ -40,15 +37,14 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 		w.Context = ctx
 		w.writer = writer
 		w.header = WrapHttpHeader(writer.Header())
-		w.body = buf
+		w.result = transports.AcquireResultResponseWriter()
 
 		h.Handle(w, r)
 
 		writer.WriteHeader(w.Status())
 
-		bodyLen := buf.Len()
-		if bodyLen > 0 {
-			body := buf.Bytes()
+		if bodyLen := w.BodyLen(); bodyLen > 0 {
+			body := w.Body()
 			n := 0
 			for n < bodyLen {
 				nn, writeErr := writer.Write(body[n:])
@@ -59,15 +55,13 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 			}
 		}
 
+		transports.ReleaseResultResponseWriter(w.result)
 		w.Context = nil
 		w.writer = nil
-		w.status = 0
 		w.header = nil
-		w.body = nil
+		w.result = nil
 		w.hijacked = false
 		responsePool.Put(w)
-
-		bytebufferpool.Put(buf)
 
 		r.Context = nil
 		r.maxBodySize = 0

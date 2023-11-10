@@ -19,10 +19,15 @@ package transports
 import (
 	"bufio"
 	sc "context"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/json"
+	"github.com/valyala/bytebufferpool"
 	"io"
 	"net"
+	"net/http"
+	"sync"
 )
 
 type ResponseWriter interface {
@@ -35,6 +40,7 @@ type ResponseWriter interface {
 	Failed(cause error)
 	Write(body []byte) (int, error)
 	Body() []byte
+	BodyLen() int
 	Hijack(func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error)
 	Hijacked() bool
 }
@@ -42,6 +48,93 @@ type ResponseWriter interface {
 type WriteBuffer interface {
 	io.Writer
 	Bytes() []byte
+}
+
+var (
+	responseWriterPool = sync.Pool{}
+)
+
+func AcquireResultResponseWriter() *ResultResponseWriter {
+	buf := bytebufferpool.Get()
+	cached := responseWriterPool.Get()
+	if cached == nil {
+		return &ResultResponseWriter{
+			status: 0,
+			body:   buf,
+		}
+	}
+	r := cached.(*ResultResponseWriter)
+	r.body = buf
+	return r
+}
+
+func ReleaseResultResponseWriter(w *ResultResponseWriter) {
+	bytebufferpool.Put(w.body)
+	w.body = nil
+	w.status = 0
+	responseWriterPool.Put(w)
+}
+
+type ResultResponseWriter struct {
+	status int
+	body   *bytebufferpool.ByteBuffer
+}
+
+func (w *ResultResponseWriter) Status() int {
+	return w.status
+}
+
+func (w *ResultResponseWriter) SetStatus(status int) {
+	w.status = status
+}
+
+func (w *ResultResponseWriter) Body() []byte {
+	return w.body.Bytes()
+}
+
+func (w *ResultResponseWriter) BodyLen() int {
+	return w.body.Len()
+}
+
+func (w *ResultResponseWriter) Succeed(v interface{}) {
+	if v == nil {
+		w.status = http.StatusOK
+		return
+	}
+	body, encodeErr := json.Marshal(v)
+	if encodeErr != nil {
+		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(encodeErr))
+		return
+	}
+
+	w.status = http.StatusOK
+	if bodyLen := len(body); bodyLen > 0 {
+		_, _ = w.Write(body)
+	}
+	return
+}
+
+func (w *ResultResponseWriter) Failed(cause error) {
+	if cause == nil {
+		cause = errors.Warning("fns: error is lost")
+	}
+	err := errors.Map(cause)
+	body, encodeErr := json.Marshal(err)
+	if encodeErr != nil {
+		body = []byte(`{"message": "fns: transport write failed result failed"}`)
+	}
+	w.status = err.Code()
+	if bodyLen := len(body); bodyLen > 0 {
+		_, _ = w.Write(body)
+	}
+	return
+}
+
+func (w *ResultResponseWriter) Write(body []byte) (int, error) {
+	if body == nil {
+		return 0, nil
+	}
+	return w.body.Write(body)
 }
 
 const (

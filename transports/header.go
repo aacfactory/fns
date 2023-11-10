@@ -32,6 +32,8 @@ const (
 	ConnectionHeaderName                         = "Connection"
 	UpgradeHeaderName                            = "Upgrade"
 	CloseHeaderValue                             = "close"
+	AcceptEncodingHeaderName                     = "Accept-Encoding"
+	ContentEncodingHeaderName                    = "Content-Encoding"
 	ClearSiteDataHeaderName                      = "Clear-Site-Data"
 	CacheControlHeaderName                       = "Cache-Control"
 	AgeHeaderName                                = "Age"

@@ -47,7 +47,6 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 	if middleware.enable {
 		return transports.HandlerFunc(func(writer transports.ResponseWriter, request transports.Request) {
 			//cc := request.Header().Get(bytex.FromString(transports.CacheControlHeaderName))
-
 		})
 	}
 	return next

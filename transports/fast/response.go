@@ -6,18 +6,15 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/json"
 	"github.com/valyala/fasthttp"
 	"net"
-	"net/http"
 	"strconv"
 	"time"
 )
 
 type responseWriter struct {
 	ctx    *fasthttp.RequestCtx
-	status int
-	body   transports.WriteBuffer
+	result *transports.ResultResponseWriter
 }
 
 func (w *responseWriter) Deadline() (time.Time, bool) {
@@ -64,11 +61,11 @@ func (w *responseWriter) UserValues(fn func(key []byte, val any)) {
 }
 
 func (w *responseWriter) Status() int {
-	return w.status
+	return w.result.Status()
 }
 
 func (w *responseWriter) SetStatus(status int) {
-	w.status = status
+	w.result.SetStatus(status)
 }
 
 func (w *responseWriter) SetCookie(cookie *transports.Cookie) {
@@ -93,70 +90,33 @@ func (w *responseWriter) Header() transports.Header {
 }
 
 func (w *responseWriter) Succeed(v interface{}) {
-	if v == nil {
-		w.status = http.StatusOK
-		return
-	}
-	body, encodeErr := json.Marshal(v)
-	if encodeErr != nil {
-		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(encodeErr))
-		return
-	}
-
-	w.status = http.StatusOK
-
-	bodyLen := len(body)
-	if bodyLen > 0 {
+	w.result.Succeed(v)
+	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
 		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
 		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
-		w.write(body, bodyLen)
 	}
 	return
 }
 
 func (w *responseWriter) Failed(cause error) {
-	if cause == nil {
-		cause = errors.Warning("fns: error is lost")
-	}
-	err := errors.Map(cause)
-	body, encodeErr := json.Marshal(err)
-	if encodeErr != nil {
-		body = []byte(`{"message": "fns: transport write failed result failed"}`)
-		return
-	}
-	w.status = err.Code()
-	bodyLen := len(body)
-	if bodyLen > 0 {
+	w.result.Failed(cause)
+	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
 		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
 		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
-		w.write(body, bodyLen)
 	}
 	return
 }
 
 func (w *responseWriter) Write(body []byte) (int, error) {
-	if body == nil {
-		return 0, nil
-	}
-	bodyLen := len(body)
-	w.write(body, bodyLen)
-	return bodyLen, nil
+	return w.result.Write(body)
 }
 
 func (w *responseWriter) Body() []byte {
-	return w.body.Bytes()
+	return w.result.Body()
 }
 
-func (w *responseWriter) write(body []byte, bodyLen int) {
-	n := 0
-	for n < bodyLen {
-		nn, writeErr := w.body.Write(body[n:])
-		if writeErr != nil {
-			break
-		}
-		n += nn
-	}
-	return
+func (w *responseWriter) BodyLen() int {
+	return w.result.BodyLen()
 }
 
 func (w *responseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {

@@ -44,15 +44,15 @@ type Document struct {
 	// Version
 	Version versions.Version `json:"version"`
 	// Fns
-	Fns []*Fn `json:"fns"`
+	Fns []*Fn `json:"fns"` // todo use value not pointer
 	// Elements
-	Elements map[string]*Element `json:"elements"`
+	Elements map[string]*Element `json:"elements"` // todo use array and element as value
 }
 
-func (doc *Document) AddFn(name string, title string, description string, hasAuthorization bool, deprecated bool, arg *Element, result *Element, errs []Error) {
+func (doc *Document) AddFn(name string, title string, description string, methods []string, hasAuthorization bool, deprecated bool, arg *Element, result *Element, errs []Error) {
 	argRef := doc.addElement(arg)
 	resultRef := doc.addElement(result)
-	doc.Fns = append(doc.Fns, newFn(name, title, description, hasAuthorization, deprecated, argRef, resultRef, errs))
+	doc.Fns = append(doc.Fns, newFn(name, title, description, methods, hasAuthorization, deprecated, argRef, resultRef, errs))
 }
 
 func (doc *Document) addElement(element *Element) (ref *Element) {

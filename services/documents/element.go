@@ -50,7 +50,7 @@ func Password() *Element {
 }
 
 func Bytes() *Element {
-	return NewElement("_", "bytes", "string", "byte", "Bytes", "Bytes")
+	return NewElement("_", "bytes", "string", "byte", "Bytes", "Base64 string")
 }
 
 func Bool() *Element {
@@ -149,7 +149,7 @@ func JsonRaw() *Element {
 }
 
 func Empty() *Element {
-	return NewElement("github.com/aacfactory/fns/service", "Empty", "object", "", "Empty", "Empty Object")
+	return NewElement("github.com/aacfactory/fns/services", "Empty", "object", "", "Empty", "Empty Object")
 }
 
 func Array(item *Element) *Element {
@@ -197,7 +197,7 @@ type Element struct {
 	Enums       []string            `json:"enums,omitempty"`
 	Required    bool                `json:"required,omitempty"`
 	Validation  *ElementValidation  `json:"validation,omitempty"`
-	Properties  map[string]*Element `json:"properties,omitempty"`
+	Properties  map[string]*Element `json:"properties,omitempty"` // todo use array
 	Additional  bool                `json:"additional,omitempty"`
 	Deprecated  bool                `json:"deprecated,omitempty"`
 }

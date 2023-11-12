@@ -16,11 +16,12 @@
 
 package documents
 
-func newFn(name string, title string, description string, authorization bool, deprecated bool, arg *Element, result *Element, errs []Error) *Fn {
+func newFn(name string, title string, description string, methods []string, authorization bool, deprecated bool, arg *Element, result *Element, errs []Error) *Fn {
 	return &Fn{
 		Name:          name,
 		Title:         title,
 		Description:   description,
+		Methods:       methods,
 		Authorization: authorization,
 		Argument:      arg,
 		Result:        result,
@@ -33,6 +34,7 @@ type Fn struct {
 	Name          string   `json:"name,omitempty"`
 	Title         string   `json:"title,omitempty"`
 	Description   string   `json:"description,omitempty"`
+	Methods       []string `json:"methods,omitempty"`
 	Authorization bool     `json:"authorization,omitempty"`
 	Argument      *Element `json:"argument,omitempty"`
 	Result        *Element `json:"result,omitempty"`
@@ -41,14 +43,6 @@ type Fn struct {
 }
 
 type Error struct {
-	Name_         string
-	Descriptions_ map[string]string
-}
-
-func (e Error) Name() string {
-	return e.Name_
-}
-
-func (e Error) Descriptions() map[string]string {
-	return e.Descriptions_
+	Name         string            `json:"name"`
+	Descriptions map[string]string `json:"descriptions"` // todo use array
 }

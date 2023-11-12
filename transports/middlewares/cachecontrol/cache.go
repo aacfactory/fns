@@ -145,6 +145,8 @@ type Entry struct {
 // 2. check transport request, when cache is enabled and path match services.request.Fn() then next
 // 3. create entry
 // 4. encode entry and set into response header
+// proxy: write no cache in backend request header, others ars same as this.
+// registration dispatch: remove cache control or set no cache
 func Make(ctx context.Context, body interface{}, options ...MakeOption) (err error) {
 	if body == nil {
 		return

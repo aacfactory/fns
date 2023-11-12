@@ -166,14 +166,14 @@ func (documents *Documents) Openapi(title string, description string, term strin
 					description = description + "\n----------\n"
 					description = description + "Errors:\n"
 					for _, errorDocument := range fn.Errors {
-						description = description + "* " + errorDocument.Name() + "\n"
+						description = description + "* " + errorDocument.Name + "\n"
 						i18nKeys := make([]string, 0, 1)
-						for i18nKey := range errorDocument.Descriptions() {
+						for i18nKey := range errorDocument.Descriptions {
 							i18nKeys = append(i18nKeys, i18nKey)
 						}
 						sort.Strings(i18nKeys)
 						for _, i18nKey := range i18nKeys {
-							i18nVal := errorDocument.Descriptions()[i18nKey]
+							i18nVal := errorDocument.Descriptions[i18nKey]
 							description = description + "\t* " + i18nKey + ": " + i18nVal + "\n"
 						}
 					}

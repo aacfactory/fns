@@ -374,7 +374,7 @@ func (s *ServiceFile) serviceHandleCode(ctx context.Context) (code gcg.Code, err
 	handleFnCode.Name("Handle")
 	handleFnCode.AddParam("ctx", gcg.QualifiedIdent(gcg.NewPackage("context"), "Context"))
 	handleFnCode.AddParam("fn", gcg.String())
-	handleFnCode.AddParam("argument", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/service"), "Argument"))
+	handleFnCode.AddParam("argument", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/service"), "Param"))
 	handleFnCode.AddResult("v", gcg.Token("interface{}"))
 	handleFnCode.AddResult("err", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/errors"), "CodeError"))
 

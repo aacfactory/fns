@@ -266,7 +266,7 @@ type _service_ struct {
 	service.Abstract
 }
 
-func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Argument) (v interface{}, err errors.CodeError) {
+func (svc *_service_) Handle(ctx context.Context, fn string, argument service.Param) (v interface{}, err errors.CodeError) {
 	switch fn {
 	case _helloFn:
 		// param

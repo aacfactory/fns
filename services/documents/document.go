@@ -18,7 +18,6 @@ package documents
 
 import (
 	"github.com/aacfactory/fns/commons/versions"
-	"sort"
 )
 
 func New(name string, description string, internal bool, ver versions.Version) *Document {
@@ -27,8 +26,8 @@ func New(name string, description string, internal bool, ver versions.Version) *
 		Description: description,
 		Internal:    internal,
 		Version:     ver,
-		Fns:         make([]*Fn, 0, 1),
-		Elements:    make(map[string]*Element),
+		Fns:         make(Fns, 0, 1),
+		Elements:    make(Elements, 0, 1),
 	}
 }
 
@@ -44,19 +43,25 @@ type Document struct {
 	// Version
 	Version versions.Version `json:"version"`
 	// Fns
-	Fns []*Fn `json:"fns"` // todo use value not pointer
+	Fns Fns `json:"fns"`
 	// Elements
-	Elements map[string]*Element `json:"elements"` // todo use array and element as value
+	Elements Elements `json:"elements"`
 }
 
-func (doc *Document) AddFn(name string, title string, description string, methods []string, hasAuthorization bool, deprecated bool, arg *Element, result *Element, errs []Error) {
-	argRef := doc.addElement(arg)
-	resultRef := doc.addElement(result)
-	doc.Fns = append(doc.Fns, newFn(name, title, description, methods, hasAuthorization, deprecated, argRef, resultRef, errs))
+func (doc *Document) AddFn(fn Fn) {
+	if fn.Param.Exist() {
+		paramRef := doc.addElement(fn.Param)
+		fn.Param = paramRef
+	}
+	if fn.Result.Exist() {
+		paramRef := doc.addElement(fn.Result)
+		fn.Result = paramRef
+	}
+	doc.Fns = doc.Fns.Add(fn)
 }
 
-func (doc *Document) addElement(element *Element) (ref *Element) {
-	if element == nil {
+func (doc *Document) addElement(element Element) (ref Element) {
+	if !element.Exist() {
 		return
 	}
 	unpacks := element.unpack()
@@ -65,15 +70,11 @@ func (doc *Document) addElement(element *Element) (ref *Element) {
 		return
 	}
 	remains := unpacks[1:]
-	sort.Sort(remains)
 	for _, remain := range remains {
 		if remain.isBuiltin() || remain.isRef() || remain.Path == "" {
 			continue
 		}
-		key := remain.Key()
-		if _, has := doc.Elements[key]; !has {
-			doc.Elements[key] = remain
-		}
+		doc.Elements = doc.Elements.Add(remain)
 	}
 	return
 }

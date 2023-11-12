@@ -16,17 +16,23 @@
 
 package documents
 
-func newFn(name string, title string, description string, methods []string, authorization bool, deprecated bool, arg *Element, result *Element, errs []Error) *Fn {
-	return &Fn{
+import (
+	"net/http"
+	"sort"
+	"strings"
+)
+
+func NewFn(name string) Fn {
+	return Fn{
 		Name:          name,
-		Title:         title,
-		Description:   description,
-		Methods:       methods,
-		Authorization: authorization,
-		Argument:      arg,
-		Result:        result,
-		Deprecated:    deprecated,
-		Errors:        errs,
+		Title:         "",
+		Description:   "",
+		Deprecated:    false,
+		Methods:       []string{http.MethodPost},
+		Authorization: false,
+		Param:         Nil(),
+		Result:        Nil(),
+		Errors:        make(Errors, 0, 1),
 	}
 }
 
@@ -34,15 +40,66 @@ type Fn struct {
 	Name          string   `json:"name,omitempty"`
 	Title         string   `json:"title,omitempty"`
 	Description   string   `json:"description,omitempty"`
+	Deprecated    bool     `json:"deprecated,omitempty"`
 	Methods       []string `json:"methods,omitempty"`
 	Authorization bool     `json:"authorization,omitempty"`
-	Argument      *Element `json:"argument,omitempty"`
-	Result        *Element `json:"result,omitempty"`
-	Deprecated    bool     `json:"deprecated,omitempty"`
-	Errors        []Error  `json:"errors,omitempty"`
+	Param         Element  `json:"argument,omitempty"`
+	Result        Element  `json:"result,omitempty"`
+	Errors        Errors   `json:"errors,omitempty"`
 }
 
-type Error struct {
-	Name         string            `json:"name"`
-	Descriptions map[string]string `json:"descriptions"` // todo use array
+func (fn Fn) SetInfo(title string, description string) Fn {
+	fn.Title = title
+	fn.Description = description
+	return fn
+}
+
+func (fn Fn) SetMethod(method ...string) Fn {
+	fn.Methods = method
+	return fn
+}
+
+func (fn Fn) SetAuthorization() Fn {
+	fn.Authorization = true
+	return fn
+}
+
+func (fn Fn) SetDeprecated() Fn {
+	fn.Deprecated = true
+	return fn
+}
+
+func (fn Fn) SetParam(param Element) Fn {
+	fn.Param = param
+	return fn
+}
+
+func (fn Fn) SetResult(result Element) Fn {
+	fn.Result = result
+	return fn
+}
+
+func (fn Fn) AddError(err Error) Fn {
+	fn.Errors = fn.Errors.Add(err)
+	return fn
+}
+
+type Fns []Fn
+
+func (pp Fns) Len() int {
+	return len(pp)
+}
+
+func (pp Fns) Less(i, j int) bool {
+	return strings.Compare(pp[i].Name, pp[j].Name) < 0
+}
+
+func (pp Fns) Swap(i, j int) {
+	pp[i], pp[j] = pp[j], pp[i]
+}
+
+func (pp Fns) Add(fn Fn) Fns {
+	n := append(pp, fn)
+	sort.Sort(n)
+	return n
 }

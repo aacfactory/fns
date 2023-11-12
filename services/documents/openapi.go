@@ -17,8 +17,149 @@
 package documents
 
 import (
+	"fmt"
 	"github.com/aacfactory/fns/commons/oas"
+	"sort"
+	"strings"
 )
+
+func Openapi(title string, description string, term string, openapiVersion string, documents *Documents) (api oas.API) {
+	if openapiVersion == "" {
+		openapiVersion = "3.1.0"
+	}
+	// oas
+	api = oas.API{
+		Openapi: openapiVersion,
+		Info: &oas.Info{
+			Title:          title,
+			Description:    description,
+			TermsOfService: term,
+			Contact:        nil,
+			License:        nil,
+			Version:        documents.Version.String(),
+		},
+		Servers: []*oas.Server{},
+		Paths:   make(map[string]*oas.Path),
+		Components: &oas.Components{
+			Schemas:   make(map[string]*oas.Schema),
+			Responses: make(map[string]*oas.Response),
+		},
+		Tags: make([]*oas.Tag, 0, 1),
+	}
+	// schemas
+	codeErr := codeErrOpenapiSchema()
+	api.Components.Schemas[codeErr.Key] = codeErr
+	jsr := jsonRawMessageOpenapiSchema()
+	api.Components.Schemas[jsr.Key] = jsr
+	empty := emptyOpenapiSchema()
+	api.Components.Schemas[empty.Key] = empty
+
+	for status, response := range responseStatusOpenapi() {
+		api.Components.Responses[status] = response
+	}
+	api.Tags = append(api.Tags, &oas.Tag{
+		Name:        "builtin",
+		Description: "fns builtins",
+	})
+	healthURI, healthPathSchema := healthPath()
+	api.Paths[healthURI] = healthPathSchema
+
+	// documents
+	endpoints := documents.Endpoints
+	if endpoints != nil || len(endpoints) > 0 {
+		for _, document := range endpoints {
+			if document == nil || document.Internal || len(document.Fns) == 0 {
+				continue
+			}
+			// tags
+			api.Tags = append(api.Tags, &oas.Tag{
+				Name:        document.Name,
+				Description: document.Description,
+			})
+			// doc
+			if document.Elements != nil {
+				for _, element := range document.Elements {
+					if _, hasElement := api.Components.Schemas[element.Key()]; !hasElement {
+						api.Components.Schemas[element.Key()] = ElementSchema(element)
+					}
+				}
+			}
+			for _, fn := range document.Fns {
+				description := fn.Description
+				if fn.Errors != nil && len(fn.Errors) > 0 {
+					description = description + "\n----------\n"
+					description = description + "Errors:\n"
+					for _, errorDocument := range fn.Errors {
+						description = description + "* " + errorDocument.Name + "\n"
+						i18nKeys := make([]string, 0, 1)
+						for _, i18nKey := range errorDocument.Descriptions {
+							i18nKeys = append(i18nKeys, i18nKey.Name)
+						}
+						sort.Strings(i18nKeys)
+						for _, i18nKey := range i18nKeys {
+							i18nVal, hasI18nValue := errorDocument.Descriptions.Get(i18nKey)
+							if hasI18nValue {
+								description = description + "\t* " + i18nKey + ": " + i18nVal + "\n"
+							}
+						}
+					}
+				}
+				path := &oas.Path{
+					Post: &oas.Operation{
+						OperationId: fmt.Sprintf("%s_%s", document.Name, fn.Name),
+						Tags:        []string{document.Name},
+						Summary:     fn.Title,
+						Description: description,
+						Deprecated:  fn.Deprecated,
+						Parameters: func() []*oas.Parameter {
+							params := requestHeadersOpenapiParams()
+							if fn.Authorization {
+								params = append(params, requestAuthHeadersOpenapiParams()...)
+								return params
+							}
+							return params
+						}(),
+						RequestBody: &oas.RequestBody{
+							Required:    func() bool { return fn.Param.Exist() }(),
+							Description: "",
+							Content: func() (c map[string]*oas.MediaType) {
+								if !fn.Param.Exist() {
+									return
+								}
+								c = oas.ApplicationJsonContent(ElementSchema(fn.Param))
+								return
+							}(),
+						},
+						Responses: map[string]oas.Response{
+							"200": {
+								Content: func() (c map[string]*oas.MediaType) {
+									if !fn.Result.Exist() {
+										c = oas.ApplicationJsonContent(oas.RefSchema("github.com/aacfactory/fns/service.Empty"))
+										return
+									}
+									c = oas.ApplicationJsonContent(ElementSchema(fn.Result))
+									return
+								}(),
+							},
+							"400": {Ref: "#/components/responses/400"},
+							"401": {Ref: "#/components/responses/401"},
+							"403": {Ref: "#/components/responses/403"},
+							"404": {Ref: "#/components/responses/404"},
+							"406": {Ref: "#/components/responses/406"},
+							"408": {Ref: "#/components/responses/408"},
+							"500": {Ref: "#/components/responses/500"},
+							"501": {Ref: "#/components/responses/501"},
+							"503": {Ref: "#/components/responses/503"},
+							"555": {Ref: "#/components/responses/555"},
+						},
+					},
+				}
+				api.Paths[fmt.Sprintf("/%s/%s", document.Name, fn.Name)] = path
+			}
+		}
+	}
+	return
+}
 
 func codeErrOpenapiSchema() *oas.Schema {
 	return &oas.Schema{
@@ -303,6 +444,97 @@ func healthPath() (uri string, path *oas.Path) {
 				"503": {Ref: "#/components/responses/503"},
 			},
 		},
+	}
+	return
+}
+
+func ElementSchema(element Element) (v *oas.Schema) {
+	// fns
+	if element.isRef() {
+		v = oas.RefSchema(element.Key())
+		return
+	}
+	v = &oas.Schema{
+		Key:         element.Key(),
+		Title:       element.Title,
+		Description: "",
+		Type:        element.Type,
+		Required:    nil,
+		Format:      element.Format,
+		Enum: func(enums []string) (v []interface{}) {
+			if enums == nil || len(enums) == 0 {
+				return
+			}
+			v = make([]interface{}, 0, len(enums))
+			for _, enum := range enums {
+				v = append(v, enum)
+			}
+			return
+		}(element.Enums),
+		Properties:           nil,
+		Items:                nil,
+		AdditionalProperties: nil,
+		Deprecated:           element.Deprecated,
+		Ref:                  "",
+	}
+	// Description
+	description := "### Description" + "\n"
+	description = description + element.Description + " "
+	if element.Validation.Enable {
+		description = description + "\n\n***Validation***" + " "
+		description = description + "`" + element.Validation.Name + "`" + " "
+		if element.Validation.I18ns != nil && len(element.Validation.I18ns) > 0 {
+			description = description + "\n"
+			i18nKeys := make([]string, 0, 1)
+			for _, i18n := range element.Validation.I18ns {
+				i18nKeys = append(i18nKeys, i18n.Name)
+			}
+			sort.Strings(i18nKeys)
+			for _, i18nKey := range i18nKeys {
+				i18nValue, hasI18nValue := element.Validation.I18ns.Get(i18nKey)
+				if hasI18nValue {
+					description = description + "  " + i18nKey + ": " + i18nValue + "\n"
+				}
+			}
+		}
+	}
+	if element.Enums != nil && len(element.Enums) > 0 {
+		description = description + "\n\n***Enum***" + " "
+		description = description + fmt.Sprintf("[%s]", strings.Join(element.Enums, ", ")) + " "
+	}
+	v.Description = description
+	// builtin
+	if element.isBuiltin() {
+		return
+	}
+	// object
+	if element.isObject() && !element.isEmpty() {
+		required := make([]string, 0, 1)
+		v.Properties = make(map[string]*oas.Schema)
+		for _, prop := range element.Properties {
+			if prop.Element.Required {
+				required = append(required, prop.Name)
+			}
+			v.Properties[prop.Name] = ElementSchema(prop.Element)
+		}
+		v.Required = required
+		return
+	}
+	// array
+	if element.isArray() {
+		item, hasItem := element.getItem()
+		if hasItem {
+			v.Items = ElementSchema(item)
+		}
+		return
+	}
+	// map
+	if element.isAdditional() {
+		item, hasItem := element.getItem()
+		if hasItem {
+			v.AdditionalProperties = ElementSchema(item)
+		}
+		return
 	}
 	return
 }

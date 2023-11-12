@@ -48,6 +48,10 @@ type Document struct {
 	Elements Elements `json:"elements"`
 }
 
+func (doc *Document) IsEmpty() bool {
+	return doc.Name == ""
+}
+
 func (doc *Document) AddFn(fn Fn) {
 	if fn.Param.Exist() {
 		paramRef := doc.addElement(fn.Param)

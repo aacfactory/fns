@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-func NewRegistration(id []byte, name []byte, version versions.Version, internal bool, document *documents.Document, client transports.Client, signature signatures.Signature) (v *Registration) {
+func NewRegistration(id []byte, name []byte, version versions.Version, internal bool, document documents.Document, client transports.Client, signature signatures.Signature) (v *Registration) {
 	v = &Registration{
 		id:        id,
 		name:      name,
@@ -40,7 +40,7 @@ type Registration struct {
 	name      []byte
 	version   versions.Version
 	internal  bool
-	document  *documents.Document
+	document  documents.Document
 	client    transports.Client
 	signature signatures.Signature
 	closed    *atomic.Bool
@@ -57,7 +57,7 @@ func (registration *Registration) Internal() (ok bool) {
 	return
 }
 
-func (registration *Registration) Document() (document *documents.Document) {
+func (registration *Registration) Document() (document documents.Document) {
 	document = registration.document
 	return
 }

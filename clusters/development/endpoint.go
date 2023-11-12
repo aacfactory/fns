@@ -16,7 +16,7 @@ import (
 	"net/http"
 )
 
-func NewEndpoint(name []byte, internal bool, document *documents.Document, client transports.Client, signature signatures.Signature) services.Endpoint {
+func NewEndpoint(name []byte, internal bool, document documents.Document, client transports.Client, signature signatures.Signature) services.Endpoint {
 	return &Endpoint{
 		name:      bytex.ToString(name),
 		internal:  internal,
@@ -29,7 +29,7 @@ func NewEndpoint(name []byte, internal bool, document *documents.Document, clien
 type Endpoint struct {
 	name      string
 	internal  bool
-	document  *documents.Document
+	document  documents.Document
 	client    transports.Client
 	signature signatures.Signature
 }
@@ -44,7 +44,7 @@ func (endpoint *Endpoint) Internal() (ok bool) {
 	return
 }
 
-func (endpoint *Endpoint) Document() (document *documents.Document) {
+func (endpoint *Endpoint) Document() (document documents.Document) {
 	document = endpoint.document
 	return
 }

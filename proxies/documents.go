@@ -9,6 +9,7 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"golang.org/x/sync/singleflight"
 	"net/http"
+	"sort"
 )
 
 const (
@@ -65,8 +66,12 @@ func (handler *DocumentsHandler) Handle(w transports.ResponseWriter, r transport
 		infos := rt.Discovery().Endpoints(r)
 		docs := make(documents.VersionSortedDocuments, 0, 1)
 		for _, info := range infos {
+			if info.Document.IsEmpty() {
+				continue
+			}
 			docs = docs.Add(info.Id, info.Document)
 		}
+		sort.Sort(docs)
 		v = docs
 		return
 	})

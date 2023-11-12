@@ -44,7 +44,7 @@ func New(id string, version versions.Version, log logs.Logger, config Config, wo
 		id:        bytex.FromString(id),
 		version:   version,
 		doc:       documents.NewDocuments(bytex.FromString(id), version),
-		values:    make(map[string]Endpoint),
+		values:    make(SortEndpoints, 0, 1),
 		discovery: discovery,
 		group:     new(singleflight.Group),
 		worker:    worker,
@@ -56,8 +56,8 @@ type Services struct {
 	config    Config
 	id        []byte
 	version   versions.Version
-	doc       *documents.Documents
-	values    map[string]Endpoint
+	doc       documents.Documents
+	values    SortEndpoints
 	discovery Discovery
 	group     *singleflight.Group
 	worker    workers.Workers
@@ -65,7 +65,7 @@ type Services struct {
 
 func (s *Services) Add(service Service) (err error) {
 	name := strings.TrimSpace(service.Name())
-	if _, has := s.values[name]; has {
+	if _, has := s.values.Find(name); has {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(fmt.Errorf("service has added"))
 		return
 	}
@@ -82,15 +82,15 @@ func (s *Services) Add(service Service) (err error) {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(constructErr)
 		return
 	}
-	s.values[name] = service
+	s.values = s.values.Add(service)
 	doc := service.Document()
-	if doc != nil && !service.Internal() {
+	if !doc.IsEmpty() && !service.Internal() {
 		s.doc.Add(doc)
 	}
 	return
 }
 
-func (s *Services) Documents() (v *documents.Documents) {
+func (s *Services) Documents() (v documents.Documents) {
 	v = s.doc
 	return
 }
@@ -116,7 +116,7 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 	var endpoint Endpoint
 	remoted := false
 	if len(req.Header().EndpointId()) == 0 {
-		local, inLocal := s.values[bytex.ToString(name)]
+		local, inLocal := s.values.Find(bytex.ToString(name))
 		if inLocal {
 			// internal
 			if local.Internal() {
@@ -151,7 +151,7 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 		}
 	} else {
 		if bytes.Equal(s.id, req.Header().EndpointId()) {
-			local, inLocal := s.values[bytex.ToString(name)]
+			local, inLocal := s.values.Find(bytex.ToString(name))
 			if inLocal {
 				// internal
 				if local.Internal() {
@@ -304,7 +304,7 @@ func (s *Services) Shutdown(ctx sc.Context) {
 }
 
 func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {
-	local, has := s.values[tracing.EndpointName]
+	local, has := s.values.Find(tracing.EndpointName)
 	if has {
 		return local
 	}
@@ -319,7 +319,7 @@ func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {
 }
 
 func (s *Services) metricEndpoint(ctx sc.Context) Endpoint {
-	local, has := s.values[metrics.EndpointName]
+	local, has := s.values.Find(metrics.EndpointName)
 	if has {
 		return local
 	}

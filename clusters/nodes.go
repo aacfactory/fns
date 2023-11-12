@@ -11,13 +11,13 @@ import (
 	"io"
 )
 
-func NewEndpointInfo(name string, internal bool, document *documents.Document) (info EndpointInfo, err error) {
+func NewEndpointInfo(name string, internal bool, document documents.Document) (info EndpointInfo, err error) {
 	info = EndpointInfo{
 		Name:        name,
 		Internal:    internal,
 		DocumentRaw: nil,
 	}
-	if !internal && document != nil {
+	if !internal && !document.IsEmpty() {
 		p, encodeErr := json.Marshal(document)
 		if encodeErr != nil {
 			err = errors.Warning("fns: new endpoint info failed").WithCause(encodeErr)
@@ -43,7 +43,7 @@ type EndpointInfo struct {
 	DocumentRaw []byte `json:"document"`
 }
 
-func (info EndpointInfo) Document() (document *documents.Document, err error) {
+func (info EndpointInfo) Document() (document documents.Document, err error) {
 	if info.Internal || len(info.DocumentRaw) == 0 {
 		return
 	}
@@ -59,8 +59,8 @@ func (info EndpointInfo) Document() (document *documents.Document, err error) {
 		return
 	}
 	_ = r.Close()
-	document = new(documents.Document)
-	decodeErr := json.Unmarshal(p, document)
+	document = documents.Document{}
+	decodeErr := json.Unmarshal(p, &document)
 	if decodeErr != nil {
 		err = errors.Warning("fns: endpoint info get document failed").WithCause(decodeErr)
 		return

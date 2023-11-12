@@ -78,9 +78,9 @@ type DiscoveryGetParam struct {
 }
 
 type DiscoveryGetResult struct {
-	Has      bool                `json:"has"`
-	Internal bool                `json:"internal"`
-	Document *documents.Document `json:"document"`
+	Has      bool               `json:"has"`
+	Internal bool               `json:"internal"`
+	Document documents.Document `json:"document"`
 }
 
 func (discovery *Discovery) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
@@ -179,7 +179,6 @@ func (handler *DiscoveryHandler) Handle(w transports.ResponseWriter, r transport
 		result := DiscoveryGetResult{
 			Has:      has,
 			Internal: false,
-			Document: nil,
 		}
 		if has {
 			result.Internal = endpoint.Internal()

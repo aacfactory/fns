@@ -23,7 +23,7 @@ import (
 	"sort"
 )
 
-type NameSortedDocuments []*Document
+type NameSortedDocuments []Document
 
 func (documents NameSortedDocuments) Len() int {
 	return len(documents)
@@ -38,7 +38,7 @@ func (documents NameSortedDocuments) Swap(i, j int) {
 	return
 }
 
-type VersionSortedDocuments []*Documents
+type VersionSortedDocuments []Documents
 
 func (documents VersionSortedDocuments) Len() int {
 	return len(documents)
@@ -52,7 +52,7 @@ func (documents VersionSortedDocuments) Swap(i, j int) {
 	documents[i], documents[j] = documents[j], documents[i]
 }
 
-func (documents VersionSortedDocuments) Add(id []byte, doc *Document) VersionSortedDocuments {
+func (documents VersionSortedDocuments) Add(id []byte, doc Document) VersionSortedDocuments {
 	for _, document := range documents {
 		if document.Id == bytex.ToString(id) {
 			document.Add(doc)
@@ -66,8 +66,8 @@ func (documents VersionSortedDocuments) Add(id []byte, doc *Document) VersionSor
 	return n
 }
 
-func NewDocuments(id []byte, version versions.Version) *Documents {
-	return &Documents{
+func NewDocuments(id []byte, version versions.Version) Documents {
+	return Documents{
 		Id:        string(id),
 		Version:   version,
 		Endpoints: make(NameSortedDocuments, 0, 1),
@@ -80,19 +80,19 @@ type Documents struct {
 	Endpoints NameSortedDocuments `json:"endpoints"`
 }
 
-func (documents *Documents) Add(doc *Document) {
-	if doc == nil {
+func (documents *Documents) Add(doc Document) {
+	if doc.IsEmpty() {
 		return
 	}
 	documents.Endpoints = append(documents.Endpoints, doc)
 	sort.Sort(documents.Endpoints)
 }
 
-func (documents *Documents) Get(name []byte) (v *Document) {
+func (documents *Documents) Get(name []byte) (v Document) {
 	for _, endpoint := range documents.Endpoints {
 		if bytes.Equal(name, bytex.FromString(endpoint.Name)) {
 			return endpoint
 		}
 	}
-	return nil
+	return Document{}
 }

@@ -1,9 +1,20 @@
 package cachecontrol
 
 import (
+	"bytes"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
+	"github.com/cespare/xxhash/v2"
+	"github.com/valyala/bytebufferpool"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+var (
+	nilBodyETag = []byte(strconv.FormatUint(xxhash.Sum64([]byte("nil")), 16))
 )
 
 func NewWithCache(cache Cache) transports.Middleware {
@@ -15,6 +26,10 @@ func NewWithCache(cache Cache) transports.Middleware {
 func New() transports.Middleware {
 	return NewWithCache(new(DefaultCache))
 }
+
+var (
+	getMethod = []byte("GET")
+)
 
 type Middleware struct {
 	log    logs.Logger
@@ -46,9 +61,94 @@ func (middleware *Middleware) Construct(options transports.MiddlewareOptions) (e
 func (middleware *Middleware) Handler(next transports.Handler) transports.Handler {
 	if middleware.enable {
 		return transports.HandlerFunc(func(writer transports.ResponseWriter, request transports.Request) {
-			//cc := request.Header().Get(bytex.FromString(transports.CacheControlHeaderName))
-			// 1. check cache control
-			// when enabled, then add cache
+			isGet := bytes.Equal(request.Method(), getMethod)
+			if !isGet {
+				next.Handle(writer, request)
+				return
+			}
+			// request key
+			var key []byte
+			// if-no-match
+			if inm := request.Header().Get(bytex.FromString(transports.CacheControlHeaderIfNonMatch)); len(inm) > 0 {
+				key = hashRequest(request)
+				etag, hasEtag, getErr := middleware.cache.Get(request, key)
+				if getErr != nil {
+					if middleware.log.WarnEnabled() {
+						middleware.log.Warn().
+							With("middleware", "cachecontrol").
+							Cause(errors.Warning("fns: get etag from cache store failed").WithCause(getErr)).
+							Message("get etag from cache store failed")
+					}
+					next.Handle(writer, request)
+					return
+				}
+				if hasEtag && bytes.Equal(etag, inm) {
+					writer.SetStatus(http.StatusNotModified)
+					return
+				}
+			}
+
+			// next
+			next.Handle(writer, request)
+			// check response
+			cch := writer.Header().Get(bytex.FromString(transports.CacheControlHeaderName))
+			if len(cch) == 0 {
+				return
+			}
+			maxAgeValue := 0
+			hasMaxAge := false
+			if idx := bytes.Index(cch, maxAge); idx > -1 {
+				segment := cch[idx+8:]
+				commaIdx := bytes.IndexByte(segment, ',')
+				if commaIdx > 0 {
+					segment = segment[:commaIdx]
+				}
+				ma, parseErr := strconv.Atoi(bytex.ToString(segment))
+				if parseErr == nil {
+					maxAgeValue = ma
+					hasMaxAge = true
+				} else {
+					// remove invalid max-age
+					if idx == 0 {
+						cch = cch[idx+8+commaIdx+1:]
+					} else {
+						cch = append(cch[:idx], cch[idx+8+commaIdx+1:]...)
+					}
+				}
+			}
+			if !hasMaxAge {
+				maxAgeValue = middleware.maxAge
+				cch = append(cch, ',', ' ')
+				cch = append(cch, maxAge...)
+				cch = append(cch, '=')
+				cch = append(cch, bytex.FromString(strconv.Itoa(maxAgeValue))...)
+				writer.Header().Set(bytex.FromString(transports.CacheControlHeaderName), cch)
+			}
+			if len(key) == 0 {
+				key = hashRequest(request)
+			}
+			// etag
+			var etag []byte
+			if bodyLen := writer.BodyLen(); bodyLen == 0 {
+				etag = nilBodyETag
+			} else {
+				body := writer.Body()
+				etag = bytex.FromString(strconv.FormatUint(xxhash.Sum64(body), 16))
+			}
+			setErr := middleware.cache.Set(request, key, etag, time.Duration(maxAgeValue)*time.Second)
+			if setErr == nil {
+				writer.Header().Set(bytex.FromString(transports.ETagHeaderName), etag)
+			} else {
+				if middleware.log.WarnEnabled() {
+					middleware.log.Warn().
+						With("middleware", "cachecontrol").
+						Cause(errors.Warning("fns: set etag into cache store failed").WithCause(setErr)).
+						Message("set etag into cache store failed")
+				}
+				// use no-cache
+				writer.Header().Set(bytex.FromString(transports.CacheControlHeaderName), bytex.FromString(transports.CacheControlHeaderNoCache))
+				writer.Header().Set(pragma, bytex.FromString(transports.CacheControlHeaderNoCache))
+			}
 		})
 	}
 	return next
@@ -56,5 +156,22 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 
 func (middleware *Middleware) Close() {
 	middleware.cache.Close()
+	return
+}
+
+func hashRequest(r transports.Request) (p []byte) {
+	b := bytebufferpool.Get()
+	// path
+	_, _ = b.Write(r.Path())
+	// param
+	param := r.Params()
+	_, _ = b.Write(param.Encode())
+	// authorization
+	if authorization := r.Header().Get(bytex.FromString(transports.AuthorizationHeaderName)); len(authorization) > 0 {
+		_, _ = b.Write(authorization)
+	}
+	pp := b.Bytes()
+	p = bytex.FromString(strconv.FormatUint(xxhash.Sum64(pp), 16))
+	bytebufferpool.Put(b)
 	return
 }

@@ -117,7 +117,7 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 	if len(opt.header.processId) == 0 {
 		opt.header.processId = uid.Bytes()
 	}
-	parent, hasParent := tryLoadRequest(ctx)
+	parent, hasParent := TryLoadRequest(ctx)
 	if hasParent {
 		header := parent.Header()
 		if len(opt.header.requestId) == 0 && len(header.requestId) > 0 {
@@ -240,7 +240,7 @@ func (r *request) Hash() (p []byte) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func tryLoadRequest(ctx sc.Context) (r Request, ok bool) {
+func TryLoadRequest(ctx sc.Context) (r Request, ok bool) {
 	r, ok = ctx.(Request)
 	return
 }

@@ -202,7 +202,7 @@ type Element struct {
 	Format      string     `json:"format,omitempty"`
 	Enums       []string   `json:"enums,omitempty"`
 	Required    bool       `json:"required,omitempty"`
-	Validation  Validation `json:"validation,omitempty"` // todo use string (non, name)
+	Validation  Validation `json:"validation,omitempty"`
 	Properties  Properties `json:"properties,omitempty"`
 	Additional  bool       `json:"additional,omitempty"`
 	Deprecated  bool       `json:"deprecated,omitempty"`

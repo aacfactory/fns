@@ -24,7 +24,7 @@ import (
 
 func NewElement(path string, name string, typ string, format string, title string, description string) Element {
 	return Element{
-		Non:         false,
+		Nil:         false,
 		Path:        path,
 		Name:        name,
 		Title:       title,
@@ -149,7 +149,7 @@ func JsonRaw() Element {
 
 func Nil() Element {
 	return Element{
-		Non: true,
+		Nil: true,
 	}
 }
 
@@ -193,7 +193,7 @@ type ElementValidation struct {
 }
 
 type Element struct {
-	Non         bool       `json:"non"`
+	Nil         bool       `json:"non"`
 	Path        string     `json:"path,omitempty"`
 	Name        string     `json:"name,omitempty"`
 	Title       string     `json:"title,omitempty"`
@@ -209,7 +209,7 @@ type Element struct {
 }
 
 func (element Element) Exist() bool {
-	return !element.Non || element.Type != ""
+	return !element.Nil || element.Type != ""
 }
 
 func (element Element) SetPath(path string) Element {

@@ -12,7 +12,8 @@ func New() transports.Middleware {
 
 // Middleware
 // todo
-// 内置（或者直接改handler），然后通过service的doc来做路由（或者endpointInfos，然后info里增加fn，来自doc），abstract service 不再提供document的
+// 1. 内置（或者直接改handler），然后通过service的doc来做路由（或者endpointInfos，然后info里增加fn，来自doc），abstract service 不再提供document的
+// 2. 不改endpointInfo，handler里放endpointInfo，然后path的第一个segment是命中就完事，abstract service也不改
 // 关于internal的doc，参数和结果用any
 // 修改argument，重名parameter。value支持Decode（v）的接口，tr的param实现Decode，然后不再用body
 // @get

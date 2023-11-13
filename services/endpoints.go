@@ -57,6 +57,16 @@ func (s SortEndpoints) Add(v Endpoint) SortEndpoints {
 
 func (s SortEndpoints) Find(name string) (v Endpoint, found bool) {
 	n := s.Len()
+	if n < 9 {
+		for _, endpoint := range s {
+			if endpoint.Name() == name {
+				v = endpoint
+				found = true
+				break
+			}
+		}
+		return
+	}
 	i, j := 0, n
 	for i < j {
 		h := int(uint(i+j) >> 1)

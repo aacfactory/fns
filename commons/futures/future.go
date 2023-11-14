@@ -3,8 +3,6 @@ package futures
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/objects"
-	"github.com/aacfactory/json"
 	"sync"
 )
 
@@ -17,22 +15,16 @@ type Future interface {
 	Get(ctx context.Context) (result Result, err error)
 }
 
-type Result interface {
-	json.Marshaler
-	Exist() (ok bool)
-	Scan(v interface{}) (err error)
-}
-
 var (
 	pool = sync.Pool{
 		New: func() any {
-			return make(chan result, 1)
+			return make(chan value, 1)
 		},
 	}
 )
 
 func New() (p Promise, f Future) {
-	ch := pool.Get().(chan result)
+	ch := pool.Get().(chan value)
 	p = promise{
 		ch: ch,
 	}
@@ -42,17 +34,17 @@ func New() (p Promise, f Future) {
 	return
 }
 
-type result struct {
+type value struct {
 	val any
 	err error
 }
 
 type promise struct {
-	ch chan result
+	ch chan value
 }
 
 func (p promise) Succeed(v interface{}) {
-	p.ch <- result{
+	p.ch <- value{
 		val: v,
 	}
 }
@@ -61,13 +53,13 @@ func (p promise) Failed(err error) {
 	if err == nil {
 		err = errors.Warning("fns: empty failed result").WithMeta("fns", "futures")
 	}
-	p.ch <- result{
+	p.ch <- value{
 		err: err,
 	}
 }
 
 type future struct {
-	ch chan result
+	ch chan value
 }
 
 func (f future) Get(ctx context.Context) (r Result, err error) {
@@ -85,7 +77,9 @@ func (f future) Get(ctx context.Context) (r Result, err error) {
 			err = data.err
 			break
 		}
-		r = objects.NewScanner(data.val)
+		r = result{
+			value: data.val,
+		}
 		break
 	}
 	return

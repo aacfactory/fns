@@ -72,12 +72,17 @@ func (ver Version) LessThan(o Version) (ok bool) {
 		ok = true
 		return
 	}
-	if ver.Minor < o.Minor {
-		ok = true
-		return
-	}
-	if ver.Patch < o.Patch {
-		ok = true
+	if ver.Major == o.Major {
+		if ver.Minor < o.Minor {
+			ok = true
+			return
+		}
+		if ver.Minor == o.Minor {
+			if ver.Patch < o.Patch {
+				ok = true
+				return
+			}
+		}
 		return
 	}
 	return

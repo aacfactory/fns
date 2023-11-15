@@ -19,6 +19,7 @@ func Acquire(ctx context.Context) Context {
 		return &context_{
 			Context: ctx,
 			entries: make(Entries, 0, 1),
+			locals:  make(Entries, 0, 1),
 		}
 	}
 	v := cached.(*context_)
@@ -31,6 +32,7 @@ func Release(ctx context.Context) {
 	if ok {
 		v.Context = nil
 		v.entries.Reset()
+		v.locals.Reset()
 		pool.Put(v)
 	}
 }
@@ -38,14 +40,15 @@ func Release(ctx context.Context) {
 func WithValue(parent context.Context, key []byte, val any) Context {
 	ctx, ok := parent.(Context)
 	if ok {
-		ctx.SetUserValue(key, val)
+		ctx.SetLocalValue(key, val)
 		return ctx
 	}
 	ctx = &context_{
 		Context: ctx,
 		entries: make(Entries, 0, 1),
+		locals:  make(Entries, 0, 1),
 	}
-	ctx.SetUserValue(key, val)
+	ctx.SetLocalValue(key, val)
 	return ctx
 }
 
@@ -70,11 +73,15 @@ type Context interface {
 	ScanUserValue(key []byte, val any) (has bool, err error)
 	SetUserValue(key []byte, val any)
 	UserValues(fn func(key []byte, val any))
+	LocalValue(key []byte) any
+	ScanLocalValue(key []byte, val any) (has bool, err error)
+	SetLocalValue(key []byte, val any)
 }
 
 type context_ struct {
 	context.Context
 	entries Entries
+	locals  Entries
 }
 
 func (c *context_) UserValue(key []byte) any {
@@ -116,18 +123,56 @@ func (c *context_) UserValues(fn func(key []byte, val any)) {
 	c.entries.Foreach(fn)
 }
 
+func (c *context_) LocalValue(key []byte) any {
+	v := c.locals.Get(key)
+	if v != nil {
+		return v
+	}
+	parent, ok := c.Context.(Context)
+	if ok {
+		return parent.LocalValue(key)
+	}
+	return nil
+}
+
+func (c *context_) ScanLocalValue(key []byte, val any) (has bool, err error) {
+	v := c.LocalValue(key)
+	if v == nil {
+		return
+	}
+	s := scanner.New(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
+}
+
+func (c *context_) SetLocalValue(key []byte, val any) {
+	c.locals.Set(key, val)
+}
+
 func (c *context_) Value(key any) any {
 	switch k := key.(type) {
 	case []byte:
 		v := c.entries.Get(k)
 		if v == nil {
-			return c.Context.Value(key)
+			v = c.locals.Get(k)
+			if v == nil {
+				return c.Context.Value(key)
+			}
 		}
 		return v
 	case string:
-		v := c.entries.Get(unsafe.Slice(unsafe.StringData(k), len(k)))
+		s := unsafe.Slice(unsafe.StringData(k), len(k))
+		v := c.entries.Get(s)
 		if v == nil {
-			return c.Context.Value(key)
+			v = c.locals.Get(s)
+			if v == nil {
+				return c.Context.Value(key)
+			}
 		}
 		return v
 	default:

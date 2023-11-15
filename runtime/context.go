@@ -5,23 +5,22 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/workers"
 	"time"
 )
 
-const (
-	contextKey = "@fns:context:runtime"
+var (
+	contextKey = []byte("@fns:context:runtime")
 )
 
-func With(ctx sc.Context, rt *Runtime) sc.Context {
-	return context.WithValue(ctx, bytex.FromString(contextKey), rt)
+func With(ctx context.Context, rt *Runtime) {
+	ctx.SetLocalValue(contextKey, rt)
 }
 
-func Load(ctx sc.Context) *Runtime {
-	v := ctx.Value(contextKey)
+func Load(ctx context.Context) *Runtime {
+	v := ctx.LocalValue(contextKey)
 	if v == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: there is no runtime in context")))
 		return nil
@@ -34,17 +33,17 @@ func Load(ctx sc.Context) *Runtime {
 	return rt
 }
 
-func TryExecute(ctx sc.Context, task workers.Task) bool {
+func TryExecute(ctx context.Context, task workers.Task) bool {
 	rt := Load(ctx)
-	return rt.TryExecute(ctx, task)
+	return rt.TryExecute(sc.TODO(), task)
 }
 
-func Execute(ctx sc.Context, task workers.Task) {
+func Execute(ctx context.Context, task workers.Task) {
 	rt := Load(ctx)
-	rt.Execute(ctx, task)
+	rt.Execute(sc.TODO(), task)
 }
 
-func Barrier(ctx sc.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {
+func Barrier(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {
 	rt := Load(ctx)
 	barrier := rt.Barrier()
 	result, err = barrier.Do(ctx, key, fn)
@@ -52,13 +51,13 @@ func Barrier(ctx sc.Context, key []byte, fn func() (result interface{}, err erro
 	return
 }
 
-func AcquireLocker(ctx sc.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
+func AcquireLocker(ctx context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
 	rt := Load(ctx)
 	locker, err = rt.Shared().Lockers().Acquire(ctx, key, ttl)
 	return
 }
 
-func SharedStore(ctx sc.Context) (store shareds.Store) {
+func SharedStore(ctx context.Context) (store shareds.Store) {
 	rt := Load(ctx)
 	store = rt.Shared().Store()
 	return

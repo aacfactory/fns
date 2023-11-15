@@ -108,9 +108,16 @@ func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 }
 
 type Endpoints interface {
-	Info() (infos []EndpointInfo)
+	Info() (infos EndpointInfos)
 	Get(ctx context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
 	Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error)
+}
+
+type EndpointsManager interface {
+	Endpoints
+	Add(service Service) (err error)
+	Listen(ctx context.Context) (err error)
+	Shutdown(ctx context.Context)
 }
 
 type Deployed []Endpoint

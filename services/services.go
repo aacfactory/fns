@@ -17,7 +17,6 @@
 package services
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -35,7 +34,7 @@ import (
 	"time"
 )
 
-func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers) *Services {
+func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers) EndpointsManager {
 	return &Services{
 		log:     log.With("fns", "services"),
 		config:  config,
@@ -213,7 +212,7 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param in
 	return
 }
 
-func (s *Services) Listen(ctx sc.Context) (err error) {
+func (s *Services) Listen(ctx context.Context) (err error) {
 	errs := errors.MakeErrors()
 	for _, endpoint := range s.values {
 		ln, ok := endpoint.(Listenable)

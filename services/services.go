@@ -17,55 +17,47 @@
 package services
 
 import (
-	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/services/documents"
-	"github.com/aacfactory/fns/services/metrics"
-	"github.com/aacfactory/fns/services/tracing"
+	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/log"
+	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
-	"golang.org/x/sync/singleflight"
 	"net/http"
-	"strconv"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
-func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers, discovery Discovery) *Services {
+func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers) *Services {
 	return &Services{
-		log:       log.With("fns", "services"),
-		config:    config,
-		id:        bytex.FromString(id),
-		version:   version,
-		doc:       documents.NewDocuments(bytex.FromString(id), version),
-		values:    make(SortEndpoints, 0, 1),
-		discovery: discovery,
-		group:     new(singleflight.Group),
-		worker:    worker,
+		log:     log.With("fns", "services"),
+		config:  config,
+		id:      id,
+		version: version,
+		values:  make(Deployed, 0, 1),
+		worker:  worker,
 	}
 }
 
 type Services struct {
-	log       logs.Logger
-	config    Config
-	id        []byte
-	version   versions.Version
-	doc       documents.Documents
-	values    SortEndpoints
-	discovery Discovery
-	group     *singleflight.Group
-	worker    workers.Workers
+	log     logs.Logger
+	config  Config
+	id      string
+	version versions.Version
+	values  Deployed
+	worker  workers.Workers
 }
 
 func (s *Services) Add(service Service) (err error) {
 	name := strings.TrimSpace(service.Name())
-	if _, has := s.values.Find(name); has {
+	if _, has := s.values.Find([]byte(name)); has {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(fmt.Errorf("service has added"))
 		return
 	}
@@ -83,19 +75,59 @@ func (s *Services) Add(service Service) (err error) {
 		return
 	}
 	s.values = s.values.Add(service)
-	doc := service.Document()
-	if !doc.IsEmpty() && !service.Internal() {
-		s.doc.Add(doc)
+	return
+}
+
+func (s *Services) Info() (infos EndpointInfos) {
+	infos = make(EndpointInfos, 0, s.values.Len())
+	for _, value := range s.values {
+		internal := value.Internal()
+		functions := make(FnInfos, 0, len(value.Functions()))
+		for _, fn := range value.Functions() {
+			functions = append(functions, FnInfo{
+				Name:     fn.Name(),
+				Readonly: fn.Readonly(),
+				Internal: internal || fn.Internal(),
+			})
+		}
+		infos = append(infos, EndpointInfo{
+			Id:        s.id,
+			Name:      value.Name(),
+			Version:   s.version,
+			Internal:  internal,
+			Functions: functions,
+			Document:  value.Document(),
+		})
 	}
+	sort.Sort(infos)
 	return
 }
 
-func (s *Services) Documents() (v documents.Documents) {
-	v = s.doc
+func (s *Services) Get(_ context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool) {
+	if len(options) > 0 {
+		opt := EndpointGetOptions{
+			id:              nil,
+			requestVersions: nil,
+		}
+		for _, option := range options {
+			option(&opt)
+		}
+		if len(opt.id) > 0 {
+			if s.id != string(opt.id) {
+				return
+			}
+		}
+		if len(opt.requestVersions) > 0 {
+			if !opt.requestVersions.Accept(name, s.version) {
+				return
+			}
+		}
+	}
+	endpoint, has = s.values.Find(name)
 	return
 }
 
-func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument, options ...RequestOption) (response Response, err error) {
+func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error) {
 	// valid params
 	if len(name) == 0 {
 		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
@@ -105,90 +137,23 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
 		return
 	}
-	if arg == nil {
-		arg = NewArgument(nil)
-	}
 
 	// request
-	req := AcquireRequest(ctx, name, fn, arg, options...)
+	req := AcquireRequest(ctx, name, fn, param, options...)
 
-	// endpoint
-	var endpoint Endpoint
-	remoted := false
-	if len(req.Header().EndpointId()) == 0 {
-		local, inLocal := s.values.Find(bytex.ToString(name))
-		if inLocal {
-			// internal
-			if local.Internal() {
-				if !req.Header().Internal() {
-					err = errors.NotFound("fns: endpoint was not found").
-						WithCause(fmt.Errorf("version was not match")).
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn))
-					ReleaseRequest(req)
-					return
-				}
-			}
-			// accept versions
-			accepted := req.Header().AcceptedVersions().Accept(name, s.version)
-			if !accepted {
-				err = errors.NotFound("fns: endpoint was not found").
-					WithCause(fmt.Errorf("version was not match")).
-					WithMeta("service", bytex.ToString(name)).
-					WithMeta("fn", bytex.ToString(fn))
-				ReleaseRequest(req)
-				return
-			}
-			endpoint = local
-		} else {
-			if req.Header().Internal() && s.discovery != nil {
-				remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()))
-				if fetched {
-					endpoint = remote
-					remoted = true
-				}
-			}
-		}
-	} else {
-		if bytes.Equal(s.id, req.Header().EndpointId()) {
-			local, inLocal := s.values.Find(bytex.ToString(name))
-			if inLocal {
-				// internal
-				if local.Internal() {
-					if !req.Header().Internal() {
-						err = errors.NotFound("fns: endpoint was not found").
-							WithCause(fmt.Errorf("version was not match")).
-							WithMeta("service", bytex.ToString(name)).
-							WithMeta("fn", bytex.ToString(fn))
-						ReleaseRequest(req)
-						return
-					}
-				}
-				// accept versions
-				accepted := req.Header().AcceptedVersions().Accept(name, s.version)
-				if !accepted {
-					err = errors.NotFound("fns: endpoint was not found").
-						WithCause(fmt.Errorf("version was not match")).
-						WithMeta("service", bytex.ToString(name)).
-						WithMeta("fn", bytex.ToString(fn)).
-						WithMeta("endpointId", bytex.ToString(req.Header().EndpointId()))
-					ReleaseRequest(req)
-					return
-				}
-				endpoint = local
-			}
-		} else {
-			if req.Header().Internal() && s.discovery != nil {
-				remote, fetched := s.discovery.Get(ctx, name, EndpointVersions(req.Header().AcceptedVersions()), EndpointId(req.Header().EndpointId()))
-				if fetched {
-					endpoint = remote
-					remoted = true
-				}
-			}
-		}
+	var endpointGetOptions []EndpointGetOption
+	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
+		endpointGetOptions = make([]EndpointGetOption, 0, 1)
+		endpointGetOptions = append(endpointGetOptions, EndpointId(endpointId))
 	}
-
-	if endpoint == nil {
+	if acceptedVersions := req.Header().AcceptedVersions(); len(acceptedVersions) > 0 {
+		if endpointGetOptions == nil {
+			endpointGetOptions = make([]EndpointGetOption, 0, 1)
+		}
+		endpointGetOptions = append(endpointGetOptions, EndpointVersions(acceptedVersions))
+	}
+	endpoint, found := s.Get(ctx, name, endpointGetOptions...)
+	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
 			WithMeta("service", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
@@ -196,41 +161,45 @@ func (s *Services) Request(ctx sc.Context, name []byte, fn []byte, arg Argument,
 		return
 	}
 
-	// ctx
+	function, hasFunction := endpoint.Functions().Find(fn)
+	if !hasFunction {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("service", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		ReleaseRequest(req)
+		return
+	}
+
+	// ctx >>>
 	ctx = req
-
-	// tracer begin
-	traceEndpoint := s.traceEndpoint(ctx)
-	if traceEndpoint != nil && len(req.Header().RequestId()) > 0 {
-		ctx = tracing.Begin(
-			ctx,
-			req.Header().RequestId(), req.Header().ProcessId(),
-			name, fn,
-			"internal", strconv.FormatBool(req.Header().Internal()),
-			"hostId", bytex.ToString(s.id),
-			"remoted", strconv.FormatBool(remoted),
-		)
+	// log
+	log.With(ctx, s.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	// components
+	service, ok := endpoint.(Service)
+	if ok {
+		components := service.Components()
+		if len(components) > 0 {
+			WithComponents(ctx, components)
+		}
 	}
-
-	// metric begin
-	metricEndpoint := s.metricEndpoint(ctx)
-	if metricEndpoint != nil {
-		ctx = metrics.Begin(ctx, name, fn, req.Header().DeviceId(), req.Header().DeviceIp(), remoted)
+	// ctx <<<
+	// tracing
+	trace, hasTrace := tracings.Load(ctx)
+	if hasTrace {
+		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
 	}
-
 	// promise
 	promise, future := futures.New()
 	// dispatch
 	dispatched := s.worker.Dispatch(ctx, fnTask{
-		log:            s.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)),
-		group:          s.group,
-		worker:         s.worker,
-		traceEndpoint:  traceEndpoint,
-		metricEndpoint: metricEndpoint,
-		endpoint:       endpoint,
-		promise:        promise,
+		fn:      function,
+		promise: promise,
 	})
 	if !dispatched {
+		// tracing
+		if hasTrace {
+			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
+		}
 		promise.Failed(
 			errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
 				WithMeta("service", bytex.ToString(name)).
@@ -250,9 +219,11 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 			continue
 		}
 		errCh := make(chan error, 1)
-		lnCtx := sc.WithValue(ctx, bytex.FromString("listener"), ln.Name())
+
+		lnCtx := context.WithValue(ctx, bytex.FromString("listener"), ln.Name())
+		log.With(lnCtx, s.log.With("service", ln.Name()))
 		if components := ln.Components(); len(components) > 0 {
-			lnCtx = WithComponents(lnCtx, components)
+			WithComponents(lnCtx, components)
 		}
 		go func(ctx sc.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)
@@ -301,34 +272,4 @@ func (s *Services) Shutdown(ctx sc.Context) {
 	case <-ch:
 		break
 	}
-}
-
-func (s *Services) traceEndpoint(ctx sc.Context) Endpoint {
-	local, has := s.values.Find(tracing.EndpointName)
-	if has {
-		return local
-	}
-	if s.discovery == nil {
-		return nil
-	}
-	remote, fetched := s.discovery.Get(ctx, bytex.FromString(tracing.EndpointName))
-	if fetched {
-		return remote
-	}
-	return nil
-}
-
-func (s *Services) metricEndpoint(ctx sc.Context) Endpoint {
-	local, has := s.values.Find(metrics.EndpointName)
-	if has {
-		return local
-	}
-	if s.discovery == nil {
-		return nil
-	}
-	remote, fetched := s.discovery.Get(ctx, bytex.FromString(metrics.EndpointName))
-	if fetched {
-		return remote
-	}
-	return nil
 }

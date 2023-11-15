@@ -4,12 +4,11 @@ import (
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 )
 
-const (
-	contextComponentsKey = "@fns:service:components"
+var (
+	contextComponentsKey = []byte("@fns:service:components")
 )
 
 type Component interface {
@@ -31,12 +30,12 @@ func (components Components) Get(key string) (v Component, has bool) {
 	return
 }
 
-func WithComponents(ctx sc.Context, components Components) sc.Context {
-	return context.WithValue(ctx, bytex.FromString(contextComponentsKey), components)
+func WithComponents(ctx context.Context, components Components) {
+	ctx.SetLocalValue(contextComponentsKey, components)
 }
 
-func LoadComponents(ctx sc.Context) Components {
-	v := ctx.Value(contextComponentsKey)
+func LoadComponents(ctx context.Context) Components {
+	v := ctx.LocalValue(contextComponentsKey)
 	if v == nil {
 		return nil
 	}
@@ -48,7 +47,7 @@ func LoadComponents(ctx sc.Context) Components {
 	return c
 }
 
-func LoadLoadComponent(ctx sc.Context, name string) (Component, bool) {
+func LoadComponent(ctx context.Context, name string) (Component, bool) {
 	v := LoadComponents(ctx)
 	if len(v) == 0 {
 		return nil, false

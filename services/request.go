@@ -17,7 +17,6 @@
 package services
 
 import (
-	"bytes"
 	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
@@ -100,13 +99,12 @@ type RequestOptions struct {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 var (
-	requestPool               = sync.Pool{}
-	requestUserValueKeyPrefix = bytex.FromString("@fns:request:user_value:")
+	requestPool = sync.Pool{}
 )
 
 type Request interface {
 	context.Context
-	Fn() (service []byte, fn []byte)
+	Fn() (endpoint []byte, fn []byte)
 	Header() (header Header)
 	Param() (param Param)
 }
@@ -175,43 +173,6 @@ type request struct {
 	service []byte
 	fn      []byte
 	param   Param
-}
-
-func (r *request) UserValue(key []byte) any {
-	key = append(requestUserValueKeyPrefix, key...)
-	return r.Context.UserValue(key)
-}
-
-func (r *request) ScanUserValue(key []byte, val any) (has bool, err error) {
-	key = append(requestUserValueKeyPrefix, key...)
-	has, err = r.Context.ScanUserValue(key, val)
-	return
-}
-
-func (r *request) SetUserValue(key []byte, val any) {
-	key = append(requestUserValueKeyPrefix, key...)
-	r.Context.SetUserValue(key, val)
-}
-
-func (r *request) UserValues(fn func(key []byte, val any)) {
-	r.Context.UserValues(func(key []byte, val any) {
-		k, ok := bytes.CutPrefix(key, requestUserValueKeyPrefix)
-		if ok {
-			fn(k, val)
-		}
-	})
-}
-
-func (r *request) Value(key any) any {
-	k, isBytes := key.([]byte)
-	if isBytes {
-		k = append(requestUserValueKeyPrefix, k...)
-		v := r.Context.UserValue(k)
-		if v != nil {
-			return v
-		}
-	}
-	return r.Context.Value(key)
 }
 
 func (r *request) Fn() (service []byte, fn []byte) {

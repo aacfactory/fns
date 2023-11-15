@@ -1,7 +1,6 @@
 package authorizations
 
 import (
-	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -10,28 +9,17 @@ import (
 	"time"
 )
 
-const (
-	contextKey     = "@fns:context:authorizations"
-	contextUserKey = "authorizations"
+var (
+	contextUserKey = []byte("authorizations")
 )
 
-func With(ctx sc.Context, authorization Authorization) sc.Context {
-	r, ok := ctx.(services.Request)
-	if ok {
-		r.SetUserValue(bytex.FromString(contextUserKey), authorization)
-		return r
-	}
-	return sc.WithValue(ctx, bytex.FromString(contextKey), authorization)
+func With(ctx context.Context, authorization Authorization) {
+	ctx.SetUserValue(contextUserKey, authorization)
 }
 
-func Load(ctx sc.Context) Authorization {
+func Load(ctx context.Context) Authorization {
 	authorization := Authorization{}
-	fc, ok := ctx.(context.Context)
-	if ok {
-		_, _ = fc.ScanUserValue(bytex.FromString(contextUserKey), &authorization)
-		return authorization
-	}
-	_, _ = context.ScanValue(ctx, bytex.FromString(contextKey), &authorization)
+	_, _ = ctx.ScanUserValue(contextUserKey, &authorization)
 	return authorization
 }
 
@@ -56,7 +44,7 @@ const (
 	DecodeFnName = "decode"
 )
 
-func Encode(ctx sc.Context, authorization Authorization) (token Token, err error) {
+func Encode(ctx context.Context, authorization Authorization) (token Token, err error) {
 	rt := runtime.Load(ctx)
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
@@ -76,7 +64,7 @@ func Encode(ctx sc.Context, authorization Authorization) (token Token, err error
 	return
 }
 
-func Decode(ctx sc.Context, token Token) (authorization Authorization, err error) {
+func Decode(ctx context.Context, token Token) (authorization Authorization, err error) {
 	rt := runtime.Load(ctx)
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
@@ -97,7 +85,7 @@ func Decode(ctx sc.Context, token Token) (authorization Authorization, err error
 
 var ErrUnauthorized = errors.Unauthorized("fns: unauthorized")
 
-func Validate(ctx sc.Context) (err error) {
+func Validate(ctx context.Context) (err error) {
 	authorization := Load(ctx)
 	if authorization.Exist() {
 		if authorization.Validate() {

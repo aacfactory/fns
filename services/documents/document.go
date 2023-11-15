@@ -53,6 +53,9 @@ func (doc *Document) AddFn(fn Fn) {
 		paramRef := doc.addElement(fn.Result)
 		fn.Result = paramRef
 	}
+	if doc.Internal {
+		fn.Internal = true
+	}
 	doc.Functions = doc.Functions.Add(fn)
 }
 

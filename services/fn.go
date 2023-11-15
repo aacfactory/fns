@@ -17,79 +17,83 @@
 package services
 
 import (
-	"context"
-	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/futures"
-	"github.com/aacfactory/fns/log"
-	"github.com/aacfactory/fns/services/metrics"
-	"github.com/aacfactory/fns/services/tracing"
-	"github.com/aacfactory/logs"
-	"github.com/aacfactory/workers"
-	"golang.org/x/sync/singleflight"
-	"strconv"
+	"sort"
+	"strings"
+	"unsafe"
 )
 
-type fnTask struct {
-	log            logs.Logger
-	group          *singleflight.Group
-	worker         workers.Workers
-	traceEndpoint  Endpoint
-	metricEndpoint Endpoint
-	endpoint       Endpoint
-	promise        futures.Promise
+type FnInfo struct {
+	Name     string `json:"name"`
+	Readonly bool   `json:"readonly"`
+	Internal bool   `json:"internal"`
 }
 
-func (f fnTask) Execute(ctx context.Context) {
-	req := LoadRequest(ctx)
-	// tracer mark begin
-	if f.traceEndpoint != nil {
-		tracing.MarkBeginHandling(ctx)
-	}
+type FnInfos []FnInfo
 
-	v, err, shared := f.group.Do(bytex.ToString(append(req.Hash(), req.Header().DeviceId()...)), func() (interface{}, error) {
-		service, ok := f.endpoint.(Service)
-		if ok {
-			components := service.Components()
-			if len(components) > 0 {
-				ctx = WithComponents(ctx, components)
+func (f FnInfos) Len() int {
+	return len(f)
+}
+
+func (f FnInfos) Less(i, j int) bool {
+	return strings.Compare(f[i].Name, f[j].Name) < 0
+}
+
+func (f FnInfos) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
+}
+
+type Fn interface {
+	Name() string
+	Internal() bool
+	Readonly() bool
+	Handle(r Request) (v interface{}, err error)
+}
+
+type Fns []Fn
+
+func (f Fns) Len() int {
+	return len(f)
+}
+
+func (f Fns) Less(i, j int) bool {
+	return strings.Compare(f[i].Name(), f[j].Name()) < 0
+}
+
+func (f Fns) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
+}
+
+func (f Fns) Add(v Fn) Fns {
+	ff := append(f, v)
+	sort.Sort(ff)
+	return ff
+}
+
+func (f Fns) Find(name []byte) (v Fn, found bool) {
+	ns := unsafe.String(unsafe.SliceData(name), len(name))
+	n := f.Len()
+	if n < 65 {
+		for _, fn := range f {
+			if fn.Name() == ns {
+				v = fn
+				found = true
+				break
 			}
 		}
-		// set log into context
-		log.With(req, f.log)
-
-		return f.endpoint.Handle(req)
-	})
-
-	if err == nil {
-		f.promise.Succeed(v)
-	} else {
-		f.promise.Failed(err)
+		return
 	}
-
-	// tracer end
-	if f.traceEndpoint != nil {
-		tracer, finished := tracing.End(
-			ctx,
-			"succeed", strconv.FormatBool(err == nil),
-			"shared", strconv.FormatBool(shared),
-		)
-		if finished {
-			f.worker.Dispatch(context.TODO(), traceReportTask{
-				endpoint: f.traceEndpoint,
-				tracer:   tracer,
-			})
+	i, j := 0, n
+	for i < j {
+		h := int(uint(i+j) >> 1)
+		if strings.Compare(f[h].Name(), ns) < 0 {
+			i = h + 1
+		} else {
+			j = h
 		}
 	}
-
-	// report stats
-	if f.metricEndpoint != nil {
-		metric, ok := metrics.Finish(ctx, err == nil, err, shared)
-		if ok {
-			f.worker.Dispatch(context.TODO(), metricReportTask{
-				endpoint: f.metricEndpoint,
-				metric:   metric,
-			})
-		}
+	found = i < n && f[i].Name() == ns
+	if found {
+		v = f[i]
 	}
-
+	return
 }

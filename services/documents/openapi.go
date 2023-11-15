@@ -68,7 +68,7 @@ func Openapi(title string, description string, term string, openapiVersion strin
 	endpoints := documents.Endpoints
 	if endpoints != nil || len(endpoints) > 0 {
 		for _, document := range endpoints {
-			if document.IsEmpty() || document.Internal || len(document.Fns) == 0 {
+			if document.IsEmpty() || document.Internal || len(document.Functions) == 0 {
 				continue
 			}
 			// tags
@@ -84,7 +84,7 @@ func Openapi(title string, description string, term string, openapiVersion strin
 					}
 				}
 			}
-			for _, fn := range document.Fns {
+			for _, fn := range document.Functions {
 				description := fn.Description
 				if fn.Errors != nil && len(fn.Errors) > 0 {
 					description = description + "\n----------\n"

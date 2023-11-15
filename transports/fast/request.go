@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/objects"
+	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"time"
@@ -39,7 +39,7 @@ func (r *Request) ScanUserValue(key []byte, val any) (has bool, err error) {
 	if v == nil {
 		return
 	}
-	s := objects.NewScanner(v)
+	s := scanner.New(v)
 	err = s.Scan(val)
 	if err != nil {
 		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)

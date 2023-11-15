@@ -31,7 +31,7 @@ func (task traceReportTask) Execute(ctx sc.Context) {
 	req := AcquireRequest(
 		ctx,
 		bytex.FromString(tracing.EndpointName), bytex.FromString(tracing.ReportFnName),
-		NewArgument(task.tracer),
+		task.tracer,
 		WithInternalRequest(),
 	)
 	_, _ = task.endpoint.Handle(req)

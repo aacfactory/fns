@@ -4,12 +4,12 @@ import (
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/objects"
+	"github.com/aacfactory/fns/commons/scanner"
 	"golang.org/x/sync/singleflight"
 )
 
-type Result struct {
-	objects.Scanner
+type Result interface {
+	scanner.Scanner
 }
 
 type Barrier interface {
@@ -31,21 +31,19 @@ type barrier struct {
 	group *singleflight.Group
 }
 
-func (b *barrier) Do(_ context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error) {
+func (b *barrier) Do(_ context.Context, key []byte, fn func() (result interface{}, err error)) (r Result, err error) {
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
-	r, doErr, _ := b.group.Do(bytex.ToString(key), func() (r interface{}, err error) {
-		r, err = fn()
+	v, doErr, _ := b.group.Do(bytex.ToString(key), func() (v interface{}, err error) {
+		v, err = fn()
 		return
 	})
 	if doErr != nil {
 		err = errors.Map(doErr)
 		return
 	}
-	result = Result{
-		objects.NewScanner(r),
-	}
+	r = scanner.New(v)
 	return
 }
 

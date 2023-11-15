@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
@@ -32,7 +33,16 @@ import (
 	"sync"
 )
 
-// todo add cache control, handle cache in services.Request()
+type Param interface {
+	scanner.Scanner
+}
+
+func NewParam(src interface{}) Param {
+	return scanner.New(src)
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
 type RequestOption func(*RequestOptions)
 
 func WithRequestId(id []byte) RequestOption {
@@ -98,11 +108,10 @@ type Request interface {
 	context.Context
 	Fn() (service []byte, fn []byte)
 	Header() (header Header)
-	Argument() (argument Argument)
-	Hash() (p []byte)
+	Param() (param Param)
 }
 
-func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, options ...RequestOption) (v Request) {
+func AcquireRequest(ctx sc.Context, service []byte, fn []byte, param interface{}, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		header: Header{},
 	}
@@ -110,9 +119,6 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 		for _, option := range options {
 			option(opt)
 		}
-	}
-	if arg == nil {
-		arg = EmptyArgument()
 	}
 	if len(opt.header.processId) == 0 {
 		opt.header.processId = uid.Bytes()
@@ -137,14 +143,6 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 		}
 		opt.header.internal = true
 	}
-	body, _ := json.Marshal(arg)
-	buf := bytebufferpool.Get()
-	_, _ = buf.Write(service)
-	_, _ = buf.Write(fn)
-	_, _ = buf.Write(opt.header.AcceptedVersions().Bytes())
-	_, _ = buf.Write(body)
-	b := buf.Bytes()
-	bytebufferpool.Put(buf)
 	var r *request
 	cached := requestPool.Get()
 	if cached == nil {
@@ -156,8 +154,7 @@ func AcquireRequest(ctx sc.Context, service []byte, fn []byte, arg Argument, opt
 	r.header = opt.header
 	r.service = service
 	r.fn = fn
-	r.argument = arg
-	r.hash = bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16))
+	r.param = NewParam(param)
 	v = r
 	return
 }
@@ -174,11 +171,10 @@ func ReleaseRequest(r Request) {
 
 type request struct {
 	context.Context
-	header   Header
-	service  []byte
-	fn       []byte
-	argument Argument
-	hash     []byte
+	header  Header
+	service []byte
+	fn      []byte
+	param   Param
 }
 
 func (r *request) UserValue(key []byte) any {
@@ -228,13 +224,8 @@ func (r *request) Header() (header Header) {
 	return
 }
 
-func (r *request) Argument() (argument Argument) {
-	argument = r.argument
-	return
-}
-
-func (r *request) Hash() (p []byte) {
-	p = r.hash
+func (r *request) Param() (param Param) {
+	param = r.param
 	return
 }
 
@@ -252,4 +243,45 @@ func LoadRequest(ctx sc.Context) Request {
 	}
 	panic(fmt.Sprintf("%+v", errors.Warning("fns: can not convert context to request")))
 	return r
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+type HashRequestOptions struct {
+	withToken bool
+}
+
+type HashRequestOption func(options *HashRequestOptions)
+
+func HashRequestWithToken() HashRequestOption {
+	return func(options *HashRequestOptions) {
+		options.withToken = true
+	}
+}
+
+func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) {
+	opt := HashRequestOptions{
+		withToken: false,
+	}
+	for _, option := range options {
+		option(&opt)
+	}
+	service, fn := r.Fn()
+	pp, encodeErr := json.Marshal(r.Param())
+	if encodeErr != nil {
+		err = errors.Warning("fns: hash request failed").WithCause(encodeErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+		return
+	}
+	buf := bytebufferpool.Get()
+	_, _ = buf.Write(service)
+	_, _ = buf.Write(fn)
+	_, _ = buf.Write(r.Header().AcceptedVersions().Bytes())
+	if opt.withToken {
+		_, _ = buf.Write(r.Header().Token())
+	}
+	_, _ = buf.Write(pp)
+	b := buf.Bytes()
+	p = bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16))
+	bytebufferpool.Put(buf)
+	return
 }

@@ -17,7 +17,6 @@
 package documents
 
 import (
-	"net/http"
 	"sort"
 	"strings"
 )
@@ -28,7 +27,7 @@ func NewFn(name string) Fn {
 		Title:         "",
 		Description:   "",
 		Deprecated:    false,
-		Methods:       []string{http.MethodPost},
+		Readonly:      false,
 		Authorization: false,
 		Param:         Nil(),
 		Result:        Nil(),
@@ -37,15 +36,15 @@ func NewFn(name string) Fn {
 }
 
 type Fn struct {
-	Name          string   `json:"name,omitempty"`
-	Title         string   `json:"title,omitempty"`
-	Description   string   `json:"description,omitempty"`
-	Deprecated    bool     `json:"deprecated,omitempty"`
-	Methods       []string `json:"methods,omitempty"`
-	Authorization bool     `json:"authorization,omitempty"`
-	Param         Element  `json:"argument,omitempty"`
-	Result        Element  `json:"result,omitempty"`
-	Errors        Errors   `json:"errors,omitempty"`
+	Name          string  `json:"name,omitempty"`
+	Title         string  `json:"title,omitempty"`
+	Description   string  `json:"description,omitempty"`
+	Deprecated    bool    `json:"deprecated,omitempty"`
+	Readonly      bool    `json:"readonly,omitempty"`
+	Authorization bool    `json:"authorization,omitempty"`
+	Param         Element `json:"argument,omitempty"`
+	Result        Element `json:"result,omitempty"`
+	Errors        Errors  `json:"errors,omitempty"`
 }
 
 func (fn Fn) SetInfo(title string, description string) Fn {
@@ -54,8 +53,8 @@ func (fn Fn) SetInfo(title string, description string) Fn {
 	return fn
 }
 
-func (fn Fn) SetMethod(method ...string) Fn {
-	fn.Methods = method
+func (fn Fn) SetReadonly() Fn {
+	fn.Readonly = true
 	return fn
 }
 

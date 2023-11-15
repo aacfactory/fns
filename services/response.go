@@ -1,9 +1,13 @@
 package services
 
-import "github.com/aacfactory/json"
+import (
+	"github.com/aacfactory/fns/commons/scanner"
+)
 
 type Response interface {
-	json.Marshaler
-	Exist() (ok bool)
-	Scan(v interface{}) (err error)
+	scanner.Scanner
+}
+
+func NewResponse(src interface{}) Response {
+	return scanner.New(src)
 }

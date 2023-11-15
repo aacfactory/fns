@@ -15,7 +15,7 @@ func (task metricReportTask) Execute(ctx sc.Context) {
 	req := AcquireRequest(
 		ctx,
 		bytex.FromString(metrics.EndpointName), bytex.FromString(metrics.ReportFnName),
-		NewArgument(task.metric),
+		task.metric,
 		WithInternalRequest(),
 	)
 	_, _ = task.endpoint.Handle(req)

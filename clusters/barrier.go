@@ -6,7 +6,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/objects"
+	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/json"
 	"golang.org/x/sync/singleflight"
@@ -149,9 +149,7 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 		err = errors.Map(doErr)
 		return
 	}
-	result = barriers.Result{
-		Scanner: objects.NewScanner(r),
-	}
+	result = scanner.New(r)
 	return
 }
 

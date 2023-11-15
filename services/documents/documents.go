@@ -52,9 +52,9 @@ func (documents VersionSortedDocuments) Swap(i, j int) {
 	documents[i], documents[j] = documents[j], documents[i]
 }
 
-func (documents VersionSortedDocuments) Add(id []byte, doc Document) VersionSortedDocuments {
+func (documents VersionSortedDocuments) Add(id string, doc Document) VersionSortedDocuments {
 	for _, document := range documents {
-		if document.Id == bytex.ToString(id) {
+		if document.Id == id {
 			document.Add(doc)
 			return documents
 		}
@@ -66,9 +66,9 @@ func (documents VersionSortedDocuments) Add(id []byte, doc Document) VersionSort
 	return n
 }
 
-func NewDocuments(id []byte, version versions.Version) Documents {
+func NewDocuments(id string, version versions.Version) Documents {
 	return Documents{
-		Id:        string(id),
+		Id:        id,
 		Version:   version,
 		Endpoints: make(NameSortedDocuments, 0, 1),
 	}

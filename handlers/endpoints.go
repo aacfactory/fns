@@ -19,11 +19,15 @@ var (
 	slashBytes = []byte{'/'}
 )
 
-func NewEndpointsHandler() transports.MuxHandler {
-	return &EndpointsHandler{}
+func NewEndpointsHandler(endpoints services.HostEndpoints) transports.MuxHandler {
+	return &EndpointsHandler{
+		endpoints: endpoints,
+	}
 }
 
 type EndpointsHandler struct {
+	// todo matcher via documents
+	endpoints services.HostEndpoints
 }
 
 func (handler *EndpointsHandler) Name() string {
@@ -35,6 +39,7 @@ func (handler *EndpointsHandler) Construct(_ transports.MuxHandlerOptions) error
 }
 
 func (handler *EndpointsHandler) Match(method []byte, path []byte, header transports.Header) bool {
+	// todo use matcher
 	ok := bytes.Equal(method, methodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), bytex.FromString(transports.ContentTypeJsonHeaderValue))

@@ -26,26 +26,18 @@ func New(name string, description string, internal bool, ver versions.Version) *
 		Description: description,
 		Internal:    internal,
 		Version:     ver,
-		Fns:         make(Fns, 0, 1),
+		Functions:   make(Fns, 0, 1),
 		Elements:    make(Elements, 0, 1),
 	}
 }
 
 type Document struct {
-	// Name
-	// as tag
-	Name string `json:"name"`
-	// Description
-	// as description of tag, support markdown
-	Description string `json:"description"`
-	// Internal
-	Internal bool
-	// Version
-	Version versions.Version `json:"version"`
-	// Fns
-	Fns Fns `json:"fns"`
-	// Elements
-	Elements Elements `json:"elements"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Internal    bool             `json:"internal"`
+	Version     versions.Version `json:"version"`
+	Functions   Fns              `json:"functions"`
+	Elements    Elements         `json:"elements"`
 }
 
 func (doc *Document) IsEmpty() bool {
@@ -61,7 +53,7 @@ func (doc *Document) AddFn(fn Fn) {
 		paramRef := doc.addElement(fn.Result)
 		fn.Result = paramRef
 	}
-	doc.Fns = doc.Fns.Add(fn)
+	doc.Functions = doc.Functions.Add(fn)
 }
 
 func (doc *Document) addElement(element Element) (ref Element) {

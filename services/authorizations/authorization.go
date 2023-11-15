@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	contextUserKey = []byte("authorizations")
+	contextUserKey = []byte("$.authorizations")
 )
 
 func With(ctx context.Context, authorization Authorization) {

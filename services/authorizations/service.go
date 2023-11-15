@@ -3,7 +3,6 @@ package authorizations
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/fns/services/documents"
 )
 
 type encodeFn struct {
@@ -108,12 +107,5 @@ func (svc *service) Construct(options services.Options) (err error) {
 	svc.AddFunction(&decodeFn{
 		encoder: encoder,
 	})
-	return
-}
-
-func (svc *service) Document() (v documents.Document) {
-	v = documents.New(endpointName, "Authorizations service", true, svc.Abstract.Version())
-	v.AddFn(documents.NewFn(encodeFnName).SetParam(documents.Any()).SetResult(documents.Any()))
-	v.AddFn(documents.NewFn(decodeFnName).SetParam(documents.Any()).SetResult(documents.Any()))
 	return
 }

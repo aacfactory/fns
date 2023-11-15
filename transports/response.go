@@ -18,7 +18,6 @@ package transports
 
 import (
 	"bufio"
-	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -142,24 +141,16 @@ const (
 )
 
 func WithResponse(ctx context.Context, w ResponseWriter) context.Context {
-	ctx.SetUserValue(bytex.FromString(responseContextKey), w)
+	ctx.SetLocalValue(bytex.FromString(responseContextKey), w)
 	return ctx
 }
 
-func LoadResponseWriter(ctx sc.Context) ResponseWriter {
-	w, ok := TryLoadResponseWriter(ctx)
-	if ok {
-		return w
-	}
-	return nil
-}
-
-func TryLoadResponseWriter(ctx sc.Context) (ResponseWriter, bool) {
+func TryLoadResponseWriter(ctx context.Context) (ResponseWriter, bool) {
 	w, ok := ctx.(ResponseWriter)
 	if ok {
 		return w, ok
 	}
-	v := ctx.Value(responseContextKey)
+	v := ctx.LocalValue(bytex.FromString(responseContextKey))
 	if v == nil {
 		return nil, false
 	}
@@ -167,7 +158,15 @@ func TryLoadResponseWriter(ctx sc.Context) (ResponseWriter, bool) {
 	return w, ok
 }
 
-func TryLoadResponseHeader(ctx sc.Context) (Header, bool) {
+func LoadResponseWriter(ctx context.Context) ResponseWriter {
+	w, ok := TryLoadResponseWriter(ctx)
+	if ok {
+		return w
+	}
+	return nil
+}
+
+func TryLoadResponseHeader(ctx context.Context) (Header, bool) {
 	w, ok := TryLoadResponseWriter(ctx)
 	if !ok {
 		return nil, false

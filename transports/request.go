@@ -17,7 +17,6 @@
 package transports
 
 import (
-	sc "context"
 	"crypto/tls"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -51,24 +50,16 @@ const (
 )
 
 func WithRequest(ctx context.Context, r Request) context.Context {
-	ctx.SetUserValue(bytex.FromString(requestContextKey), r)
+	ctx.SetLocalValue(bytex.FromString(requestContextKey), r)
 	return ctx
 }
 
-func LoadRequest(ctx sc.Context) Request {
-	r, ok := TryLoadRequest(ctx)
-	if ok {
-		return r
-	}
-	return nil
-}
-
-func TryLoadRequest(ctx sc.Context) (Request, bool) {
+func TryLoadRequest(ctx context.Context) (Request, bool) {
 	r, ok := ctx.(Request)
 	if ok {
 		return r, ok
 	}
-	v := ctx.Value(requestContextKey)
+	v := ctx.LocalValue(bytex.FromString(requestContextKey))
 	if v == nil {
 		return nil, false
 	}
@@ -76,7 +67,15 @@ func TryLoadRequest(ctx sc.Context) (Request, bool) {
 	return r, ok
 }
 
-func TryLoadRequestHeader(ctx sc.Context) (Header, bool) {
+func LoadRequest(ctx context.Context) Request {
+	r, ok := TryLoadRequest(ctx)
+	if ok {
+		return r
+	}
+	return nil
+}
+
+func TryLoadRequestHeader(ctx context.Context) (Header, bool) {
 	r, ok := TryLoadRequest(ctx)
 	if !ok {
 		return nil, false

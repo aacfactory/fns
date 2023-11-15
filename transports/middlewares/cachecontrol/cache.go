@@ -1,8 +1,8 @@
 package cachecontrol
 
 import (
-	"context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"time"
 )
@@ -14,7 +14,7 @@ type Cache interface {
 }
 
 var (
-	cacheKeyPrefix = []byte("$.fns:cachecontrol:")
+	cacheKeyPrefix = []byte("fns:cachecontrol:")
 )
 
 type DefaultCache struct{}

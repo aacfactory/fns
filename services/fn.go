@@ -42,6 +42,35 @@ func (f FnInfos) Swap(i, j int) {
 	f[i], f[j] = f[j], f[i]
 }
 
+func (f FnInfos) Find(name []byte) (info FnInfo, found bool) {
+	ns := unsafe.String(unsafe.SliceData(name), len(name))
+	n := f.Len()
+	if n < 65 {
+		for _, fn := range f {
+			if fn.Name == ns {
+				info = fn
+				found = true
+				break
+			}
+		}
+		return
+	}
+	i, j := 0, n
+	for i < j {
+		h := int(uint(i+j) >> 1)
+		if strings.Compare(f[h].Name, ns) < 0 {
+			i = h + 1
+		} else {
+			j = h
+		}
+	}
+	found = i < n && f[i].Name == ns
+	if found {
+		info = f[i]
+	}
+	return
+}
+
 type Fn interface {
 	Name() string
 	Internal() bool

@@ -49,6 +49,35 @@ func (infos EndpointInfos) Swap(i, j int) {
 	infos[i], infos[j] = infos[j], infos[i]
 }
 
+func (infos EndpointInfos) Find(name []byte) (info EndpointInfo, found bool) {
+	ns := unsafe.String(unsafe.SliceData(name), len(name))
+	n := infos.Len()
+	if n < 65 {
+		for _, endpoint := range infos {
+			if endpoint.Name == ns {
+				info = endpoint
+				found = true
+				break
+			}
+		}
+		return
+	}
+	i, j := 0, n
+	for i < j {
+		h := int(uint(i+j) >> 1)
+		if strings.Compare(infos[h].Name, ns) < 0 {
+			i = h + 1
+		} else {
+			j = h
+		}
+	}
+	found = i < n && infos[i].Name == ns
+	if found {
+		info = infos[i]
+	}
+	return
+}
+
 type EndpointGetOption func(options *EndpointGetOptions)
 
 type EndpointGetOptions struct {

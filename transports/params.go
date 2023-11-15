@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"reflect"
 	"sort"
@@ -21,6 +23,30 @@ type Params interface {
 	Remove(name []byte)
 	Len() int
 	Encode() (p []byte)
+}
+
+func ParamsScanner(params Params) scanner.Scanner {
+	return paramsScanner{
+		value: params,
+	}
+}
+
+type paramsScanner struct {
+	value Params
+}
+
+func (p paramsScanner) Exist() (ok bool) {
+	ok = p.value.Len() > 0
+	return
+}
+
+func (p paramsScanner) Scan(dst interface{}) (err error) {
+	err = DecodeParams(p.value, dst)
+	return
+}
+
+func (p paramsScanner) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.value.Encode())
 }
 
 type paramValues [][]byte

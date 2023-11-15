@@ -5,6 +5,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/workers"
 	"time"
@@ -30,6 +31,11 @@ func Load(ctx context.Context) *Runtime {
 		return nil
 	}
 	return rt
+}
+
+func Endpoints(ctx context.Context) services.Endpoints {
+	rt := Load(ctx)
+	return rt.Endpoints()
 }
 
 func TryExecute(ctx context.Context, task workers.Task) bool {

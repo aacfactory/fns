@@ -5,13 +5,15 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"time"
 )
 
 type Request struct {
-	ctx *fasthttp.RequestCtx
+	ctx    *fasthttp.RequestCtx
+	locals context.Entries
 }
 
 func (r *Request) Deadline() (time.Time, bool) {
@@ -55,6 +57,33 @@ func (r *Request) SetUserValue(key []byte, val any) {
 
 func (r *Request) UserValues(fn func(key []byte, val any)) {
 	r.ctx.VisitUserValues(fn)
+}
+
+func (r *Request) LocalValue(key []byte) any {
+	v := r.locals.Get(key)
+	if v != nil {
+		return v
+	}
+	return nil
+}
+
+func (r *Request) ScanLocalValue(key []byte, val any) (has bool, err error) {
+	v := r.LocalValue(key)
+	if v == nil {
+		return
+	}
+	s := scanner.New(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
+}
+
+func (r *Request) SetLocalValue(key []byte, val any) {
+	r.locals.Set(key, val)
 }
 
 func (r *Request) TLS() bool {

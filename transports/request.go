@@ -21,10 +21,16 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
+	"net/http"
 )
 
 var (
 	ErrTooBigRequestBody = errors.Warning("fns: request body is too big")
+)
+
+var (
+	MethodGet  = []byte(http.MethodGet)
+	MethodPost = []byte(http.MethodPost)
 )
 
 type Request interface {

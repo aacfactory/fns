@@ -5,6 +5,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"net"
@@ -14,6 +15,7 @@ import (
 
 type responseWriter struct {
 	ctx    *fasthttp.RequestCtx
+	locals context.Entries
 	result *transports.ResultResponseWriter
 }
 
@@ -58,6 +60,33 @@ func (w *responseWriter) SetUserValue(key []byte, val any) {
 
 func (w *responseWriter) UserValues(fn func(key []byte, val any)) {
 	w.ctx.VisitUserValues(fn)
+}
+
+func (w *responseWriter) LocalValue(key []byte) any {
+	v := w.locals.Get(key)
+	if v != nil {
+		return v
+	}
+	return nil
+}
+
+func (w *responseWriter) ScanLocalValue(key []byte, val any) (has bool, err error) {
+	v := w.LocalValue(key)
+	if v == nil {
+		return
+	}
+	s := scanner.New(v)
+	err = s.Scan(val)
+	if err != nil {
+		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
+		return
+	}
+	has = true
+	return
+}
+
+func (w *responseWriter) SetLocalValue(key []byte, val any) {
+	w.locals.Set(key, val)
 }
 
 func (w *responseWriter) Status() int {

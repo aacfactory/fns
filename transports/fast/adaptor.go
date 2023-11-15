@@ -1,6 +1,7 @@
 package fast
 
 import (
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"sync"
@@ -17,6 +18,7 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 		cr := requestPool.Get()
 		if cr == nil {
 			r = new(Request)
+			r.locals = make(context.Entries, 0, 1)
 		} else {
 			r = cr.(*Request)
 		}
@@ -26,6 +28,7 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 		cw := responsePool.Get()
 		if cw == nil {
 			w = new(responseWriter)
+			w.locals = make(context.Entries, 0, 1)
 		} else {
 			w = cw.(*responseWriter)
 		}
@@ -50,10 +53,12 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 
 		transports.ReleaseResultResponseWriter(w.result)
 		w.ctx = nil
+		w.locals.Reset()
 		w.result = nil
 		responsePool.Put(w)
 
 		r.ctx = nil
+		r.locals.Reset()
 		requestPool.Put(r)
 	}
 }

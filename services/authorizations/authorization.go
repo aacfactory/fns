@@ -49,7 +49,7 @@ func Encode(ctx context.Context, authorization Authorization) (token Token, err 
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
 		bytex.FromString(EndpointName), bytex.FromString(EncodeFnName),
-		services.NewArgument(authorization),
+		authorization,
 	)
 	if handleErr != nil {
 		err = handleErr
@@ -69,7 +69,7 @@ func Decode(ctx context.Context, token Token) (authorization Authorization, err 
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
 		bytex.FromString(EndpointName), bytex.FromString(DecodeFnName),
-		services.NewArgument(token),
+		token,
 	)
 	if handleErr != nil {
 		err = handleErr

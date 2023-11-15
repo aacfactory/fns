@@ -251,15 +251,13 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 	return
 }
 
-func (s *Services) Shutdown(ctx sc.Context) {
+func (s *Services) Shutdown(ctx context.Context) {
 	wg := new(sync.WaitGroup)
 	ch := make(chan struct{}, 1)
 	for _, endpoint := range s.values {
 		wg.Add(1)
-		go func(ctx sc.Context, endpoint Endpoint, wg *sync.WaitGroup) {
-			ec, ecc := sc.WithCancel(ctx)
-			endpoint.Shutdown(context.WithValue(ec, bytex.FromString("endpoint"), endpoint.Name()))
-			ecc()
+		go func(ctx context.Context, endpoint Endpoint, wg *sync.WaitGroup) {
+			endpoint.Shutdown(ctx)
 			wg.Done()
 		}(ctx, endpoint, wg)
 	}

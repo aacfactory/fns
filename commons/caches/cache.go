@@ -19,7 +19,6 @@ package caches
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/valyala/bytebufferpool"
 	"sync"
 	"time"
@@ -28,13 +27,12 @@ import (
 const (
 	defaultMaxBytes        = 64 << (10 * 2)
 	bucketsCount           = 512
-	chunkSize              = 64 * 1024
+	chunkSize              = 1 << 16
 	bucketSizeBits         = 40
 	genSizeBits            = 64 - bucketSizeBits
 	maxGen                 = 1<<genSizeBits - 1
 	maxBucketSize   uint64 = 1 << bucketSizeBits
-	maxSubValueLen         = chunkSize - 16 - 4 - 1
-	maxKeyLen              = chunkSize - 16 - 4 - 1
+	maxKeyLen              = chunkSize - 4 - 2 - 8 - 8
 )
 
 var (
@@ -55,13 +53,10 @@ func NewWithHash(maxBytes uint64, h Hash) (cache *Cache) {
 		maxBytes = maxBucketSize - 1<<30
 	}
 	cache = &Cache{
-		buckets: [512]bucket{},
-		bigKeys: NewKeys(),
-		increments: &Increments{
-			values: sync.Map{},
-		},
-		incrementKeys: NewKeys(),
-		hash:          h,
+		locker:       sync.RWMutex{},
+		maxItemBytes: maxBytes / 2,
+		buckets:      [bucketsCount]bucket{},
+		hash:         h,
 	}
 	maxBucketBytes := (maxBytes + bucketsCount - 1) / bucketsCount
 	for i := range cache.buckets[:] {
@@ -71,11 +66,59 @@ func NewWithHash(maxBytes uint64, h Hash) (cache *Cache) {
 }
 
 type Cache struct {
-	buckets       [bucketsCount]bucket
-	bigKeys       *Keys
-	increments    *Increments
-	incrementKeys *Keys
-	hash          Hash
+	locker       sync.RWMutex
+	maxItemBytes uint64
+	buckets      [bucketsCount]bucket
+	hash         Hash
+}
+
+func (c *Cache) canSet(k []byte, v []byte) (ok bool) {
+	vLen := len(v)
+	if vLen == 0 {
+		vLen = 8
+	}
+	itemLen := uint64(len(k) + vLen + 4 + 10)
+	ok = itemLen < c.maxItemBytes
+	return
+}
+
+func (c *Cache) set(k []byte, v []byte, h uint64) {
+	idx := h % bucketsCount
+	c.buckets[idx].Set(k, v, h)
+}
+
+func (c *Cache) get(k []byte) (p []byte, found bool) {
+	p = make([]byte, 0, 8)
+	h := c.hash.Sum(k)
+	idx := h % bucketsCount
+	p, found = c.buckets[idx].Get(p, k, h, true)
+	return
+}
+
+func (c *Cache) contains(k []byte) (ok bool) {
+	h := c.hash.Sum(k)
+	idx := h % bucketsCount
+	_, ok = c.buckets[idx].Get(nil, k, h, false)
+	return
+}
+
+func (c *Cache) SetWithTTL(k []byte, v []byte, ttl time.Duration) (err error) {
+	if len(k) == 0 || len(v) == 0 {
+		err = ErrInvalidKey
+		return
+	}
+
+	if !c.canSet(k, v) {
+		err = ErrTooBigKey
+		return
+	}
+	c.locker.Lock()
+	kvs := MakeKVS(k, v, ttl, c.hash)
+	for _, kv := range kvs {
+		c.set(kv.k, kv.v, kv.h)
+	}
+	c.locker.Unlock()
+	return
 }
 
 func (c *Cache) Set(k []byte, v []byte) (err error) {
@@ -83,142 +126,106 @@ func (c *Cache) Set(k []byte, v []byte) (err error) {
 	return
 }
 
-func (c *Cache) SetWithTTL(k []byte, v []byte, ttl time.Duration) (err error) {
-	if k == nil || len(k) == 0 {
-		err = ErrInvalidKey
+func (c *Cache) Get(k []byte) (p []byte, ok bool) {
+	c.locker.RLock()
+	// first
+	dst, found := c.get(k)
+	if !found {
+		c.locker.RUnlock()
 		return
 	}
-	if len(k) > maxKeyLen {
-		err = ErrTooBigKey
+	v := Value(dst)
+	if v.Pos() > 1 {
+		c.locker.RUnlock()
 		return
 	}
-	if v == nil {
-		v = []byte{}
+	if deadline := v.Deadline(); !deadline.IsZero() {
+		if deadline.Before(time.Now()) {
+			c.locker.RUnlock()
+			return
+		}
 	}
-	deadline := uint64(0)
-	if ttl > 0 {
-		deadline = uint64(time.Now().Add(ttl).UnixNano())
-	}
-	expire := make([]byte, 8)
-	binary.BigEndian.PutUint64(expire, deadline)
-	v = append(v, expire...)
-	h := c.hash.Sum(k)
-	if len(v) > maxSubValueLen {
-		c.setBig(k, v)
-		c.bigKeys.Set(h)
+	size := v.Size()
+	if size == 1 {
+		p = v.Bytes()
+		ok = true
+		c.locker.RUnlock()
 		return
 	}
-	idx := h % bucketsCount
-	c.buckets[idx].Set(k, v, h)
+
+	// big key
+	kLen := len(k)
+	nkLen := kLen + 8
+	b := bytebufferpool.Get()
+	_, _ = b.Write(v.Bytes())
+	for i := 2; i <= size; i++ {
+		nk := make([]byte, nkLen)
+		copy(nk, k)
+		binary.BigEndian.PutUint64(nk[kLen:], uint64(i))
+		np, has := c.get(nk)
+		if !has {
+			return
+		}
+		_, _ = b.Write(Value(np).Bytes())
+	}
+	p = b.Bytes()
+	bytebufferpool.Put(b)
+	ok = true
+	c.locker.RUnlock()
 	return
 }
 
-func (c *Cache) set(k []byte, v []byte) {
-	h := c.hash.Sum(k)
-	idx := h % bucketsCount
-	c.buckets[idx].Set(k, v, h)
+func (c *Cache) Contains(k []byte) bool {
+	c.locker.RLock()
+	defer c.locker.RUnlock()
+	return c.contains(k)
 }
 
-func (c *Cache) Get(k []byte) ([]byte, bool) {
-	h := c.hash.Sum(k)
-	if c.incrementKeys.Exist(h) {
-		n, has := c.increments.Value(h)
-		if !has {
-			c.del(h)
-			return nil, has
-		}
-		return bytex.FromString(fmt.Sprintf("%d", n)), has
-	}
-
-	idx := h % bucketsCount
-	dst := make([]byte, 0, 8)
-
-	v, has := c.buckets[idx].Get(dst, k, h, true)
-	if has && len(v) == 16 && unmarshalUint64(v) > 0 {
-		if !c.bigKeys.Exist(c.hash.Sum(k)) {
-			return nil, false
-		}
-		dst = make([]byte, 0, 8)
-		v = c.getBig(dst, k)
-		return c.checkExpire(v, h)
-	}
-	return c.checkExpire(v, h)
-}
-
-func (c *Cache) checkExpire(v []byte, h uint64) ([]byte, bool) {
-	vLen := len(v)
-	if vLen < 8 {
-		c.del(h)
-		return nil, false
-	}
-	deadlinePos := vLen - 8
-	deadline := binary.BigEndian.Uint64(v[vLen-8:])
-	if deadline == 0 {
-		return v[0:deadlinePos], true
-	}
-	if deadline < uint64(time.Now().UnixNano()) {
-		c.del(h)
-		return nil, false
-	}
-	return v[0:deadlinePos], true
-}
-
-func (c *Cache) get(dst []byte, k []byte) ([]byte, bool) {
-	h := c.hash.Sum(k)
-	idx := h % bucketsCount
-	has := false
-	dst, has = c.buckets[idx].Get(dst, k, h, true)
-	return dst, has
-}
-
-func (c *Cache) Exist(k []byte) bool {
-	_, ok := c.exist(k)
-	return ok
-}
-
-func (c *Cache) exist(k []byte) (uint64, bool) {
-	h := c.hash.Sum(k)
-	idx := h % bucketsCount
-	_, ok := c.buckets[idx].Get(nil, k, h, false)
-	return h, ok
-}
-
-func (c *Cache) Expire(k []byte, ttl time.Duration) (err error) {
-	h, has := c.exist(k)
-	if !has {
+func (c *Cache) Expire(k []byte, ttl time.Duration) {
+	c.locker.Lock()
+	dst, found := c.get(k)
+	if !found {
+		c.locker.Unlock()
 		return
 	}
-	v, _ := c.Get(k)
-	err = c.SetWithTTL(k, v, ttl)
-	if c.incrementKeys.Exist(h) {
-		c.increments.Expire(h, ttl)
+	v := Value(dst)
+	if v.Pos() > 1 {
+		c.locker.Unlock()
+		return
 	}
+	v.SetDeadline(time.Now().Add(ttl))
+	c.locker.Unlock()
 	return
 }
 
 func (c *Cache) Incr(k []byte, delta int64) (n int64, err error) {
-	h, ok := c.exist(k)
-	if !ok {
-		err = c.Set(k, []byte{1})
-		if err != nil {
-			return
-		}
-		c.incrementKeys.Set(h)
+	if len(k) == 0 {
+		err = ErrInvalidKey
+		return
 	}
-	n = c.increments.Incr(h, delta)
-	return
-}
+	if !c.canSet(k, nil) {
+		err = ErrTooBigKey
+		return
+	}
+	c.locker.Lock()
 
-func (c *Cache) Decr(k []byte, delta int64) (n int64, err error) {
-	h, ok := c.exist(k)
-	if !ok {
-		err = c.Set(k, []byte{1})
-		if err != nil {
-			return
-		}
-		c.incrementKeys.Set(h)
+	p, found := c.get(k)
+	if found && len(p) == 18 {
+		n = int64(binary.BigEndian.Uint64(p[10:]))
+		n += delta
+		binary.BigEndian.PutUint64(p[10:], uint64(n))
+		c.set(k, p, c.hash.Sum(k))
+		c.locker.Unlock()
+		return
 	}
-	n = c.increments.Decr(h, delta)
+
+	p = make([]byte, 18)
+	p[0] = 1
+	p[1] = 1
+	binary.BigEndian.PutUint64(p[10:], uint64(delta))
+	c.set(k, p, c.hash.Sum(k))
+	n = delta
+	c.locker.Unlock()
 	return
 }
 
@@ -226,104 +233,13 @@ func (c *Cache) Remove(k []byte) {
 	if len(k) > maxKeyLen {
 		return
 	}
+	c.locker.Lock()
 	h := c.hash.Sum(k)
-	c.del(h)
-}
-
-func (c *Cache) del(h uint64) {
 	idx := h % bucketsCount
 	c.buckets[idx].Remove(h)
+	c.locker.Unlock()
 }
 
-func (c *Cache) setBig(k []byte, v []byte) {
-	if len(k) > maxKeyLen {
-		return
-	}
-	valueLen := len(v)
-	valueHash := c.hash.Sum(v)
+func (c *Cache) evict(_ uint64) {
 
-	subKey := bytebufferpool.Get()
-	var i uint64
-	for len(v) > 0 {
-		subKey.B = marshalUint64(subKey.B[:0], valueHash)
-		subKey.B = marshalUint64(subKey.B, i)
-		i++
-		subValueLen := maxSubValueLen
-		if len(v) < subValueLen {
-			subValueLen = len(v)
-		}
-		subValue := v[:subValueLen]
-		v = v[subValueLen:]
-		c.set(subKey.B, subValue)
-	}
-
-	subKey.B = marshalUint64(subKey.B[:0], valueHash)
-	subKey.B = marshalUint64(subKey.B, uint64(valueLen))
-	c.set(k, subKey.B)
-	bytebufferpool.Put(subKey)
-}
-
-func (c *Cache) getBig(dst, k []byte) (r []byte) {
-	subKey := bytebufferpool.Get()
-	dstWasNil := dst == nil
-	defer func() {
-		bytebufferpool.Put(subKey)
-		if len(r) == 0 && dstWasNil {
-			r = nil
-		}
-	}()
-
-	subKey.B, _ = c.get(subKey.B[:0], k)
-	if len(subKey.B) == 0 {
-		return dst
-	}
-	if len(subKey.B) != 16 {
-		return dst
-	}
-	valueHash := unmarshalUint64(subKey.B)
-	valueLen := unmarshalUint64(subKey.B[8:])
-
-	dstLen := len(dst)
-	if n := dstLen + int(valueLen) - cap(dst); n > 0 {
-		dst = append(dst[:cap(dst)], make([]byte, n)...)
-	}
-	dst = dst[:dstLen]
-	var i uint64
-	for uint64(len(dst)-dstLen) < valueLen {
-		subKey.B = marshalUint64(subKey.B[:0], valueHash)
-		subKey.B = marshalUint64(subKey.B, i)
-		i++
-		dstNew, _ := c.get(dst, subKey.B)
-		if len(dstNew) == len(dst) {
-			return dst[:dstLen]
-		}
-		dst = dstNew
-	}
-	v := dst[dstLen:]
-	if uint64(len(v)) != valueLen {
-		return dst[:dstLen]
-	}
-	h := c.hash.Sum(v)
-	if h != valueHash {
-		return dst[:dstLen]
-	}
-	return dst
-}
-
-func (c *Cache) evict(key uint64) {
-	if c.bigKeys.Exist(key) {
-		c.bigKeys.Remove(key)
-	}
-	if c.incrementKeys.Exist(key) {
-		c.increments.Remove(key)
-	}
-}
-
-func marshalUint64(dst []byte, u uint64) []byte {
-	return append(dst, byte(u>>56), byte(u>>48), byte(u>>40), byte(u>>32), byte(u>>24), byte(u>>16), byte(u>>8), byte(u))
-}
-
-func unmarshalUint64(src []byte) uint64 {
-	_ = src[7]
-	return uint64(src[0])<<56 | uint64(src[1])<<48 | uint64(src[2])<<40 | uint64(src[3])<<32 | uint64(src[4])<<24 | uint64(src[5])<<16 | uint64(src[6])<<8 | uint64(src[7])
 }

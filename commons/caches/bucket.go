@@ -75,18 +75,17 @@ func (b *bucket) cleanLocked() {
 }
 
 func (b *bucket) Set(k, v []byte, h uint64) {
-	if len(k) >= (1<<16) || len(v) >= (1<<16) {
-		return
-	}
-	var kvLenBuf [4]byte
-	kvLenBuf[0] = byte(uint16(len(k)) >> 8)
-	kvLenBuf[1] = byte(len(k))
-	kvLenBuf[2] = byte(uint16(len(v)) >> 8)
-	kvLenBuf[3] = byte(len(v))
-	kvLen := uint64(len(kvLenBuf) + len(k) + len(v))
+	kLen := len(k)
+	vLen := len(v)
+	kvLen := uint64(4 + kLen + vLen)
 	if kvLen >= chunkSize {
 		return
 	}
+	var kvLenBuf [4]byte
+	kvLenBuf[0] = byte(uint16(kLen) >> 8)
+	kvLenBuf[1] = byte(kLen)
+	kvLenBuf[2] = byte(uint16(vLen) >> 8)
+	kvLenBuf[3] = byte(vLen)
 
 	chunks := b.chunks
 	needClean := false

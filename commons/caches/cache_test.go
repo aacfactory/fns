@@ -17,9 +17,11 @@
 package caches_test
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/aacfactory/fns/commons/caches"
 	"github.com/aacfactory/fns/commons/uid"
+	"math"
 	"testing"
 	"time"
 )
@@ -33,7 +35,7 @@ func TestNew(t *testing.T) {
 		return
 	}
 	valA, hasA := cache.Get(keyA)
-	fmt.Println(hasA, string(valA))
+	fmt.Println("a:", hasA, string(valA))
 	// big
 	keyB := []byte("b")
 	big := [2 << 16]byte{}
@@ -45,7 +47,7 @@ func TestNew(t *testing.T) {
 		return
 	}
 	valB, hasB := cache.Get(keyB)
-	fmt.Println(hasB, string(valB))
+	fmt.Println("b:", hasB, len(valB), len(valB) == len(big), bytes.Equal(big[:], valB))
 
 	// ttl
 	keyC := []byte("c")
@@ -55,10 +57,10 @@ func TestNew(t *testing.T) {
 		return
 	}
 	valC, hasC := cache.Get(keyC)
-	fmt.Println(hasC, string(valC))
+	fmt.Println("c:", hasC, string(valC))
 	time.Sleep(1 * time.Second)
 	valC, hasC = cache.Get(keyC)
-	fmt.Println(hasC, string(valC))
+	fmt.Println("c:", hasC, string(valC))
 	cache.Remove(keyB)
 }
 
@@ -68,11 +70,9 @@ func TestIncr(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		fmt.Println(cache.Incr(key, 1))
 	}
-	fmt.Println(cache.Expire(key, 10*time.Second))
+	cache.Expire(key, 10*time.Second)
 	cache.Remove(key)
-	for i := 0; i < 10; i++ {
-		fmt.Println(cache.Decr(key, 1))
-	}
+
 }
 
 func TestCache_Set(t *testing.T) {
@@ -80,4 +80,17 @@ func TestCache_Set(t *testing.T) {
 	key := []byte("a")
 	val := []byte(uid.UID())
 	fmt.Println(cache.Set(key, val))
+}
+
+func TestName(t *testing.T) {
+	fmt.Println(1<<16, 64*1024)
+	var kvLenBuf [4]byte
+	fmt.Println(len(kvLenBuf))
+	now := time.Now()
+	n := now.UnixNano()
+	d := time.Unix(0, n)
+	fmt.Println(now)
+	fmt.Println(d)
+	fmt.Println(now.Equal(d))
+	fmt.Println(math.MaxInt8, math.MinInt8)
 }

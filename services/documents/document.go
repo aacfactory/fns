@@ -20,8 +20,8 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 )
 
-func New(name string, description string, internal bool, ver versions.Version) *Document {
-	return &Document{
+func New(name string, description string, internal bool, ver versions.Version) Document {
+	return Document{
 		Name:        name,
 		Description: description,
 		Internal:    internal,

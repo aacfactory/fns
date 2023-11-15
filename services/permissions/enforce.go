@@ -17,9 +17,9 @@
 package permissions
 
 import (
-	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/authorizations"
@@ -29,12 +29,14 @@ var (
 	ErrForbidden = errors.Forbidden("permissions: forbidden")
 )
 
-func EnforceContext(ctx context.Context, endpoint []byte, fn []byte) (err error) {
+func EnforceContext(ctx context.Context) (err error) {
 	authorization := authorizations.Load(ctx)
 	if !authorization.Validate() {
 		err = ErrForbidden
 		return
 	}
+	r := services.LoadRequest(ctx)
+	endpoint, fn := r.Fn()
 	ok, enforceErr := Enforce(ctx, EnforceParam{
 		Account:  authorization.Account,
 		Endpoint: endpoint,
@@ -55,8 +57,8 @@ func Enforce(ctx context.Context, param EnforceParam) (ok bool, err error) {
 	rt := runtime.Load(ctx)
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
-		bytex.FromString(name), bytex.FromString(enforceFn),
-		services.NewArgument(param),
+		bytex.FromString(endpointName), bytex.FromString(enforceFnName),
+		param,
 	)
 	if handleErr != nil {
 		err = handleErr

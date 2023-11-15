@@ -1,7 +1,6 @@
 package services
 
 import (
-	sc "context"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services/documents"
@@ -15,7 +14,7 @@ type Endpoint interface {
 	Internal() (ok bool)
 	Document() (document documents.Document)
 	Functions() (functions Fns)
-	Shutdown(ctx sc.Context)
+	Shutdown(ctx context.Context)
 }
 
 type EndpointInfo struct {

@@ -14,7 +14,7 @@ func (id Id) Int() int64 {
 	}
 	v, err := strconv.ParseInt(id.String(), 10, 64)
 	if err != nil {
-		panic(errors.Warning("fns: get int value from id failed").WithCause(err).WithMeta("id", id.String()))
+		panic(errors.Warning("authorizations: get int value from id failed").WithCause(err).WithMeta("id", id.String()))
 		return 0
 	}
 	return v

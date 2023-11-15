@@ -67,8 +67,10 @@ func (s *Services) Add(service Service) (err error) {
 		return
 	}
 	constructErr := service.Construct(Options{
-		Log:    s.log.With("service", name),
-		Config: config,
+		Id:      s.id,
+		Version: s.version,
+		Log:     s.log.With("service", name),
+		Config:  config,
 	})
 	if constructErr != nil {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(constructErr)
@@ -225,7 +227,7 @@ func (s *Services) Listen(ctx sc.Context) (err error) {
 		if components := ln.Components(); len(components) > 0 {
 			WithComponents(lnCtx, components)
 		}
-		go func(ctx sc.Context, ln Listenable, errCh chan error) {
+		go func(ctx context.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)
 			if lnErr != nil {
 				errCh <- lnErr
@@ -256,7 +258,7 @@ func (s *Services) Shutdown(ctx sc.Context) {
 		wg.Add(1)
 		go func(ctx sc.Context, endpoint Endpoint, wg *sync.WaitGroup) {
 			ec, ecc := sc.WithCancel(ctx)
-			endpoint.Shutdown(ec)
+			endpoint.Shutdown(context.WithValue(ec, bytex.FromString("endpoint"), endpoint.Name()))
 			ecc()
 			wg.Done()
 		}(ctx, endpoint, wg)

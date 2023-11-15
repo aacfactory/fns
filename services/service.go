@@ -17,17 +17,20 @@
 package services
 
 import (
-	"context"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/logs"
 )
 
 type Options struct {
-	Log    logs.Logger
-	Config configures.Config
+	Id      string
+	Version versions.Version
+	Log     logs.Logger
+	Config  configures.Config
 }
 
 type Service interface {
@@ -49,6 +52,7 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 		internal:   internal,
 		log:        nil,
 		components: make(Components, 0, 1),
+		functions:  make(Fns, 0, 1),
 	}
 	if components != nil && len(components) > 0 {
 		for _, component := range components {
@@ -62,10 +66,13 @@ func NewAbstract(name string, internal bool, components ...Component) Abstract {
 }
 
 type Abstract struct {
+	id         string
 	name       string
+	version    versions.Version
 	internal   bool
 	log        logs.Logger
 	components Components
+	functions  Fns
 }
 
 func (abstract *Abstract) Construct(options Options) (err error) {
@@ -77,8 +84,10 @@ func (abstract *Abstract) Construct(options Options) (err error) {
 				config, _ = configures.NewJsonConfig([]byte{'{', '}'})
 			}
 			constructErr := component.Construct(Options{
-				Log:    abstract.log.With("component", component.Name()),
-				Config: config,
+				Id:      abstract.id,
+				Version: abstract.version,
+				Log:     abstract.log.With("component", component.Name()),
+				Config:  config,
 			})
 			if constructErr != nil {
 				if abstract.log.ErrorEnabled() {
@@ -92,9 +101,17 @@ func (abstract *Abstract) Construct(options Options) (err error) {
 	return
 }
 
+func (abstract *Abstract) Id() string {
+	return abstract.id
+}
+
 func (abstract *Abstract) Name() (name string) {
 	name = abstract.name
 	return
+}
+
+func (abstract *Abstract) Version() versions.Version {
+	return abstract.version
 }
 
 func (abstract *Abstract) Internal() (internal bool) {
@@ -108,6 +125,15 @@ func (abstract *Abstract) Components() (components Components) {
 }
 
 func (abstract *Abstract) Document() (document documents.Document) {
+	return
+}
+
+func (abstract *Abstract) AddFunction(fn Fn) {
+	abstract.functions = abstract.functions.Add(fn)
+}
+
+func (abstract *Abstract) Functions() (functions Fns) {
+	functions = abstract.functions
 	return
 }
 

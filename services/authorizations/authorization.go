@@ -39,16 +39,16 @@ func (authorization Authorization) Validate() bool {
 }
 
 const (
-	EndpointName = "authorizations"
-	EncodeFnName = "encode"
-	DecodeFnName = "decode"
+	endpointName = "authorizations"
+	encodeFnName = "encode"
+	decodeFnName = "decode"
 )
 
 func Encode(ctx context.Context, authorization Authorization) (token Token, err error) {
 	rt := runtime.Load(ctx)
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
-		bytex.FromString(EndpointName), bytex.FromString(EncodeFnName),
+		bytex.FromString(endpointName), bytex.FromString(encodeFnName),
 		authorization,
 	)
 	if handleErr != nil {
@@ -58,7 +58,7 @@ func Encode(ctx context.Context, authorization Authorization) (token Token, err 
 	token = make([]byte, 0, 1)
 	scanErr := response.Scan(&token)
 	if scanErr != nil {
-		err = errors.Warning("fns: scan encode value failed").WithCause(scanErr)
+		err = errors.Warning("authorizations: scan encode value failed").WithCause(scanErr)
 		return
 	}
 	return
@@ -68,7 +68,7 @@ func Decode(ctx context.Context, token Token) (authorization Authorization, err 
 	rt := runtime.Load(ctx)
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
-		bytex.FromString(EndpointName), bytex.FromString(DecodeFnName),
+		bytex.FromString(endpointName), bytex.FromString(decodeFnName),
 		token,
 	)
 	if handleErr != nil {
@@ -77,7 +77,7 @@ func Decode(ctx context.Context, token Token) (authorization Authorization, err 
 	}
 	scanErr := response.Scan(&authorization)
 	if scanErr != nil {
-		err = errors.Warning("fns: scan decode value failed").WithCause(scanErr)
+		err = errors.Warning("authorizations: scan decode value failed").WithCause(scanErr)
 		return
 	}
 	return

@@ -1,7 +1,6 @@
 package services
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/context"
@@ -14,7 +13,7 @@ var (
 type Component interface {
 	Name() (name string)
 	Construct(options Options) (err error)
-	Shutdown(ctx sc.Context)
+	Shutdown(ctx context.Context)
 }
 
 type Components []Component

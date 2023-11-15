@@ -1,49 +1,48 @@
-package handlers
+package runtime
 
 import (
 	"bytes"
 	"context"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/transports"
 	"time"
 )
 
 var (
-	healthPath = bytex.FromString("/application/health")
+	healthPath = bytex.FromString("/health")
 )
 
 func CheckHealth(ctx context.Context, client transports.Client) (ok bool) {
-	status, _, _, _ := client.Do(ctx, methodGet, healthPath, nil, nil)
+	status, _, _, _ := client.Do(ctx, transports.MethodGet, healthPath, nil, nil)
 	ok = status == 200
 	return
 }
 
-func NewHealthHandler() transports.MuxHandler {
-	return &HealthHandler{
+func HealthHandler() transports.MuxHandler {
+	return &healthHandler{
 		launch: time.Now(),
 	}
 }
 
-type HealthHandler struct {
+type healthHandler struct {
 	launch time.Time
 }
 
-func (handler *HealthHandler) Name() string {
+func (handler *healthHandler) Name() string {
 	return "health"
 }
 
-func (handler *HealthHandler) Construct(_ transports.MuxHandlerOptions) error {
+func (handler *healthHandler) Construct(_ transports.MuxHandlerOptions) error {
 	return nil
 }
 
-func (handler *HealthHandler) Match(method []byte, path []byte, _ transports.Header) bool {
-	ok := bytes.Equal(method, methodGet) && bytes.Equal(path, healthPath)
+func (handler *healthHandler) Match(method []byte, path []byte, _ transports.Header) bool {
+	ok := bytes.Equal(method, transports.MethodGet) && bytes.Equal(path, healthPath)
 	return ok
 }
 
-func (handler *HealthHandler) Handle(w transports.ResponseWriter, r transports.Request) {
-	rt := runtime.Load(r)
+func (handler *healthHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+	rt := Load(r)
 	running, _ := rt.Running()
 	w.Succeed(Health{
 		Id:      rt.AppId(),

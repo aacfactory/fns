@@ -37,6 +37,18 @@ func Release(ctx context.Context) {
 	}
 }
 
+func Wrap(ctx context.Context) Context {
+	return &context_{
+		Context: ctx,
+		entries: make(Entries, 0, 1),
+		locals:  make(Entries, 0, 1),
+	}
+}
+
+func TODO() Context {
+	return Wrap(context.TODO())
+}
+
 func WithValue(parent context.Context, key []byte, val any) Context {
 	ctx, ok := parent.(Context)
 	if ok {

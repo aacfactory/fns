@@ -7,6 +7,7 @@ import (
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/json"
 	"net/http"
 )
 
@@ -19,7 +20,7 @@ var (
 	slashBytes = []byte{'/'}
 )
 
-func NewEndpointsHandler(endpoints services.HostEndpoints) transports.MuxHandler {
+func NewEndpointsHandler(endpoints services.EndpointInfos) transports.MuxHandler {
 	return &EndpointsHandler{
 		endpoints: endpoints,
 	}
@@ -27,7 +28,7 @@ func NewEndpointsHandler(endpoints services.HostEndpoints) transports.MuxHandler
 
 type EndpointsHandler struct {
 	// todo matcher via documents
-	endpoints services.HostEndpoints
+	endpoints services.EndpointInfos
 }
 
 func (handler *EndpointsHandler) Name() string {
@@ -104,7 +105,7 @@ func (handler *EndpointsHandler) Handle(w transports.ResponseWriter, r transport
 	// handle
 	response, err := rt.Endpoints().Request(
 		r, service, fn,
-		services.NewArgument(body),
+		json.RawMessage(body),
 		options...,
 	)
 	if err != nil {

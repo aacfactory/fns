@@ -1,10 +1,10 @@
 package runtime
 
 import (
-	"context"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
@@ -80,8 +80,8 @@ func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {
 	if ok {
 		name = named.Name()
 	}
-	ctx = log.With(ctx, rt.log.With("task", name))
-	ctx = With(ctx, rt)
+	log.With(ctx, rt.log.With("task", name))
+	With(ctx, rt)
 	return rt.worker.Dispatch(ctx, task)
 }
 
@@ -91,8 +91,8 @@ func (rt *Runtime) Execute(ctx context.Context, task workers.Task) {
 	if ok {
 		name = named.Name()
 	}
-	ctx = log.With(ctx, rt.log.With("task", name))
-	ctx = With(ctx, rt)
+	log.With(ctx, rt.log.With("task", name))
+	With(ctx, rt)
 	rt.worker.MustDispatch(ctx, task)
 	return
 }

@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
@@ -35,12 +34,12 @@ func Load(ctx context.Context) *Runtime {
 
 func TryExecute(ctx context.Context, task workers.Task) bool {
 	rt := Load(ctx)
-	return rt.TryExecute(sc.TODO(), task)
+	return rt.TryExecute(context.TODO(), task)
 }
 
 func Execute(ctx context.Context, task workers.Task) {
 	rt := Load(ctx)
-	rt.Execute(sc.TODO(), task)
+	rt.Execute(context.TODO(), task)
 }
 
 func Barrier(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {

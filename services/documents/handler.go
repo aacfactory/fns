@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	documentsHandlerPath = bytex.FromString("/services/documents")
+	documentsHandlerPath = bytex.FromString("/documents")
 )
 
 type HandlerConfig struct {

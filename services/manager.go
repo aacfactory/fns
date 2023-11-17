@@ -41,6 +41,7 @@ func New(id string, version versions.Version, log logs.Logger, config Config, wo
 		id:      id,
 		version: version,
 		values:  make(Services, 0, 1),
+		infos:   make(EndpointInfos, 0, 1),
 		worker:  worker,
 	}
 }
@@ -58,6 +59,7 @@ type Manager struct {
 	id      string
 	version versions.Version
 	values  Services
+	infos   EndpointInfos
 	worker  workers.Workers
 }
 
@@ -83,31 +85,30 @@ func (manager *Manager) Add(service Service) (err error) {
 		return
 	}
 	manager.values = manager.values.Add(service)
+	// info
+	internal := service.Internal()
+	functions := make(FnInfos, 0, len(service.Functions()))
+	for _, fn := range service.Functions() {
+		functions = append(functions, FnInfo{
+			Name:     fn.Name(),
+			Readonly: fn.Readonly(),
+			Internal: internal || fn.Internal(),
+		})
+	}
+	manager.infos = append(manager.infos, EndpointInfo{
+		Id:        manager.id,
+		Name:      service.Name(),
+		Version:   manager.version,
+		Internal:  internal,
+		Functions: functions,
+		Document:  service.Document(),
+	})
+	sort.Sort(manager.infos)
 	return
 }
 
 func (manager *Manager) Info() (infos EndpointInfos) {
-	infos = make(EndpointInfos, 0, manager.values.Len())
-	for _, value := range manager.values {
-		internal := value.Internal()
-		functions := make(FnInfos, 0, len(value.Functions()))
-		for _, fn := range value.Functions() {
-			functions = append(functions, FnInfo{
-				Name:     fn.Name(),
-				Readonly: fn.Readonly(),
-				Internal: internal || fn.Internal(),
-			})
-		}
-		infos = append(infos, EndpointInfo{
-			Id:        manager.id,
-			Name:      value.Name(),
-			Version:   manager.version,
-			Internal:  internal,
-			Functions: functions,
-			Document:  value.Document(),
-		})
-	}
-	sort.Sort(infos)
+	infos = manager.infos
 	return
 }
 

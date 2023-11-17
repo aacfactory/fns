@@ -113,34 +113,27 @@ type Endpoints interface {
 	Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error)
 }
 
-type EndpointsManager interface {
-	Endpoints
-	Add(service Service) (err error)
-	Listen(ctx context.Context) (err error)
-	Shutdown(ctx context.Context)
-}
+type Services []Service
 
-type Deployed []Endpoint
-
-func (s Deployed) Len() int {
+func (s Services) Len() int {
 	return len(s)
 }
 
-func (s Deployed) Less(i, j int) bool {
+func (s Services) Less(i, j int) bool {
 	return strings.Compare(s[i].Name(), s[j].Name()) < 0
 }
 
-func (s Deployed) Swap(i, j int) {
+func (s Services) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func (s Deployed) Add(v Endpoint) Deployed {
+func (s Services) Add(v Service) Services {
 	ss := append(s, v)
 	sort.Sort(ss)
 	return ss
 }
 
-func (s Deployed) Find(name []byte) (v Endpoint, found bool) {
+func (s Services) Find(name []byte) (v Service, found bool) {
 	ns := unsafe.String(unsafe.SliceData(name), len(name))
 	n := s.Len()
 	if n < 65 {

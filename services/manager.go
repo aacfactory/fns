@@ -35,53 +35,60 @@ import (
 )
 
 func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers) EndpointsManager {
-	return &Services{
+	return &Manager{
 		log:     log.With("fns", "services"),
 		config:  config,
 		id:      id,
 		version: version,
-		values:  make(Deployed, 0, 1),
+		values:  make(Services, 0, 1),
 		worker:  worker,
 	}
 }
 
-type Services struct {
+type EndpointsManager interface {
+	Endpoints
+	Add(service Service) (err error)
+	Listen(ctx context.Context) (err error)
+	Shutdown(ctx context.Context)
+}
+
+type Manager struct {
 	log     logs.Logger
 	config  Config
 	id      string
 	version versions.Version
-	values  Deployed
+	values  Services
 	worker  workers.Workers
 }
 
-func (s *Services) Add(service Service) (err error) {
+func (manager *Manager) Add(service Service) (err error) {
 	name := strings.TrimSpace(service.Name())
-	if _, has := s.values.Find([]byte(name)); has {
+	if _, has := manager.values.Find([]byte(name)); has {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(fmt.Errorf("service has added"))
 		return
 	}
-	config, configErr := s.config.Get(name)
+	config, configErr := manager.config.Get(name)
 	if configErr != nil {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(configErr)
 		return
 	}
 	constructErr := service.Construct(Options{
-		Id:      s.id,
-		Version: s.version,
-		Log:     s.log.With("service", name),
+		Id:      manager.id,
+		Version: manager.version,
+		Log:     manager.log.With("service", name),
 		Config:  config,
 	})
 	if constructErr != nil {
 		err = errors.Warning("fns: services add service failed").WithMeta("service", name).WithCause(constructErr)
 		return
 	}
-	s.values = s.values.Add(service)
+	manager.values = manager.values.Add(service)
 	return
 }
 
-func (s *Services) Info() (infos EndpointInfos) {
-	infos = make(EndpointInfos, 0, s.values.Len())
-	for _, value := range s.values {
+func (manager *Manager) Info() (infos EndpointInfos) {
+	infos = make(EndpointInfos, 0, manager.values.Len())
+	for _, value := range manager.values {
 		internal := value.Internal()
 		functions := make(FnInfos, 0, len(value.Functions()))
 		for _, fn := range value.Functions() {
@@ -92,9 +99,9 @@ func (s *Services) Info() (infos EndpointInfos) {
 			})
 		}
 		infos = append(infos, EndpointInfo{
-			Id:        s.id,
+			Id:        manager.id,
 			Name:      value.Name(),
-			Version:   s.version,
+			Version:   manager.version,
 			Internal:  internal,
 			Functions: functions,
 			Document:  value.Document(),
@@ -104,7 +111,7 @@ func (s *Services) Info() (infos EndpointInfos) {
 	return
 }
 
-func (s *Services) Get(_ context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool) {
+func (manager *Manager) Get(_ context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool) {
 	if len(options) > 0 {
 		opt := EndpointGetOptions{
 			id:              nil,
@@ -114,21 +121,21 @@ func (s *Services) Get(_ context.Context, name []byte, options ...EndpointGetOpt
 			option(&opt)
 		}
 		if len(opt.id) > 0 {
-			if s.id != string(opt.id) {
+			if manager.id != string(opt.id) {
 				return
 			}
 		}
 		if len(opt.requestVersions) > 0 {
-			if !opt.requestVersions.Accept(name, s.version) {
+			if !opt.requestVersions.Accept(name, manager.version) {
 				return
 			}
 		}
 	}
-	endpoint, has = s.values.Find(name)
+	endpoint, has = manager.values.Find(name)
 	return
 }
 
-func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error) {
+func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error) {
 	// valid params
 	if len(name) == 0 {
 		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
@@ -153,7 +160,7 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param in
 		}
 		endpointGetOptions = append(endpointGetOptions, EndpointVersions(acceptedVersions))
 	}
-	endpoint, found := s.Get(ctx, name, endpointGetOptions...)
+	endpoint, found := manager.Get(ctx, name, endpointGetOptions...)
 	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
 			WithMeta("service", bytex.ToString(name)).
@@ -174,7 +181,7 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param in
 	// ctx >>>
 	ctx = req
 	// log
-	log.With(ctx, s.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	log.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(Service)
 	if ok {
@@ -192,7 +199,7 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param in
 	// promise
 	promise, future := futures.New()
 	// dispatch
-	dispatched := s.worker.Dispatch(ctx, fnTask{
+	dispatched := manager.worker.Dispatch(ctx, fnTask{
 		fn:      function,
 		promise: promise,
 	})
@@ -212,9 +219,9 @@ func (s *Services) Request(ctx context.Context, name []byte, fn []byte, param in
 	return
 }
 
-func (s *Services) Listen(ctx context.Context) (err error) {
+func (manager *Manager) Listen(ctx context.Context) (err error) {
 	errs := errors.MakeErrors()
-	for _, endpoint := range s.values {
+	for _, endpoint := range manager.values {
 		ln, ok := endpoint.(Listenable)
 		if !ok {
 			continue
@@ -222,7 +229,7 @@ func (s *Services) Listen(ctx context.Context) (err error) {
 		errCh := make(chan error, 1)
 
 		lnCtx := context.WithValue(ctx, bytex.FromString("listener"), ln.Name())
-		log.With(lnCtx, s.log.With("service", ln.Name()))
+		log.With(lnCtx, manager.log.With("service", ln.Name()))
 		if components := ln.Components(); len(components) > 0 {
 			WithComponents(lnCtx, components)
 		}
@@ -240,8 +247,8 @@ func (s *Services) Listen(ctx context.Context) (err error) {
 			break
 		}
 		close(errCh)
-		if s.log.DebugEnabled() {
-			s.log.Debug().With("service", endpoint.Name()).Message("fns: service is listening...")
+		if manager.log.DebugEnabled() {
+			manager.log.Debug().With("service", endpoint.Name()).Message("fns: service is listening...")
 		}
 	}
 	if len(errs) > 0 {
@@ -250,10 +257,10 @@ func (s *Services) Listen(ctx context.Context) (err error) {
 	return
 }
 
-func (s *Services) Shutdown(ctx context.Context) {
+func (manager *Manager) Shutdown(ctx context.Context) {
 	wg := new(sync.WaitGroup)
 	ch := make(chan struct{}, 1)
-	for _, endpoint := range s.values {
+	for _, endpoint := range manager.values {
 		wg.Add(1)
 		go func(ctx context.Context, endpoint Endpoint, wg *sync.WaitGroup) {
 			endpoint.Shutdown(ctx)

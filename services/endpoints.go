@@ -23,7 +23,7 @@ type EndpointInfo struct {
 	Version   versions.Version   `json:"version"`
 	Internal  bool               `json:"internal"`
 	Functions FnInfos            `json:"functions"`
-	Document  documents.Document `json:"document"`
+	Document  documents.Endpoint `json:"document"`
 }
 
 type EndpointInfos []EndpointInfo

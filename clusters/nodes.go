@@ -11,8 +11,8 @@ import (
 	"io"
 )
 
-func NewEndpointInfo(name string, internal bool, document documents.Document) (info EndpointInfo, err error) {
-	info = EndpointInfo{
+func NewService(name string, internal bool, document documents.Endpoint) (service Service, err error) {
+	service = Service{
 		Name:        name,
 		Internal:    internal,
 		DocumentRaw: nil,
@@ -32,48 +32,48 @@ func NewEndpointInfo(name string, internal bool, document documents.Document) (i
 		}
 		_, _ = w.Write(p)
 		_ = w.Close()
-		info.DocumentRaw = buf.Bytes()
+		service.DocumentRaw = buf.Bytes()
 	}
 	return
 }
 
-type EndpointInfo struct {
+type Service struct {
 	Name        string `json:"name"`
 	Internal    bool   `json:"internal"`
 	DocumentRaw []byte `json:"document"`
 }
 
-func (info EndpointInfo) Document() (document documents.Document, err error) {
-	if info.Internal || len(info.DocumentRaw) == 0 {
+func (service Service) Document() (document documents.Endpoint, err error) {
+	if service.Internal || len(service.DocumentRaw) == 0 {
 		return
 	}
-	r, rErr := zlib.NewReader(bytes.NewReader(info.DocumentRaw))
+	r, rErr := zlib.NewReader(bytes.NewReader(service.DocumentRaw))
 	if rErr != nil {
-		err = errors.Warning("fns: endpoint info get document failed").WithCause(rErr)
+		err = errors.Warning("fns: service get document failed").WithCause(rErr)
 		return
 	}
 	p, readErr := io.ReadAll(r)
 	if readErr != nil {
 		_ = r.Close()
-		err = errors.Warning("fns: endpoint info get document failed").WithCause(readErr)
+		err = errors.Warning("fns: service get document failed").WithCause(readErr)
 		return
 	}
 	_ = r.Close()
-	document = documents.Document{}
+	document = documents.Endpoint{}
 	decodeErr := json.Unmarshal(p, &document)
 	if decodeErr != nil {
-		err = errors.Warning("fns: endpoint info get document failed").WithCause(decodeErr)
+		err = errors.Warning("fns: service get document failed").WithCause(decodeErr)
 		return
 	}
 	return
 }
 
 type Node struct {
-	Id        string           `json:"id"`
-	Name      string           `json:"name"`
-	Version   versions.Version `json:"version"`
-	Address   string           `json:"address"`
-	Endpoints []EndpointInfo   `json:"endpoints"`
+	Id       string           `json:"id"`
+	Name     string           `json:"name"`
+	Version  versions.Version `json:"version"`
+	Address  string           `json:"address"`
+	Services []Service        `json:"services"`
 }
 
 const (

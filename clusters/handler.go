@@ -2,23 +2,19 @@ package clusters
 
 import (
 	"bytes"
-	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/runtime"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/fns/services/tracing"
+	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
-	"net/http"
 )
 
 var (
 	slashBytes          = []byte{'/'}
-	methodPost          = bytex.FromString(http.MethodPost)
-	dispatchContentType = bytex.FromString("application/json")
 	internalContentType = bytex.FromString("application/json+fns")
 )
 
@@ -35,19 +31,23 @@ type RequestBody struct {
 type ResponseBody struct {
 	Succeed bool            `json:"succeed"`
 	Data    json.RawMessage `json:"data"`
-	Span    *tracing.Span   `json:"span"`
+	Span    *tracings.Span  `json:"span"`
 }
 
-func NewInternalHandler(id string, signature signatures.Signature) transports.MuxHandler {
+// NewInternalHandler
+// endpoints: local endpoints
+func NewInternalHandler(id string, signature signatures.Signature, endpoints services.Endpoints) transports.MuxHandler {
 	return &InternalHandler{
 		id:        bytex.FromString(id),
 		signature: signature,
+		endpoints: endpoints,
 	}
 }
 
 type InternalHandler struct {
 	id        []byte
 	signature signatures.Signature
+	endpoints services.Endpoints
 }
 
 func (handler *InternalHandler) Name() string {
@@ -58,8 +58,8 @@ func (handler *InternalHandler) Construct(_ transports.MuxHandlerOptions) error 
 	return nil
 }
 
-func (handler *InternalHandler) Match(method []byte, path []byte, header transports.Header) bool {
-	matched := bytes.Equal(method, methodPost) &&
+func (handler *InternalHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
+	matched := bytes.Equal(method, transports.MethodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), internalContentType) &&
 		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
@@ -155,18 +155,16 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 
 	var ctx context.Context = r
 
-	// runtime
-	rt := runtime.Load(r)
 	// handle
-	response, err := rt.Endpoints().Request(
+	response, err := handler.endpoints.Request(
 		ctx, service, fn,
-		services.NewArgument(rb.Argument),
+		rb.Argument,
 		options...,
 	)
 	succeed := err == nil
 	var data []byte
 	var dataErr error
-	var span *tracing.Span
+	var span *tracings.Span
 	if succeed {
 		if response.Exist() {
 			data, dataErr = json.Marshal(response)
@@ -180,7 +178,10 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 
 	if hasRequestId {
-		span = tracing.LoadSpan(ctx)
+		trace, hasTrace := tracings.Load(ctx)
+		if hasTrace {
+			span = trace.Span
+		}
 	}
 
 	rsb := ResponseBody{

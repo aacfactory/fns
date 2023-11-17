@@ -61,7 +61,7 @@ type Options struct {
 	Config  Config
 }
 
-func New(options Options) (discovery services.Discovery, cluster Cluster, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
+func Newxx(options Options) (discovery services.Discovery, cluster Cluster, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
 	// dev
 	if options.Config.Name == developmentName {
 		if options.Config.DevMode {

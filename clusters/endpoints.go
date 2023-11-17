@@ -1,154 +1,99 @@
 package clusters
 
 import (
-	sc "context"
 	"fmt"
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/commons/window"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/logs"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
-func NewEndpoints(local services.Endpoints, log logs.Logger, dialer transports.Dialer, signature signatures.Signature, events <-chan NodeEvent) services.EndpointsManager {
-	v := &endpoints{
-		local:     local,
-		log:       log.With("cluster", "endpoints"),
-		dialer:    dialer,
+func NewEndpoint(id string, version versions.Version, name string, internal bool, document documents.Endpoint, client transports.Client, signature signatures.Signature) (endpoint *Endpoint) {
+	endpoint = &Endpoint{
+		id:        id,
+		version:   version,
+		name:      name,
+		internal:  internal,
+		document:  document,
+		running:   atomic.Bool{},
+		functions: make(services.Fns, 0, 1),
+		client:    client,
 		signature: signature,
-		names:     make(NamedRegistrations, 0, 1),
-		locker:    sync.RWMutex{},
-		events:    events,
 	}
-	return v
+	endpoint.running.Store(true)
+	return
 }
 
-type endpoints struct {
-	log       logs.Logger
-	local     services.Endpoints
-	dialer    transports.Dialer
+type Endpoint struct {
+	id        string
+	version   versions.Version
+	name      string
+	internal  bool
+	document  documents.Endpoint
+	running   atomic.Bool
+	functions services.Fns
+	client    transports.Client
 	signature signatures.Signature
-	names     NamedRegistrations
-	locker    sync.RWMutex
-	events    <-chan NodeEvent
 }
 
-func (eps *endpoints) Add(service services.Service) (err error) {
-
-	return
+func (endpoint *Endpoint) Running() bool {
+	return endpoint.running.Load()
 }
 
-func (eps *endpoints) Info() (infos services.EndpointInfos) {
-	eps.locker.RLock()
-	defer eps.locker.RUnlock()
-	infos = make([]services.EndpointInfo, 0, 1)
-	for _, name := range eps.names {
-		for _, value := range name.values {
-			infos = append(infos, services.EndpointInfo{
-				Id:       value.id,
-				Name:     value.name,
-				Version:  value.version,
-				Internal: value.internal,
-				Document: value.document,
-			})
-		}
+func (endpoint *Endpoint) Name() string {
+	return endpoint.name
+}
+
+func (endpoint *Endpoint) Internal() bool {
+	return endpoint.internal
+}
+
+func (endpoint *Endpoint) Document() documents.Endpoint {
+	return endpoint.document
+}
+
+func (endpoint *Endpoint) Functions() services.Fns {
+	return endpoint.functions
+}
+
+func (endpoint *Endpoint) Shutdown(_ context.Context) {
+	endpoint.running.Store(false)
+	endpoint.client.Close()
+}
+
+func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
+	fn := &Fn{
+		endpointName: endpoint.name,
+		name:         name,
+		internal:     internal,
+		readonly:     readonly,
+		path:         bytex.FromString(fmt.Sprintf("/%s/%s", endpoint.name, name)),
+		signature:    endpoint.signature,
+		errs:         window.NewTimes(10 * time.Second),
+		health:       atomic.Bool{},
+		client:       endpoint.client,
 	}
-	return
+	fn.health.Store(true)
+	endpoint.functions = endpoint.functions.Add(fn)
 }
 
-func (eps *endpoints) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
-	//TODO implement me
-	panic("implement me")
+type Endpoints []*Endpoint
+
+func (list Endpoints) Len() int {
+	return len(list)
 }
 
-func (eps *endpoints) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...services.RequestOption) (response services.Response, err error) {
-	//TODO implement me
-	panic("implement me")
+func (list Endpoints) Less(i, j int) bool {
+	return list[i].version.LessThan(list[j].version)
 }
 
-func (eps *endpoints) Listen(ctx context.Context) (err error) {
-	// watching
-	// local.listen
-	return
-}
-
-func (eps *endpoints) Shutdown(ctx context.Context) {
-
-	return
-}
-
-func (eps *endpoints) watching() {
-	go func(eps *endpoints) {
-		for {
-			event, ok := <-eps.events
-			if !ok {
-				break
-			}
-			switch event.Kind {
-			case Add:
-				registrations := make([]*Registration, 0, 1)
-				client, clientErr := eps.dialer.Dial(bytex.FromString(event.Node.Address))
-				if clientErr != nil {
-					if eps.log.WarnEnabled() {
-						eps.log.Warn().
-							With("cluster", "registrations").
-							Cause(errors.Warning(fmt.Sprintf("fns: dial %s failed", event.Node.Address)).WithMeta("address", event.Node.Address).WithCause(clientErr)).
-							Message(fmt.Sprintf("fns: dial %s failed", event.Node.Address))
-					}
-					break
-				}
-				// check health
-				active := false
-				for i := 0; i < 10; i++ {
-					ctx, cancel := sc.WithTimeout(context.TODO(), 2*time.Second)
-					if runtime.CheckHealth(ctx, client) {
-						active = true
-						cancel()
-						break
-					}
-					cancel()
-					time.Sleep(1 * time.Second)
-				}
-				if !active {
-					break
-				}
-				// get document
-				for _, endpoint := range event.Node.Endpoints {
-					document, documentErr := endpoint.Document()
-					if documentErr != nil {
-						if eps.log.WarnEnabled() {
-							eps.log.Warn().
-								With("cluster", "registrations").
-								Cause(errors.Warning("fns: get endpoint document failed").WithMeta("address", event.Node.Address).WithCause(documentErr)).
-								Message(fmt.Sprintf("fns: dial %s failed", event.Node.Address))
-						}
-						continue
-					}
-					r := NewRegistration(event.Node.Id, endpoint.Name, event.Node.Version, endpoint.Internal, document, client, eps.signature)
-					registrations = append(registrations, r)
-				}
-				eps.locker.Lock()
-				for _, registration := range registrations {
-					eps.names = eps.names.Add(registration)
-				}
-				eps.locker.Unlock()
-				break
-			case Remove:
-				eps.locker.Lock()
-				for _, endpoint := range event.Node.Endpoints {
-					eps.names = eps.names.Remove(endpoint.Name, event.Node.Id)
-				}
-				eps.locker.Unlock()
-				break
-			default:
-				break
-			}
-		}
-	}(eps)
+func (list Endpoints) Swap(i, j int) {
+	list[i], list[j] = list[j], list[i]
 	return
 }

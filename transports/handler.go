@@ -3,6 +3,7 @@ package transports
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/logs"
 )
 
@@ -24,7 +25,7 @@ type MuxHandlerOptions struct {
 type MuxHandler interface {
 	Name() string
 	Construct(options MuxHandlerOptions) error
-	Match(method []byte, path []byte, header Header) bool
+	Match(ctx context.Context, method []byte, path []byte, header Header) bool
 	Handler
 }
 
@@ -44,7 +45,7 @@ func (mux *Mux) Add(handler MuxHandler) {
 
 func (mux *Mux) Handle(w ResponseWriter, r Request) {
 	for _, handler := range mux.handlers {
-		matched := handler.Match(r.Method(), r.Path(), r.Header())
+		matched := handler.Match(r, r.Method(), r.Path(), r.Header())
 		if matched {
 			handler.Handle(w, r)
 			return

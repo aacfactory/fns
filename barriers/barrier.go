@@ -1,10 +1,10 @@
 package barriers
 
 import (
-	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/context"
 	"golang.org/x/sync/singleflight"
 )
 

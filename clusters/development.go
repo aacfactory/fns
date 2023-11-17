@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-func NewDevelopment(options Options) (discovery services.Discovery, cluster Cluster, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
+func NewDevelopment(options Options) (manager services.EndpointsManager, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
 	// signature
 	signature := NewSignature(options.Config.Secret)
 	// cluster
@@ -38,7 +38,7 @@ func NewDevelopment(options Options) (discovery services.Discovery, cluster Clus
 		err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("address in cluster config is required")).WithMeta("name", options.Config.Name)
 		return
 	}
-	cluster = &Development{
+	cluster := &Development{
 		log:       nil,
 		signature: signature,
 		address:   nil,
@@ -95,7 +95,7 @@ func (cluster *Development) Construct(options ClusterOptions) (err error) {
 	return
 }
 
-func (cluster *Development) AddEndpoint(_ EndpointInfo) {
+func (cluster *Development) AddService(service Service) {
 	return
 }
 

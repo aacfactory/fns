@@ -5,6 +5,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
@@ -31,11 +32,11 @@ var (
 	developmentPathPrefix = []byte("/development/")
 )
 
-func NewHandler(signature signatures.Signature, discovery services.Discovery, shared shareds.Shared) transports.MuxHandler {
+func NewHandler(signature signatures.Signature, endpoints services.Endpoints, shared shareds.Shared) transports.MuxHandler {
 	return &Handler{
 		log:       nil,
 		signature: signature,
-		discovery: NewDiscoveryHandler(signature, discovery),
+		discovery: NewDiscoveryHandler(signature, endpoints),
 		shared:    NewSharedHandler(signature, shared),
 		endpoints: NewEndpointsHandler(signature),
 	}
@@ -58,7 +59,7 @@ func (handler *Handler) Construct(options transports.MuxHandlerOptions) error {
 	return nil
 }
 
-func (handler *Handler) Match(method []byte, path []byte, header transports.Header) bool {
+func (handler *Handler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
 	ok := bytes.Equal(method, methodPost) &&
 		(len(bytes.Split(path, slashBytes)) == 3 || bytes.Index(path, developmentPathPrefix) == 0) &&
 		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&

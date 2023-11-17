@@ -139,16 +139,16 @@ func (discovery *Discovery) Client() transports.Client {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func NewDiscoveryHandler(signature signatures.Signature, discovery services.Discovery) transports.Handler {
+func NewDiscoveryHandler(signature signatures.Signature, endpoints services.Endpoints) transports.Handler {
 	return &DiscoveryHandler{
 		signature: signature,
-		discovery: discovery,
+		endpoints: endpoints,
 	}
 }
 
 type DiscoveryHandler struct {
 	signature signatures.Signature
-	discovery services.Discovery
+	endpoints services.Endpoints
 }
 
 func (handler *DiscoveryHandler) Handle(w transports.ResponseWriter, r transports.Request) {

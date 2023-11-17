@@ -36,16 +36,14 @@ type ResponseBody struct {
 
 // NewInternalHandler
 // endpoints: local endpoints
-func NewInternalHandler(id string, signature signatures.Signature, endpoints services.Endpoints) transports.MuxHandler {
+func NewInternalHandler(endpoints services.Endpoints, signature signatures.Signature) transports.MuxHandler {
 	return &InternalHandler{
-		id:        bytex.FromString(id),
 		signature: signature,
 		endpoints: endpoints,
 	}
 }
 
 type InternalHandler struct {
-	id        []byte
 	signature signatures.Signature
 	endpoints services.Endpoints
 }
@@ -62,8 +60,7 @@ func (handler *InternalHandler) Match(_ context.Context, method []byte, path []b
 	matched := bytes.Equal(method, transports.MethodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
 		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), internalContentType) &&
-		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
-		bytes.Equal(header.Get(bytex.FromString(transports.EndpointIdHeaderName)), handler.id)
+		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0
 	return matched
 }
 
@@ -113,10 +110,9 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	options = append(options, services.WithInternalRequest())
 	// endpoint id
 	endpointId := r.Header().Get(bytex.FromString(transports.EndpointIdHeaderName))
-	if len(endpointId) == 0 {
-		endpointId = handler.id
+	if len(endpointId) > 0 {
+		options = append(options, services.WithEndpointId(endpointId))
 	}
-	options = append(options, services.WithEndpointId(endpointId))
 	// device id
 	deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
 	if len(deviceId) == 0 {

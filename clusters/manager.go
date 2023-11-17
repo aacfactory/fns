@@ -15,31 +15,40 @@ import (
 	"time"
 )
 
-func New(local services.EndpointsManager, log logs.Logger, dialer transports.Dialer, signature signatures.Signature, events <-chan NodeEvent) services.EndpointsManager {
+func NewManager(cluster Cluster, local services.EndpointsManager, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) services.EndpointsManager {
 	v := &Manager{
+		cluster:       cluster,
 		local:         local,
 		log:           log.With("cluster", "endpoints"),
 		dialer:        dialer,
 		signature:     signature,
 		registrations: make(Registrations, 0, 1),
 		locker:        sync.RWMutex{},
-		events:        events,
 	}
 	return v
 }
 
 type Manager struct {
 	log           logs.Logger
+	cluster       Cluster
 	local         services.EndpointsManager
 	dialer        transports.Dialer
 	signature     signatures.Signature
 	registrations Registrations
 	locker        sync.RWMutex
-	events        <-chan NodeEvent
 }
 
 func (manager *Manager) Add(service services.Service) (err error) {
-
+	err = manager.local.Add(service)
+	if err != nil {
+		return
+	}
+	info, infoErr := NewService(service.Name(), service.Internal(), service.Document())
+	if infoErr != nil {
+		err = errors.Warning("fns: create cluster service info failed").WithCause(infoErr).WithMeta("service", service.Name())
+		return
+	}
+	manager.cluster.AddService(info)
 	return
 }
 
@@ -82,6 +91,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 }
 
 func (manager *Manager) Listen(ctx context.Context) (err error) {
+	// cluster.join
 	// watching
 	// local.listen
 	return
@@ -95,7 +105,7 @@ func (manager *Manager) Shutdown(ctx context.Context) {
 func (manager *Manager) watching() {
 	go func(eps *Manager) {
 		for {
-			event, ok := <-eps.events
+			event, ok := <-eps.cluster.NodeEvents()
 			if !ok {
 				break
 			}

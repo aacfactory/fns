@@ -26,7 +26,7 @@ type ClusterOptions struct {
 
 type Cluster interface {
 	Construct(options ClusterOptions) (err error)
-	AddEndpoint(info EndpointInfo)
+	AddService(service Service)
 	Join(ctx context.Context) (err error)
 	Leave(ctx context.Context) (err error)
 	NodeEvents() (events <-chan NodeEvent)
@@ -57,18 +57,19 @@ type Options struct {
 	Version versions.Version
 	Port    int
 	Log     logs.Logger
+	Local   services.EndpointsManager
 	Dialer  transports.Dialer
 	Config  Config
 }
 
-func Newxx(options Options) (discovery services.Discovery, cluster Cluster, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
+func New(options Options) (manager services.EndpointsManager, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
 	// dev
 	if options.Config.Name == developmentName {
 		if options.Config.DevMode {
 			err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("dev cluster can not use dev mode"))
 			return
 		}
-		discovery, cluster, barrier, handlers, err = NewDevelopment(options)
+		manager, barrier, handlers, err = NewDevelopment(options)
 		return
 	}
 	// host
@@ -89,8 +90,7 @@ func Newxx(options Options) (discovery services.Discovery, cluster Cluster, barr
 	// signature
 	signature := NewSignature(options.Config.Secret)
 	// cluster
-	hasCluster := false
-	cluster, hasCluster = loadCluster(options.Config.Name)
+	cluster, hasCluster := loadCluster(options.Config.Name)
 	if !hasCluster {
 		err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("cluster was not found")).WithMeta("name", options.Config.Name)
 		return
@@ -117,14 +117,14 @@ func Newxx(options Options) (discovery services.Discovery, cluster Cluster, barr
 	}
 	// barrier
 	barrier = NewBarrier(options.Config.Barrier)
-	// discovery
-	discovery = NewDiscovery(options.Log, options.Dialer, signature, cluster.NodeEvents())
+	// manager
+	manager = NewManager(cluster, options.Local, options.Log, options.Dialer, signature)
 	// handlers
 	handlers = make([]transports.MuxHandler, 0, 1)
-	handlers = append(handlers, NewInternalHandler(options.Id, signature))
+	handlers = append(handlers, NewInternalHandler(options.Local, signature))
 	if options.Config.DevMode {
 		// append dev handler
-		handlers = append(handlers, development.NewHandler(signature, discovery, cluster.Shared()))
+		handlers = append(handlers, development.NewHandler(signature, manager, cluster.Shared()))
 	}
 	return
 }

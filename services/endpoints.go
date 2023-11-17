@@ -19,8 +19,8 @@ type Endpoint interface {
 
 type EndpointInfo struct {
 	Id        string             `json:"id"`
-	Name      string             `json:"name"`
 	Version   versions.Version   `json:"version"`
+	Name      string             `json:"name"`
 	Internal  bool               `json:"internal"`
 	Functions FnInfos            `json:"functions"`
 	Document  documents.Endpoint `json:"document"`

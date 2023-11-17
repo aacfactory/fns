@@ -1,4 +1,4 @@
-package services
+package transport
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/commons/versions"
-	"github.com/aacfactory/fns/runtime"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"net/http"
@@ -23,14 +23,16 @@ var (
 	ErrInvalidRequestVersions = errors.Warning("fns: invalid request versions")
 )
 
-func Handler(endpoints EndpointInfos) transports.MuxHandler {
+func Handler(endpoints services.Endpoints) transports.MuxHandler {
 	return &endpointsHandler{
 		endpoints: endpoints,
+		infos:     endpoints.Info(),
 	}
 }
 
 type endpointsHandler struct {
-	endpoints EndpointInfos
+	endpoints services.Endpoints
+	infos     services.EndpointInfos
 }
 
 func (handler *endpointsHandler) Name() string {
@@ -48,7 +50,7 @@ func (handler *endpointsHandler) Match(method []byte, path []byte, header transp
 	}
 	ep := pathItems[1]
 	fn := pathItems[2]
-	endpoint, hasEndpoint := handler.endpoints.Find(ep)
+	endpoint, hasEndpoint := handler.infos.Find(ep)
 	if !hasEndpoint {
 		return false
 	}
@@ -71,7 +73,6 @@ func (handler *endpointsHandler) Match(method []byte, path []byte, header transp
 }
 
 func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transports.Request) {
-	rt := runtime.Load(r)
 	// path
 	path := r.Path()
 	pathItems := bytes.Split(path, slashBytes)
@@ -95,23 +96,23 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 	}
 
 	// header >>>
-	options := make([]RequestOption, 0, 1)
+	options := make([]services.RequestOption, 0, 1)
 	// device id
 	deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
 	if len(deviceId) == 0 {
 		w.Failed(ErrDeviceId.WithMeta("path", bytex.ToString(path)))
 		return
 	}
-	options = append(options, WithDeviceId(deviceId))
+	options = append(options, services.WithDeviceId(deviceId))
 	// device ip
 	deviceIp := transports.DeviceIp(r)
 	if len(deviceIp) > 0 {
-		options = append(options, WithDeviceIp(deviceIp))
+		options = append(options, services.WithDeviceIp(deviceIp))
 	}
 	// request id
 	requestId := r.Header().Get(bytex.FromString(transports.RequestIdHeaderName))
 	if len(requestId) > 0 {
-		options = append(options, WithRequestId(requestId))
+		options = append(options, services.WithRequestId(requestId))
 	}
 	// request version
 	acceptedVersions := r.Header().Get(bytex.FromString(transports.RequestVersionsHeaderName))
@@ -121,18 +122,18 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 			w.Failed(ErrInvalidRequestVersions.WithMeta("path", bytex.ToString(path)).WithMeta("versions", bytex.ToString(acceptedVersions)).WithCause(intervalsErr))
 			return
 		}
-		options = append(options, WithRequestVersions(intervals))
+		options = append(options, services.WithRequestVersions(intervals))
 	}
 	// authorization
 	authorization := r.Header().Get(bytex.FromString(transports.AuthorizationHeaderName))
 	if len(authorization) > 0 {
-		options = append(options, WithToken(authorization))
+		options = append(options, services.WithToken(authorization))
 	}
 
 	// header <<<
 
 	// handle
-	response, err := rt.Endpoints().Request(
+	response, err := handler.endpoints.Request(
 		r, ep, fn,
 		param,
 		options...,

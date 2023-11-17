@@ -1,4 +1,4 @@
-package documents
+package transport
 
 import (
 	"bytes"
@@ -14,26 +14,26 @@ var (
 	documentsHandlerPath = bytex.FromString("/documents")
 )
 
-type HandlerConfig struct {
+type DocumentHandlerConfig struct {
 	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 
-func Handler() transports.MuxHandler {
-	return &handler{}
+func DocumentHandler() transports.MuxHandler {
+	return &documentHandler{}
 }
 
-type handler struct {
+type documentHandler struct {
 	enabled  bool
 	document json.RawMessage
 	once     *sync.Once
 }
 
-func (handler *handler) Name() string {
+func (handler *documentHandler) Name() string {
 	return "documents"
 }
 
-func (handler *handler) Construct(options transports.MuxHandlerOptions) error {
-	config := HandlerConfig{}
+func (handler *documentHandler) Construct(options transports.MuxHandlerOptions) error {
+	config := DocumentHandlerConfig{}
 	err := options.Config.As(&config)
 	if err != nil {
 		err = errors.Warning("fns: construct document handler failed").WithCause(err)
@@ -46,12 +46,12 @@ func (handler *handler) Construct(options transports.MuxHandlerOptions) error {
 	return nil
 }
 
-func (handler *handler) Match(method []byte, path []byte, _ transports.Header) bool {
+func (handler *documentHandler) Match(method []byte, path []byte, _ transports.Header) bool {
 	ok := handler.enabled && bytes.Equal(method, transports.MethodGet) && bytes.Equal(path, documentsHandlerPath)
 	return ok
 }
 
-func (handler *handler) Handle(w transports.ResponseWriter, r transports.Request) {
+func (handler *documentHandler) Handle(w transports.ResponseWriter, r transports.Request) {
 	handler.once.Do(func() {
 		rt := runtime.Load(r)
 		id := rt.AppId()

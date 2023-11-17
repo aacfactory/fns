@@ -23,9 +23,9 @@ func Handler() transports.MuxHandler {
 }
 
 type handler struct {
-	enabled bool
-	doc     json.RawMessage
-	once    *sync.Once
+	enabled  bool
+	document json.RawMessage
+	once     *sync.Once
 }
 
 func (handler *handler) Name() string {
@@ -59,10 +59,10 @@ func (handler *handler) Handle(w transports.ResponseWriter, r transports.Request
 		for _, info := range infos {
 			if info.Id == id {
 				p, _ := json.Marshal(info.Document)
-				handler.doc = p
+				handler.document = p
 				break
 			}
 		}
 	})
-	w.Succeed(handler.doc)
+	w.Succeed(handler.document)
 }

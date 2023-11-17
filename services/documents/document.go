@@ -17,63 +17,56 @@
 package documents
 
 import (
+	"bytes"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
+	"sort"
 )
 
-func New(name string, description string, internal bool, ver versions.Version) Document {
-	return Document{
-		Name:        name,
-		Description: description,
-		Internal:    internal,
-		Version:     ver,
-		Functions:   make(Fns, 0, 1),
-		Elements:    make(Elements, 0, 1),
-	}
-}
-
 type Document struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Internal    bool             `json:"internal"`
-	Version     versions.Version `json:"version"`
-	Functions   Fns              `json:"functions"`
-	Elements    Elements         `json:"elements"`
+	Id        string           `json:"id"`
+	Version   versions.Version `json:"version"`
+	Endpoints Endpoints        `json:"endpoints"`
 }
 
-func (doc *Document) IsEmpty() bool {
-	return doc.Name == ""
-}
-
-func (doc *Document) AddFn(fn Fn) {
-	if fn.Param.Exist() {
-		paramRef := doc.addElement(fn.Param)
-		fn.Param = paramRef
-	}
-	if fn.Result.Exist() {
-		paramRef := doc.addElement(fn.Result)
-		fn.Result = paramRef
-	}
-	if doc.Internal {
-		fn.Internal = true
-	}
-	doc.Functions = doc.Functions.Add(fn)
-}
-
-func (doc *Document) addElement(element Element) (ref Element) {
-	if !element.Exist() {
+func (document *Document) Add(endpoint Endpoint) {
+	if endpoint.IsEmpty() {
 		return
 	}
-	unpacks := element.unpack()
-	ref = unpacks[0]
-	if len(unpacks) <= 1 {
-		return
-	}
-	remains := unpacks[1:]
-	for _, remain := range remains {
-		if remain.isBuiltin() || remain.isRef() || remain.Path == "" {
-			continue
+	document.Endpoints = append(document.Endpoints, endpoint)
+	sort.Sort(document.Endpoints)
+}
+
+func (document *Document) Get(name []byte) (v Endpoint) {
+	for _, endpoint := range document.Endpoints {
+		if bytes.Equal(name, bytex.FromString(endpoint.Name)) {
+			return endpoint
 		}
-		doc.Elements = doc.Elements.Add(remain)
 	}
-	return
+	return Endpoint{}
+}
+
+type Documents []Document
+
+func (documents Documents) Len() int {
+	return len(documents)
+}
+
+func (documents Documents) Less(i, j int) bool {
+	return documents[i].Version.LessThan(documents[j].Version)
+}
+
+func (documents Documents) Swap(i, j int) {
+	documents[i], documents[j] = documents[j], documents[i]
+}
+
+func (documents Documents) Add(document Document) Documents {
+	for _, stored := range documents {
+		if stored.Id == document.Id {
+			return documents
+		}
+	}
+	n := append(documents, document)
+	sort.Sort(n)
+	return n
 }

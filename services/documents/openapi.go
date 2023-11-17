@@ -23,7 +23,7 @@ import (
 	"strings"
 )
 
-func Openapi(title string, description string, term string, openapiVersion string, documents *Documents) (api oas.API) {
+func Openapi(title string, description string, term string, openapiVersion string, document Document) (api oas.API) {
 	if openapiVersion == "" {
 		openapiVersion = "3.1.0"
 	}
@@ -36,7 +36,7 @@ func Openapi(title string, description string, term string, openapiVersion strin
 			TermsOfService: term,
 			Contact:        nil,
 			License:        nil,
-			Version:        documents.Version.String(),
+			Version:        document.Version.String(),
 		},
 		Servers: []*oas.Server{},
 		Paths:   make(map[string]*oas.Path),
@@ -65,7 +65,7 @@ func Openapi(title string, description string, term string, openapiVersion strin
 	api.Paths[healthURI] = healthPathSchema
 
 	// documents
-	endpoints := documents.Endpoints
+	endpoints := document.Endpoints
 	if endpoints != nil || len(endpoints) > 0 {
 		for _, document := range endpoints {
 			if document.IsEmpty() || document.Internal || len(document.Functions) == 0 {

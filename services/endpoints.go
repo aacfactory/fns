@@ -12,7 +12,7 @@ import (
 type Endpoint interface {
 	Name() (name string)
 	Internal() (ok bool)
-	Document() (document documents.Document)
+	Document() (document documents.Endpoint)
 	Functions() (functions Fns)
 	Shutdown(ctx context.Context)
 }

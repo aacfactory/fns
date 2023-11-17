@@ -124,7 +124,7 @@ func (abstract *Abstract) Components() (components Components) {
 	return
 }
 
-func (abstract *Abstract) Document() (document documents.Document) {
+func (abstract *Abstract) Document() (document documents.Endpoint) {
 	return
 }
 

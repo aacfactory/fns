@@ -12,6 +12,7 @@ import (
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
+	"github.com/aacfactory/workers"
 	"strings"
 )
 
@@ -57,19 +58,20 @@ type Options struct {
 	Version versions.Version
 	Port    int
 	Log     logs.Logger
+	Worker  workers.Workers
 	Local   services.EndpointsManager
 	Dialer  transports.Dialer
 	Config  Config
 }
 
-func New(options Options) (manager services.EndpointsManager, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
+func New(options Options) (manager services.EndpointsManager, shared shareds.Shared, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
 	// dev
 	if options.Config.Name == developmentName {
 		if options.Config.DevMode {
 			err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("dev cluster can not use dev mode"))
 			return
 		}
-		manager, barrier, handlers, err = NewDevelopment(options)
+		manager, shared, barrier, err = NewDevelopment(options)
 		return
 	}
 	// host
@@ -115,10 +117,12 @@ func New(options Options) (manager services.EndpointsManager, barrier barriers.B
 		err = errors.Warning("fns: new cluster failed").WithCause(clusterErr).WithMeta("name", options.Config.Name)
 		return
 	}
+	// shared
+	shared = cluster.Shared()
 	// barrier
-	barrier = NewBarrier(options.Config.Barrier)
+	barrier = NewBarrier(options.Config.Barrier, shared)
 	// manager
-	manager = NewManager(cluster, options.Local, options.Log, options.Dialer, signature)
+	manager = NewManager(options.Id, options.Version, cluster, options.Local, options.Worker, options.Log, options.Dialer, signature)
 	// handlers
 	handlers = make([]transports.MuxHandler, 0, 1)
 	handlers = append(handlers, NewInternalHandler(options.Local, signature))

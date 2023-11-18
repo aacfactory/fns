@@ -5,36 +5,51 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
+	"github.com/aacfactory/workers"
+	"net/http"
+	"sort"
 	"sync"
 	"time"
 )
 
-func NewManager(cluster Cluster, local services.EndpointsManager, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) services.EndpointsManager {
+func NewManager(id string, version versions.Version, cluster Cluster, local services.EndpointsManager, worker workers.Workers, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) services.EndpointsManager {
 	v := &Manager{
+		id:            id,
+		version:       version,
+		log:           log.With("cluster", "endpoints"),
 		cluster:       cluster,
 		local:         local,
-		log:           log.With("cluster", "endpoints"),
+		worker:        worker,
 		dialer:        dialer,
 		signature:     signature,
 		registrations: make(Registrations, 0, 1),
+		infos:         nil,
 		locker:        sync.RWMutex{},
 	}
 	return v
 }
 
 type Manager struct {
+	id            string
+	version       versions.Version
 	log           logs.Logger
 	cluster       Cluster
 	local         services.EndpointsManager
+	worker        workers.Workers
 	dialer        transports.Dialer
 	signature     signatures.Signature
 	registrations Registrations
+	infos         services.EndpointInfos
 	locker        sync.RWMutex
 }
 
@@ -43,7 +58,16 @@ func (manager *Manager) Add(service services.Service) (err error) {
 	if err != nil {
 		return
 	}
-	info, infoErr := NewService(service.Name(), service.Internal(), service.Document())
+	functions := make(services.FnInfos, 0, len(service.Functions()))
+	for _, fn := range service.Functions() {
+		functions = append(functions, services.FnInfo{
+			Name:     fn.Name(),
+			Readonly: fn.Readonly(),
+			Internal: service.Internal() || fn.Internal(),
+		})
+	}
+	sort.Sort(functions)
+	info, infoErr := NewService(service.Name(), service.Internal(), functions, service.Document())
 	if infoErr != nil {
 		err = errors.Warning("fns: create cluster service info failed").WithCause(infoErr).WithMeta("service", service.Name())
 		return
@@ -54,51 +78,221 @@ func (manager *Manager) Add(service services.Service) (err error) {
 
 func (manager *Manager) Info() (infos services.EndpointInfos) {
 	manager.locker.RLock()
-	defer manager.locker.RUnlock()
-	infos = make([]services.EndpointInfo, 0, 1)
-	for _, registration := range manager.registrations {
-		for _, value := range registration.values {
-			infos = append(infos, services.EndpointInfo{
-				Id:       value.id,
-				Name:     value.name,
-				Version:  value.version,
-				Internal: value.internal,
-				Document: value.document,
-			})
-		}
-	}
+	infos = manager.infos
+	manager.locker.RUnlock()
 	return
 }
 
-func (manager *Manager) Registration(ctx context.Context, name []byte, options ...services.EndpointGetOption) (info Service, has bool, err error) {
-	// todo return endpoint  Registration  with node info
-	// used by proxies
-	// 重新document
-	// documents > endpoint
-	// document > service
-	// fn > fn
+func (manager *Manager) PublicFnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, has bool) {
+	local, localed := manager.local.Get(ctx, endpoint, options...)
+	if localed {
+		if local.Internal() {
+			return
+		}
+		fnNameString := bytex.ToString(fnName)
+		for _, fn := range local.Functions() {
+			if fn.Name() == fnNameString {
+				if fn.Internal() {
+					return
+				}
+				has = true
+				return
+			}
+		}
+	}
+	manager.locker.RLock()
+	registration, found := manager.registrations.Get(endpoint)
+	if !found {
+		manager.locker.RUnlock()
+		return
+	}
+	if len(options) == 0 {
+		maxed, exist := registration.MaxOne()
+		if !exist {
+			manager.locker.RUnlock()
+			return
+		}
+		address = maxed.Address()
+		has = true
+		manager.locker.RUnlock()
+		return
+	}
+	opt := services.EndpointGetOptions{}
+	for _, option := range options {
+		option(&opt)
+	}
+
+	interval, hasVersion := opt.Versions().Get(endpoint)
+	if hasVersion {
+		matched, exist := registration.Range(interval)
+		if !exist {
+			manager.locker.RUnlock()
+			return
+		}
+		address = matched.Address()
+		has = true
+		manager.locker.RUnlock()
+		return
+	}
+	manager.locker.RUnlock()
 	return
 }
 
 func (manager *Manager) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
-	//TODO implement me
-	panic("implement me")
+	local, localed := manager.local.Get(ctx, name, options...)
+	if localed {
+		endpoint = local
+		has = true
+		return
+	}
+	manager.locker.RLock()
+	registration, found := manager.registrations.Get(name)
+	if !found {
+		manager.locker.RUnlock()
+		return
+	}
+	if len(options) == 0 {
+		endpoint, has = registration.MaxOne()
+		manager.locker.RUnlock()
+		return
+	}
+	opt := services.EndpointGetOptions{}
+	for _, option := range options {
+		option(&opt)
+	}
+	if eid := opt.Id(); len(eid) > 0 {
+		endpoint, has = registration.Get(eid)
+		manager.locker.RUnlock()
+		return
+	}
+	if intervals := opt.Versions(); len(intervals) > 0 {
+		interval, matched := intervals.Get(name)
+		if !matched {
+			manager.locker.RUnlock()
+			return
+		}
+		endpoint, has = registration.Range(interval)
+		manager.locker.RUnlock()
+		return
+	}
+	manager.locker.RUnlock()
+	return
 }
 
 func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...services.RequestOption) (response services.Response, err error) {
-	//TODO implement me
-	panic("implement me")
+	// valid params
+	if len(name) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
+		return
+	}
+	if len(fn) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
+		return
+	}
+
+	// request
+	req := services.AcquireRequest(ctx, name, fn, param, options...)
+
+	var endpointGetOptions []services.EndpointGetOption
+	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
+		endpointGetOptions = make([]services.EndpointGetOption, 0, 1)
+		endpointGetOptions = append(endpointGetOptions, services.EndpointId(endpointId))
+	}
+	if acceptedVersions := req.Header().AcceptedVersions(); len(acceptedVersions) > 0 {
+		if endpointGetOptions == nil {
+			endpointGetOptions = make([]services.EndpointGetOption, 0, 1)
+		}
+		endpointGetOptions = append(endpointGetOptions, services.EndpointVersions(acceptedVersions))
+	}
+	endpoint, found := manager.Get(ctx, name, endpointGetOptions...)
+	if !found {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("service", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		services.ReleaseRequest(req)
+		return
+	}
+
+	function, hasFunction := endpoint.Functions().Find(fn)
+	if !hasFunction {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("service", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		services.ReleaseRequest(req)
+		return
+	}
+
+	// ctx >>>
+	ctx = req
+	// log
+	log.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	// components
+	service, ok := endpoint.(services.Service)
+	if ok {
+		components := service.Components()
+		if len(components) > 0 {
+			services.WithComponents(ctx, components)
+		}
+	}
+	// ctx <<<
+
+	// tracing
+	trace, hasTrace := tracings.Load(ctx)
+	if hasTrace {
+		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
+	}
+	// promise
+	promise, future := futures.New()
+	// dispatch
+	dispatched := manager.worker.Dispatch(ctx, services.FnTask{
+		Fn:      function,
+		Promise: promise,
+	})
+	if !dispatched {
+		// tracing
+		if hasTrace {
+			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
+		}
+		promise.Failed(
+			errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
+				WithMeta("service", bytex.ToString(name)).
+				WithMeta("fn", bytex.ToString(fn)),
+		)
+	}
+	response, err = future.Get(ctx)
+	services.ReleaseRequest(req)
+	return
 }
 
 func (manager *Manager) Listen(ctx context.Context) (err error) {
-	// cluster.join
+	// copy info
+	manager.infos = manager.local.Info()
 	// watching
+	manager.watching()
 	// local.listen
+	err = manager.local.Listen(ctx)
+	if err != nil {
+		return
+	}
+	// cluster.join
+	err = manager.cluster.Join(ctx)
+	if err != nil {
+		if manager.log.WarnEnabled() {
+			manager.log.Warn().With("cluster", "join").Cause(err).Message("fns: cluster join failed")
+		}
+		return
+	}
 	return
 }
 
 func (manager *Manager) Shutdown(ctx context.Context) {
-
+	leaveErr := manager.cluster.Leave(ctx)
+	if leaveErr != nil {
+		if manager.log.WarnEnabled() {
+			manager.log.Warn().With("cluster", "leave").Cause(leaveErr).Message("fns: cluster leave failed")
+		}
+	}
+	manager.local.Shutdown(ctx)
 	return
 }
 
@@ -138,6 +332,7 @@ func (manager *Manager) watching() {
 					break
 				}
 				// get document
+				infos := eps.local.Info()[:]
 				for _, endpoint := range event.Node.Services {
 					document, documentErr := endpoint.Document()
 					if documentErr != nil {
@@ -149,18 +344,35 @@ func (manager *Manager) watching() {
 						}
 						continue
 					}
-					endpoints = append(endpoints, NewEndpoint(event.Node.Id, event.Node.Version, endpoint.Name, endpoint.Internal, document, client, eps.signature))
+					ep := NewEndpoint(event.Node.Address, event.Node.Id, event.Node.Version, endpoint.Name, endpoint.Internal, document, client, eps.signature)
+					for _, fnInfo := range endpoint.Functions {
+						ep.AddFn(fnInfo.Name, fnInfo.Internal, fnInfo.Readonly)
+					}
+					endpoints = append(endpoints, ep)
+					infos = append(infos, ep.Info())
 				}
+				sort.Sort(infos)
 				eps.locker.Lock()
 				for _, endpoint := range endpoints {
 					eps.registrations = eps.registrations.Add(endpoint)
 				}
+				eps.infos = infos
 				eps.locker.Unlock()
 				break
 			case Remove:
 				eps.locker.Lock()
 				for _, endpoint := range event.Node.Services {
 					eps.registrations = eps.registrations.Remove(endpoint.Name, event.Node.Id)
+					idx := -1
+					for i, info := range eps.infos {
+						if info.Id == event.Node.Id && info.Name == endpoint.Name {
+							idx = i
+							break
+						}
+					}
+					if idx != -1 {
+						eps.infos = append(eps.infos[:idx], eps.infos[idx+1:]...)
+					}
 				}
 				eps.locker.Unlock()
 				break

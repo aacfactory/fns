@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/json"
 	"github.com/klauspost/compress/zlib"
@@ -11,10 +12,11 @@ import (
 	"io"
 )
 
-func NewService(name string, internal bool, document documents.Endpoint) (service Service, err error) {
+func NewService(name string, internal bool, functions services.FnInfos, document documents.Endpoint) (service Service, err error) {
 	service = Service{
 		Name:        name,
 		Internal:    internal,
+		Functions:   functions,
 		DocumentRaw: nil,
 	}
 	if !internal && !document.IsEmpty() {
@@ -38,9 +40,10 @@ func NewService(name string, internal bool, document documents.Endpoint) (servic
 }
 
 type Service struct {
-	Name        string `json:"name"`
-	Internal    bool   `json:"internal"`
-	DocumentRaw []byte `json:"document"`
+	Name        string           `json:"name"`
+	Internal    bool             `json:"internal"`
+	Functions   services.FnInfos `json:"functions"`
+	DocumentRaw []byte           `json:"document"`
 }
 
 func (service Service) Document() (document documents.Endpoint, err error) {

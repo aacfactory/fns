@@ -8,6 +8,7 @@ import (
 	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
+	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/json"
 	"golang.org/x/sync/singleflight"
 	"time"
@@ -91,7 +92,7 @@ func (bv BarrierValue) Failed(v error) (n BarrierValue) {
 	return
 }
 
-func NewBarrier(config BarrierConfig) (b barriers.Barrier) {
+func NewBarrier(config BarrierConfig, shared shareds.Shared) (b barriers.Barrier) {
 	ttl := config.TTL
 	interval := config.Interval
 	loops := 0
@@ -113,6 +114,8 @@ func NewBarrier(config BarrierConfig) (b barriers.Barrier) {
 		ttl:        ttl,
 		interval:   interval,
 		loops:      loops,
+		store:      shared.Store(),
+		lockers:    shared.Lockers(),
 	}
 	return
 }
@@ -129,6 +132,8 @@ type Barrier struct {
 	ttl        time.Duration
 	interval   time.Duration
 	loops      int
+	store      shareds.Store
+	lockers    shareds.Lockers
 }
 
 func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result barriers.Result, err error) {
@@ -154,11 +159,7 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 }
 
 func (b *Barrier) doRemote(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (r interface{}, err error) {
-	shared := runtime.Load(ctx).Shared()
-	lockers := shared.Lockers()
-	store := shared.Store()
-
-	locker, lockerErr := lockers.Acquire(ctx, key, b.ttl)
+	locker, lockerErr := b.lockers.Acquire(ctx, key, b.ttl)
 	if lockerErr != nil {
 		err = errors.Warning("fns: barrier failed").WithCause(lockerErr)
 		return
@@ -169,7 +170,7 @@ func (b *Barrier) doRemote(ctx context.Context, key []byte, fn func() (result in
 		return
 	}
 
-	value, has, getErr := store.Get(ctx, key)
+	value, has, getErr := b.store.Get(ctx, key)
 	if getErr != nil {
 		_ = locker.Unlock(ctx)
 		err = errors.Warning("fns: barrier failed").WithCause(getErr)
@@ -177,7 +178,7 @@ func (b *Barrier) doRemote(ctx context.Context, key []byte, fn func() (result in
 	}
 	if !has {
 		bv := NewBarrierValue()
-		setErr := store.SetWithTTL(ctx, key, bv, b.ttl)
+		setErr := b.store.SetWithTTL(ctx, key, bv, b.ttl)
 		if setErr != nil {
 			_ = locker.Unlock(ctx)
 			err = errors.Warning("fns: barrier failed").WithCause(setErr)
@@ -219,7 +220,7 @@ func (b *Barrier) doRemote(ctx context.Context, key []byte, fn func() (result in
 				return
 			}
 		}
-		setErr := store.SetWithTTL(ctx, key, bv, b.ttl)
+		setErr := b.store.SetWithTTL(ctx, key, bv, b.ttl)
 		if setErr != nil {
 			err = errors.Warning("fns: barrier failed").WithCause(setErr)
 			return

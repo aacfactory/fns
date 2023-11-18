@@ -1,6 +1,7 @@
 package clusters
 
 import (
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"sort"
 	"sync/atomic"
@@ -14,7 +15,7 @@ type Registration struct {
 }
 
 func (registration *Registration) Add(endpoint *Endpoint) {
-	_, exist := registration.Get(endpoint.id)
+	_, exist := registration.Get(bytex.FromString(endpoint.id))
 	if exist {
 		return
 	}
@@ -38,13 +39,14 @@ func (registration *Registration) Remove(id string) {
 	registration.length = len(registration.values)
 }
 
-func (registration *Registration) Get(id string) (endpoint *Endpoint, has bool) {
+func (registration *Registration) Get(id []byte) (endpoint *Endpoint, has bool) {
 	if registration.length == 0 {
 		return
 	}
+	idString := bytex.ToString(id)
 	for _, value := range registration.values {
 		if value.Running() {
-			if value.id == id {
+			if value.id == idString {
 				endpoint = value
 				has = true
 				break
@@ -101,10 +103,11 @@ func (registration *Registration) MaxOne() (endpoint *Endpoint, has bool) {
 
 type Registrations []*Registration
 
-func (registrations Registrations) Get(name string) (v *Registration, has bool) {
-	for _, named := range registrations {
-		if named.length > 0 && named.name == name {
-			v = named
+func (registrations Registrations) Get(name []byte) (v *Registration, has bool) {
+	ns := bytex.ToString(name)
+	for _, registration := range registrations {
+		if registration.length > 0 && registration.name == ns {
+			v = registration
 			has = true
 			break
 		}
@@ -121,14 +124,14 @@ func (registrations Registrations) Add(endpoint *Endpoint) Registrations {
 			return registrations
 		}
 	}
-	named := Registration{
+	registration := Registration{
 		name:   name,
 		length: 0,
 		pos:    0,
 		values: make(Endpoints, 0, 1),
 	}
-	named.Add(endpoint)
-	return append(registrations, &named)
+	registration.Add(endpoint)
+	return append(registrations, &registration)
 }
 
 func (registrations Registrations) Remove(name string, id string) Registrations {

@@ -10,12 +10,14 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
+	"sort"
 	"sync/atomic"
 	"time"
 )
 
-func NewEndpoint(id string, version versions.Version, name string, internal bool, document documents.Endpoint, client transports.Client, signature signatures.Signature) (endpoint *Endpoint) {
+func NewEndpoint(address string, id string, version versions.Version, name string, internal bool, document documents.Endpoint, client transports.Client, signature signatures.Signature) (endpoint *Endpoint) {
 	endpoint = &Endpoint{
+		address:   address,
 		id:        id,
 		version:   version,
 		name:      name,
@@ -31,6 +33,7 @@ func NewEndpoint(id string, version versions.Version, name string, internal bool
 }
 
 type Endpoint struct {
+	address   string
 	id        string
 	version   versions.Version
 	name      string
@@ -44,6 +47,10 @@ type Endpoint struct {
 
 func (endpoint *Endpoint) Running() bool {
 	return endpoint.running.Load()
+}
+
+func (endpoint *Endpoint) Address() string {
+	return endpoint.address
 }
 
 func (endpoint *Endpoint) Name() string {
@@ -81,6 +88,27 @@ func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
 	}
 	fn.health.Store(true)
 	endpoint.functions = endpoint.functions.Add(fn)
+}
+
+func (endpoint *Endpoint) Info() services.EndpointInfo {
+	fnInfos := make(services.FnInfos, 0, len(endpoint.functions))
+	for _, fn := range endpoint.functions {
+		fnInfos = append(fnInfos, services.FnInfo{
+			Name:     fn.Name(),
+			Readonly: fn.Readonly(),
+			Internal: fn.Internal(),
+		})
+	}
+	sort.Sort(fnInfos)
+	return services.EndpointInfo{
+		Id:        endpoint.id,
+		Version:   endpoint.version,
+		Address:   endpoint.address,
+		Name:      endpoint.name,
+		Internal:  endpoint.internal,
+		Functions: fnInfos,
+		Document:  endpoint.document,
+	}
 }
 
 type Endpoints []*Endpoint

@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-func NewDevelopment(options Options) (manager services.EndpointsManager, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
+func NewDevelopment(options Options) (manager services.EndpointsManager, shared shareds.Shared, barrier barriers.Barrier, err error) {
 	// signature
 	signature := NewSignature(options.Config.Secret)
 	// cluster
@@ -57,10 +57,12 @@ func NewDevelopment(options Options) (manager services.EndpointsManager, barrier
 		err = errors.Warning("fns: new cluster failed").WithCause(clusterErr).WithMeta("name", options.Config.Name)
 		return
 	}
+	// shared
+	shared = cluster.Shared()
 	// barrier
-	barrier = NewBarrier(options.Config.Barrier)
-	// discovery
-	discovery = development.NewDiscovery(options.Log.With("cluster", "discovery"), address, options.Dialer, signature)
+	barrier = NewBarrier(options.Config.Barrier, cluster.Shared())
+	// manager
+	manager = development.NewManager(options.Local, options.Log.With("cluster", "discovery"), address, options.Worker, options.Dialer, signature)
 	return
 }
 
@@ -95,7 +97,7 @@ func (cluster *Development) Construct(options ClusterOptions) (err error) {
 	return
 }
 
-func (cluster *Development) AddService(service Service) {
+func (cluster *Development) AddService(_ Service) {
 	return
 }
 

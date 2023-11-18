@@ -95,6 +95,7 @@ func (manager *Manager) Add(service Service) (err error) {
 			Internal: internal || fn.Internal(),
 		})
 	}
+	sort.Sort(functions)
 	manager.infos = append(manager.infos, EndpointInfo{
 		Id:        manager.id,
 		Name:      service.Name(),
@@ -200,9 +201,9 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	// promise
 	promise, future := futures.New()
 	// dispatch
-	dispatched := manager.worker.Dispatch(ctx, fnTask{
-		fn:      function,
-		promise: promise,
+	dispatched := manager.worker.Dispatch(ctx, FnTask{
+		Fn:      function,
+		Promise: promise,
 	})
 	if !dispatched {
 		// tracing

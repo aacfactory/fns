@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-func NewManager(id string, version versions.Version, cluster Cluster, local services.EndpointsManager, worker workers.Workers, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) services.EndpointsManager {
+func NewManager(id string, version versions.Version, cluster Cluster, local services.EndpointsManager, worker workers.Workers, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) ClusterEndpointsManager {
 	v := &Manager{
 		id:            id,
 		version:       version,
@@ -37,6 +37,11 @@ func NewManager(id string, version versions.Version, cluster Cluster, local serv
 		locker:        sync.RWMutex{},
 	}
 	return v
+}
+
+type ClusterEndpointsManager interface {
+	services.EndpointsManager
+	PublicFnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, has bool)
 }
 
 type Manager struct {

@@ -22,6 +22,11 @@ func (manager *Manager) Info() (infos services.EndpointInfos) {
 	panic("implement me")
 }
 
+func (manager *Manager) PublicFnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, has bool) {
+
+	return
+}
+
 func (manager *Manager) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
 	// local. not exist, remote
 	//TODO implement me

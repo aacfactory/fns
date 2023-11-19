@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-func New(id []byte) *Trace {
-	return &Trace{
+func New(id []byte) Trace {
+	return Trace{
 		Id:      bytex.ToString(id),
 		Span:    nil,
 		current: nil,
@@ -90,5 +90,7 @@ func (trace *Trace) Mount(child *Span) {
 	if trace.current.Children == nil {
 		trace.current.Children = make([]*Span, 0, 1)
 	}
+	child.parent = trace.current
+	child.mountChildrenParent()
 	trace.current.Children = append(trace.current.Children, child)
 }

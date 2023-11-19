@@ -24,14 +24,55 @@ type Entry struct {
 }
 
 type RequestBody struct {
-	UserValues []Entry         `json:"userValues"`
-	Argument   json.RawMessage `json:"argument"`
+	ContextUserValues []Entry         `json:"contextUserValues"`
+	Params            json.RawMessage `json:"params"`
+}
+
+type ResponseAttachment struct {
+	Name  string          `json:"name"`
+	Value json.RawMessage `json:"value"`
+}
+
+func (attachment *ResponseAttachment) Scan(dst interface{}) (err error) {
+	err = json.Unmarshal(attachment.Value, dst)
+	return
+}
+
+type ResponseAttachments []ResponseAttachment
+
+func (attachments *ResponseAttachments) Get(name string) (attachment ResponseAttachment, has bool) {
+	aa := *attachments
+	for _, responseAttachment := range aa {
+		if responseAttachment.Name == name {
+			attachment = responseAttachment
+			has = true
+			return
+		}
+	}
+	return
+}
+
+func (attachments *ResponseAttachments) Set(name string, value interface{}) (err error) {
+	p, encodeErr := json.Marshal(value)
+	if encodeErr != nil {
+		err = encodeErr
+		return
+	}
+	aa := *attachments
+	for i, responseAttachment := range aa {
+		if responseAttachment.Name == name {
+			responseAttachment.Value = p
+		}
+		aa[i] = responseAttachment
+	}
+	*attachments = aa
+	return
 }
 
 type ResponseBody struct {
-	Succeed bool            `json:"succeed"`
-	Data    json.RawMessage `json:"data"`
-	Span    *tracings.Span  `json:"span"`
+	Succeed     bool                `json:"succeed"`
+	Data        json.RawMessage     `json:"data"`
+	Attachments ResponseAttachments `json:"attachments"`
 }
 
 func NewInternalHandler(local services.Endpoints, signature signatures.Signature) transports.MuxHandler {
@@ -98,7 +139,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 		return
 	}
 	// user values
-	for _, userValue := range rb.UserValues {
+	for _, userValue := range rb.ContextUserValues {
 		r.SetUserValue(userValue.Key, userValue.Val)
 	}
 
@@ -152,7 +193,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	// handle
 	response, err := handler.endpoints.Request(
 		ctx, service, fn,
-		rb.Argument,
+		rb.Params,
 		options...,
 	)
 	succeed := err == nil
@@ -179,9 +220,12 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 
 	rsb := ResponseBody{
-		Succeed: succeed,
-		Data:    data,
-		Span:    span,
+		Succeed:     succeed,
+		Data:        data,
+		Attachments: make(ResponseAttachments, 0, 1),
+	}
+	if span != nil {
+		_ = rsb.Attachments.Set("span", span)
 	}
 
 	w.Succeed(rsb)

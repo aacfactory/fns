@@ -118,8 +118,8 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		return
 	}
 	rb := RequestBody{
-		UserValues: userValues,
-		Argument:   argument,
+		ContextUserValues: userValues,
+		Params:            argument,
 	}
 	body, bodyErr := json.Marshal(rb)
 	if bodyErr != nil {
@@ -166,10 +166,15 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			err = errors.Warning("fns: internal endpoint handle failed").WithCause(decodeErr).WithMeta("service", fn.endpointName).WithMeta("fn", fn.name)
 			return
 		}
-		if rsb.Span != nil && len(rsb.Span.Id) > 0 {
-			trace, hasTrace := tracings.Load(ctx)
-			if hasTrace {
-				trace.Mount(rsb.Span)
+		trace, hasTrace := tracings.Load(ctx)
+		if hasTrace {
+			spanAttachment, hasSpanAttachment := rsb.Attachments.Get("span")
+			if hasSpanAttachment {
+				span := tracings.Span{}
+				spanErr := spanAttachment.Scan(&span)
+				if spanErr == nil {
+					trace.Mount(&span)
+				}
 			}
 		}
 		if rsb.Succeed {

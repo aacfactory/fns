@@ -1,13 +1,15 @@
 package metrics
 
 import (
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/services"
 	"time"
 )
 
-const (
-	contextKey = "@fns:context:metrics"
+var (
+	contextKey = []byte("@fns:context:metrics")
 )
 
 // Metric
@@ -25,27 +27,58 @@ type Metric struct {
 	ErrorName string `json:"errorName"`
 	DeviceId  string `json:"deviceId"`
 	DeviceIp  string `json:"deviceIp"`
-	Shared    bool   `json:"shared"`
 	beg       time.Time
 }
 
-func (m *Metric) Finish() {
-	m.Succeed = true
-	m.Latency = time.Now().Sub(m.beg).Milliseconds()
-}
-
-func Begin(ctx context.Context, endpoint []byte, fn []byte, deviceId []byte, deviceIp []byte, remoted bool) Metric {
+func Begin(ctx context.Context) {
+	r, ok := services.TryLoadRequest(ctx)
+	if !ok {
+		return
+	}
+	ep, fn := r.Fn()
 	metric := Metric{
-		Endpoint:  bytex.ToString(endpoint),
+		Endpoint:  bytex.ToString(ep),
 		Fn:        bytex.ToString(fn),
 		Latency:   0,
 		Succeed:   false,
 		ErrorCode: 0,
 		ErrorName: "",
-		DeviceId:  string(deviceId),
-		DeviceIp:  string(deviceIp),
-		Shared:    false,
+		DeviceId:  bytex.ToString(r.Header().DeviceId()),
+		DeviceIp:  bytex.ToString(r.Header().DeviceIp()),
 		beg:       time.Now(),
 	}
-	return metric
+	r.SetLocalValue(contextKey, metric)
+	return
+}
+
+func End(ctx context.Context) {
+	EndWithCause(ctx, nil)
+}
+
+func EndWithCause(ctx context.Context, cause error) {
+	v := ctx.LocalValue(contextKey)
+	if v == nil {
+		return
+	}
+	metric, has := v.(Metric)
+	if !has {
+		return
+	}
+	r, ok := services.TryLoadRequest(ctx)
+	if !ok {
+		return
+	}
+	ep, fn := r.Fn()
+	if metric.Endpoint != bytex.ToString(ep) && metric.Fn != bytex.ToString(fn) {
+		return
+	}
+	metric.Latency = time.Now().Sub(metric.beg).Milliseconds()
+	if cause == nil {
+		metric.Succeed = true
+	} else {
+		err := errors.Map(cause)
+		metric.ErrorCode = err.Code()
+		metric.ErrorName = err.Name()
+	}
+	report(ctx, metric)
 }

@@ -1,22 +1,26 @@
-package development
+package proxy
 
 import (
 	"bytes"
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 )
 
-func NewShared(dialer transports.Dialer, address []byte, signature signatures.Signature) shareds.Shared {
+var (
+	sharedHandlerPath = append(handlerPathPrefix, []byte("/clusters/shared")...)
+	sharedHeader      = []byte("X-Fns-Shared")
+)
+
+func NewShared(client transports.Client, signature signatures.Signature) shareds.Shared {
 	return &Shared{
 		lockers: &Lockers{
-			address:   address,
-			dialer:    dialer,
+			client:    client,
 			signature: signature,
 		},
 		store: &Store{
-			address:   address,
-			dialer:    dialer,
+			client:    client,
 			signature: signature,
 		},
 	}
@@ -27,7 +31,7 @@ type Shared struct {
 	store   shareds.Store
 }
 
-func (shared *Shared) Construct(options shareds.Options) (err error) {
+func (shared *Shared) Construct(_ shareds.Options) (err error) {
 	return
 }
 
@@ -43,32 +47,26 @@ func (shared *Shared) Store() (store shareds.Store) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-var (
-	shardHandlePathPrefix = []byte("/development/shared/")
-)
-
-func NewSharedHandler(signature signatures.Signature, shared shareds.Shared) transports.Handler {
+func NewSharedHandler(shared shareds.Shared) transports.Handler {
 	return &SharedHandler{
-		signature: signature,
-		lockers:   NewSharedLockersHandler(shared.Lockers(), signature),
-		store:     NewSharedStoreHandler(shared.Store(), signature),
+		lockers: NewSharedLockersHandler(shared.Lockers()),
+		store:   NewSharedStoreHandler(shared.Store()),
 	}
 }
 
 type SharedHandler struct {
-	signature signatures.Signature
-	lockers   transports.Handler
-	store     transports.Handler
+	lockers transports.Handler
+	store   transports.Handler
 }
 
 func (handler *SharedHandler) Handle(w transports.ResponseWriter, r transports.Request) {
-	path := r.Path()
-	if bytes.Equal(path, shardHandleLockersPath) {
+	kind := r.Header().Get(sharedHeader)
+	if bytes.Equal(kind, sharedHeaderLockersValue) {
 		handler.lockers.Handle(w, r)
-	} else if bytes.Equal(path, shardHandleStorePath) {
+	} else if bytes.Equal(kind, sharedHeaderStoreValue) {
 		handler.store.Handle(w, r)
 	} else {
-		w.Failed(ErrInvalidPath.WithMeta("path", string(path)))
+		w.Failed(errors.Warning("fns: X-Fns-Shared is required"))
 	}
 	return
 }

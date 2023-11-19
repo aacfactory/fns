@@ -6,7 +6,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
-	"github.com/aacfactory/fns/clusters/development"
+	"github.com/aacfactory/fns/clusters/proxy"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
@@ -65,15 +65,8 @@ type Options struct {
 }
 
 func New(options Options) (manager services.EndpointsManager, shared shareds.Shared, barrier barriers.Barrier, handlers []transports.MuxHandler, err error) {
-	// dev
-	if options.Config.Name == developmentName {
-		if options.Config.DevMode {
-			err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("dev cluster can not use dev mode"))
-			return
-		}
-		manager, shared, barrier, err = NewDevelopment(options)
-		return
-	}
+	// signature
+	signature := NewSignature(options.Config.Secret)
 	// host
 	hostRetrieverName := strings.TrimSpace(options.Config.HostRetriever)
 	if hostRetrieverName == "" {
@@ -89,13 +82,18 @@ func New(options Options) (manager services.EndpointsManager, shared shareds.Sha
 		err = errors.Warning("fns: new cluster failed").WithCause(hostErr)
 		return
 	}
-	// signature
-	signature := NewSignature(options.Config.Secret)
+	address := fmt.Sprintf("%s:%d", host, options.Port)
 	// cluster
-	cluster, hasCluster := loadCluster(options.Config.Name)
-	if !hasCluster {
-		err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("cluster was not found")).WithMeta("name", options.Config.Name)
-		return
+	var cluster Cluster
+	if options.Config.Name == developmentName {
+		cluster = NewDevelopment(options.Dialer, signature)
+	} else {
+		has := false
+		cluster, has = loadCluster(options.Config.Name)
+		if !has {
+			err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("cluster was not found")).WithMeta("name", options.Config.Name)
+			return
+		}
 	}
 	if options.Config.Option == nil && len(options.Config.Option) < 2 {
 		options.Config.Option = []byte{'{', '}'}
@@ -111,7 +109,7 @@ func New(options Options) (manager services.EndpointsManager, shared shareds.Sha
 		Id:      options.Id,
 		Name:    options.Name,
 		Version: options.Version,
-		Address: fmt.Sprintf("%s:%d", host, options.Port),
+		Address: address,
 	})
 	if clusterErr != nil {
 		err = errors.Warning("fns: new cluster failed").WithCause(clusterErr).WithMeta("name", options.Config.Name)
@@ -122,13 +120,13 @@ func New(options Options) (manager services.EndpointsManager, shared shareds.Sha
 	// barrier
 	barrier = NewBarrier(options.Config.Barrier, shared)
 	// manager
-	manager = NewManager(options.Id, options.Version, cluster, options.Local, options.Worker, options.Log, options.Dialer, signature)
+	manager = NewManager(options.Id, options.Version, address, cluster, options.Local, options.Worker, options.Log, options.Dialer, signature)
 	// handlers
 	handlers = make([]transports.MuxHandler, 0, 1)
 	handlers = append(handlers, NewInternalHandler(options.Local, signature))
-	if options.Config.DevMode {
-		// append dev handler
-		handlers = append(handlers, development.NewHandler(signature, manager, cluster.Shared()))
+	if options.Config.Proxy {
+		// append proxy handler
+		handlers = append(handlers, proxy.NewHandler(signature, manager, cluster.Shared()))
 	}
 	return
 }

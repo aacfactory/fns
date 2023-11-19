@@ -22,10 +22,11 @@ import (
 	"time"
 )
 
-func NewManager(id string, version versions.Version, cluster Cluster, local services.EndpointsManager, worker workers.Workers, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) ClusterEndpointsManager {
+func NewManager(id string, version versions.Version, address string, cluster Cluster, local services.EndpointsManager, worker workers.Workers, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) ClusterEndpointsManager {
 	v := &Manager{
 		id:            id,
 		version:       version,
+		address:       address,
 		log:           log.With("cluster", "endpoints"),
 		cluster:       cluster,
 		local:         local,
@@ -41,12 +42,14 @@ func NewManager(id string, version versions.Version, cluster Cluster, local serv
 
 type ClusterEndpointsManager interface {
 	services.EndpointsManager
+	Address() string
 	PublicFnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, has bool)
 }
 
 type Manager struct {
 	id            string
 	version       versions.Version
+	address       string
 	log           logs.Logger
 	cluster       Cluster
 	local         services.EndpointsManager
@@ -56,6 +59,10 @@ type Manager struct {
 	registrations Registrations
 	infos         services.EndpointInfos
 	locker        sync.RWMutex
+}
+
+func (manager *Manager) Address() string {
+	return manager.address
 }
 
 func (manager *Manager) Add(service services.Service) (err error) {
@@ -272,6 +279,10 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 func (manager *Manager) Listen(ctx context.Context) (err error) {
 	// copy info
 	manager.infos = manager.local.Info()
+	for i, info := range manager.infos {
+		info.Address = manager.address
+		manager.infos[i] = info
+	}
 	// watching
 	manager.watching()
 	// local.listen

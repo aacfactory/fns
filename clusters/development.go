@@ -3,73 +3,33 @@ package clusters
 import (
 	"context"
 	"fmt"
-	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/barriers"
-	"github.com/aacfactory/fns/clusters/development"
+	"github.com/aacfactory/fns/clusters/proxy"
 	"github.com/aacfactory/fns/commons/signatures"
-	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"strings"
+	"time"
 )
-
-func NewDevelopment(options Options) (manager services.EndpointsManager, shared shareds.Shared, barrier barriers.Barrier, err error) {
-	// signature
-	signature := NewSignature(options.Config.Secret)
-	// cluster
-	if options.Config.Option == nil && len(options.Config.Option) < 2 {
-		options.Config.Option = []byte{'{', '}'}
-	}
-	clusterConfig, clusterConfigErr := configures.NewJsonConfig(options.Config.Option)
-	if clusterConfigErr != nil {
-		err = errors.Warning("fns: new cluster failed").WithCause(clusterConfigErr).WithMeta("name", options.Config.Name)
-		return
-	}
-	config := DevelopmentConfig{}
-	configErr := clusterConfig.As(&config)
-	if configErr != nil {
-		err = errors.Warning("fns: new cluster failed").WithCause(configErr).WithMeta("name", options.Config.Name)
-		return
-	}
-	address := strings.TrimSpace(config.Address)
-	if address == "" {
-		err = errors.Warning("fns: new cluster failed").WithCause(fmt.Errorf("address in cluster config is required")).WithMeta("name", options.Config.Name)
-		return
-	}
-	cluster := &Development{
-		log:       nil,
-		signature: signature,
-		address:   nil,
-		dialer:    options.Dialer,
-		events:    make(chan NodeEvent, 8),
-	}
-	clusterErr := cluster.Construct(ClusterOptions{
-		Log:     options.Log.With("cluster", options.Config.Name),
-		Config:  clusterConfig,
-		Id:      options.Id,
-		Name:    options.Name,
-		Version: options.Version,
-		Address: fmt.Sprintf("localhost:%d", options.Port),
-	})
-	if clusterErr != nil {
-		err = errors.Warning("fns: new cluster failed").WithCause(clusterErr).WithMeta("name", options.Config.Name)
-		return
-	}
-	// shared
-	shared = cluster.Shared()
-	// barrier
-	barrier = NewBarrier(options.Config.Barrier, cluster.Shared())
-	// manager
-	manager = development.NewManager(options.Local, options.Log.With("cluster", "discovery"), address, options.Worker, options.Dialer, signature)
-	return
-}
 
 const developmentName = "dev"
 
 type DevelopmentConfig struct {
-	Address string
+	ProxyAddr string `json:"proxyAddr"`
+}
+
+func NewDevelopment(dialer transports.Dialer, signature signatures.Signature) Cluster {
+	return &Development{
+		log:       nil,
+		signature: signature,
+		address:   nil,
+		dialer:    dialer,
+		client:    nil,
+		events:    make(chan NodeEvent, 64),
+		closeFn:   nil,
+		nodes:     make(Nodes, 0, 1),
+	}
 }
 
 type Development struct {
@@ -77,7 +37,10 @@ type Development struct {
 	signature signatures.Signature
 	address   []byte
 	dialer    transports.Dialer
+	client    transports.Client
 	events    chan NodeEvent
+	closeFn   context.CancelFunc
+	nodes     Nodes
 }
 
 func (cluster *Development) Construct(options ClusterOptions) (err error) {
@@ -88,12 +51,17 @@ func (cluster *Development) Construct(options ClusterOptions) (err error) {
 		err = errors.Warning("fns: dev cluster construct failed").WithCause(configErr)
 		return
 	}
-	address := strings.TrimSpace(config.Address)
+	address := strings.TrimSpace(config.ProxyAddr)
 	if address == "" {
 		err = errors.Warning("fns: dev cluster construct failed").WithCause(fmt.Errorf("address is required"))
 		return
 	}
 	cluster.address = []byte(address)
+	cluster.client, err = cluster.dialer.Dial(cluster.address)
+	if err != nil {
+		err = errors.Warning("fns: dev cluster construct failed").WithCause(err)
+		return
+	}
 	return
 }
 
@@ -101,11 +69,14 @@ func (cluster *Development) AddService(_ Service) {
 	return
 }
 
-func (cluster *Development) Join(_ context.Context) (err error) {
+func (cluster *Development) Join(ctx context.Context) (err error) {
+	ctx, cluster.closeFn = context.WithCancel(ctx)
+	go cluster.watching(ctx)
 	return
 }
 
 func (cluster *Development) Leave(_ context.Context) (err error) {
+	cluster.closeFn()
 	close(cluster.events)
 	return
 }
@@ -116,6 +87,42 @@ func (cluster *Development) NodeEvents() (events <-chan NodeEvent) {
 }
 
 func (cluster *Development) Shared() (shared shareds.Shared) {
-	shared = development.NewShared(cluster.dialer, cluster.address, cluster.signature)
+	shared = proxy.NewShared(cluster.client, cluster.signature)
+	return
+}
+
+func (cluster *Development) watching(ctx context.Context) {
+	stop := false
+	timer := time.NewTimer(10 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			stop = true
+			break
+		case <-timer.C:
+			nodes := cluster.fetchNodes(ctx)
+			events := nodes.Difference(cluster.nodes)
+			for _, event := range events {
+				cluster.events <- event
+			}
+			cluster.nodes = nodes
+			break
+		}
+		if stop {
+			timer.Stop()
+			break
+		}
+	}
+}
+
+func (cluster *Development) fetchNodes(ctx context.Context) (nodes Nodes) {
+	infos, infosErr := proxy.FetchEndpointInfos(ctx, cluster.client, cluster.signature)
+	if infosErr != nil {
+		if cluster.log.WarnEnabled() {
+			cluster.log.Warn().Cause(infosErr).With("cluster", developmentName).Message("fns: fetch endpoint infos failed")
+		}
+		return
+	}
+	nodes = MapEndpointInfosToNodes(infos)
 	return
 }

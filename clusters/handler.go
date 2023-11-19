@@ -34,12 +34,10 @@ type ResponseBody struct {
 	Span    *tracings.Span  `json:"span"`
 }
 
-// NewInternalHandler
-// endpoints: local endpoints
-func NewInternalHandler(endpoints services.Endpoints, signature signatures.Signature) transports.MuxHandler {
+func NewInternalHandler(local services.Endpoints, signature signatures.Signature) transports.MuxHandler {
 	return &InternalHandler{
 		signature: signature,
-		endpoints: endpoints,
+		endpoints: local,
 	}
 }
 

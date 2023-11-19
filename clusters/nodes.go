@@ -10,6 +10,9 @@ import (
 	"github.com/klauspost/compress/zlib"
 	"github.com/valyala/bytebufferpool"
 	"io"
+	"slices"
+	"sort"
+	"strings"
 )
 
 func NewService(name string, internal bool, functions services.FnInfos, document documents.Endpoint) (service Service, err error) {
@@ -73,7 +76,6 @@ func (service Service) Document() (document documents.Endpoint, err error) {
 
 type Node struct {
 	Id       string           `json:"id"`
-	Name     string           `json:"name"`
 	Version  versions.Version `json:"version"`
 	Address  string           `json:"address"`
 	Services []Service        `json:"services"`
@@ -103,5 +105,80 @@ func (nodes Nodes) Less(i, j int) bool {
 
 func (nodes Nodes) Swap(i, j int) {
 	nodes[i], nodes[j] = nodes[j], nodes[i]
+	return
+}
+
+func (nodes Nodes) Add(node Node) Nodes {
+	n := append(nodes, node)
+	sort.Sort(n)
+	return n
+}
+
+func (nodes Nodes) Remove(node Node) Nodes {
+	idx, found := slices.BinarySearchFunc(nodes, node, func(x Node, j Node) int {
+		return strings.Compare(x.Id, j.Id)
+	})
+	if found {
+		return append(nodes[:idx], nodes[idx+1:]...)
+	}
+	return nodes
+}
+
+func (nodes Nodes) Difference(olds Nodes) (events []NodeEvent) {
+	events = make([]NodeEvent, 0, 1)
+	// remove
+	for _, old := range olds {
+		_, found := slices.BinarySearchFunc(nodes, old, func(x Node, j Node) int {
+			return strings.Compare(x.Id, j.Id)
+		})
+		if !found {
+			events = append(events, NodeEvent{
+				Kind: Remove,
+				Node: old,
+			})
+		}
+	}
+	// add
+	for _, node := range nodes {
+		_, found := slices.BinarySearchFunc(olds, node, func(x Node, j Node) int {
+			return strings.Compare(x.Id, j.Id)
+		})
+		if !found {
+			events = append(events, NodeEvent{
+				Kind: Add,
+				Node: node,
+			})
+		}
+	}
+	return
+}
+
+func MapEndpointInfosToNodes(infos services.EndpointInfos) (nodes Nodes) {
+	nodes = make(Nodes, 0, 1)
+	for _, info := range infos {
+		service, serviceErr := NewService(info.Name, info.Internal, info.Functions, info.Document)
+		if serviceErr != nil {
+			continue
+		}
+		exist := false
+		for i, node := range nodes {
+			if node.Id == info.Id {
+				node.Services = append(node.Services, service)
+				nodes[i] = node
+				exist = true
+				break
+			}
+		}
+		if exist {
+			continue
+		}
+		nodes = nodes.Add(Node{
+			Id:       info.Id,
+			Version:  info.Version,
+			Address:  info.Address,
+			Services: []Service{service},
+		})
+	}
+	sort.Sort(nodes)
 	return
 }

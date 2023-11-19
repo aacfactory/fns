@@ -1,11 +1,12 @@
-package development
+package proxy
 
 import (
-	"context"
+	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
@@ -15,7 +16,7 @@ import (
 )
 
 var (
-	shardHandleLockersPath = []byte("/development/shared/lockers")
+	sharedHeaderLockersValue = []byte("lockers")
 )
 
 type LockParam struct {
@@ -46,11 +47,6 @@ type UnlockResult struct {
 	Error json.RawMessage `json:"error"`
 }
 
-type LockerCommand struct {
-	Command string          `json:"command"`
-	Payload json.RawMessage `json:"payload"`
-}
-
 type Locker struct {
 	id        []byte
 	key       []byte
@@ -59,13 +55,13 @@ type Locker struct {
 	signature signatures.Signature
 }
 
-func (locker *Locker) status(ctx context.Context, id []byte) (passed bool, err error) {
+func (locker *Locker) status(ctx sc.Context, id []byte) (passed bool, err error) {
 	// param
 	param := LockStatusParam{
 		Id: id,
 	}
 	p, _ := json.Marshal(param)
-	command := LockerCommand{
+	command := Command{
 		Command: "status",
 		Payload: p,
 	}
@@ -75,11 +71,12 @@ func (locker *Locker) status(ctx context.Context, id []byte) (passed bool, err e
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
 	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(sharedHeader, sharedHeaderLockersValue)
 	// signature
 	header.Set(bytex.FromString(transports.SignatureHeaderName), locker.signature.Sign(body))
 
 	// do
-	status, _, responseBody, doErr := locker.client.Do(ctx, methodPost, shardHandleLockersPath, header, body)
+	status, _, responseBody, doErr := locker.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development locker status failed").WithCause(doErr)
 		return
@@ -102,14 +99,14 @@ func (locker *Locker) status(ctx context.Context, id []byte) (passed bool, err e
 	return
 }
 
-func (locker *Locker) Lock(ctx context.Context) (err error) {
+func (locker *Locker) Lock(ctx sc.Context) (err error) {
 	// param
 	param := LockParam{
 		Key: locker.key,
 		TTL: locker.ttl,
 	}
 	p, _ := json.Marshal(param)
-	command := LockerCommand{
+	command := Command{
 		Command: "lock",
 		Payload: p,
 	}
@@ -118,11 +115,12 @@ func (locker *Locker) Lock(ctx context.Context) (err error) {
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
 	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(sharedHeader, sharedHeaderLockersValue)
 	// signature
 	header.Set(bytex.FromString(transports.SignatureHeaderName), locker.signature.Sign(body))
 
 	// do
-	status, _, responseBody, doErr := locker.client.Do(ctx, methodPost, shardHandleLockersPath, header, body)
+	status, _, responseBody, doErr := locker.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development locker lock failed").WithCause(doErr)
 		return
@@ -169,14 +167,14 @@ func (locker *Locker) Lock(ctx context.Context) (err error) {
 	return
 }
 
-func (locker *Locker) Unlock(ctx context.Context) (err error) {
+func (locker *Locker) Unlock(ctx sc.Context) (err error) {
 	// param
 	param := UnlockParam{
 		Key: locker.key,
 		Id:  locker.id,
 	}
 	p, _ := json.Marshal(param)
-	command := LockerCommand{
+	command := Command{
 		Command: "unlock",
 		Payload: p,
 	}
@@ -186,11 +184,12 @@ func (locker *Locker) Unlock(ctx context.Context) (err error) {
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
 	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(sharedHeader, sharedHeaderLockersValue)
 	// signature
 	header.Set(bytex.FromString(transports.SignatureHeaderName), locker.signature.Sign(body))
 
 	// do
-	status, _, responseBody, doErr := locker.client.Do(ctx, methodPost, shardHandleLockersPath, header, body)
+	status, _, responseBody, doErr := locker.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development locker unlock failed").WithCause(doErr)
 		return
@@ -213,21 +212,15 @@ func (locker *Locker) Unlock(ctx context.Context) (err error) {
 }
 
 type Lockers struct {
-	address   []byte
-	dialer    transports.Dialer
+	client    transports.Client
 	signature signatures.Signature
 }
 
-func (lockers *Lockers) Acquire(_ context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
-	client, clientErr := lockers.dialer.Dial(lockers.address)
-	if clientErr != nil {
-		err = errors.Warning("fns: lockers acquire failed").WithCause(clientErr)
-		return
-	}
+func (lockers *Lockers) Acquire(_ sc.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
 	locker = &Locker{
 		key:       key,
 		ttl:       ttl,
-		client:    client,
+		client:    lockers.client,
 		signature: lockers.signature,
 	}
 	return
@@ -241,10 +234,9 @@ type LockerStatus struct {
 	Err    error
 }
 
-func NewSharedLockersHandler(lockers shareds.Lockers, signature signatures.Signature) transports.Handler {
+func NewSharedLockersHandler(lockers shareds.Lockers) transports.Handler {
 	return &SharedLockersHandler{
 		lockers:   lockers,
-		signature: signature,
 		statusMap: sync.Map{},
 	}
 }
@@ -261,7 +253,7 @@ func (handler *SharedLockersHandler) Handle(w transports.ResponseWriter, r trans
 		w.Failed(ErrInvalidBody)
 		return
 	}
-	cmd := LockerCommand{}
+	cmd := Command{}
 	decodeErr := json.Unmarshal(body, &cmd)
 	if decodeErr != nil {
 		w.Failed(ErrInvalidBody.WithCause(decodeErr))

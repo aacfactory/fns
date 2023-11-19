@@ -45,7 +45,7 @@ func (m *middleware) Handler(next transports.Handler) transports.Handler {
 			return
 		}
 		latency := time.Now().Sub(beg)
-		w.Header().Set(bytex.FromString(transports.HandleLatencyHeaderName), bytex.FromString(latency.String()))
+		w.Header().Set(transports.HandleLatencyHeaderName, bytex.FromString(latency.String()))
 	})
 }
 

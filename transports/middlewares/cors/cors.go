@@ -65,16 +65,16 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 	}
 	if len(config.AllowedHeaders) == 0 || config.AllowedHeaders[0] != "*" {
 		defaultAllowedHeaders := []string{
-			transports.OriginHeaderName, transports.AcceptHeaderName, transports.ContentTypeHeaderName,
-			transports.AcceptEncodingHeaderName,
-			transports.XRequestedWithHeaderName,
-			transports.ConnectionHeaderName, transports.UpgradeHeaderName,
-			transports.XForwardedForHeaderName, transports.TrueClientIpHeaderName, transports.XRealIpHeaderName,
-			transports.DeviceIpHeaderName, transports.DeviceIdHeaderName,
-			transports.RequestIdHeaderName,
-			transports.RequestTimeoutHeaderName, transports.RequestVersionsHeaderName,
-			transports.CacheControlHeaderIfNonMatch, transports.CacheControlHeaderName,
-			transports.SignatureHeaderName,
+			string(transports.OriginHeaderName), string(transports.AcceptHeaderName), string(transports.ContentTypeHeaderName),
+			string(transports.AcceptEncodingHeaderName),
+			string(transports.XRequestedWithHeaderName),
+			string(transports.ConnectionHeaderName), string(transports.UpgradeHeaderName),
+			string(transports.XForwardedForHeaderName), string(transports.TrueClientIpHeaderName), string(transports.XRealIpHeaderName),
+			string(transports.DeviceIpHeaderName), string(transports.DeviceIdHeaderName),
+			string(transports.RequestIdHeaderName),
+			string(transports.RequestTimeoutHeaderName), string(transports.RequestVersionsHeaderName),
+			string(transports.CacheControlHeaderIfNonMatch), string(transports.CacheControlHeaderName),
+			string(transports.SignatureHeaderName),
 		}
 		for _, header := range defaultAllowedHeaders {
 			if !slices.Contains(config.AllowedHeaders, header) {
@@ -118,12 +118,12 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
 	defaultExposedHeaders := []string{
-		transports.DeviceIdHeaderName,
-		transports.EndpointIdHeaderName, transports.EndpointVersionHeaderName,
-		transports.ContentEncodingHeaderName,
-		transports.RequestIdHeaderName, transports.HandleLatencyHeaderName,
-		transports.CacheControlHeaderName, transports.ETagHeaderName, transports.ClearSiteDataHeaderName, transports.AgeHeaderName,
-		transports.ResponseRetryAfterHeaderName, transports.SignatureHeaderName,
+		string(transports.DeviceIdHeaderName),
+		string(transports.EndpointIdHeaderName), string(transports.EndpointVersionHeaderName),
+		string(transports.ContentEncodingHeaderName),
+		string(transports.RequestIdHeaderName), string(transports.HandleLatencyHeaderName),
+		string(transports.CacheControlHeaderName), string(transports.ETagHeaderName), string(transports.ClearSiteDataHeaderName), string(transports.AgeHeaderName),
+		string(transports.ResponseRetryAfterHeaderName), string(transports.SignatureHeaderName),
 	}
 	for _, header := range defaultExposedHeaders {
 		if !slices.Contains(config.ExposedHeaders, header) {
@@ -290,7 +290,7 @@ func (c *corsMiddleware) areHeadersAllowed(requestedHeaders [][]byte) bool {
 				found = true
 				break
 			}
-			if bytes.Index(hs, bytex.FromString(transports.UserHeaderNamePrefix)) == 0 {
+			if bytes.Index(hs, transports.UserHeaderNamePrefix) == 0 {
 				found = true
 				break
 			}

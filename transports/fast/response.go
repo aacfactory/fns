@@ -121,8 +121,8 @@ func (w *responseWriter) Header() transports.Header {
 func (w *responseWriter) Succeed(v interface{}) {
 	w.result.Succeed(v)
 	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
-		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
-		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+		w.Header().Set(transports.ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
+		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
 	}
 	return
 }
@@ -130,8 +130,8 @@ func (w *responseWriter) Succeed(v interface{}) {
 func (w *responseWriter) Failed(cause error) {
 	w.result.Failed(cause)
 	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
-		w.Header().Set(bytex.FromString(transports.ContentLengthHeaderName), bytex.FromString(strconv.Itoa(bodyLen)))
-		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+		w.Header().Set(transports.ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
+		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
 	}
 	return
 }

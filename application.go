@@ -120,7 +120,7 @@ func New(options ...Option) (app Application) {
 	var shared shareds.Shared
 	// cluster
 	if clusterConfig := config.Cluster; clusterConfig != nil {
-		port, portErr := config.Transport.Port()
+		port, portErr := config.Transport.GetPort()
 		if portErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(portErr)))
 			return
@@ -183,7 +183,7 @@ func New(options ...Option) (app Application) {
 	}
 
 	for _, handler := range opt.handlers {
-		handlerConfig, handlerConfigErr := config.Transport.Handler(handler.Name())
+		handlerConfig, handlerConfigErr := config.Transport.HandlerConfig(handler.Name())
 		if handlerConfigErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport handler failed").WithCause(handlerConfigErr).WithMeta("handler", handler.Name())))
 			return

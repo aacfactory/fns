@@ -49,7 +49,7 @@ func (mf *MainFile) Name() (name string) {
 	return
 }
 
-func (mf *MainFile) Write(ctx context.Context) (err error) {
+func (mf *MainFile) Write(_ context.Context) (err error) {
 	const (
 		content = `package main
 

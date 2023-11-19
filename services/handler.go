@@ -43,7 +43,7 @@ func (handler *endpointsHandler) Construct(_ transports.MuxHandlerOptions) error
 	return nil
 }
 
-func (handler *endpointsHandler) Match(ctx context.Context, method []byte, path []byte, header transports.Header) bool {
+func (handler *endpointsHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
 	pathItems := bytes.Split(path, slashBytes)
 	if len(pathItems) != 3 {
 		return false
@@ -69,7 +69,7 @@ func (handler *endpointsHandler) Match(ctx context.Context, method []byte, path 
 		ok := bytes.Equal(method, transports.MethodGet)
 		return ok
 	}
-	ok := bytes.Equal(method, transports.MethodPost) && bytex.ToString(header.Get(bytex.FromString(transports.ContentTypeHeaderName))) == transports.ContentTypeJsonHeaderValue
+	ok := bytes.Equal(method, transports.MethodPost) && bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue)
 	return ok
 }
 
@@ -99,7 +99,7 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 	// header >>>
 	options := make([]RequestOption, 0, 1)
 	// device id
-	deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
+	deviceId := r.Header().Get(transports.DeviceIdHeaderName)
 	if len(deviceId) == 0 {
 		w.Failed(ErrDeviceId.WithMeta("path", bytex.ToString(path)))
 		return
@@ -111,12 +111,12 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 		options = append(options, WithDeviceIp(deviceIp))
 	}
 	// request id
-	requestId := r.Header().Get(bytex.FromString(transports.RequestIdHeaderName))
+	requestId := r.Header().Get(transports.RequestIdHeaderName)
 	if len(requestId) > 0 {
 		options = append(options, WithRequestId(requestId))
 	}
 	// request version
-	acceptedVersions := r.Header().Get(bytex.FromString(transports.RequestVersionsHeaderName))
+	acceptedVersions := r.Header().Get(transports.RequestVersionsHeaderName)
 	if len(acceptedVersions) > 0 {
 		intervals, intervalsErr := versions.ParseIntervals(acceptedVersions)
 		if intervalsErr != nil {
@@ -126,7 +126,7 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 		options = append(options, WithRequestVersions(intervals))
 	}
 	// authorization
-	authorization := r.Header().Get(bytex.FromString(transports.AuthorizationHeaderName))
+	authorization := r.Header().Get(transports.AuthorizationHeaderName)
 	if len(authorization) > 0 {
 		options = append(options, WithToken(authorization))
 	}

@@ -38,11 +38,11 @@ func (handler *proxyHandler) Construct(_ transports.MuxHandlerOptions) error {
 }
 
 func (handler *proxyHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
-	if len(header.Get(bytex.FromString(transports.UpgradeHeaderName))) > 0 {
+	if len(header.Get(transports.UpgradeHeaderName)) > 0 {
 		return false
 	}
 	if bytes.Equal(method, transports.MethodPost) {
-		return len(bytes.Split(path, slashBytes)) == 3 && bytex.ToString(header.Get(bytex.FromString(transports.ContentTypeHeaderName))) == transports.ContentTypeJsonHeaderValue
+		return len(bytes.Split(path, slashBytes)) == 3 && bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue)
 	}
 	if bytes.Equal(method, transports.MethodGet) {
 		return len(bytes.Split(path, slashBytes)) == 3
@@ -61,7 +61,7 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 	service := pathItems[1]
 	fn := pathItems[2]
 	// device id
-	deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
+	deviceId := r.Header().Get(transports.DeviceIdHeaderName)
 	if len(deviceId) == 0 {
 		w.Failed(ErrDeviceId.WithMeta("path", bytex.ToString(path)))
 		return
@@ -69,7 +69,7 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 	// discovery
 	endpointGetOptions := make([]services.EndpointGetOption, 0, 1)
 	var intervals versions.Intervals
-	acceptedVersions := r.Header().Get(bytex.FromString(transports.RequestVersionsHeaderName))
+	acceptedVersions := r.Header().Get(transports.RequestVersionsHeaderName)
 	if len(acceptedVersions) > 0 {
 		var intervalsErr error
 		intervals, intervalsErr = versions.ParseIntervals(acceptedVersions)

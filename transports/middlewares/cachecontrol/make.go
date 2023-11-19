@@ -99,7 +99,7 @@ func Make(ctx context.Context, options ...MakeOption) {
 	//
 	noTransformEnabled := false
 	// cache control
-	cch := header.Get(bytex.FromString(transports.CacheControlHeaderName))
+	cch := header.Get(transports.CacheControlHeaderName)
 	if len(cch) > 0 {
 		// no-cache, no-store, max-age=0
 		if bytes.Contains(cch, noCache) || bytes.Contains(cch, noStore) || bytes.Contains(cch, zeroMaxAge) {
@@ -152,7 +152,7 @@ func Make(ctx context.Context, options ...MakeOption) {
 	if len(h) > 0 {
 		h = h[2:]
 	}
-	responseHeader.Set(bytex.FromString(transports.CacheControlHeaderName), h)
+	responseHeader.Set(transports.CacheControlHeaderName, h)
 	bytebufferpool.Put(ccr)
 	return
 }

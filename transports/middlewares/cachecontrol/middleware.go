@@ -66,10 +66,15 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 				next.Handle(writer, request)
 				return
 			}
+			rch := request.Header().Get(transports.CacheControlHeaderName)
+			if bytes.Equal(rch, transports.CacheControlHeaderNoStore) || bytes.Equal(rch, transports.CacheControlHeaderNoCache) {
+				next.Handle(writer, request)
+				return
+			}
 			// request key
 			var key []byte
 			// if-no-match
-			if inm := request.Header().Get(bytex.FromString(transports.CacheControlHeaderIfNonMatch)); len(inm) > 0 {
+			if inm := request.Header().Get(transports.CacheControlHeaderIfNonMatch); len(inm) > 0 {
 				key = hashRequest(request)
 				etag, hasEtag, getErr := middleware.cache.Get(request, key)
 				if getErr != nil {
@@ -91,7 +96,7 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 			// next
 			next.Handle(writer, request)
 			// check response
-			cch := writer.Header().Get(bytex.FromString(transports.CacheControlHeaderName))
+			cch := writer.Header().Get(transports.CacheControlHeaderName)
 			if len(cch) == 0 {
 				return
 			}
@@ -121,8 +126,8 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 				cch = append(cch, ',', ' ')
 				cch = append(cch, maxAge...)
 				cch = append(cch, '=')
-				cch = append(cch, bytex.FromString(strconv.Itoa(maxAgeValue))...)
-				writer.Header().Set(bytex.FromString(transports.CacheControlHeaderName), cch)
+				cch = append(cch, strconv.Itoa(maxAgeValue)...)
+				writer.Header().Set(transports.CacheControlHeaderName, cch)
 			}
 			if len(key) == 0 {
 				key = hashRequest(request)
@@ -137,7 +142,7 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 			}
 			setErr := middleware.cache.Set(request, key, etag, time.Duration(maxAgeValue)*time.Second)
 			if setErr == nil {
-				writer.Header().Set(bytex.FromString(transports.ETagHeaderName), etag)
+				writer.Header().Set(transports.ETagHeaderName, etag)
 			} else {
 				if middleware.log.WarnEnabled() {
 					middleware.log.Warn().
@@ -146,8 +151,8 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 						Message("set etag into cache store failed")
 				}
 				// use no-cache
-				writer.Header().Set(bytex.FromString(transports.CacheControlHeaderName), bytex.FromString(transports.CacheControlHeaderNoCache))
-				writer.Header().Set(pragma, bytex.FromString(transports.CacheControlHeaderNoCache))
+				writer.Header().Set(transports.CacheControlHeaderName, transports.CacheControlHeaderNoCache)
+				writer.Header().Set(pragma, transports.CacheControlHeaderNoCache)
 			}
 		})
 	}
@@ -167,7 +172,7 @@ func hashRequest(r transports.Request) (p []byte) {
 	param := r.Params()
 	_, _ = b.Write(param.Encode())
 	// authorization
-	if authorization := r.Header().Get(bytex.FromString(transports.AuthorizationHeaderName)); len(authorization) > 0 {
+	if authorization := r.Header().Get(transports.AuthorizationHeaderName); len(authorization) > 0 {
 		_, _ = b.Write(authorization)
 	}
 	pp := b.Bytes()

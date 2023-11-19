@@ -52,15 +52,15 @@ func (handler *Handler) Construct(options transports.MuxHandlerOptions) error {
 func (handler *Handler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
 	ok := bytes.Equal(method, transports.MethodPost) &&
 		bytes.Index(path, handlerPathPrefix) == 0 &&
-		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0 &&
-		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), contentType)
+		len(header.Get(transports.SignatureHeaderName)) != 0 &&
+		bytes.Equal(header.Get(transports.ContentTypeHeaderName), contentType)
 	return ok
 }
 
 func (handler *Handler) Handle(w transports.ResponseWriter, r transports.Request) {
 	path := r.Path()
 	// sign
-	sign := r.Header().Get(bytex.FromString(transports.SignatureHeaderName))
+	sign := r.Header().Get(transports.SignatureHeaderName)
 	if len(sign) == 0 {
 		w.Failed(ErrSignatureLost.WithMeta("path", bytex.ToString(path)))
 		return

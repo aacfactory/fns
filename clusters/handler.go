@@ -98,8 +98,8 @@ func (handler *InternalHandler) Construct(_ transports.MuxHandlerOptions) error 
 func (handler *InternalHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
 	matched := bytes.Equal(method, transports.MethodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
-		bytes.Equal(header.Get(bytex.FromString(transports.ContentTypeHeaderName)), internalContentType) &&
-		len(header.Get(bytex.FromString(transports.SignatureHeaderName))) != 0
+		bytes.Equal(header.Get(transports.ContentTypeHeaderName), internalContentType) &&
+		len(header.Get(transports.SignatureHeaderName)) != 0
 	return matched
 }
 
@@ -115,7 +115,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	fn := pathItems[2]
 
 	// sign
-	sign := r.Header().Get(bytex.FromString(transports.SignatureHeaderName))
+	sign := r.Header().Get(transports.SignatureHeaderName)
 	if len(sign) == 0 {
 		w.Failed(ErrSignatureLost.WithMeta("path", bytex.ToString(path)))
 		return
@@ -148,30 +148,30 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	// internal
 	options = append(options, services.WithInternalRequest())
 	// endpoint id
-	endpointId := r.Header().Get(bytex.FromString(transports.EndpointIdHeaderName))
+	endpointId := r.Header().Get(transports.EndpointIdHeaderName)
 	if len(endpointId) > 0 {
 		options = append(options, services.WithEndpointId(endpointId))
 	}
 	// device id
-	deviceId := r.Header().Get(bytex.FromString(transports.DeviceIdHeaderName))
+	deviceId := r.Header().Get(transports.DeviceIdHeaderName)
 	if len(deviceId) == 0 {
 		w.Failed(ErrDeviceId.WithMeta("path", bytex.ToString(path)))
 		return
 	}
 	options = append(options, services.WithDeviceId(deviceId))
 	// device ip
-	deviceIp := r.Header().Get(bytex.FromString(transports.DeviceIpHeaderName))
+	deviceIp := r.Header().Get(transports.DeviceIpHeaderName)
 	if len(deviceIp) > 0 {
 		options = append(options, services.WithDeviceIp(deviceIp))
 	}
 	// request id
-	requestId := r.Header().Get(bytex.FromString(transports.RequestIdHeaderName))
+	requestId := r.Header().Get(transports.RequestIdHeaderName)
 	hasRequestId := len(requestId) > 0
 	if hasRequestId {
 		options = append(options, services.WithRequestId(requestId))
 	}
 	// request version
-	acceptedVersions := r.Header().Get(bytex.FromString(transports.RequestVersionsHeaderName))
+	acceptedVersions := r.Header().Get(transports.RequestVersionsHeaderName)
 	if len(acceptedVersions) > 0 {
 		intervals, intervalsErr := versions.ParseIntervals(acceptedVersions)
 		if intervalsErr != nil {
@@ -181,7 +181,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 		options = append(options, services.WithRequestVersions(intervals))
 	}
 	// authorization
-	authorization := r.Header().Get(bytex.FromString(transports.AuthorizationHeaderName))
+	authorization := r.Header().Get(transports.AuthorizationHeaderName)
 	if len(authorization) > 0 {
 		options = append(options, services.WithToken(authorization))
 	}

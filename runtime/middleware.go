@@ -42,22 +42,22 @@ func (middle *middleware) Handler(next transports.Handler) transports.Handler {
 	return transports.HandlerFunc(func(w transports.ResponseWriter, r transports.Request) {
 		running, upped := middle.rt.Running()
 		if !running {
-			w.Header().Set(bytex.FromString(transports.ConnectionHeaderName), bytex.FromString(transports.CloseHeaderValue))
+			w.Header().Set(transports.ConnectionHeaderName, transports.CloseHeaderValue)
 			w.Failed(ErrUnavailable)
 			return
 		}
 		if !upped {
-			w.Header().Set(bytex.FromString(transports.ResponseRetryAfterHeaderName), bytex.FromString("3"))
+			w.Header().Set(transports.ResponseRetryAfterHeaderName, bytex.FromString("3"))
 			w.Failed(ErrTooEarly)
 			return
 		}
 
 		middle.counter.Add(1)
 		// request Id
-		requestId := r.Header().Get(bytex.FromString(transports.RequestIdHeaderName))
+		requestId := r.Header().Get(transports.RequestIdHeaderName)
 		if len(requestId) == 0 {
 			requestId = uid.Bytes()
-			r.Header().Set(bytex.FromString(transports.RequestIdHeaderName), requestId)
+			r.Header().Set(transports.RequestIdHeaderName, requestId)
 		}
 		// set runtime into request context
 		With(r, middle.rt)

@@ -13,15 +13,15 @@ func DeviceIp(ctx context.Context) (ip []byte) {
 	if r == nil {
 		return
 	}
-	ip = r.Header().Get(bytex.FromString(DeviceIpHeaderName))
+	ip = r.Header().Get(DeviceIpHeaderName)
 	if len(ip) > 0 {
 		return
 	}
-	if trueClientIp := r.Header().Get(bytex.FromString(TrueClientIpHeaderName)); len(trueClientIp) > 0 {
+	if trueClientIp := r.Header().Get(TrueClientIpHeaderName); len(trueClientIp) > 0 {
 		ip = trueClientIp
-	} else if realIp := r.Header().Get(bytex.FromString(XRealIpHeaderName)); len(realIp) > 0 {
+	} else if realIp := r.Header().Get(XRealIpHeaderName); len(realIp) > 0 {
 		ip = realIp
-	} else if forwarded := r.Header().Get(bytex.FromString(XForwardedForHeaderName)); len(forwarded) > 0 {
+	} else if forwarded := r.Header().Get(XForwardedForHeaderName); len(forwarded) > 0 {
 		i := bytes.Index(forwarded, []byte{',', ' '})
 		if i == -1 {
 			i = len(forwarded)
@@ -35,6 +35,6 @@ func DeviceIp(ctx context.Context) (ip []byte) {
 		ip = bytex.FromString(remoteIp)
 	}
 	ip = ipx.CanonicalizeIp(ip)
-	r.Header().Set(bytex.FromString(DeviceIpHeaderName), ip)
+	r.Header().Set(DeviceIpHeaderName, ip)
 	return
 }

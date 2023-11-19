@@ -56,7 +56,7 @@ func (tr *Transport) Construct(options transports.Options) (err error) {
 	// log
 	log := options.Log.With("transport", transportName)
 	// tls
-	tlsConfig, tlsConfigErr := options.Config.TLS()
+	tlsConfig, tlsConfigErr := options.Config.GetTLS()
 	if tlsConfig != nil {
 		err = errors.Warning("fns: fast transport build failed").WithCause(tlsConfigErr).WithMeta("transport", transportName)
 		return
@@ -74,13 +74,13 @@ func (tr *Transport) Construct(options transports.Options) (err error) {
 	}
 
 	// port
-	port, portErr := options.Config.Port()
+	port, portErr := options.Config.GetPort()
 	if portErr != nil {
 		err = errors.Warning("fns: fast transport build failed").WithCause(portErr).WithMeta("transport", transportName)
 		return
 	}
 	// config
-	optConfig, optConfigErr := options.Config.Options()
+	optConfig, optConfigErr := options.Config.OptionsConfig()
 	if optConfigErr != nil {
 		err = errors.Warning("fns: build transport failed").WithCause(optConfigErr).WithMeta("transport", transportName)
 		return
@@ -147,7 +147,7 @@ func (tr *Transport) Shutdown(ctx context.Context) {
 
 func errorHandler(ctx *fasthttp.RequestCtx, err error) {
 	ctx.SetStatusCode(555)
-	ctx.SetContentType(transports.ContentTypeJsonHeaderValue)
+	ctx.SetContentTypeBytes(transports.ContentTypeJsonHeaderValue)
 	p, _ := json.Marshal(errors.Warning("fns: transport receiving or parsing the request failed").WithCause(err).WithMeta("transport", transportName))
 	ctx.SetBody(p)
 }

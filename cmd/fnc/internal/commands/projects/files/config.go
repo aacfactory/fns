@@ -20,7 +20,10 @@ import (
 	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/fnc/internal/libs/files"
-	"github.com/aacfactory/fns/services"
+	"github.com/aacfactory/fns/configs"
+	"github.com/aacfactory/fns/log"
+	"github.com/aacfactory/fns/shareds"
+	"github.com/aacfactory/fns/transports"
 	"github.com/goccy/go-yaml"
 	"os"
 	"path/filepath"
@@ -116,7 +119,7 @@ func (cf *ConfigFile) Name() (name string) {
 	return
 }
 
-func (cf *ConfigFile) Write(ctx context.Context) (err error) {
+func (cf *ConfigFile) Write(_ context.Context) (err error) {
 	if !files.ExistFile(cf.dir) {
 		mdErr := os.MkdirAll(cf.dir, 0644)
 		if mdErr != nil {
@@ -124,75 +127,58 @@ func (cf *ConfigFile) Write(ctx context.Context) (err error) {
 			return
 		}
 	}
-	config := services.Config{}
+	config := configs.Config{}
 	switch cf.kind {
 	case "local":
-		config.Log = &services.LogConfig{
+		config.Log = log.Config{
 			Level:     "debug",
 			Formatter: "console",
 			Color:     true,
 		}
-		config.Runtime = &services.RuntimeConfig{
-			MaxWorkers:           0,
-			WorkerMaxIdleSeconds: 0,
-			HandleTimeoutSeconds: 0,
-			AutoMaxProcs:         services.AutoMaxProcsConfig{},
-			SecretKey:            "",
+		config.Runtime = configs.RuntimeConfig{
+			Procs:   configs.ProcsConfig{},
+			Workers: configs.WorkersConfig{},
+			Shared:  shareds.LocalSharedConfig{},
 		}
 		break
 	case "dev":
-		config.Log = &services.LogConfig{
+		config.Log = log.Config{
 			Level:     "info",
 			Formatter: "json",
 			Color:     false,
 		}
-		config.Runtime = &services.RuntimeConfig{
-			MaxWorkers:           0,
-			WorkerMaxIdleSeconds: 0,
-			HandleTimeoutSeconds: 0,
-			AutoMaxProcs: services.AutoMaxProcsConfig{
-				Min: 2,
-				Max: 0,
-			},
-			SecretKey: "",
+		config.Runtime = configs.RuntimeConfig{
+			Procs:   configs.ProcsConfig{Min: 2},
+			Workers: configs.WorkersConfig{},
+			Shared:  shareds.LocalSharedConfig{},
 		}
 		break
 	case "test":
-		config.Log = &services.LogConfig{
+		config.Log = log.Config{
 			Level:     "warn",
 			Formatter: "json",
 			Color:     false,
 		}
-		config.Runtime = &services.RuntimeConfig{
-			MaxWorkers:           0,
-			WorkerMaxIdleSeconds: 0,
-			HandleTimeoutSeconds: 0,
-			AutoMaxProcs: services.AutoMaxProcsConfig{
-				Min: 2,
-				Max: 0,
-			},
-			SecretKey: "",
+		config.Runtime = configs.RuntimeConfig{
+			Procs:   configs.ProcsConfig{Min: 2},
+			Workers: configs.WorkersConfig{},
+			Shared:  shareds.LocalSharedConfig{},
 		}
 		break
 	case "prod":
-		config.Log = &services.LogConfig{
+		config.Log = log.Config{
 			Level:     "error",
 			Formatter: "json",
 			Color:     false,
 		}
-		config.Runtime = &services.RuntimeConfig{
-			MaxWorkers:           0,
-			WorkerMaxIdleSeconds: 0,
-			HandleTimeoutSeconds: 0,
-			AutoMaxProcs: services.AutoMaxProcsConfig{
-				Min: 4,
-				Max: 0,
-			},
-			SecretKey: "",
+		config.Runtime = configs.RuntimeConfig{
+			Procs:   configs.ProcsConfig{Min: 8},
+			Workers: configs.WorkersConfig{},
+			Shared:  shareds.LocalSharedConfig{},
 		}
 		break
 	default:
-		config.Transport = &services.TransportConfig{
+		config.Transport = transports.Config{
 			Port: 18080,
 		}
 		break

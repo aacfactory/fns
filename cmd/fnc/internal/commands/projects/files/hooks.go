@@ -50,7 +50,7 @@ func (hooks *HooksFile) Name() (name string) {
 	return
 }
 
-func (hooks *HooksFile) Write(ctx context.Context) (err error) {
+func (hooks *HooksFile) Write(_ context.Context) (err error) {
 	if !files.ExistFile(hooks.dir) {
 		mdErr := os.MkdirAll(hooks.dir, 0644)
 		if mdErr != nil {

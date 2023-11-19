@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/shareds"
@@ -45,10 +44,10 @@ func (store *Store) Get(ctx context.Context, key []byte) (value []byte, has bool
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderStoreValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
 	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
@@ -98,10 +97,10 @@ func (store *Store) Set(ctx context.Context, key []byte, value []byte) (err erro
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderStoreValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
 	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
@@ -151,10 +150,10 @@ func (store *Store) SetWithTTL(ctx context.Context, key []byte, value []byte, tt
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderStoreValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
 	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
@@ -203,10 +202,10 @@ func (store *Store) Incr(ctx context.Context, key []byte, delta int64) (v int64,
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderStoreValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
 	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
@@ -253,10 +252,10 @@ func (store *Store) Remove(ctx context.Context, key []byte) (err error) {
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderStoreValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), store.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
 	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {

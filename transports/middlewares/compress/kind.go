@@ -66,7 +66,7 @@ var (
 )
 
 func getKind(r transports.Request) Kind {
-	accepts := r.Header().Get(bytex.FromString(transports.AcceptEncodingHeaderName))
+	accepts := r.Header().Get(transports.AcceptEncodingHeaderName)
 	if len(accepts) == 0 {
 		return No
 	}

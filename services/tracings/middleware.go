@@ -3,7 +3,6 @@ package tracings
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
@@ -72,7 +71,7 @@ func (middle *Middleware) Construct(options transports.MiddlewareOptions) (err e
 func (middle *Middleware) Handler(next transports.Handler) transports.Handler {
 	if middle.enable {
 		return transports.HandlerFunc(func(w transports.ResponseWriter, r transports.Request) {
-			id := r.Header().Get(bytex.FromString(transports.RequestIdHeaderName))
+			id := r.Header().Get(transports.RequestIdHeaderName)
 			if len(id) == 0 {
 				next.Handle(w, r)
 				return

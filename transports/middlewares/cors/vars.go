@@ -7,18 +7,18 @@ import (
 )
 
 var (
-	varyHeader                               = bytex.FromString(transports.VaryHeaderName)
-	accessControlRequestMethodHeader         = bytex.FromString(transports.AccessControlRequestMethodHeaderName)
-	originHeader                             = bytex.FromString(transports.OriginHeaderName)
-	accessControlRequestHeadersHeader        = bytex.FromString(transports.AccessControlRequestHeadersHeaderName)
-	accessControlRequestPrivateNetworkHeader = bytex.FromString(transports.AccessControlRequestPrivateNetworkHeaderName)
-	accessControlAllowOriginHeader           = bytex.FromString(transports.AccessControlAllowOriginHeaderName)
-	accessControlAllowMethodsHeader          = bytex.FromString(transports.AccessControlAllowMethodsHeaderName)
-	accessControlAllowHeadersHeader          = bytex.FromString(transports.AccessControlAllowHeadersHeaderName)
-	accessControlAllowCredentialsHeader      = bytex.FromString(transports.AccessControlAllowCredentialsHeaderName)
-	accessControlAllowPrivateNetworkHeader   = bytex.FromString(transports.AccessControlAllowPrivateNetworkHeaderName)
-	accessControlMaxAgeHeader                = bytex.FromString(transports.AccessControlMaxAgeHeaderName)
-	accessControlExposeHeadersHeader         = bytex.FromString(transports.AccessControlExposeHeadersHeaderName)
+	varyHeader                               = transports.VaryHeaderName
+	accessControlRequestMethodHeader         = transports.AccessControlRequestMethodHeaderName
+	originHeader                             = transports.OriginHeaderName
+	accessControlRequestHeadersHeader        = transports.AccessControlRequestHeadersHeaderName
+	accessControlRequestPrivateNetworkHeader = transports.AccessControlRequestPrivateNetworkHeaderName
+	accessControlAllowOriginHeader           = transports.AccessControlAllowOriginHeaderName
+	accessControlAllowMethodsHeader          = transports.AccessControlAllowMethodsHeaderName
+	accessControlAllowHeadersHeader          = transports.AccessControlAllowHeadersHeaderName
+	accessControlAllowCredentialsHeader      = transports.AccessControlAllowCredentialsHeaderName
+	accessControlAllowPrivateNetworkHeader   = transports.AccessControlAllowPrivateNetworkHeaderName
+	accessControlMaxAgeHeader                = transports.AccessControlMaxAgeHeaderName
+	accessControlExposeHeadersHeader         = transports.AccessControlExposeHeadersHeaderName
 )
 
 var (

@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
@@ -27,8 +26,8 @@ func FetchEndpointInfos(ctx context.Context, client transports.Client, signature
 	}
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
-	header.Set(bytex.FromString(transports.SignatureHeaderName), sign)
+	header.Set(transports.ContentTypeHeaderName, contentType)
+	header.Set(transports.SignatureHeaderName, sign)
 	status, _, respBody, doErr := client.Do(ctx, transports.MethodPost, managerHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: fetch endpoint infos failed").WithCause(doErr)

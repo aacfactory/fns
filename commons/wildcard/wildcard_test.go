@@ -7,7 +7,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	w := wildcard.New("abc")
-	fmt.Println(w.Match("abc"))
-	fmt.Println(w.Match("abcd"))
+	w := wildcard.New([]byte("abc"))
+	fmt.Println(w.Match([]byte("abc")))
+	fmt.Println(w.Match([]byte("abcd")))
 }

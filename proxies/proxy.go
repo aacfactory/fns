@@ -75,7 +75,7 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 	// handlers
 	mux := transports.NewMux()
 	for _, handler := range p.handlers {
-		handlerConfig, handlerConfigErr := config.Handler(handler.Name())
+		handlerConfig, handlerConfigErr := config.HandlerConfig(handler.Name())
 		if handlerConfigErr != nil {
 			err = errors.Warning("fns: construct proxy failed, new transport handler failed").WithCause(handlerConfigErr).WithMeta("handler", handler.Name())
 			return

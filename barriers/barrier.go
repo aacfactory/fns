@@ -26,7 +26,7 @@ func New() (b Barrier) {
 
 // Barrier
 // @barrier
-// todo 当@authorization 存在时，则key增加user，不存在时，不加user
+// 当@authorization 存在时，则key为 services.HashRequest(r, services.HashRequestWithToken())
 type barrier struct {
 	group *singleflight.Group
 }

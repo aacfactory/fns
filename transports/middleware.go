@@ -22,7 +22,7 @@ type Middleware interface {
 func WaveMiddlewares(log logs.Logger, config Config, middlewares []Middleware) (v Middlewares, err error) {
 	for _, middleware := range middlewares {
 		name := strings.TrimSpace(middleware.Name())
-		mc, mcErr := config.Middleware(name)
+		mc, mcErr := config.MiddlewareConfig(name)
 		if mcErr != nil {
 			err = errors.Warning("wave middlewares failed").WithCause(mcErr).WithMeta("middleware", name)
 			return

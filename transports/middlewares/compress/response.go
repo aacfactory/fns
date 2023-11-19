@@ -51,7 +51,7 @@ type ResponseWriter struct {
 }
 
 func (w *ResponseWriter) canCompress() bool {
-	contentType := w.Header().Get(bytex.FromString(transports.ContentTypeHeaderName))
+	contentType := w.Header().Get(transports.ContentTypeHeaderName)
 	return bytes.HasPrefix(contentType, strTextSlash) ||
 		bytes.HasPrefix(contentType, strApplicationSlash) ||
 		bytes.HasPrefix(contentType, strImageSVG) ||
@@ -61,15 +61,15 @@ func (w *ResponseWriter) canCompress() bool {
 }
 
 func (w *ResponseWriter) setCompressHeader() {
-	w.Header().Set(bytex.FromString(transports.ContentEncodingHeaderName), bytex.FromString(w.compressor.Name()))
-	vary := w.Header().Get(bytex.FromString(transports.VaryHeaderName))
+	w.Header().Set(transports.ContentEncodingHeaderName, bytex.FromString(w.compressor.Name()))
+	vary := w.Header().Get(transports.VaryHeaderName)
 	if len(vary) == 0 {
-		vary = bytex.FromString(transports.AcceptEncodingHeaderName)
+		vary = transports.AcceptEncodingHeaderName
 	} else {
 		vary = append(vary, ',', ' ')
-		vary = append(vary, bytex.FromString(transports.AcceptEncodingHeaderName)...)
+		vary = append(vary, transports.AcceptEncodingHeaderName...)
 	}
-	w.Header().Set(bytex.FromString(transports.VaryHeaderName), vary)
+	w.Header().Set(transports.VaryHeaderName, vary)
 }
 
 func (w *ResponseWriter) Succeed(v interface{}) {
@@ -91,7 +91,7 @@ func (w *ResponseWriter) Succeed(v interface{}) {
 		return
 	}
 	w.SetStatus(200)
-	w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+	w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
 	w.setCompressHeader()
 	_, _ = w.ResponseWriter.Write(compressed)
 }
@@ -105,14 +105,14 @@ func (w *ResponseWriter) Failed(cause error) {
 	body, encodeErr := json.Marshal(err)
 	if encodeErr != nil {
 		w.SetStatus(555)
-		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
 		body = []byte(`{"message": "fns: transport write failed result failed"}`)
 		_, _ = w.ResponseWriter.Write(body)
 		return
 	}
 	if len(body) < minCompressLen {
 		w.SetStatus(err.Code())
-		w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
 		if bodyLen := len(body); bodyLen > 0 {
 			_, _ = w.ResponseWriter.Write(body)
 		}
@@ -124,7 +124,7 @@ func (w *ResponseWriter) Failed(cause error) {
 		return
 	}
 	w.SetStatus(err.Code())
-	w.Header().Set(bytex.FromString(transports.ContentTypeHeaderName), bytex.FromString(transports.ContentTypeJsonHeaderValue))
+	w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
 	w.setCompressHeader()
 	_, _ = w.ResponseWriter.Write(compressed)
 }

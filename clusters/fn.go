@@ -3,7 +3,6 @@ package clusters
 import (
 	"bytes"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/window"
 	"github.com/aacfactory/fns/services"
@@ -54,11 +53,10 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	transportRequestHeader, hasTransportRequestHeader := transports.TryLoadRequestHeader(ctx)
 	if hasTransportRequestHeader {
 		transportRequestHeader.Foreach(func(key []byte, values [][]byte) {
-			ks := bytex.ToString(key)
-			ok := ks == transports.CookieHeaderName ||
-				ks == transports.XForwardedForHeaderName ||
-				ks == transports.OriginHeaderName ||
-				bytes.Index(key, bytex.FromString(transports.UserHeaderNamePrefix)) == 0
+			ok := bytes.Equal(key, transports.CookieHeaderName) ||
+				bytes.Equal(key, transports.XForwardedForHeaderName) ||
+				bytes.Equal(key, transports.OriginHeaderName) ||
+				bytes.Index(key, transports.UserHeaderNamePrefix) == 0
 			if ok {
 				for _, value := range values {
 					header.Add(key, value)
@@ -67,36 +65,36 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		})
 	}
 	// content-type
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), internalContentType)
+	header.Set(transports.ContentTypeHeaderName, internalContentType)
 	// endpoint id
 	endpointId := ctx.Header().EndpointId()
 	if len(endpointId) > 0 {
-		header.Set(bytex.FromString(transports.EndpointIdHeaderName), endpointId)
+		header.Set(transports.EndpointIdHeaderName, endpointId)
 	}
 	// device id
 	deviceId := ctx.Header().DeviceId()
 	if len(deviceId) > 0 {
-		header.Set(bytex.FromString(transports.DeviceIdHeaderName), deviceId)
+		header.Set(transports.DeviceIdHeaderName, deviceId)
 	}
 	// device ip
 	deviceIp := ctx.Header().DeviceIp()
 	if len(deviceIp) > 0 {
-		header.Set(bytex.FromString(transports.DeviceIpHeaderName), deviceIp)
+		header.Set(transports.DeviceIpHeaderName, deviceIp)
 	}
 	// request id
 	requestId := ctx.Header().RequestId()
 	if len(requestId) > 0 {
-		header.Set(bytex.FromString(transports.RequestIdHeaderName), requestId)
+		header.Set(transports.RequestIdHeaderName, requestId)
 	}
 	// request version
 	requestVersion := ctx.Header().AcceptedVersions()
 	if len(requestVersion) > 0 {
-		header.Set(bytex.FromString(transports.RequestVersionsHeaderName), requestVersion.Bytes())
+		header.Set(transports.RequestVersionsHeaderName, requestVersion.Bytes())
 	}
 	// authorization
 	token := ctx.Header().Token()
 	if len(token) > 0 {
-		header.Set(bytex.FromString(transports.AuthorizationHeaderName), token)
+		header.Set(transports.AuthorizationHeaderName, token)
 	}
 	// header <<<
 
@@ -128,7 +126,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	}
 	// sign
 	signature := fn.signature.Sign(body)
-	header.Set(bytex.FromString(transports.SignatureHeaderName), signature)
+	header.Set(transports.SignatureHeaderName, signature)
 
 	// do
 	status, respHeader, respBody, doErr := fn.client.Do(ctx, transports.MethodPost, fn.path, header, body)
@@ -145,9 +143,8 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	transportResponseHeader, hasTransportResponseHeader := transports.TryLoadResponseHeader(ctx)
 	if hasTransportResponseHeader {
 		respHeader.Foreach(func(key []byte, values [][]byte) {
-			ks := bytex.ToString(key)
-			ok := ks == transports.CookieHeaderName ||
-				bytes.Index(key, bytex.FromString(transports.UserHeaderNamePrefix)) == 0
+			ok := bytes.Equal(key, transports.CookieHeaderName) ||
+				bytes.Index(key, transports.UserHeaderNamePrefix) == 0
 			if ok {
 				for _, value := range values {
 					transportResponseHeader.Add(key, value)

@@ -69,10 +69,10 @@ func (locker *Locker) status(ctx context.Context, id []byte) (passed bool, err e
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderLockersValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), locker.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, locker.signature.Sign(body))
 
 	// do
 	status, _, responseBody, doErr := locker.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
@@ -113,10 +113,10 @@ func (locker *Locker) Lock(ctx context.Context) (err error) {
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderLockersValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), locker.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, locker.signature.Sign(body))
 
 	// do
 	status, _, responseBody, doErr := locker.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
@@ -182,10 +182,10 @@ func (locker *Locker) Unlock(ctx context.Context) (err error) {
 
 	header := transports.AcquireHeader()
 	defer transports.ReleaseHeader(header)
-	header.Set(bytex.FromString(transports.ContentTypeHeaderName), contentType)
+	header.Set(transports.ContentTypeHeaderName, contentType)
 	header.Set(sharedHeader, sharedHeaderLockersValue)
 	// signature
-	header.Set(bytex.FromString(transports.SignatureHeaderName), locker.signature.Sign(body))
+	header.Set(transports.SignatureHeaderName, locker.signature.Sign(body))
 
 	// do
 	status, _, responseBody, doErr := locker.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)

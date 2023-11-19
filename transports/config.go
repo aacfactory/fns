@@ -39,17 +39,17 @@ func (config *TLSConfig) Config() (conf ssl.Config, err error) {
 }
 
 type Config struct {
-	Port_        int             `json:"port" yaml:"port,omitempty"`
-	TLS_         *TLSConfig      `json:"tls" yaml:"tls,omitempty"`
-	Options_     json.RawMessage `json:"options" yaml:"options,omitempty"`
-	Middlewares_ json.RawMessage `json:"middlewares" yaml:"middlewares,omitempty"`
-	Handlers_    json.RawMessage `json:"handlers" yaml:"handlers,omitempty"`
+	Port        int             `json:"port,omitempty" yaml:"port,omitempty"`
+	TLS         *TLSConfig      `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Options     json.RawMessage `json:"options,omitempty" yaml:"options,omitempty"`
+	Middlewares json.RawMessage `json:"middlewares,omitempty" yaml:"middlewares,omitempty"`
+	Handlers    json.RawMessage `json:"handlers,omitempty" yaml:"handlers,omitempty"`
 }
 
-func (config *Config) Port() (port int, err error) {
-	port = config.Port_
+func (config *Config) GetPort() (port int, err error) {
+	port = config.Port
 	if port == 0 {
-		if config.TLS_ == nil {
+		if config.TLS == nil {
 			port = 80
 		} else {
 			port = 443
@@ -62,11 +62,11 @@ func (config *Config) Port() (port int, err error) {
 	return
 }
 
-func (config *Config) TLS() (tls ssl.Config, err error) {
-	if config.TLS_ == nil {
+func (config *Config) GetTLS() (tls ssl.Config, err error) {
+	if config.TLS == nil {
 		return
 	}
-	tls, err = config.TLS_.Config()
+	tls, err = config.TLS.Config()
 	if err != nil {
 		err = errors.Warning("tls is invalid").WithCause(err)
 		return
@@ -74,11 +74,11 @@ func (config *Config) TLS() (tls ssl.Config, err error) {
 	return
 }
 
-func (config *Config) Options() (options configures.Config, err error) {
-	if len(config.Options_) == 0 {
-		config.Options_ = []byte{'{', '}'}
+func (config *Config) OptionsConfig() (options configures.Config, err error) {
+	if len(config.Options) == 0 {
+		config.Options = []byte{'{', '}'}
 	}
-	options, err = configures.NewJsonConfig(config.Options_)
+	options, err = configures.NewJsonConfig(config.Options)
 	if err != nil {
 		err = errors.Warning("options is invalid").WithCause(err)
 		return
@@ -86,16 +86,16 @@ func (config *Config) Options() (options configures.Config, err error) {
 	return
 }
 
-func (config *Config) Middleware(name string) (middleware configures.Config, err error) {
+func (config *Config) MiddlewareConfig(name string) (middleware configures.Config, err error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		err = errors.Warning("middleware is invalid").WithCause(fmt.Errorf("name is nil")).WithMeta("middleware", name)
 		return
 	}
-	if len(config.Middlewares_) == 0 {
-		config.Middlewares_ = []byte{'{', '}'}
+	if len(config.Middlewares) == 0 {
+		config.Middlewares = []byte{'{', '}'}
 	}
-	middlewares, middlewaresErr := configures.NewJsonConfig(config.Middlewares_)
+	middlewares, middlewaresErr := configures.NewJsonConfig(config.Middlewares)
 	if middlewaresErr != nil {
 		err = errors.Warning("middleware is invalid").WithCause(middlewaresErr).WithMeta("middleware", name)
 		return
@@ -108,16 +108,16 @@ func (config *Config) Middleware(name string) (middleware configures.Config, err
 	return
 }
 
-func (config *Config) Handler(name string) (handler configures.Config, err error) {
+func (config *Config) HandlerConfig(name string) (handler configures.Config, err error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		err = errors.Warning("middleware is invalid").WithCause(fmt.Errorf("name is nil")).WithMeta("middleware", name)
 		return
 	}
-	if len(config.Handlers_) == 0 {
-		config.Handlers_ = []byte{'{', '}'}
+	if len(config.Handlers) == 0 {
+		config.Handlers = []byte{'{', '}'}
 	}
-	handlers, handlersErr := configures.NewJsonConfig(config.Handlers_)
+	handlers, handlersErr := configures.NewJsonConfig(config.Handlers)
 	if handlersErr != nil {
 		err = errors.Warning("middleware is invalid").WithCause(handlersErr).WithMeta("middleware", name)
 		return

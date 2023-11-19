@@ -3,6 +3,7 @@ package proxies
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/fast"
@@ -13,6 +14,8 @@ type ProxyOptions struct {
 	Log     logs.Logger
 	Config  Config
 	Runtime *runtime.Runtime
+	Manager clusters.ClusterEndpointsManager
+	Dialer  transports.Dialer
 }
 
 type Proxy interface {
@@ -37,7 +40,6 @@ func New(options ...Option) (p Proxy, err error) {
 	}
 	p = &proxy{
 		log:         nil,
-		rt:          nil,
 		transport:   opt.transport,
 		middlewares: opt.middlewares,
 		handlers:    opt.handlers,
@@ -47,7 +49,6 @@ func New(options ...Option) (p Proxy, err error) {
 
 type proxy struct {
 	log         logs.Logger
-	rt          *runtime.Runtime
 	transport   transports.Transport
 	middlewares []transports.Middleware
 	handlers    []transports.MuxHandler
@@ -55,12 +56,11 @@ type proxy struct {
 
 func (p *proxy) Construct(options ProxyOptions) (err error) {
 	p.log = options.Log
-	p.rt = options.Runtime
 	// config
 	config := options.Config
 	// middlewares
 	middlewares := make([]transports.Middleware, 0, 1)
-	middlewares = append(middlewares, NewProxyMiddleware(p.rt))
+	middlewares = append(middlewares, runtime.Middleware(options.Runtime))
 	var corsMiddleware transports.Middleware
 	for _, middleware := range p.middlewares {
 		if middleware.Name() == "cors" {
@@ -74,7 +74,6 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 	}
 	// handlers
 	mux := transports.NewMux()
-	mux.Add(NewProxyHandler())
 	for _, handler := range p.handlers {
 		handlerConfig, handlerConfigErr := config.Handler(handler.Name())
 		if handlerConfigErr != nil {
@@ -91,6 +90,7 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 		}
 		mux.Add(handler)
 	}
+	mux.Add(NewProxyHandler(options.Manager, options.Dialer))
 	// transport
 	transportErr := p.transport.Construct(transports.Options{
 		Log:         p.log.With("transport", p.transport.Name()),

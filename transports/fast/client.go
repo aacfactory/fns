@@ -1,6 +1,7 @@
 package fast
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"github.com/aacfactory/errors"
@@ -185,8 +186,14 @@ func (client *Client) Do(ctx context.Context, method []byte, path []byte, header
 		uri.SetSchemeBytes(bytex.FromString("http"))
 	}
 	uri.SetHostBytes(bytex.FromString(client.address))
+	queryIdx := bytes.IndexByte(path, '?')
+	if queryIdx > -1 {
+		if len(path) > queryIdx {
+			uri.SetQueryStringBytes(path[queryIdx+1:])
+		}
+		path = path[0:queryIdx]
+	}
 	uri.SetPathBytes(path)
-
 	// body
 	if body != nil && len(body) > 0 {
 		req.SetBodyRaw(body)

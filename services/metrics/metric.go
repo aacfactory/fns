@@ -13,10 +13,6 @@ var (
 )
 
 // Metric
-// todo
-// as service
-// tryExecute in service
-// report channel listen in service
 // use @metric to enable in fn
 type Metric struct {
 	Endpoint  string `json:"endpoint"`

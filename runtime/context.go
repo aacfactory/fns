@@ -15,8 +15,9 @@ var (
 	contextKey = []byte("@fns:context:runtime")
 )
 
-func With(ctx context.Context, rt *Runtime) {
+func With(ctx context.Context, rt *Runtime) context.Context {
 	ctx.SetLocalValue(contextKey, rt)
+	return ctx
 }
 
 func Load(ctx context.Context) *Runtime {

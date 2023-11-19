@@ -6,7 +6,6 @@ require (
 	github.com/aacfactory/afssl v1.9.0
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
-	github.com/aacfactory/copier v1.1.0
 	github.com/aacfactory/errors v1.13.5
 	github.com/aacfactory/gcg v1.0.4
 	github.com/aacfactory/json v1.16.0
@@ -16,11 +15,11 @@ require (
 	github.com/dgrr/http2 v0.3.6-0.20231023141632-12370d352f5f
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/goccy/go-yaml v1.11.2
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.17.3
 	github.com/rs/xid v1.5.0
 	github.com/urfave/cli/v2 v2.25.7
 	github.com/valyala/bytebufferpool v1.0.0
-	github.com/valyala/fasthttp v1.50.0
+	github.com/valyala/fasthttp v1.51.0
 	go.uber.org/automaxprocs v1.5.3
 	golang.org/x/crypto v0.15.0
 	golang.org/x/mod v0.14.0

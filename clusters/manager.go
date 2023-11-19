@@ -1,7 +1,6 @@
 package clusters
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -335,7 +334,7 @@ func (manager *Manager) watching() {
 				// check health
 				active := false
 				for i := 0; i < 10; i++ {
-					ctx, cancel := sc.WithTimeout(context.TODO(), 2*time.Second)
+					ctx, cancel := context.WithTimeout(context.TODO(), 2*time.Second)
 					if runtime.CheckHealth(ctx, client) {
 						active = true
 						cancel()

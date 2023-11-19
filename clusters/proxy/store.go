@@ -1,10 +1,10 @@
 package proxy
 
 import (
-	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
@@ -31,7 +31,7 @@ type StoreGetResult struct {
 	Error json.RawMessage `json:"error"`
 }
 
-func (store *Store) Get(ctx sc.Context, key []byte) (value []byte, has bool, err error) {
+func (store *Store) Get(ctx context.Context, key []byte) (value []byte, has bool, err error) {
 	// param
 	param := StoreGetParam{
 		Key: key,
@@ -83,7 +83,7 @@ type StoreSetResult struct {
 	Error json.RawMessage `json:"error"`
 }
 
-func (store *Store) Set(ctx sc.Context, key []byte, value []byte) (err error) {
+func (store *Store) Set(ctx context.Context, key []byte, value []byte) (err error) {
 	// param
 	param := StoreSetParam{
 		Key:   key,
@@ -135,7 +135,7 @@ type StoreSetWithTTLResult struct {
 	Error json.RawMessage `json:"error"`
 }
 
-func (store *Store) SetWithTTL(ctx sc.Context, key []byte, value []byte, ttl time.Duration) (err error) {
+func (store *Store) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error) {
 	// param
 	param := StoreSetWithTTLParam{
 		Key:   key,
@@ -188,7 +188,7 @@ type StoreIncrResult struct {
 	Error json.RawMessage `json:"error"`
 }
 
-func (store *Store) Incr(ctx sc.Context, key []byte, delta int64) (v int64, err error) {
+func (store *Store) Incr(ctx context.Context, key []byte, delta int64) (v int64, err error) {
 	// param
 	param := StoreIncrParam{
 		Key:   key,
@@ -239,7 +239,7 @@ type StoreRemoveResult struct {
 	Error json.RawMessage `json:"error"`
 }
 
-func (store *Store) Remove(ctx sc.Context, key []byte) (err error) {
+func (store *Store) Remove(ctx context.Context, key []byte) (err error) {
 	// param
 	param := StoreRemoveParam{
 		Key: key,

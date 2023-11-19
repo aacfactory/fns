@@ -17,7 +17,6 @@
 package fns
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
@@ -47,7 +46,7 @@ import (
 
 type Application interface {
 	Deploy(service ...services.Service) Application
-	Run(ctx sc.Context) Application
+	Run(ctx context.Context) Application
 	Sync()
 }
 
@@ -319,11 +318,11 @@ func (app *application) Deploy(s ...services.Service) Application {
 	return app
 }
 
-func (app *application) Run(ctx sc.Context) Application {
+func (app *application) Run(ctx context.Context) Application {
 	app.amp.Enable()
 	// transport
 	trErrs := make(chan error, 1)
-	go func(ctx sc.Context, transport transports.Transport, errs chan error) {
+	go func(ctx context.Context, transport transports.Transport, errs chan error) {
 		lnErr := transport.ListenAndServe()
 		if lnErr != nil {
 			errs <- lnErr
@@ -345,7 +344,7 @@ func (app *application) Run(ctx sc.Context) Application {
 	app.status.Confirm()
 
 	// endpoints
-	lnErr := app.manager.Listen(context.Wrap(ctx))
+	lnErr := app.manager.Listen(ctx)
 	if lnErr != nil {
 		app.shutdown()
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(lnErr)))
@@ -354,7 +353,7 @@ func (app *application) Run(ctx sc.Context) Application {
 	// proxy
 	if app.proxy != nil {
 		prErrs := make(chan error, 1)
-		go func(ctx sc.Context, proxy proxies.Proxy, errs chan error) {
+		go func(ctx context.Context, proxy proxies.Proxy, errs chan error) {
 			proxyErr := proxy.Run(ctx)
 			if proxyErr != nil {
 				errs <- proxyErr
@@ -375,7 +374,7 @@ func (app *application) Run(ctx sc.Context) Application {
 	}
 	// hooks
 	for _, hook := range app.hooks {
-		app.worker.MustDispatch(runtime.With(context.Wrap(ctx), app.rt), hook)
+		app.worker.MustDispatch(runtime.With(ctx, app.rt), hook)
 		if app.log.DebugEnabled() {
 			app.log.Debug().With("hook", hook.Name()).Message("fns: hook is dispatched")
 		}
@@ -403,11 +402,11 @@ func (app *application) shutdown() {
 	if timeout < 1 {
 		timeout = 10 * time.Minute
 	}
-	ctx, cancel := sc.WithTimeout(sc.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	// status
 	app.status.Off()
 
-	go func(ctx context.Context, cancel sc.CancelFunc, app *application) {
+	go func(ctx context.Context, cancel context.CancelFunc, app *application) {
 		// endpoints
 		app.manager.Shutdown(ctx)
 		// transport

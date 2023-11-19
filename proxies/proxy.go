@@ -1,9 +1,9 @@
 package proxies
 
 import (
-	"context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/fast"

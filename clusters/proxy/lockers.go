@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	sc "context"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/signatures"
@@ -55,7 +54,7 @@ type Locker struct {
 	signature signatures.Signature
 }
 
-func (locker *Locker) status(ctx sc.Context, id []byte) (passed bool, err error) {
+func (locker *Locker) status(ctx context.Context, id []byte) (passed bool, err error) {
 	// param
 	param := LockStatusParam{
 		Id: id,
@@ -99,7 +98,7 @@ func (locker *Locker) status(ctx sc.Context, id []byte) (passed bool, err error)
 	return
 }
 
-func (locker *Locker) Lock(ctx sc.Context) (err error) {
+func (locker *Locker) Lock(ctx context.Context) (err error) {
 	// param
 	param := LockParam{
 		Key: locker.key,
@@ -167,7 +166,7 @@ func (locker *Locker) Lock(ctx sc.Context) (err error) {
 	return
 }
 
-func (locker *Locker) Unlock(ctx sc.Context) (err error) {
+func (locker *Locker) Unlock(ctx context.Context) (err error) {
 	// param
 	param := UnlockParam{
 		Key: locker.key,
@@ -216,7 +215,7 @@ type Lockers struct {
 	signature signatures.Signature
 }
 
-func (lockers *Lockers) Acquire(_ sc.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
+func (lockers *Lockers) Acquire(_ context.Context, key []byte, ttl time.Duration) (locker shareds.Locker, err error) {
 	locker = &Locker{
 		key:       key,
 		ttl:       ttl,

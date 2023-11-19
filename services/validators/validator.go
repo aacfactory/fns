@@ -17,6 +17,7 @@
 package validators
 
 import (
+	se "errors"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/go-playground/validator/v10"
@@ -55,7 +56,8 @@ func (v *validate) Validate(value interface{}, title string) (err errors.CodeErr
 	if validateErr == nil {
 		return
 	}
-	validationErrors, ok := validateErr.(validator.ValidationErrors)
+	var validationErrors validator.ValidationErrors
+	ok := se.As(validateErr, &validationErrors)
 	if !ok {
 		err = errors.Warning(fmt.Sprintf("fns: validate value failed")).WithCause(validateErr)
 		return

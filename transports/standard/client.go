@@ -2,11 +2,12 @@ package standard
 
 import (
 	"bytes"
-	"context"
+	sc "context"
 	"crypto/tls"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/ssl"
 	"github.com/valyala/bytebufferpool"
@@ -142,7 +143,7 @@ func NewClient(address string, config *ClientConfig) (client *Client, err error)
 	if !isTLS {
 		isTLS = config.TLSConfig != nil
 	}
-	var dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+	var dialFunc func(ctx sc.Context, network, addr string) (net.Conn, error)
 	if config.TLSDialer != nil {
 		dialFunc = config.TLSDialer.DialContext
 	}

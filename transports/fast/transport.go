@@ -1,9 +1,9 @@
 package fast
 
 import (
-	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"github.com/valyala/fasthttp"

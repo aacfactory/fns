@@ -17,7 +17,7 @@
 package permissions
 
 import (
-	"context"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/authorizations"
 )

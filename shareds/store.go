@@ -17,7 +17,6 @@
 package shareds
 
 import (
-	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/aacfactory/configures"
@@ -26,6 +25,7 @@ import (
 	"github.com/aacfactory/fns/commons/caches"
 	"github.com/aacfactory/fns/commons/container/smap"
 	"github.com/aacfactory/fns/commons/mmhash"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/logs"
 	"sync"
 	"time"

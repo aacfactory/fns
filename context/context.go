@@ -37,48 +37,6 @@ func Release(ctx context.Context) {
 	}
 }
 
-func Wrap(ctx context.Context) Context {
-	return &context_{
-		Context: ctx,
-		entries: make(Entries, 0, 1),
-		locals:  make(Entries, 0, 1),
-	}
-}
-
-func TODO() Context {
-	return Wrap(context.TODO())
-}
-
-func WithValue(parent context.Context, key []byte, val any) Context {
-	ctx, ok := parent.(Context)
-	if ok {
-		ctx.SetLocalValue(key, val)
-		return ctx
-	}
-	ctx = &context_{
-		Context: ctx,
-		entries: make(Entries, 0, 1),
-		locals:  make(Entries, 0, 1),
-	}
-	ctx.SetLocalValue(key, val)
-	return ctx
-}
-
-func ScanValue(ctx context.Context, key []byte, val any) (has bool, err error) {
-	v := ctx.Value(key)
-	if v == nil {
-		return
-	}
-	s := scanner.New(v)
-	err = s.Scan(val)
-	if err != nil {
-		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
-		return
-	}
-	has = true
-	return
-}
-
 type Context interface {
 	context.Context
 	UserValue(key []byte) any

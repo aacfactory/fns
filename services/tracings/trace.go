@@ -13,8 +13,6 @@ func New(id []byte) *Trace {
 	}
 }
 
-// todo
-// use  middleware and listen wrap
 type Trace struct {
 	Id      string `json:"id"`
 	Span    *Span  `json:"span"`

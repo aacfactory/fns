@@ -17,7 +17,6 @@
 package services
 
 import (
-	sc "context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -109,7 +108,7 @@ type Request interface {
 	Param() (param Param)
 }
 
-func AcquireRequest(ctx sc.Context, service []byte, fn []byte, param interface{}, options ...RequestOption) (v Request) {
+func AcquireRequest(ctx context.Context, service []byte, fn []byte, param interface{}, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		header: Header{},
 	}
@@ -192,12 +191,12 @@ func (r *request) Param() (param Param) {
 
 // +-------------------------------------------------------------------------------------------------------------------+
 
-func TryLoadRequest(ctx sc.Context) (r Request, ok bool) {
+func TryLoadRequest(ctx context.Context) (r Request, ok bool) {
 	r, ok = ctx.(Request)
 	return
 }
 
-func LoadRequest(ctx sc.Context) Request {
+func LoadRequest(ctx context.Context) Request {
 	r, ok := ctx.(Request)
 	if ok {
 		return r

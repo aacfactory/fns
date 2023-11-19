@@ -1,8 +1,8 @@
 package log
 
 import (
-	"context"
 	"github.com/aacfactory/configures"
+	"github.com/aacfactory/fns/context"
 	"io"
 	"os"
 )

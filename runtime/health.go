@@ -2,8 +2,8 @@ package runtime
 
 import (
 	"bytes"
-	"context"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"time"
 )
@@ -36,7 +36,7 @@ func (handler *healthHandler) Construct(_ transports.MuxHandlerOptions) error {
 	return nil
 }
 
-func (handler *healthHandler) Match(method []byte, path []byte, _ transports.Header) bool {
+func (handler *healthHandler) Match(_ context.Context, method []byte, path []byte, _ transports.Header) bool {
 	ok := bytes.Equal(method, transports.MethodGet) && bytes.Equal(path, healthPath)
 	return ok
 }

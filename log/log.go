@@ -17,10 +17,10 @@
 package log
 
 import (
-	"context"
 	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"os"
@@ -87,7 +87,7 @@ func New(name string, config Config) (v *Logger, err error) {
 		logs.Writer(writer),
 	)
 	if coreErr != nil {
-		writer.Shutdown(context.Background())
+		writer.Shutdown(context.TODO())
 		err = errors.Warning("fns: new log failed").WithCause(coreErr).WithMeta("writer", config.Writer.Name)
 		return
 	}

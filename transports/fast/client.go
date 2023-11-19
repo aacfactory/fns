@@ -2,10 +2,10 @@ package fast
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/ssl"
 	"github.com/dgrr/http2"
@@ -112,7 +112,7 @@ func NewClient(address string, config ClientConfig) (client *Client, err error) 
 	var dialFunc fasthttp.DialFunc
 	if config.TLSDialer != nil {
 		dialFunc = func(addr string) (net.Conn, error) {
-			return config.TLSDialer.DialContext(context.Background(), "tcp", addr)
+			return config.TLSDialer.DialContext(context.TODO(), "tcp", addr)
 		}
 	}
 

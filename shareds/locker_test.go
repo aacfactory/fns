@@ -17,8 +17,8 @@
 package shareds_test
 
 import (
-	"context"
 	"fmt"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/shareds"
 	"sync"
 	"testing"

@@ -15,6 +15,7 @@ require (
 	github.com/dgrr/http2 v0.3.6-0.20231023141632-12370d352f5f
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/goccy/go-yaml v1.11.2
+	github.com/hashicorp/golang-lru/arc/v2 v2.0.7
 	github.com/klauspost/compress v1.17.3
 	github.com/rs/xid v1.5.0
 	github.com/urfave/cli/v2 v2.25.7
@@ -25,6 +26,7 @@ require (
 	golang.org/x/mod v0.14.0
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.14.0
+	golang.org/x/time v0.4.0
 )
 
 require (
@@ -34,6 +36,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

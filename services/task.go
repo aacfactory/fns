@@ -31,6 +31,6 @@ func (task FnTask) Execute(ctx sc.Context) {
 		if hasTrace {
 			trace.Finish("succeed", "true")
 		}
-		task.Promise.Succeed(r)
+		task.Promise.Succeed(NewResponse(r))
 	}
 }

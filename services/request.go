@@ -24,7 +24,6 @@ import (
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/json"
 	"github.com/cespare/xxhash/v2"
 	"github.com/valyala/bytebufferpool"
 	"strconv"
@@ -208,7 +207,9 @@ func LoadRequest(ctx context.Context) Request {
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type HashRequestOptions struct {
-	withToken bool
+	withToken    bool
+	withDeviceId bool
+	sumFn        func(p []byte) uint64
 }
 
 type HashRequestOption func(options *HashRequestOptions)
@@ -219,29 +220,57 @@ func HashRequestWithToken() HashRequestOption {
 	}
 }
 
+func HashRequestWithDeviceId() HashRequestOption {
+	return func(options *HashRequestOptions) {
+		options.withDeviceId = true
+	}
+}
+
+func HashRequestBySumFn(fn func(p []byte) uint64) HashRequestOption {
+	return func(options *HashRequestOptions) {
+		options.sumFn = fn
+	}
+}
+
 func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) {
 	opt := HashRequestOptions{
-		withToken: false,
+		withToken:    false,
+		withDeviceId: false,
+		sumFn:        xxhash.Sum64,
 	}
 	for _, option := range options {
 		option(&opt)
 	}
 	service, fn := r.Fn()
-	pp, encodeErr := json.Marshal(r.Param())
-	if encodeErr != nil {
-		err = errors.Warning("fns: hash request failed").WithCause(encodeErr).WithMeta("service", string(service)).WithMeta("fn", string(fn))
-		return
+	var pp []byte
+	if r.Param().Exist() {
+		pp, err = r.Param().MarshalJSON()
+		if err != nil {
+			err = errors.Warning("fns: hash request failed").WithCause(err).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			return
+		}
 	}
 	buf := bytebufferpool.Get()
 	_, _ = buf.Write(service)
 	_, _ = buf.Write(fn)
 	_, _ = buf.Write(r.Header().AcceptedVersions().Bytes())
 	if opt.withToken {
-		_, _ = buf.Write(r.Header().Token())
+		token := r.Header().Token()
+		if len(token) > 0 {
+			_, _ = buf.Write(token)
+		}
 	}
-	_, _ = buf.Write(pp)
+	if opt.withDeviceId {
+		deviceId := r.Header().DeviceId()
+		if len(deviceId) > 0 {
+			_, _ = buf.Write(deviceId)
+		}
+	}
+	if len(pp) > 0 {
+		_, _ = buf.Write(pp)
+	}
 	b := buf.Bytes()
-	p = bytex.FromString(strconv.FormatUint(xxhash.Sum64(b), 16))
+	p = bytex.FromString(strconv.FormatUint(opt.sumFn(b), 16))
 	bytebufferpool.Put(buf)
 	return
 }

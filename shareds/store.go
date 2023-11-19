@@ -95,7 +95,7 @@ func (store *localStore) Get(_ context.Context, key []byte) (value []byte, has b
 	if has {
 		return
 	}
-	k := mmhash.MemHash(key)
+	k := mmhash.Sum64(key)
 	var p interface{}
 	p, has = store.persisted.Get(k)
 	if has {
@@ -112,7 +112,7 @@ func (store *localStore) Set(_ context.Context, key []byte, value []byte) (err e
 	}
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	k := mmhash.MemHash(key)
+	k := mmhash.Sum64(key)
 	store.persisted.Set(k, value)
 	return
 }
@@ -139,7 +139,7 @@ func (store *localStore) Incr(_ context.Context, key []byte, delta int64) (v int
 	}
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	k := mmhash.MemHash(key)
+	k := mmhash.Sum64(key)
 	n := int64(0)
 	p, has := store.persisted.Get(k)
 	if has {
@@ -165,7 +165,7 @@ func (store *localStore) Remove(_ context.Context, key []byte) (err error) {
 	store.locker.Lock()
 	defer store.locker.Unlock()
 	store.cache.Remove(key)
-	k := mmhash.MemHash(key)
+	k := mmhash.Sum64(key)
 	store.persisted.Delete(k)
 	return
 }

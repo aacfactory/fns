@@ -6,7 +6,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/scanner"
-	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"reflect"
 	"sort"
@@ -46,7 +45,13 @@ func (p paramsScanner) Scan(dst interface{}) (err error) {
 }
 
 func (p paramsScanner) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.value.Encode())
+	encoded := p.value.Encode()
+	capacity := len(encoded) + 2
+	b := make([]byte, capacity)
+	b[0] = '"'
+	b[capacity-1] = '"'
+	copy(b[1:], encoded)
+	return b, nil
 }
 
 type paramValues [][]byte

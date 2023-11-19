@@ -27,7 +27,7 @@ type stringStruct struct {
 	len int
 }
 
-func MemHash(data []byte) uint64 {
+func Sum64(data []byte) uint64 {
 	ss := (*stringStruct)(unsafe.Pointer(&data))
 	return uint64(memhash(ss.str, 0, uintptr(ss.len)))
 }

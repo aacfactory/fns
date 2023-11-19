@@ -21,12 +21,14 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/futures"
+	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/log"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"golang.org/x/sync/singleflight"
 	"net/http"
 	"sort"
 	"strings"
@@ -43,6 +45,7 @@ func New(id string, version versions.Version, log logs.Logger, config Config, wo
 		values:  make(Services, 0, 1),
 		infos:   make(EndpointInfos, 0, 1),
 		worker:  worker,
+		group:   new(singleflight.Group),
 	}
 }
 
@@ -61,6 +64,7 @@ type Manager struct {
 	values  Services
 	infos   EndpointInfos
 	worker  workers.Workers
+	group   *singleflight.Group
 }
 
 func (manager *Manager) Add(service Service) (err error) {
@@ -198,25 +202,45 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	if hasTrace {
 		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
 	}
-	// promise
-	promise, future := futures.New()
-	// dispatch
-	dispatched := manager.worker.Dispatch(ctx, FnTask{
-		Fn:      function,
-		Promise: promise,
-	})
-	if !dispatched {
-		// tracing
-		if hasTrace {
-			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
-		}
-		promise.Failed(
-			errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
-				WithMeta("service", bytex.ToString(name)).
-				WithMeta("fn", bytex.ToString(fn)),
-		)
+
+	groupKey, groupKeyErr := HashRequest(req, HashRequestWithDeviceId(), HashRequestWithToken(), HashRequestBySumFn(mmhash.Sum64))
+	if groupKeyErr != nil {
+		err = errors.Warning("fns: hash request failed").
+			WithCause(groupKeyErr).
+			WithMeta("service", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		ReleaseRequest(req)
+		return
 	}
-	response, err = future.Get(ctx)
+
+	v, doErr, _ := manager.group.Do(bytex.ToString(groupKey), func() (v interface{}, err error) {
+		// promise
+		promise, future := futures.New()
+		// dispatch
+		dispatched := manager.worker.Dispatch(ctx, FnTask{
+			Fn:      function,
+			Promise: promise,
+		})
+		if !dispatched {
+			// release futures
+			futures.Release(promise, future)
+			// tracing
+			if hasTrace {
+				trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
+			}
+			err = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
+				WithMeta("service", bytex.ToString(name)).
+				WithMeta("fn", bytex.ToString(fn))
+			return
+		}
+		v, err = future.Get(ctx)
+		return
+	})
+	if doErr != nil {
+		err = doErr
+	} else {
+		response = v.(Response)
+	}
 	ReleaseRequest(req)
 	return
 }

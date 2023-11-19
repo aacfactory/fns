@@ -35,6 +35,6 @@ func (hash XXHash) Sum(p []byte) (h uint64) {
 type MemHash struct{}
 
 func (hash MemHash) Sum(p []byte) (h uint64) {
-	h = mmhash.MemHash(p)
+	h = mmhash.Sum64(p)
 	return
 }

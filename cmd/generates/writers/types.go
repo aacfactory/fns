@@ -146,13 +146,11 @@ func mapBasicTypeToFunctionElementCode(ctx context.Context, typ *sources.Type) (
 			stmt.Token(fmt.Sprintf("documents.Time()"))
 			break
 		}
-		// todo move it to fns/commons/times.Date
-		if typ.Path == "github.com/aacfactory/fns-contrib/databases/sql" && typ.Name == "Date" {
+		if typ.Path == "github.com/aacfactory/fns/commons/times" && typ.Name == "Date" {
 			stmt.Token(fmt.Sprintf("documents.Date()"))
 			break
 		}
-		// todo move it to fns/commons/times.Time
-		if typ.Path == "github.com/aacfactory/fns-contrib/databases/sql" && typ.Name == "Time" {
+		if typ.Path == "github.com/aacfactory/fns/commons/times" && typ.Name == "Time" {
 			stmt.Token(fmt.Sprintf("documents.Time()"))
 			break
 		}

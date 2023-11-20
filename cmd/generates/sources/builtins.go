@@ -33,7 +33,7 @@ func tryGetBuiltinType(path string, name string) (typ *Type, has bool) {
 }
 
 func registerBuiltinTypes() {
-	// password
+	// github.com/aacfactory/fns/commons/passwords.password
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/fns/commons/passwords",
@@ -43,7 +43,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
-	// time
+	// time.Time
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "time",
@@ -53,6 +53,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
+	// time.Duration
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "time",
@@ -62,7 +63,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
-	// encoding/json
+	// encoding/json.RawMessage
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "encoding/json",
@@ -72,7 +73,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
-	// github.com/aacfactory/json
+	// github.com/aacfactory/json.RawMessage
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/json",
@@ -82,6 +83,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
+	// github.com/aacfactory/json.Date
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/json",
@@ -91,6 +93,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
+	// github.com/aacfactory/json.Time
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/json",
@@ -100,6 +103,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
+	// github.com/aacfactory/json.Object
 	RegisterBuiltinType(&Type{
 		Kind:        AnyKind,
 		Path:        "github.com/aacfactory/json",
@@ -109,6 +113,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
+	// github.com/aacfactory/json.Array
 	RegisterBuiltinType(&Type{
 		Kind:        ArrayKind,
 		Path:        "github.com/aacfactory/json",
@@ -118,7 +123,7 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    []*Type{AnyType},
 	})
-	// github.com/aacfactory/services
+	// github.com/aacfactory/services.Empty
 	RegisterBuiltinType(&Type{
 		Kind:        BuiltinKind,
 		Path:        "github.com/aacfactory/services",
@@ -128,142 +133,148 @@ func registerBuiltinTypes() {
 		Tags:        nil,
 		Elements:    nil,
 	})
-	// todo full elements github.com/aacfactory/errors
+	// github.com/aacfactory/errors.CodeErr
 	RegisterBuiltinType(&Type{
-		Kind: BuiltinKind,
+		Kind: StructKind,
 		Path: "github.com/aacfactory/errors",
 		Name: "CodeError",
 		Annotations: Annotations{
-			NewAnnotation("title", "错误"),
-			NewAnnotation("description", "具备代码与跟踪的错误"),
+			NewAnnotation("title", "Code error"),
+			NewAnnotation("description", "Errors with code and tracking"),
 		},
 		Paradigms: nil,
 		Tags:      nil,
-		Elements:  nil,
+		Elements: []*Type{
+			{
+				Kind: StructFieldKind,
+				Name: "Id",
+				Tags: map[string]string{"json": "id"},
+				Elements: []*Type{{
+					Kind: BasicKind,
+					Name: "string",
+				}},
+			},
+			{
+				Kind: StructFieldKind,
+				Name: "Code",
+				Tags: map[string]string{"json": "code"},
+				Elements: []*Type{{
+					Kind: BasicKind,
+					Name: "int",
+				}},
+			},
+			{
+				Kind: StructFieldKind,
+				Name: "Name",
+				Tags: map[string]string{"json": "name"},
+				Elements: []*Type{{
+					Kind: BasicKind,
+					Name: "string",
+				}},
+			},
+			{
+				Kind: StructFieldKind,
+				Name: "Message",
+				Tags: map[string]string{"json": "message"},
+				Elements: []*Type{{
+					Kind: BasicKind,
+					Name: "string",
+				}},
+			},
+			{
+				Kind: StructFieldKind,
+				Name: "Meta",
+				Tags: map[string]string{"json": "meta"},
+				Elements: []*Type{{
+					Kind:        MapKind,
+					Path:        "",
+					Name:        "",
+					Annotations: nil,
+					Paradigms:   nil,
+					Tags:        nil,
+					Elements: []*Type{
+						{
+							Kind: BasicKind,
+							Name: "string",
+						},
+						{
+							Kind: BasicKind,
+							Name: "string",
+						},
+					},
+				}},
+			},
+			{
+				Kind: StructFieldKind,
+				Name: "Stacktrace",
+				Tags: map[string]string{"json": "stacktrace"},
+				Elements: []*Type{
+					{
+						Kind: StructKind,
+						Path: "github.com/aacfactory/errors",
+						Name: "Stacktrace",
+						Elements: []*Type{
+							{
+								Kind: StructFieldKind,
+								Name: "Fn",
+								Tags: map[string]string{"json": "fn"},
+								Elements: []*Type{{
+									Kind: BasicKind,
+									Name: "string",
+								}},
+							},
+							{
+								Kind: StructFieldKind,
+								Name: "File",
+								Tags: map[string]string{"json": "file"},
+								Elements: []*Type{{
+									Kind: BasicKind,
+									Name: "string",
+								}},
+							},
+							{
+								Kind: StructFieldKind,
+								Name: "Line",
+								Tags: map[string]string{"json": "line"},
+								Elements: []*Type{{
+									Kind: BasicKind,
+									Name: "int",
+								}},
+							},
+						},
+					},
+				},
+			},
+			{
+				Kind: StructFieldKind,
+				Name: "Cause",
+				Tags: map[string]string{"json": "cause"},
+				Elements: []*Type{{
+					Kind: ReferenceKind,
+					Path: "github.com/aacfactory/errors",
+					Name: "CodeError",
+				}},
+			},
+		},
 	})
-	// todo move into github.com/aacfactory/fns-contrib/databases/sql
+	// github.com/aacfactory/fns/commons/times.Date
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
-		Path:        "github.com/aacfactory/fns-contrib/databases/sql",
+		Path:        "github.com/aacfactory/fns/commons/times",
 		Name:        "Date",
 		Annotations: nil,
 		Paradigms:   nil,
 		Tags:        nil,
 		Elements:    nil,
 	})
-	// todo move into github.com/aacfactory/fns-contrib/databases/sql
+	// github.com/aacfactory/fns/commons/times.Time
 	RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
-		Path:        "github.com/aacfactory/fns-contrib/databases/sql",
+		Path:        "github.com/aacfactory/fns/commons/times",
 		Name:        "Time",
 		Annotations: nil,
 		Paradigms:   nil,
 		Tags:        nil,
 		Elements:    nil,
-	})
-	// todo move into github.com/aacfactory/fns-contrib/databases/sql/dal
-	RegisterBuiltinType(&Type{
-		Kind: StructKind,
-		Path: "github.com/aacfactory/fns-contrib/databases/sql/dal",
-		Name: "Pager",
-		Annotations: Annotations{
-			NewAnnotation("title", "页"),
-			NewAnnotation("description", "分页查询结果"),
-		},
-		Paradigms: []*TypeParadigm{{
-			Name:  "E",
-			Types: []*Type{AnyType},
-		}},
-		Tags: nil,
-		Elements: []*Type{
-			{
-				Kind: StructFieldKind,
-				Path: "",
-				Name: "No",
-				Annotations: Annotations{
-					NewAnnotation("title", "页码"),
-					NewAnnotation("description", "当前页码"),
-				},
-				Paradigms: nil,
-				Tags:      map[string]string{"json": "no"},
-				Elements: []*Type{{
-					Kind:        BasicKind,
-					Path:        "",
-					Name:        "int64",
-					Annotations: nil,
-					Paradigms:   nil,
-					Tags:        nil,
-					Elements:    nil,
-				}},
-			},
-			{
-				Kind: StructFieldKind,
-				Path: "",
-				Name: "Num",
-				Annotations: Annotations{
-					NewAnnotation("title", "总页数"),
-					NewAnnotation("description", "总页数"),
-				},
-				Paradigms: nil,
-				Tags:      map[string]string{"json": "num"},
-				Elements: []*Type{{
-					Kind:        BasicKind,
-					Path:        "",
-					Name:        "int64",
-					Annotations: nil,
-					Paradigms:   nil,
-					Tags:        nil,
-					Elements:    nil,
-				}},
-			},
-			{
-				Kind: StructFieldKind,
-				Path: "",
-				Name: "Total",
-				Annotations: Annotations{
-					NewAnnotation("title", "总条目数"),
-					NewAnnotation("description", "总条目数"),
-				},
-				Paradigms: nil,
-				Tags:      map[string]string{"json": "total"},
-				Elements: []*Type{{
-					Kind:        BasicKind,
-					Path:        "",
-					Name:        "int64",
-					Annotations: nil,
-					Paradigms:   nil,
-					Tags:        nil,
-					Elements:    nil,
-				}},
-			},
-			{
-				Kind: StructFieldKind,
-				Path: "",
-				Name: "Items",
-				Annotations: Annotations{
-					NewAnnotation("title", "页条目"),
-					NewAnnotation("description", "页条目"),
-				},
-				Paradigms: nil,
-				Tags:      map[string]string{"json": "items"},
-				Elements: []*Type{{
-					Kind:        ArrayKind,
-					Path:        "",
-					Name:        "",
-					Annotations: nil,
-					Paradigms:   nil,
-					Tags:        nil,
-					Elements: []*Type{{
-						Kind:        ParadigmElementKind,
-						Path:        "",
-						Name:        "E",
-						Annotations: nil,
-						Paradigms:   nil,
-						Tags:        nil,
-						Elements:    []*Type{AnyType},
-					}},
-				}},
-			},
-		},
 	})
 }

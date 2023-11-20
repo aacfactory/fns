@@ -18,6 +18,7 @@ package transports
 
 import (
 	"bufio"
+	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -100,12 +101,30 @@ func (w *ResultResponseWriter) Succeed(v interface{}) {
 		w.status = http.StatusOK
 		return
 	}
-	body, encodeErr := json.Marshal(v)
-	if encodeErr != nil {
-		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(encodeErr))
+	var body []byte
+	var bodyErr error
+	switch vv := v.(type) {
+	case []byte:
+		if json.Validate(vv) {
+			body = vv
+		} else {
+			body, bodyErr = json.Marshal(v)
+		}
+		break
+	case json.RawMessage:
+		body = vv
+		break
+	case stdjson.RawMessage:
+		body = vv
+		break
+	default:
+		body, bodyErr = json.Marshal(v)
+		break
+	}
+	if bodyErr != nil {
+		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(bodyErr))
 		return
 	}
-
 	w.status = http.StatusOK
 	if bodyLen := len(body); bodyLen > 0 {
 		_, _ = w.Write(body)

@@ -69,7 +69,6 @@ var (
 	DeviceIpHeaderName                           = []byte("X-Fns-Device-Ip")
 	ResponseRetryAfterHeaderName                 = []byte("Retry-After")
 	ResponseTimingAllowOriginHeaderName          = []byte("Timing-Allow-Origin")
-	ResponseXFrameOptionsHeaderName              = []byte("X-Frame-Options")
 	ResponseXFrameOptionsSameOriginHeaderName    = []byte("SAMEORIGIN")
 	UserHeaderNamePrefix                         = []byte("XU-")
 )
@@ -81,6 +80,7 @@ type Header interface {
 	Del(key []byte)
 	Values(key []byte) [][]byte
 	Foreach(fn func(key []byte, values [][]byte))
+	Len() int
 	Reset()
 }
 
@@ -182,6 +182,10 @@ func (h *defaultHeader) Values(key []byte) [][]byte {
 		}
 	}
 	return nil
+}
+
+func (h *defaultHeader) Len() int {
+	return len(*h)
 }
 
 func (h *defaultHeader) Foreach(fn func(key []byte, values [][]byte)) {

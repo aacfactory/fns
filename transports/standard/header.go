@@ -45,6 +45,10 @@ func (h httpHeader) Values(key []byte) [][]byte {
 	return values
 }
 
+func (h httpHeader) Len() int {
+	return len(h)
+}
+
 func (h httpHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	if fn == nil {
 		return

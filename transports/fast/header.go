@@ -42,6 +42,14 @@ func (h RequestHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	}
 }
 
+func (h RequestHeader) Len() int {
+	return h.RequestHeader.Len()
+}
+
+func (h RequestHeader) Reset() {
+	h.RequestHeader.Reset()
+}
+
 type ResponseHeader struct {
 	*fasthttp.ResponseHeader
 }
@@ -77,4 +85,12 @@ func (h ResponseHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	for _, key := range keys {
 		fn(key, h.ResponseHeader.PeekAll(bytex.ToString(key)))
 	}
+}
+
+func (h ResponseHeader) Len() int {
+	return h.ResponseHeader.Len()
+}
+
+func (h ResponseHeader) Reset() {
+	h.ResponseHeader.Reset()
 }

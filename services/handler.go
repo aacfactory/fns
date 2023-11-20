@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
+	"github.com/valyala/bytebufferpool"
+	"golang.org/x/sync/singleflight"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 )
 
@@ -27,6 +31,9 @@ var (
 func Handler(endpoints Endpoints) transports.MuxHandler {
 	return &endpointsHandler{
 		endpoints: endpoints,
+		loaded:    atomic.Bool{},
+		infos:     nil,
+		group:     singleflight.Group{},
 	}
 }
 
@@ -34,6 +41,7 @@ type endpointsHandler struct {
 	endpoints Endpoints
 	loaded    atomic.Bool
 	infos     EndpointInfos
+	group     singleflight.Group
 }
 
 func (handler *endpointsHandler) Name() string {
@@ -79,37 +87,31 @@ func (handler *endpointsHandler) Match(_ context.Context, method []byte, path []
 }
 
 func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transports.Request) {
+	groupKeyBuf := bytebufferpool.Get()
+
 	// path
 	path := r.Path()
 	pathItems := bytes.Split(path, slashBytes)
 	if len(pathItems) != 3 {
+		bytebufferpool.Put(groupKeyBuf)
 		w.Failed(ErrInvalidPath.WithMeta("path", bytex.ToString(path)))
 		return
 	}
 	ep := pathItems[1]
 	fn := pathItems[2]
-	var param scanner.Scanner
-	if bytes.Equal(r.Method(), transports.MethodGet) {
-		param = transports.ParamsScanner(r.Params())
-	} else {
-		// body
-		body, bodyErr := r.Body()
-		if bodyErr != nil {
-			w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
-			return
-		}
-		param = json.RawMessage(body)
-	}
+	_, _ = groupKeyBuf.Write(path)
 
 	// header >>>
 	options := make([]RequestOption, 0, 1)
 	// device id
 	deviceId := r.Header().Get(transports.DeviceIdHeaderName)
 	if len(deviceId) == 0 {
+		bytebufferpool.Put(groupKeyBuf)
 		w.Failed(ErrDeviceId.WithMeta("path", bytex.ToString(path)))
 		return
 	}
 	options = append(options, WithDeviceId(deviceId))
+	_, _ = groupKeyBuf.Write(deviceId)
 	// device ip
 	deviceIp := transports.DeviceIp(r)
 	if len(deviceIp) > 0 {
@@ -125,29 +127,58 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 	if len(acceptedVersions) > 0 {
 		intervals, intervalsErr := versions.ParseIntervals(acceptedVersions)
 		if intervalsErr != nil {
+			bytebufferpool.Put(groupKeyBuf)
 			w.Failed(ErrInvalidRequestVersions.WithMeta("path", bytex.ToString(path)).WithMeta("versions", bytex.ToString(acceptedVersions)).WithCause(intervalsErr))
 			return
 		}
 		options = append(options, WithRequestVersions(intervals))
+		_, _ = groupKeyBuf.Write(acceptedVersions)
 	}
 	// authorization
 	authorization := r.Header().Get(transports.AuthorizationHeaderName)
 	if len(authorization) > 0 {
 		options = append(options, WithToken(authorization))
+		_, _ = groupKeyBuf.Write(authorization)
 	}
 
 	// header <<<
 
+	// param
+	var param scanner.Scanner
+	method := r.Method()
+	if bytes.Equal(method, transports.MethodGet) {
+		// query
+		queryParams := r.Params()
+		param = transports.ParamsScanner(queryParams)
+		_, _ = groupKeyBuf.Write(queryParams.Encode())
+	} else {
+		// body
+		body, bodyErr := r.Body()
+		if bodyErr != nil {
+			bytebufferpool.Put(groupKeyBuf)
+			w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
+			return
+		}
+		param = json.RawMessage(body)
+		_, _ = groupKeyBuf.Write(body)
+	}
+
 	// handle
-	response, err := handler.endpoints.Request(
-		r, ep, fn,
-		param,
-		options...,
-	)
+	groupKey := strconv.FormatUint(mmhash.Sum64(groupKeyBuf.Bytes()), 16)
+	bytebufferpool.Put(groupKeyBuf)
+	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
+		v, err = handler.endpoints.Request(
+			r, ep, fn,
+			param,
+			options...,
+		)
+		return
+	})
 	if err != nil {
 		w.Failed(err)
 		return
 	}
+	response := v.(Response)
 	if response.Exist() {
 		w.Succeed(response)
 	} else {

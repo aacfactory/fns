@@ -17,6 +17,7 @@
 package services
 
 import (
+	"github.com/aacfactory/fns/runtime"
 	"sort"
 	"strings"
 	"unsafe"
@@ -124,5 +125,58 @@ func (f Fns) Find(name []byte) (v Fn, found bool) {
 	if found {
 		v = f[i]
 	}
+	return
+}
+
+func WrapFn(name string, readonly bool, internal bool, authorized bool, barrier bool, handler func(r Request) (v interface{}, err error)) Fn {
+	return &WrappedFn{
+		name:       name,
+		internal:   internal,
+		readonly:   readonly,
+		authorized: authorized,
+		barrier:    barrier,
+		handler:    handler,
+	}
+}
+
+type WrappedFn struct {
+	name       string
+	internal   bool
+	readonly   bool
+	authorized bool
+	barrier    bool
+	handler    func(r Request) (v interface{}, err error)
+}
+
+func (fn *WrappedFn) Name() string {
+	return fn.name
+}
+
+func (fn *WrappedFn) Internal() bool {
+	return fn.internal
+}
+
+func (fn *WrappedFn) Readonly() bool {
+	return fn.readonly
+}
+
+func (fn *WrappedFn) Handle(r Request) (v interface{}, err error) {
+	if fn.barrier {
+		var key []byte
+		if fn.authorized {
+			key, err = HashRequest(r, HashRequestWithToken())
+		} else {
+			key, err = HashRequest(r)
+		}
+		if err != nil {
+			return
+		}
+		v, err = runtime.Barrier(r, key, func() (result interface{}, err error) {
+			result, err = fn.handler(r)
+			return
+		})
+		return
+	}
+	v, err = fn.handler(r)
 	return
 }

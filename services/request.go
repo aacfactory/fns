@@ -256,15 +256,19 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 	_, _ = buf.Write(r.Header().AcceptedVersions().Bytes())
 	if opt.withToken {
 		token := r.Header().Token()
-		if len(token) > 0 {
-			_, _ = buf.Write(token)
+		if len(token) == 0 {
+			err = errors.Warning("fns: hash request failed").WithCause(fmt.Errorf("fns: token is required")).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			return
 		}
+		_, _ = buf.Write(token)
 	}
 	if opt.withDeviceId {
 		deviceId := r.Header().DeviceId()
-		if len(deviceId) > 0 {
-			_, _ = buf.Write(deviceId)
+		if len(deviceId) == 0 {
+			err = errors.Warning("fns: hash request failed").WithCause(fmt.Errorf("fns: device id is required")).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			return
 		}
+		_, _ = buf.Write(deviceId)
 	}
 	if len(pp) > 0 {
 		_, _ = buf.Write(pp)

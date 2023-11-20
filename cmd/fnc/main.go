@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aacfactory/fns/cmd/fnc/internal/commands/codes"
 	"github.com/aacfactory/fns/cmd/fnc/internal/commands/projects"
-	"github.com/aacfactory/fns/cmd/fnc/internal/commands/ssc"
 	"github.com/urfave/cli/v2"
 	"os"
 )
@@ -60,7 +59,6 @@ func main() {
 	app.Commands = []*cli.Command{
 		projects.Command,
 		codes.Command,
-		ssc.Command,
 	}
 	if err := app.RunContext(context.Background(), os.Args); err != nil {
 		fmt.Println(fmt.Sprintf("%+v", err))

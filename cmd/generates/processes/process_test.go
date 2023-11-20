@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/cmd/internal/processes"
+	processes2 "github.com/aacfactory/fns/cmd/generates/processes"
 	"testing"
 	"time"
 )
@@ -48,7 +48,7 @@ func (unit *WorkUnit) Handle(ctx context.Context) (message interface{}, err erro
 
 func TestNew(t *testing.T) {
 	units := make([]*WorkUnit, 0, 1)
-	process := processes.New()
+	process := processes2.New()
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("s%d", i)
 		unit := &WorkUnit{
@@ -60,7 +60,7 @@ func TestNew(t *testing.T) {
 	}
 
 	results := process.Start(context.TODO())
-	go func(process *processes.Process) {
+	go func(process *processes2.Process) {
 		time.Sleep(3100 * time.Millisecond)
 		fmt.Println("abort:", process.Abort(2*time.Second))
 	}(process)
@@ -74,9 +74,9 @@ func TestNew(t *testing.T) {
 }
 
 func TestParallelUnits(t *testing.T) {
-	process := processes.New()
+	process := processes2.New()
 	for i := 0; i < 2; i++ {
-		subs := make([]processes.Unit, 0, 1)
+		subs := make([]processes2.Unit, 0, 1)
 		for j := 0; j < 10; j++ {
 			unit := &WorkUnit{
 				name: fmt.Sprintf("s:%d:%d", i, j),
@@ -87,7 +87,7 @@ func TestParallelUnits(t *testing.T) {
 		process.Add(fmt.Sprintf("s:%d", i), subs...)
 	}
 	results := process.Start(context.TODO())
-	go func(process *processes.Process) {
+	go func(process *processes2.Process) {
 		time.Sleep(1100 * time.Millisecond)
 		fmt.Println("abort:", process.Abort(2*time.Second))
 	}(process)

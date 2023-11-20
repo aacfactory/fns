@@ -8,11 +8,7 @@ import (
 
 func TestParseAnnotations(t *testing.T) {
 	s := `@title title
-@desc >>> 
-000
-desc1
-desc2
-desc3
+@desc >>>
 <<<
 @barrier
 @auth

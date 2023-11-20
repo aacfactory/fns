@@ -9,6 +9,17 @@ import (
 	"strings"
 )
 
+func NewAnnotation(name string, params ...string) Annotation {
+	var pp []string
+	if len(params) > 0 {
+		pp = params
+	}
+	return Annotation{
+		Name:   name,
+		Params: pp,
+	}
+}
+
 type Annotation struct {
 	Name   string
 	Params []string
@@ -135,6 +146,11 @@ func ParseAnnotations(s string) (annotations Annotations, err error) {
 				block := bytes.NewBuffer(make([]byte, 0, 1))
 				block.Write([]byte{'\n'})
 				content = bytes.TrimSpace(content[3:])
+				if endIdx := bytes.Index(content, []byte("<<<")); endIdx > -1 {
+					content = bytes.TrimSpace(content[0:endIdx])
+					block.Write(content)
+					continue
+				}
 				if len(content) > 0 {
 					block.Write(content)
 				}
@@ -163,7 +179,7 @@ func ParseAnnotations(s string) (annotations Annotations, err error) {
 					block.Write([]byte{'\n'})
 					block.Write(content)
 				}
-				annotations.Set(name, block.String())
+				annotations.Set(name, block.String()[1:])
 			} else {
 				params := strings.Split(string(content), " ")
 				for _, param := range params {

@@ -177,9 +177,9 @@ func New(options ...Option) (app Application) {
 	}
 	// handler
 	mux := transports.NewMux()
-	mux.Add(services.Handler(manager))
+	opt.handlers = append(opt.handlers, services.Handler(manager))
 	for _, handler := range handlers {
-		mux.Add(handler)
+		opt.handlers = append(opt.handlers, handler)
 	}
 
 	for _, handler := range opt.handlers {

@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/logs"
+	"sort"
 )
 
 type Options struct {
@@ -130,6 +131,7 @@ func (abstract *Abstract) Document() (document documents.Endpoint) {
 
 func (abstract *Abstract) AddFunction(fn Fn) {
 	abstract.functions = abstract.functions.Add(fn)
+	sort.Sort(abstract.functions)
 }
 
 func (abstract *Abstract) Functions() (functions Fns) {

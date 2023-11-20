@@ -10,6 +10,7 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
 	"net/http"
+	"sync/atomic"
 )
 
 var (
@@ -26,12 +27,12 @@ var (
 func Handler(endpoints Endpoints) transports.MuxHandler {
 	return &endpointsHandler{
 		endpoints: endpoints,
-		infos:     endpoints.Info(),
 	}
 }
 
 type endpointsHandler struct {
 	endpoints Endpoints
+	loaded    atomic.Bool
 	infos     EndpointInfos
 }
 
@@ -44,6 +45,9 @@ func (handler *endpointsHandler) Construct(_ transports.MuxHandlerOptions) error
 }
 
 func (handler *endpointsHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
+	if !handler.loaded.Load() {
+		handler.infos = handler.endpoints.Info()
+	}
 	pathItems := bytes.Split(path, slashBytes)
 	if len(pathItems) != 3 {
 		return false

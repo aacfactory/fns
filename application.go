@@ -108,12 +108,15 @@ func New(options ...Option) (app Application) {
 	}
 	worker := workers.New(workerOptions...)
 
+	handlers := make([]transports.MuxHandler, 0, 1)
+
 	var manager services.EndpointsManager
 
 	local := services.New(appId, appVersion, logger.With("fns", "endpoints"), config.Services, worker)
 
-	// handlers
-	var handlers []transports.MuxHandler
+	handlers = append(handlers, services.Handler(local))
+	handlers = append(handlers, runtime.HealthHandler())
+
 	// barrier
 	var barrier barriers.Barrier
 	// shared
@@ -125,8 +128,9 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(portErr)))
 			return
 		}
+		var clusterHandlers []transports.MuxHandler
 		var clusterErr error
-		manager, shared, barrier, handlers, clusterErr = clusters.New(clusters.Options{
+		manager, shared, barrier, clusterHandlers, clusterErr = clusters.New(clusters.Options{
 			Id:      appId,
 			Name:    "",
 			Version: appVersion,
@@ -141,6 +145,7 @@ func New(options ...Option) (app Application) {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(clusterErr)))
 			return
 		}
+		handlers = append(handlers, clusterHandlers...)
 	} else {
 		var sharedErr error
 		shared, sharedErr = shareds.Local(logger.With("shared", "local"), config.Runtime.Shared)
@@ -177,12 +182,8 @@ func New(options ...Option) (app Application) {
 	}
 	// handler
 	mux := transports.NewMux()
-	opt.handlers = append(opt.handlers, services.Handler(manager))
+	handlers = append(handlers, opt.handlers...)
 	for _, handler := range handlers {
-		opt.handlers = append(opt.handlers, handler)
-	}
-
-	for _, handler := range opt.handlers {
 		handlerConfig, handlerConfigErr := config.Transport.HandlerConfig(handler.Name())
 		if handlerConfigErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport handler failed").WithCause(handlerConfigErr).WithMeta("handler", handler.Name())))

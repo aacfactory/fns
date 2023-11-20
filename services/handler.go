@@ -47,6 +47,7 @@ func (handler *endpointsHandler) Construct(_ transports.MuxHandlerOptions) error
 func (handler *endpointsHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
 	if !handler.loaded.Load() {
 		handler.infos = handler.endpoints.Info()
+		handler.loaded.Store(true)
 	}
 	pathItems := bytes.Split(path, slashBytes)
 	if len(pathItems) != 3 {

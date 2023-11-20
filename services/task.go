@@ -3,6 +3,7 @@ package services
 import (
 	sc "context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services/tracings"
@@ -14,23 +15,24 @@ type FnTask struct {
 }
 
 func (task FnTask) Execute(ctx sc.Context) {
-	req := LoadRequest(context.Wrap(ctx))
+	r := LoadRequest(context.Wrap(ctx))
 	// tracing
-	trace, hasTrace := tracings.Load(req)
+	trace, hasTrace := tracings.Load(r)
 	if hasTrace {
 		trace.Waited()
 	}
-	r, err := task.Fn.Handle(req)
+	v, err := task.Fn.Handle(r)
 	if err != nil {
+		ep, fn := r.Fn()
+		codeErr := errors.Map(err).WithMeta("endpoint", bytex.ToString(ep)).WithMeta("fn", bytex.ToString(fn))
 		if hasTrace {
-			codeErr := errors.Map(err)
 			trace.Finish("succeed", "false", "cause", codeErr.Name())
 		}
-		task.Promise.Failed(err)
+		task.Promise.Failed(codeErr)
 	} else {
 		if hasTrace {
 			trace.Finish("succeed", "true")
 		}
-		task.Promise.Succeed(NewResponse(r))
+		task.Promise.Succeed(NewResponse(v))
 	}
 }

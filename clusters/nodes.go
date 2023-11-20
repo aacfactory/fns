@@ -22,7 +22,7 @@ func NewService(name string, internal bool, functions services.FnInfos, document
 		Functions:   functions,
 		DocumentRaw: nil,
 	}
-	if !internal && !document.IsEmpty() {
+	if !document.IsEmpty() {
 		p, encodeErr := json.Marshal(document)
 		if encodeErr != nil {
 			err = errors.Warning("fns: new endpoint info failed").WithCause(encodeErr)
@@ -50,7 +50,7 @@ type Service struct {
 }
 
 func (service Service) Document() (document documents.Endpoint, err error) {
-	if service.Internal || len(service.DocumentRaw) == 0 {
+	if len(service.DocumentRaw) == 0 {
 		return
 	}
 	r, rErr := zlib.NewReader(bytes.NewReader(service.DocumentRaw))

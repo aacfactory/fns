@@ -43,6 +43,27 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 	return handler
 }
 
+// Fn
+// builtin fn handler wrapper
+// supported annotations
+// @fn {name}
+// @readonly
+// @authorization
+// @permission
+// @validation
+// @cache {command} {ttl}
+// @cache-control {options}
+// @barrier
+// @metric
+// @title {title}
+// @description >>>
+// {description}
+// <<<
+// @errors >>>
+// {error_name}
+// zh: {zh_message}
+// en: {en_message}
+// <<<
 type Fn struct {
 	name       string
 	internal   bool

@@ -3,7 +3,7 @@ module github.com/aacfactory/fns
 go 1.21
 
 require (
-	github.com/aacfactory/afssl v1.9.0
+	github.com/aacfactory/afssl v1.10.0
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.13.5

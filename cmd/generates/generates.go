@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func New(bin string, annotations ...sources.FnAnnotationCodeWriter) (generator *Generator) {
+func New(bin string, annotations ...writers.FnAnnotationCodeWriter) (generator *Generator) {
 	// action
 	action := &Action{
 		annotations: annotations,
@@ -56,12 +56,12 @@ func (generator *Generator) Execute(ctx context.Context, args ...string) (err er
 }
 
 type Action struct {
-	annotations sources.FnAnnotationCodeWriters
+	annotations writers.FnAnnotationCodeWriters
 }
 
-func (action *Action) Handle(ctx *cli.Context) (err error) {
-	verbose := ctx.Bool("verbose")
-	projectDir := strings.TrimSpace(ctx.Args().First())
+func (action *Action) Handle(c *cli.Context) (err error) {
+	verbose := c.Bool("verbose")
+	projectDir := strings.TrimSpace(c.Args().First())
 	if projectDir == "" {
 		projectDir = "."
 	}
@@ -73,7 +73,7 @@ func (action *Action) Handle(ctx *cli.Context) (err error) {
 		}
 	}
 	projectDir = filepath.ToSlash(projectDir)
-	work := ctx.String("work")
+	work := c.String("work")
 	if work != "" {
 		work = strings.TrimSpace(work)
 		if work == "" {
@@ -81,12 +81,13 @@ func (action *Action) Handle(ctx *cli.Context) (err error) {
 			return
 		}
 	}
-	process, processErr := action.process(ctx.Context, projectDir, work)
+	ctx := writers.WithFnAnnotationCodeWriters(c.Context, action.annotations)
+	process, processErr := action.process(ctx, projectDir, work)
 	if processErr != nil {
 		err = errors.Warning("generates: generate failed").WithCause(processErr).WithMeta("dir", projectDir)
 		return
 	}
-	results := process.Start(ctx.Context)
+	results := process.Start(ctx)
 	for {
 		result, ok := <-results
 		if !ok {

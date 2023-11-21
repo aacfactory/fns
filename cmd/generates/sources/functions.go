@@ -22,9 +22,12 @@ import (
 	"github.com/aacfactory/errors"
 	"go/ast"
 	"reflect"
+	"strconv"
+	"strings"
 )
 
 type FunctionField struct {
+	mod  *Module
 	Name string
 	Type *Type
 }
@@ -168,6 +171,52 @@ func (f *Function) Cache() (params []string, has bool) {
 	return
 }
 
+func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool, proxyRevalidate bool, has bool, err error) {
+	anno, exist := f.Annotations.Get("cachecontrol")
+	if !exist {
+		return
+	}
+	has = true
+	if len(anno.Params) == 0 {
+		return
+	}
+	for _, param := range anno.Params {
+		maxAgeValue, hasMaxValue := strings.CutPrefix(param, "max-age=")
+		if hasMaxValue {
+			maxAge, err = strconv.Atoi(strings.TrimSpace(maxAgeValue))
+			if err != nil {
+				err = errors.Warning("fns: parse @cachecontrol max-age failed").WithMeta("max-age", maxAgeValue)
+				return
+			}
+		}
+		publicValue, hasPublic := strings.CutPrefix(param, "public=")
+		if hasPublic {
+			public, err = strconv.ParseBool(strings.TrimSpace(publicValue))
+			if err != nil {
+				err = errors.Warning("fns: parse @cachecontrol public failed").WithMeta("public", publicValue)
+				return
+			}
+		}
+		mustRevalidateValue, hasMustRevalidate := strings.CutPrefix(param, "must-revalidate=")
+		if hasMustRevalidate {
+			mustRevalidate, err = strconv.ParseBool(strings.TrimSpace(mustRevalidateValue))
+			if err != nil {
+				err = errors.Warning("fns: parse @cachecontrol must-revalidate failed").WithMeta("must-revalidate", mustRevalidateValue)
+				return
+			}
+		}
+		proxyRevalidateValue, hasProxyRevalidate := strings.CutPrefix(param, "proxy-revalidate=")
+		if hasProxyRevalidate {
+			proxyRevalidate, err = strconv.ParseBool(strings.TrimSpace(proxyRevalidateValue))
+			if err != nil {
+				err = errors.Warning("fns: parse @cachecontrol proxy-revalidate failed").WithMeta("proxy-revalidate", proxyRevalidateValue)
+				return
+			}
+		}
+	}
+	return
+}
+
 func (f *Function) Annotation(name string) (params []string, has bool) {
 	anno, exist := f.Annotations.Get(name)
 	if exist {
@@ -270,6 +319,7 @@ func (f *Function) parseField(ctx context.Context, field *ast.Field) (v *Functio
 		return
 	}
 	v = &FunctionField{
+		mod:  f.mod,
 		Name: name,
 		Type: typ,
 	}

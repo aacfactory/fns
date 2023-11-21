@@ -1,6 +1,7 @@
 package caches
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -8,8 +9,17 @@ import (
 	"github.com/aacfactory/fns/services"
 )
 
-func Remove(ctx context.Context, param KeyParam) (err error) {
-	key, keyErr := param.CacheKey(ctx)
+func Remove(ctx context.Context, param interface{}) (err error) {
+	if param == nil {
+		err = errors.Warning("fns: remove cache failed").WithCause(fmt.Errorf("param is nil"))
+		return
+	}
+	kp, ok := param.(KeyParam)
+	if !ok {
+		err = errors.Warning("fns: remove cache failed").WithCause(fmt.Errorf("param dose not implement caches.KeyParam"))
+		return
+	}
+	key, keyErr := kp.CacheKey(ctx)
 	if keyErr != nil {
 		err = errors.Warning("fns: remove cache failed").WithCause(keyErr)
 		return

@@ -22,6 +22,10 @@ func NewWithStore(store Store) services.Service {
 
 // New
 // use @cache, and param must implement KeyParam.
+// @cache get
+// @cache set 10
+// @cache remove
+// @cache get-set 10
 func New() services.Service {
 	return NewWithStore(&defaultStore{})
 }

@@ -11,8 +11,17 @@ import (
 	"time"
 )
 
-func Set(ctx context.Context, param KeyParam, value interface{}, ttl time.Duration) (err error) {
-	key, keyErr := param.CacheKey(ctx)
+func Set(ctx context.Context, param interface{}, value interface{}, ttl time.Duration) (err error) {
+	if param == nil {
+		err = errors.Warning("fns: set cache failed").WithCause(fmt.Errorf("param is nil"))
+		return
+	}
+	kp, ok := param.(KeyParam)
+	if !ok {
+		err = errors.Warning("fns: set cache failed").WithCause(fmt.Errorf("param dose not implement caches.KeyParam"))
+		return
+	}
+	key, keyErr := kp.CacheKey(ctx)
 	if keyErr != nil {
 		err = errors.Warning("fns: set cache failed").WithCause(keyErr)
 		return

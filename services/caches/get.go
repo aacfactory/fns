@@ -1,6 +1,7 @@
 package caches
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -9,8 +10,17 @@ import (
 	"github.com/aacfactory/json"
 )
 
-func Get(ctx context.Context, param KeyParam) (p []byte, has bool, err error) {
-	key, keyErr := param.CacheKey(ctx)
+func Get(ctx context.Context, param interface{}) (p []byte, has bool, err error) {
+	if param == nil {
+		err = errors.Warning("fns: get cache failed").WithCause(fmt.Errorf("param is nil"))
+		return
+	}
+	kp, ok := param.(KeyParam)
+	if !ok {
+		err = errors.Warning("fns: get cache failed").WithCause(fmt.Errorf("param dose not implement caches.KeyParam"))
+		return
+	}
+	key, keyErr := kp.CacheKey(ctx)
 	if keyErr != nil {
 		err = errors.Warning("fns: get cache failed").WithCause(keyErr)
 		return

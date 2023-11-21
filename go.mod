@@ -7,7 +7,7 @@ require (
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.13.5
-	github.com/aacfactory/gcg v1.0.4
+	github.com/aacfactory/gcg v1.0.5
 	github.com/aacfactory/json v1.16.0
 	github.com/aacfactory/logs v1.13.0
 	github.com/aacfactory/workers v1.8.4

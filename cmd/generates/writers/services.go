@@ -733,7 +733,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 			}
 			fnCode.Tab().Tab().Token("SetResult(").Add(resultCode).Token(")").Dot().Line()
 		}
-		fnCode.Tab().Token(fmt.Sprintf("SetErrors(\"%s\"),", strings.ReplaceAll(function.Errors(), "\n", "\\n")))
+		fnCode.Tab().Token(fmt.Sprintf("SetErrors(\"%s\"),", strings.ReplaceAll(function.Errors(), "\n", "\\n"))).Line()
 		fnCode.Token(")")
 		fnCodes = append(fnCodes, fnCode)
 	}
@@ -749,7 +749,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 	for _, fnCode := range fnCodes {
 		body.Line().Add(fnCode).Line()
 	}
-	body.Return().Line()
+	body.Tab().Return()
 	docFnCode.Body(body)
 	code = docFnCode.Build()
 	return

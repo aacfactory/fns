@@ -320,10 +320,10 @@ func (s *ServiceFile) serviceInstanceCode(ctx context.Context) (code gcg.Code, e
 	}
 	instance := gcg.Func()
 	instance.Name("Service")
-	instance.AddResult("v", gcg.Token("service.Service"))
+	instance.AddResult("v", gcg.Token("services.Service"))
 	body := gcg.Statements()
-	body.Tab().Token("v = &_service{").Line()
-	body.Tab().Tab().Token("Abstract: service.NewAbstract(").Line()
+	body.Tab().Token("v = &service{").Line()
+	body.Tab().Tab().Token("Abstract: services.NewAbstract(").Line()
 	body.Tab().Tab().Tab().Token("_name,").Line()
 	if s.service.Internal {
 		body.Tab().Tab().Tab().Token("true,").Line()
@@ -331,13 +331,13 @@ func (s *ServiceFile) serviceInstanceCode(ctx context.Context) (code gcg.Code, e
 		body.Tab().Tab().Tab().Token("false,").Line()
 	}
 	if s.service.Components != nil && s.service.Components.Len() > 0 {
-		body.Tab().Tab().Tab().Token("[]service.Component{").Line()
+		//body.Tab().Tab().Tab().Token("[]service.Component{").Line()
 		path := fmt.Sprintf("%s/components", s.service.Path)
 		for _, component := range s.service.Components {
 			componentCode := gcg.QualifiedIdent(gcg.NewPackage(path), component.Indent)
 			body.Tab().Tab().Token("&").Add(componentCode).Token("{}").Symbol(",").Line()
 		}
-		body.Tab().Tab().Tab().Token("}...,").Line()
+		//body.Tab().Tab().Tab().Token("}...,").Line()
 	}
 	body.Tab().Tab().Symbol(")").Symbol(",").Line()
 	body.Tab().Symbol("}").Line()
@@ -426,7 +426,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 	docFnCode := gcg.Func()
 	docFnCode.Receiver("svc", gcg.Star().Ident("service"))
 	docFnCode.Name("Document")
-	docFnCode.AddResult("document", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/service/documents"), "Endpoint"))
+	docFnCode.AddResult("document", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/services/documents"), "Endpoint"))
 	body := gcg.Statements()
 	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", svc.Internal(), svc.Version())", s.service.Description))
 	for _, fnCode := range fnCodes {

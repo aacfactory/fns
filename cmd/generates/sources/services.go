@@ -269,7 +269,7 @@ func (service *Service) loadComponents() (err error) {
 func (service *Service) mergeImports() {
 	importer := Imports{}
 	importer.Add(&Import{
-		Path:  "context",
+		Path:  "github.com/aacfactory/fns/context",
 		Alias: "",
 	})
 	importer.Add(&Import{
@@ -277,11 +277,11 @@ func (service *Service) mergeImports() {
 		Alias: "",
 	})
 	importer.Add(&Import{
-		Path:  "github.com/aacfactory/fns/service",
+		Path:  "github.com/aacfactory/fns/services",
 		Alias: "",
 	})
 	importer.Add(&Import{
-		Path:  "github.com/aacfactory/fns/service/documents",
+		Path:  "github.com/aacfactory/fns/services/documents",
 		Alias: "",
 	})
 	imports := make([]Imports, 0, 1)

@@ -2,9 +2,10 @@ package documents
 
 import "github.com/aacfactory/fns/commons/versions"
 
-func New(name string, description string, internal bool, ver versions.Version) Endpoint {
+func New(name string, title string, description string, internal bool, ver versions.Version) Endpoint {
 	return Endpoint{
 		Name:        name,
+		Title:       title,
 		Description: description,
 		Internal:    internal,
 		Version:     ver,
@@ -15,6 +16,7 @@ func New(name string, description string, internal bool, ver versions.Version) E
 
 type Endpoint struct {
 	Name        string           `json:"name"`
+	Title       string           `json:"title"`
 	Description string           `json:"description"`
 	Internal    bool             `json:"internal"`
 	Version     versions.Version `json:"version"`

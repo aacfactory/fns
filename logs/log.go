@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package log
+package logs
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ type Config struct {
 	Writer    WriterConfig `json:"writer" yaml:"writer"`
 }
 
-func New(name string, config Config) (v *Logger, err error) {
+func New(name string, config Config) (v Logger, err error) {
 	formatter := logs.ConsoleFormatter
 	if strings.ToLower(strings.TrimSpace(config.Formatter)) == "json" {
 		formatter = logs.JsonFormatter
@@ -91,18 +91,23 @@ func New(name string, config Config) (v *Logger, err error) {
 		err = errors.Warning("fns: new log failed").WithCause(coreErr).WithMeta("writer", config.Writer.Name)
 		return
 	}
-	v = &Logger{
+	v = &logger{
 		Logger: core,
 		w:      writer,
 	}
 	return
 }
 
-type Logger struct {
+type Logger interface {
+	logs.Logger
+	Shutdown(ctx context.Context)
+}
+
+type logger struct {
 	logs.Logger
 	w Writer
 }
 
-func (l *Logger) Shutdown(ctx context.Context) {
+func (l *logger) Shutdown(ctx context.Context) {
 	l.w.Shutdown(ctx)
 }

@@ -191,6 +191,7 @@ func (service *Service) loadFunctions() (err error) {
 			}
 			proxyIdent := cases.Camel().Format(nameAtoms)
 			constIdent := fmt.Sprintf("_%sFnName", ident)
+			handlerIdent := fmt.Sprintf("_%s", ident)
 			annotations, parseAnnotationsErr := ParseAnnotations(doc)
 			if parseAnnotationsErr != nil {
 				err = errors.Warning("sources: parse func annotations failed").
@@ -207,9 +208,10 @@ func (service *Service) loadFunctions() (err error) {
 				file:            file,
 				imports:         fileImports,
 				decl:            funcDecl,
-				Ident:           funcDecl.Name.Name,
+				Ident:           ident,
 				ConstIdent:      constIdent,
 				ProxyIdent:      proxyIdent,
+				HandlerIdent:    handlerIdent,
 				Annotations:     annotations,
 				Param:           nil,
 				Result:          nil,

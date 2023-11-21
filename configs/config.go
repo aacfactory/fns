@@ -3,7 +3,7 @@ package configs
 import (
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/hooks"
-	"github.com/aacfactory/fns/log"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
@@ -27,7 +27,7 @@ type RuntimeConfig struct {
 
 type Config struct {
 	Runtime   RuntimeConfig     `json:"runtime,omitempty" yaml:"runtime,omitempty"`
-	Log       log.Config        `json:"log,omitempty" yaml:"log,omitempty"`
+	Log       logs.Config       `json:"log,omitempty" yaml:"log,omitempty"`
 	Cluster   *clusters.Config  `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 	Transport transports.Config `json:"transport,omitempty" yaml:"transport,omitempty"`
 	Proxy     proxies.Config    `json:"proxy,omitempty" yaml:"proxy,omitempty"`

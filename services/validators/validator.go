@@ -38,6 +38,9 @@ func ValidateWithErrorTitle(value interface{}, title string) (err errors.CodeErr
 	return
 }
 
+// Validate
+// field tag is validate
+// message tag is validate-message or message
 func Validate(value interface{}) (err errors.CodeError) {
 	err = ValidateWithErrorTitle(value, "invalid")
 	return

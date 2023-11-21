@@ -58,6 +58,7 @@ type Function struct {
 	Ident           string
 	ConstIdent      string
 	ProxyIdent      string
+	HandlerIdent    string
 	Annotations     Annotations
 	Param           *FunctionField
 	Result          *FunctionField
@@ -69,8 +70,7 @@ func (f *Function) HostServiceName() (name string) {
 }
 
 func (f *Function) Name() (name string) {
-	anno, _ := f.Annotations.Get("fn")
-	name = anno.Params[0]
+	name, _ = f.Annotations.FirstParam("fn")
 	return
 }
 
@@ -85,38 +85,21 @@ func (f *Function) Internal() (ok bool) {
 }
 
 func (f *Function) Title() (title string) {
-	anno, has := f.Annotations.Get("title")
-	if has {
-		if len(anno.Params) > 0 {
-			title = anno.Params[0]
-		} else {
-			title = f.Name()
-		}
-	} else {
+	has := false
+	title, has = f.Annotations.FirstParam("title")
+	if !has {
 		title = f.Name()
 	}
 	return
 }
 
 func (f *Function) Description() (description string) {
-	anno, has := f.Annotations.Get("description")
-	if has {
-		if len(anno.Params) > 0 {
-			description = anno.Params[0]
-		}
-	}
+	description, _ = f.Annotations.FirstParam("description")
 	return
 }
 
 func (f *Function) Errors() (errs string) {
-	anno, has := f.Annotations.Get("errors")
-	if !has {
-		return
-	}
-	if len(anno.Params) == 0 {
-		return
-	}
-	errs = anno.Params[0]
+	errs, _ = f.Annotations.FirstParam("errors")
 	return
 }
 
@@ -150,6 +133,11 @@ func (f *Function) Permission() (ok bool) {
 
 func (f *Function) Deprecated() (ok bool) {
 	_, ok = f.Annotations.Get("deprecated")
+	return
+}
+
+func (f *Function) Metric() (ok bool) {
+	_, ok = f.Annotations.Get("metric")
 	return
 }
 
@@ -275,6 +263,12 @@ func (f *Function) Annotation(name string) (params []string, has bool) {
 	return
 }
 
+func (f *Function) ForeachAnnotations(fn func(name string, params []string)) {
+	for _, annotation := range f.Annotations {
+		fn(annotation.Name, annotation.Params)
+	}
+}
+
 func (f *Function) FieldImports() (v Imports) {
 	v = Imports{}
 	paths := make([]string, 0, 1)
@@ -312,6 +306,7 @@ func (f *Function) Parse(ctx context.Context) (err error) {
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 		return
 	}
+
 	if !f.mod.types.isContextType(params.List[0].Type, f.imports) {
 		err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("first param must be context.Context")).
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
@@ -335,13 +330,13 @@ func (f *Function) Parse(ctx context.Context) (err error) {
 	}
 	if len(results.List) == 1 {
 		if !f.mod.types.isCodeErrorType(results.List[0].Type, f.imports) {
-			err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("the last results must github.com/aacfactory/errors.CodeError")).
+			err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("the last results must be error or github.com/aacfactory/errors.CodeError")).
 				WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 			return
 		}
 	} else {
 		if !f.mod.types.isCodeErrorType(results.List[1].Type, f.imports) {
-			err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("the last results must github.com/aacfactory/errors.CodeError")).
+			err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("the last results must be error or github.com/aacfactory/errors.CodeError")).
 				WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 			return
 		}

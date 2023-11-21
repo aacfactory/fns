@@ -29,7 +29,7 @@ import (
 	"github.com/aacfactory/fns/configs"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/hooks"
-	"github.com/aacfactory/fns/log"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
@@ -90,7 +90,7 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	// log
-	logger, loggerErr := log.New(appName, config.Log)
+	logger, loggerErr := logs.New(appName, config.Log)
 	if loggerErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(loggerErr)))
 		return
@@ -160,7 +160,7 @@ func New(options ...Option) (app Application) {
 	// runtime
 	rt := runtime.New(
 		appId, appName, appVersion,
-		status, logger.Logger, worker,
+		status, logger, worker,
 		manager,
 		barrier, shared,
 	)
@@ -190,7 +190,7 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		handlerErr := handler.Construct(transports.MuxHandlerOptions{
-			Log:    logger.Logger.With("handler", handler.Name()),
+			Log:    logger.With("handler", handler.Name()),
 			Config: handlerConfig,
 		})
 		if handlerErr != nil {
@@ -201,7 +201,7 @@ func New(options ...Option) (app Application) {
 	}
 	transport := opt.transport
 	transportErr := transport.Construct(transports.Options{
-		Log:         logger.Logger,
+		Log:         logger.With("transport", transport.Name()),
 		Config:      config.Transport,
 		Middlewares: middlewares,
 		Handler:     mux,
@@ -227,7 +227,7 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		constructErr := proxy.Construct(proxies.ProxyOptions{
-			Log:     logger.Logger.With("fns", "proxy"),
+			Log:     logger.With("fns", "proxy"),
 			Config:  config.Proxy,
 			Runtime: rt,
 			Manager: cluster,
@@ -248,7 +248,7 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		hookErr := hook.Construct(hooks.Options{
-			Log:    logger.Logger.With("hook", hook.Name()),
+			Log:    logger.With("hook", hook.Name()),
 			Config: hookConfig,
 		})
 		if hookErr != nil {
@@ -295,7 +295,7 @@ type application struct {
 	version         versions.Version
 	rt              *runtime.Runtime
 	status          *switchs.Switch
-	log             *log.Logger
+	log             logs.Logger
 	config          configs.Config
 	amp             *procs.AutoMaxProcs
 	worker          workers.Workers

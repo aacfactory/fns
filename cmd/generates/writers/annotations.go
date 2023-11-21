@@ -7,10 +7,10 @@ import (
 
 type FnAnnotationCodeWriter interface {
 	Annotation() (annotation string)
-	HandleBefore(ctx context.Context, params []string) (code gcg.Code, err error)
-	HandleAfter(ctx context.Context, params []string) (code gcg.Code, err error)
-	ProxyBefore(ctx context.Context, params []string) (code gcg.Code, err error)
-	ProxyAfter(ctx context.Context, params []string) (code gcg.Code, err error)
+	HandleBefore(ctx context.Context, params []string, hasFnParam bool, hasFnResult bool) (code gcg.Code, err error)
+	HandleAfter(ctx context.Context, params []string, hasFnParam bool, hasFnResult bool) (code gcg.Code, err error)
+	ProxyBefore(ctx context.Context, params []string, hasFnParam bool, hasFnResult bool) (code gcg.Code, err error)
+	ProxyAfter(ctx context.Context, params []string, hasFnParam bool, hasFnResult bool) (code gcg.Code, err error)
 }
 
 type FnAnnotationCodeWriters []FnAnnotationCodeWriter

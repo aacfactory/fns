@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/fns/log"
+	fLog "github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
@@ -36,7 +36,7 @@ import (
 
 func New(id string, version versions.Version, log logs.Logger, config Config, worker workers.Workers) EndpointsManager {
 	return &Manager{
-		log:     log.With("fns", "services"),
+		log:     log,
 		config:  config,
 		id:      id,
 		version: version,
@@ -183,7 +183,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	// ctx >>>
 	ctx = req
 	// log
-	log.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	fLog.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(Service)
 	if ok {
@@ -234,7 +234,7 @@ func (manager *Manager) Listen(ctx context.Context) (err error) {
 		errCh := make(chan error, 1)
 
 		lnCtx := context.WithValue(ctx, bytex.FromString("listener"), ln.Name())
-		log.With(lnCtx, manager.log.With("service", ln.Name()))
+		fLog.With(lnCtx, manager.log.With("service", ln.Name()))
 		if components := ln.Components(); len(components) > 0 {
 			WithComponents(lnCtx, components)
 		}

@@ -39,6 +39,20 @@ func (annotations *Annotations) Get(name string) (annotation Annotation, has boo
 	return
 }
 
+func (annotations *Annotations) FirstParam(name string) (value string, has bool) {
+	ss := *annotations
+	for _, target := range ss {
+		if target.Name == name {
+			if len(target.Params) > 0 {
+				value = target.Params[0]
+				has = true
+			}
+			return
+		}
+	}
+	return
+}
+
 func (annotations *Annotations) Add(name string, param string) {
 	ss := *annotations
 	for i, s := range ss {

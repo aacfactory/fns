@@ -21,7 +21,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/fnc/internal/libs/files"
 	"github.com/aacfactory/fns/configs"
-	"github.com/aacfactory/fns/log"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/goccy/go-yaml"
@@ -130,7 +130,7 @@ func (cf *ConfigFile) Write(_ context.Context) (err error) {
 	config := configs.Config{}
 	switch cf.kind {
 	case "local":
-		config.Log = log.Config{
+		config.Log = logs.Config{
 			Level:     "debug",
 			Formatter: "console",
 			Color:     true,
@@ -142,7 +142,7 @@ func (cf *ConfigFile) Write(_ context.Context) (err error) {
 		}
 		break
 	case "dev":
-		config.Log = log.Config{
+		config.Log = logs.Config{
 			Level:     "info",
 			Formatter: "json",
 			Color:     false,
@@ -154,7 +154,7 @@ func (cf *ConfigFile) Write(_ context.Context) (err error) {
 		}
 		break
 	case "test":
-		config.Log = log.Config{
+		config.Log = logs.Config{
 			Level:     "warn",
 			Formatter: "json",
 			Color:     false,
@@ -166,7 +166,7 @@ func (cf *ConfigFile) Write(_ context.Context) (err error) {
 		}
 		break
 	case "prod":
-		config.Log = log.Config{
+		config.Log = logs.Config{
 			Level:     "error",
 			Formatter: "json",
 			Color:     false,

@@ -60,11 +60,11 @@ func (s *DeploysFile) Write(ctx context.Context) (err error) {
 	file.FileComments("NOTE: this file has been automatically generated, DON'T EDIT IT!!!\n")
 
 	fn := gcg.Func()
-	fn.Name("services")
-	fn.AddResult("v", gcg.Token("[]service.Service", gcg.NewPackage("github.com/aacfactory/fns/service")))
+	fn.Name("endpoints")
+	fn.AddResult("v", gcg.Token("[]services.Service", gcg.NewPackage("github.com/aacfactory/fns/services")))
 	body := gcg.Statements()
 	if s.services != nil && s.services.Len() > 0 {
-		body.Token("v = []service.Service{").Line()
+		body.Token("v = []services.Service{").Line()
 		for _, service := range s.services {
 			body.Tab().Token(fmt.Sprintf("%s.Service()", service.PathIdent), gcg.NewPackage(service.Path)).Symbol(",").Line()
 		}

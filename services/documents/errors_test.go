@@ -7,13 +7,7 @@ import (
 )
 
 func TestNewErrors(t *testing.T) {
-	s := `
-	name1
-	zh: chinese
-	en: english
-	name2
-	zh: chinese
-	en: english`
+	s := "user_not_found\nzh: zh_message\nen: en_message"
 	errs := documents.NewErrors(s)
 	for _, err := range errs {
 		fmt.Println(err.Name)

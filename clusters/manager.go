@@ -8,7 +8,7 @@ import (
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/fns/log"
+	fLog "github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/tracings"
@@ -236,7 +236,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	// ctx >>>
 	ctx = req
 	// log
-	log.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	fLog.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(services.Service)
 	if ok {

@@ -1152,32 +1152,37 @@ func (types *Types) isContextType(expr ast.Expr, imports Imports) (ok bool) {
 }
 
 func (types *Types) isCodeErrorType(expr ast.Expr, imports Imports) (ok bool) {
-	e, isSelector := expr.(*ast.SelectorExpr)
-	if !isSelector {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		ok = e.Name == "error"
+		break
+	case *ast.SelectorExpr:
+		if e.X == nil {
+			return
+		}
+		ident, isIdent := e.X.(*ast.Ident)
+		if !isIdent {
+			return
+		}
+		pkg := ident.Name
+		if pkg == "" {
+			return
+		}
+		if e.Sel == nil {
+			return
+		}
+		ok = e.Sel.Name == "CodeError"
+		if !ok {
+			return
+		}
+		importer, has := imports.Find(pkg)
+		if !has {
+			return
+		}
+		ok = importer.Path == "github.com/aacfactory/errors"
+		break
+	default:
 		return
 	}
-	if e.X == nil {
-		return
-	}
-	ident, isIdent := e.X.(*ast.Ident)
-	if !isIdent {
-		return
-	}
-	pkg := ident.Name
-	if pkg == "" {
-		return
-	}
-	if e.Sel == nil {
-		return
-	}
-	ok = e.Sel.Name == "CodeError"
-	if !ok {
-		return
-	}
-	importer, has := imports.Find(pkg)
-	if !has {
-		return
-	}
-	ok = importer.Path == "github.com/aacfactory/errors"
 	return
 }

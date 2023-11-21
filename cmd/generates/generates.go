@@ -65,6 +65,7 @@ func (action *Action) Handle(c *cli.Context) (err error) {
 	if projectDir == "" {
 		projectDir = "."
 	}
+
 	if !filepath.IsAbs(projectDir) {
 		projectDir, err = filepath.Abs(projectDir)
 		if err != nil {
@@ -143,7 +144,7 @@ func (action *Action) process(ctx context.Context, project string, workspace str
 		for _, function := range service.Functions {
 			functionParseUnits = append(functionParseUnits, function)
 		}
-		serviceCodeFileUnits = append(serviceCodeFileUnits, writers.Unit(writers.NewServiceFile(service)))
+		serviceCodeFileUnits = append(serviceCodeFileUnits, writers.Unit(writers.NewServiceFile(service, action.annotations)))
 	}
 	process.Add("services: parsing", functionParseUnits...)
 	process.Add("services: writing", serviceCodeFileUnits...)

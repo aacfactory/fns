@@ -293,21 +293,21 @@ func (s *ServiceFile) serviceCode(ctx context.Context) (code gcg.Code, err error
 	}
 	stmt.Add(typeCode).Line()
 
-	handleFnCode, handleFnCodeErr := s.serviceHandleCode(ctx)
-	if handleFnCodeErr != nil {
-		err = handleFnCodeErr
-		return
-	}
-	stmt.Add(handleFnCode).Line()
-
 	docFnCode, docFnCodeErr := s.serviceDocumentCode(ctx)
 	if docFnCodeErr != nil {
 		err = docFnCodeErr
 		return
 	}
-	stmt.Add(docFnCode).Line()
+	if docFnCode != nil {
+		stmt.Add(docFnCode).Line()
+	}
 
 	code = stmt
+	return
+}
+
+func (s *ServiceFile) functionTypeCode(ctx context.Context) (code gcg.Code, err error) {
+
 	return
 }
 
@@ -363,193 +363,6 @@ func (s *ServiceFile) serviceTypeCode(ctx context.Context) (code gcg.Code, err e
 	return
 }
 
-func (s *ServiceFile) serviceHandleCode(ctx context.Context) (code gcg.Code, err error) {
-	if ctx.Err() != nil {
-		err = errors.Warning("sources: service write failed").
-			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-			WithCause(ctx.Err())
-		return
-	}
-	handleFnCode := gcg.Func()
-	handleFnCode.Receiver("svc", gcg.Star().Ident("_service"))
-	handleFnCode.Name("Handle")
-	handleFnCode.AddParam("ctx", gcg.QualifiedIdent(gcg.NewPackage("context"), "Context"))
-	handleFnCode.AddParam("fn", gcg.String())
-	handleFnCode.AddParam("argument", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/service"), "Param"))
-	handleFnCode.AddResult("v", gcg.Token("interface{}"))
-	handleFnCode.AddResult("err", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/errors"), "CodeError"))
-
-	body := gcg.Statements()
-	if s.service.Functions != nil && s.service.Functions.Len() > 0 {
-		fnSwitchCode := gcg.Switch()
-		fnSwitchCode.Expression(gcg.Ident("fn"))
-		for _, function := range s.service.Functions {
-			functionCode := gcg.Statements()
-			// internal
-			if function.Internal() {
-				functionCode.Token("// check internal").Line()
-				functionCode.Token("if !service.CanAccessInternal(ctx) {").Line()
-				functionCode.Tab().Token(fmt.Sprintf("err = errors.Warning(\"%s: %s cannot be accessed externally\")", s.service.Name, function.Name())).Line()
-				functionCode.Tab().Break().Line()
-				functionCode.Symbol("}").Line()
-			}
-			// authorization
-			if function.Authorization() {
-				functionCode.Token("// verify authorizations").Line()
-				functionCode.Token("err = authorizations.ParseContext(ctx)", gcg.NewPackage("github.com/aacfactory/fns/service/builtin/authorizations")).Line()
-				functionCode.Token("if err != nil {").Line()
-				functionCode.Tab().Break().Line()
-				functionCode.Token("}").Line()
-			}
-			// permission
-			if function.Permission() {
-				functionCode.Token("// verify permissions").Line()
-				functionCode.Token("err = permissions.EnforceContext(ctx, _name, fn)", gcg.NewPackage("github.com/aacfactory/fns/service/builtin/permissions")).Line()
-				functionCode.Token("if err != nil {").Line()
-				functionCode.Tab().Break().Line()
-				functionCode.Token("}").Line()
-			}
-			// param
-			if function.Param != nil {
-				var param gcg.Code = nil
-				if s.service.Path == function.Param.Type.Path {
-					param = gcg.Ident(function.Param.Type.Name)
-				} else {
-					pkg, hasPKG := s.service.Imports.Path(function.Param.Type.Path)
-					if !hasPKG {
-						err = errors.Warning("sources: make service handle function code failed").
-							WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-							WithMeta("function", function.Name()).
-							WithCause(errors.Warning("import of param was not found").WithMeta("path", function.Param.Type.Path))
-						return
-					}
-					if pkg.Alias == "" {
-						param = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Param.Type.Name)
-					} else {
-						param = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Param.Type.Name)
-					}
-				}
-				functionCode.Token("// param").Line()
-				functionCode.Token("param := ").Add(param).Token("{}").Line()
-				functionCode.Token("paramErr := argument.As(&param)").Line()
-				functionCode.Token("if paramErr != nil {").Line()
-				functionCode.Tab().Token(fmt.Sprintf("err = errors.Warning(\"%s: decode request argument failed\").WithCause(paramErr)", s.service.Name)).Line()
-				functionCode.Tab().Break().Line()
-				functionCode.Token("}").Line()
-				// param validation
-				if title, has := function.Validation(); has {
-					functionCode.Token(fmt.Sprintf("err = validators.ValidateWithErrorTitle(param, \"%s\")", title), gcg.NewPackage("github.com/aacfactory/fns/service/validators")).Line()
-					functionCode.Token("if err != nil {").Line()
-					functionCode.Tab().Break().Line()
-					functionCode.Token("}").Line()
-				}
-			}
-			// timeout
-			timeout, hasTimeout, timeoutErr := function.Timeout()
-			if timeoutErr != nil {
-				timeoutValue := function.Annotations["timeout"]
-				err = errors.Warning("sources: make service handle function code failed").
-					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-					WithMeta("function", function.Name()).
-					WithCause(errors.Warning("value of @timeout is invalid").WithMeta("timeout", timeoutValue).WithCause(timeoutErr))
-				return
-			}
-			if hasTimeout {
-				functionCode.Token("// make timeout context").Line()
-				functionCode.Token("var cancel context.CancelFunc = nil").Line()
-				functionCode.Token(fmt.Sprintf("ctx, cancel = context.WithTimeout(ctx, time.Duration(%d))", int64(timeout))).Line()
-			}
-			// exec
-			functionExecCode := gcg.Statements()
-			// sql
-			if db, has := function.SQL(); has {
-				db = strings.TrimSpace(db)
-				if db == "" {
-					err = errors.Warning("sources: make service handle function code failed").
-						WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-						WithMeta("function", function.Name()).
-						WithCause(errors.Warning("value of @sql is required"))
-					return
-				}
-				functionExecCode.Token("// use sql database").Line()
-				functionExecCode.Token(fmt.Sprintf("ctx = sql.WithOptions(ctx, sql.Database(\"%s\"))", db), gcg.NewPackage("github.com/aacfactory/fns-contrib/databases/sql")).Line()
-			}
-			// transactional
-			if function.Transactional() {
-				functionExecCode.Token("// sql begin transaction").Line()
-				functionExecCode.Token("beginTransactionErr := sql.BeginTransaction(ctx)", gcg.NewPackage("github.com/aacfactory/fns-contrib/databases/sql")).Line()
-				functionExecCode.Token("if beginTransactionErr != nil {").Line()
-				functionExecCode.Tab().Token(fmt.Sprintf("err = errors.Warning(\"%s: begin sql transaction failed\").WithCause(beginTransactionErr)", s.service.Name)).Line()
-				functionExecCode.Tab().Return().Line()
-				functionExecCode.Token("}").Line()
-			}
-			// handle
-			functionExecCode.Token("// execute function").Line()
-			if function.Param != nil && function.Result != nil {
-				functionExecCode.Token(fmt.Sprintf("v, err = %s(ctx, param)", function.Ident)).Line()
-			} else if function.Param == nil && function.Result != nil {
-				functionExecCode.Token(fmt.Sprintf("v, err = %s(ctx)", function.Ident)).Line()
-			} else if function.Param != nil && function.Result == nil {
-				functionExecCode.Token(fmt.Sprintf("err = %s(ctx, param)", function.Ident)).Line()
-			} else if function.Param == nil && function.Result == nil {
-				functionExecCode.Token(fmt.Sprintf("err = %s(ctx)", function.Ident)).Line()
-			}
-			if function.Transactional() {
-				functionExecCode.Token("// sql commit transaction").Line()
-				functionExecCode.Token("if err == nil {").Line()
-				functionExecCode.Tab().Token("commitTransactionErr := sql.CommitTransaction(ctx)", gcg.NewPackage("github.com/aacfactory/fns-contrib/databases/sql")).Line()
-				functionExecCode.Tab().Token("if commitTransactionErr != nil {").Line()
-				functionExecCode.Tab().Tab().Token("_ = sql.RollbackTransaction(ctx)", gcg.NewPackage("github.com/aacfactory/fns-contrib/databases/sql")).Line()
-				functionExecCode.Tab().Tab().Token(fmt.Sprintf("err = errors.ServiceError(\"%s: commit sql transaction failed\").WithCause(commitTransactionErr)", s.service.Name)).Line()
-				functionExecCode.Tab().Tab().Return().Line()
-				functionExecCode.Tab().Token("}").Line()
-				functionExecCode.Token("}").Line()
-			}
-			// cache
-			// cache control
-			cacheControlTTL, hasCacheControl, parseCacheControlErr := function.Cache()
-			if parseCacheControlErr != nil {
-				cacheValue := function.Annotations["cache"]
-				err = errors.Warning("sources: make service handle function code failed").
-					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-					WithMeta("function", function.Name()).
-					WithCause(errors.Warning("value of @cache is invalid").WithMeta("cache", cacheValue).WithCause(parseCacheControlErr))
-				return
-			}
-			if hasCacheControl {
-				functionExecCode.Token("// cache control").Line()
-				functionExecCode.Token(fmt.Sprintf("service.CacheControl(ctx, v, time.Duration(%d))", cacheControlTTL)).Line()
-			}
-
-			// barrier
-			if function.Barrier() {
-				functionCode.Token("// barrier").Line()
-				functionCode.Token(fmt.Sprintf("v, err = svc.Barrier(ctx, %s, argument, func() (v interface{}, err errors.CodeError) {", function.ConstIdent)).Line()
-				functionCode.Add(functionExecCode)
-				functionCode.Tab().Return().Line()
-				functionCode.Token("})").Line()
-			} else {
-				functionCode.Add(functionExecCode)
-			}
-			if hasTimeout {
-				functionCode.Token("// cancel timeout context").Line()
-				functionCode.Token("cancel()").Line()
-			}
-			functionCode.Break()
-			fnSwitchCode.Case(gcg.Ident(function.ConstIdent), functionCode)
-		}
-		notFoundCode := gcg.Statements()
-		notFoundCode.Token(fmt.Sprintf("err = errors.Warning(\"%s: fn was not found\").WithMeta(\"service\", _name).WithMeta(\"fn\", fn)", s.service.Name)).Line()
-		notFoundCode.Break()
-		fnSwitchCode.Default(notFoundCode)
-		body.Add(fnSwitchCode.Build()).Return()
-	}
-	handleFnCode.Body(body)
-
-	code = handleFnCode.Build()
-	return
-}
-
 func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, err error) {
 	if ctx.Err() != nil {
 		err = errors.Warning("sources: service write failed").
@@ -557,84 +370,67 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 			WithCause(ctx.Err())
 		return
 	}
+	if s.service.Title == "" {
+		return
+	}
+	fnCodes := make([]gcg.Code, 0, 1)
+	for _, function := range s.service.Functions {
+		if function.Title() == "" {
+			continue
+		}
+		fnCode := gcg.Statements()
+		fnCode.Token("// ").Token(function.Name()).Line()
+		fnCode.Token("document.AddFn(").Line()
+		fnCode.Tab().Token("documents.NewFn(").Token("\"").Token(function.Name()).Token("\"").Token(")").Dot().Line()
+		fnCode.Tab().Tab().Token("SetInfo(").Token("\"").Token(function.Title()).Token("\", ").Token("\"").Token(function.Description()).Token("\"").Token(")").Dot().Line()
+		fnCode.Tab().Tab().
+			Token(fmt.Sprintf("SetInternal(%v)", function.Internal())).Dot().
+			Token(fmt.Sprintf("SetReadonly(%v)", function.Readonly())).Dot().
+			Token(fmt.Sprintf("SetDeprecated(%v)", function.Deprecated())).Dot().Line()
+		fnCode.Tab().Tab().
+			Token(fmt.Sprintf("SetAuthorization(%v)", function.Authorization())).Dot().
+			Token(fmt.Sprintf("SetPermission(%v)", function.Permission())).Dot().Line()
+		if function.Param == nil {
+			fnCode.Tab().Tab().Token("SetParam(documents.Nil())").Dot().Line()
+		} else {
+			paramCode, paramCodeErr := mapTypeToFunctionElementCode(ctx, function.Param.Type)
+			if paramCodeErr != nil {
+				err = errors.Warning("sources: make service document code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(paramCodeErr)
+				return
+			}
+			fnCode.Tab().Tab().Token("SetParam(").Add(paramCode).Token(")").Dot().Line()
+		}
+		if function.Result == nil {
+			fnCode.Tab().Tab().Token("SetResult(documents.Nil())").Dot().Line()
+		} else {
+			resultCode, resultCodeErr := mapTypeToFunctionElementCode(ctx, function.Result.Type)
+			if resultCodeErr != nil {
+				err = errors.Warning("sources: make service document code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(resultCodeErr)
+				return
+			}
+			fnCode.Tab().Tab().Token("SetResult(").Add(resultCode).Token(")").Dot().Line()
+		}
+		fnCode.Tab().Token(fmt.Sprintf("SetErrors(\"%s\"),", function.Errors()))
+		fnCode.Token(")").Line()
+		fnCodes = append(fnCodes, fnCode)
+	}
+	if len(fnCodes) == 0 {
+		return
+	}
 	docFnCode := gcg.Func()
-	docFnCode.Receiver("svc", gcg.Star().Ident("_service"))
+	docFnCode.Receiver("svc", gcg.Star().Ident("service"))
 	docFnCode.Name("Document")
-	docFnCode.AddResult("document", gcg.Star().QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/service/documents"), "Document"))
+	docFnCode.AddResult("document", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/service/documents"), "Endpoint"))
 	body := gcg.Statements()
-	if !s.service.Internal {
-		fnCodes := make([]gcg.Code, 0, 1)
-		for _, function := range s.service.Functions {
-			if function.Internal() {
-				continue
-			}
-			fnCode := gcg.Statements()
-			fnCode.Token("// ").Token(function.Name()).Line()
-			fnCode.Token("document.AddFn(").Line()
-			fnCode.Tab().Token(fmt.Sprintf("\"%s\", \"%s\", \"%s\",%v, %v,", function.Name(), function.Title(), function.Description(), function.Authorization(), function.Deprecated())).Line()
-			if function.Param != nil {
-				paramCode, paramCodeErr := mapTypeToFunctionElementCode(ctx, function.Param.Type)
-				if paramCodeErr != nil {
-					err = errors.Warning("sources: make service document code failed").
-						WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-						WithMeta("function", function.Name()).
-						WithCause(paramCodeErr)
-					return
-				}
-				fnCode.Add(paramCode).Symbol(",").Line()
-			} else {
-				fnCode.Tab().Token("nil").Symbol(",").Line()
-			}
-			if function.Result != nil {
-				resultCode, resultCodeErr := mapTypeToFunctionElementCode(ctx, function.Result.Type)
-				if resultCodeErr != nil {
-					err = errors.Warning("sources: make service document code failed").
-						WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-						WithMeta("function", function.Name()).
-						WithCause(resultCodeErr)
-					return
-				}
-				fnCode.Add(resultCode).Symbol(",").Line()
-			} else {
-				fnCode.Tab().Token("nil").Symbol(",").Line()
-			}
-			fnErrsCode := gcg.Statements()
-			fnErrsCode.Token("[]documents.FnError{")
-			functionErrors := function.Errors()
-			if functionErrors != nil && len(functionErrors) > 0 {
-				fnErrsCode.Line()
-
-				for _, functionError := range functionErrors {
-					fnErrCode := gcg.Statements()
-					fnErrCode.Symbol("{").Line()
-					fnErrCode.Tab().Token(fmt.Sprintf("Name_: \"%s\"", functionError.Name)).Symbol(",").Line()
-					fnErrCode.Tab().Token("Descriptions_: map[string]string{")
-					if functionError.Descriptions != nil && len(functionError.Descriptions) > 0 {
-						fnErrCode.Line()
-						for dk, dv := range functionError.Descriptions {
-							fnErrCode.Tab().Tab().Token(fmt.Sprintf("\"%s\": \"%s\"", dk, dv)).Symbol(",").Line()
-						}
-					}
-					fnErrCode.Tab().Symbol("}").Symbol(",").Line()
-					fnErrCode.Symbol("}")
-					fnErrsCode.Tab().Add(fnErrCode).Symbol(",").Line()
-				}
-			}
-			fnErrsCode.Symbol("}")
-			fnCode.Add(fnErrsCode).Symbol(",").Line()
-			fnCode.Token(")").Line()
-			fnCodes = append(fnCodes, fnCode)
-		}
-		if len(fnCodes) > 0 {
-			internal := "false"
-			if s.service.Internal {
-				internal = "true"
-			}
-			body.Token(fmt.Sprintf("document = documents.New(_name, \"%s\", %s, svc.AppVersion())", s.service.Description, internal), gcg.NewPackage("github.com/aacfactory/fns/service/documents")).Line()
-			for _, fnCode := range fnCodes {
-				body.Add(fnCode).Line()
-			}
-		}
+	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", svc.Internal(), svc.Version())", s.service.Description))
+	for _, fnCode := range fnCodes {
+		body.Line().Token("document.AddFn(").Line().Add(fnCode).Line().Token(")")
 	}
 	body.Return().Line()
 	docFnCode.Body(body)

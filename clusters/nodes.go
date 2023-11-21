@@ -22,7 +22,7 @@ func NewService(name string, internal bool, functions services.FnInfos, document
 		Functions:   functions,
 		DocumentRaw: nil,
 	}
-	if !document.IsEmpty() {
+	if document.Defined() {
 		p, encodeErr := json.Marshal(document)
 		if encodeErr != nil {
 			err = errors.Warning("fns: new endpoint info failed").WithCause(encodeErr)

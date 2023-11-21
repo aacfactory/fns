@@ -26,13 +26,13 @@ import (
 )
 
 var (
-	ErrForbidden = errors.Forbidden("permissions: forbidden")
+	ErrForbidden = errors.Forbidden("forbidden")
 )
 
 func EnforceContext(ctx context.Context) (err error) {
 	authorization := authorizations.Load(ctx)
 	if !authorization.Validate() {
-		err = ErrForbidden
+		err = authorizations.ErrUnauthorized
 		return
 	}
 	r := services.LoadRequest(ctx)
@@ -47,7 +47,7 @@ func EnforceContext(ctx context.Context) (err error) {
 		return
 	}
 	if !ok {
-		err = errors.Forbidden("permissions: forbidden")
+		err = ErrForbidden
 		return
 	}
 	return

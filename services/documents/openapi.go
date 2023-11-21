@@ -67,24 +67,24 @@ func Openapi(title string, description string, term string, openapiVersion strin
 	// documents
 	endpoints := document.Endpoints
 	if endpoints != nil || len(endpoints) > 0 {
-		for _, document := range endpoints {
-			if document.IsEmpty() || document.Internal || len(document.Functions) == 0 {
+		for _, endpoint := range endpoints {
+			if !endpoint.Defined() {
 				continue
 			}
 			// tags
 			api.Tags = append(api.Tags, &oas.Tag{
-				Name:        document.Name,
-				Description: document.Description,
+				Name:        endpoint.Name,
+				Description: endpoint.Description,
 			})
 			// doc
-			if document.Elements != nil {
-				for _, element := range document.Elements {
+			if endpoint.Elements != nil {
+				for _, element := range endpoint.Elements {
 					if _, hasElement := api.Components.Schemas[element.Key()]; !hasElement {
 						api.Components.Schemas[element.Key()] = ElementSchema(element)
 					}
 				}
 			}
-			for _, fn := range document.Functions {
+			for _, fn := range endpoint.Functions {
 				description := fn.Description
 				if fn.Errors != nil && len(fn.Errors) > 0 {
 					description = description + "\n----------\n"
@@ -106,8 +106,8 @@ func Openapi(title string, description string, term string, openapiVersion strin
 				}
 				path := &oas.Path{
 					Post: &oas.Operation{
-						OperationId: fmt.Sprintf("%s_%s", document.Name, fn.Name),
-						Tags:        []string{document.Name},
+						OperationId: fmt.Sprintf("%s_%s", endpoint.Name, fn.Name),
+						Tags:        []string{endpoint.Name},
 						Summary:     fn.Title,
 						Description: description,
 						Deprecated:  fn.Deprecated,
@@ -154,7 +154,7 @@ func Openapi(title string, description string, term string, openapiVersion strin
 						},
 					},
 				}
-				api.Paths[fmt.Sprintf("/%s/%s", document.Name, fn.Name)] = path
+				api.Paths[fmt.Sprintf("/%s/%s", endpoint.Name, fn.Name)] = path
 			}
 		}
 	}

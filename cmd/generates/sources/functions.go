@@ -17,13 +17,10 @@
 package sources
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"go/ast"
-	"io"
 	"reflect"
 )
 
@@ -108,8 +105,7 @@ func (f *Function) Description() (description string) {
 	return
 }
 
-func (f *Function) Errors() (errs []FunctionError) {
-	errs = make([]FunctionError, 0, 1)
+func (f *Function) Errors() (errs string) {
 	anno, has := f.Annotations.Get("errors")
 	if !has {
 		return
@@ -117,47 +113,14 @@ func (f *Function) Errors() (errs []FunctionError) {
 	if len(anno.Params) == 0 {
 		return
 	}
-	reader := bufio.NewReader(bytes.NewReader([]byte(anno.Params[0])))
-	current := FunctionError{
-		Name:         "",
-		Descriptions: make(map[string]string),
-	}
-	for {
-		line, _, readErr := reader.ReadLine()
-		if readErr == io.EOF {
-			break
-		}
-		px := bytes.IndexByte(line, '+')
-		if px >= 0 {
-			if current.Name != "" {
-				errs = append(errs, current)
-			}
-			current = FunctionError{
-				Name:         string(bytes.TrimSpace(line[px+1:])),
-				Descriptions: make(map[string]string),
-			}
-			continue
-		}
-		dx := bytes.IndexByte(line, '-')
-		if dx >= 0 {
-			description := bytes.TrimSpace(line[dx+1:])
-			idx := bytes.IndexByte(description, ':')
-			if idx < 0 {
-				continue
-			}
-			key := bytes.TrimSpace(description[0:idx])
-			val := bytes.TrimSpace(description[idx+1:])
-			current.Descriptions[string(key)] = string(val)
-			continue
-		}
-	}
-	if current.Name != "" {
-		errs = append(errs, current)
-	}
+	errs = anno.Params[0]
 	return
 }
 
 func (f *Function) Validation() (title string, ok bool) {
+	if f.Param == nil {
+		return
+	}
 	anno, has := f.Annotations.Get("validation")
 	if !has {
 		return

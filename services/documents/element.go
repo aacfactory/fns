@@ -120,6 +120,10 @@ func Any() Element {
 	return NewElement("_", "any", "object", "", "Any", "Any kind object")
 }
 
+func Unknown() Element {
+	return NewElement("_", "unknown", "object", "", "Unknown", "unknown object")
+}
+
 func Struct(path string, name string) Element {
 	return NewElement(path, name, "object", "", "", "")
 }

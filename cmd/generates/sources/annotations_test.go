@@ -9,6 +9,14 @@ import (
 func TestParseAnnotations(t *testing.T) {
 	s := `@title title
 @desc >>>
+
+	name1:
+	zh: chinese
+	en: english
+	name2:
+	zh: chinese
+	en: english
+
 <<<
 @barrier
 @auth

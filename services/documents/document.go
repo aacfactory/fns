@@ -30,11 +30,10 @@ type Document struct {
 }
 
 func (document *Document) Add(endpoint Endpoint) {
-	if endpoint.IsEmpty() {
-		return
+	if endpoint.Defined() {
+		document.Endpoints = append(document.Endpoints, endpoint)
+		sort.Sort(document.Endpoints)
 	}
-	document.Endpoints = append(document.Endpoints, endpoint)
-	sort.Sort(document.Endpoints)
 }
 
 func (document *Document) Get(name []byte) (v Endpoint) {

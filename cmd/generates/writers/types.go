@@ -321,9 +321,9 @@ func mapStructFieldTypeToFunctionElementCode(ctx context.Context, typ *sources.T
 		stmt = stmt.Dot().Line().Token("AsPassword()")
 	}
 	// enum
-	fieldEnum, hasFieldEnum := typ.Annotations["enum"]
-	if hasFieldEnum && fieldEnum != "" {
-		fieldEnums := strings.Split(fieldEnum, ",")
+	fieldEnum, hasFieldEnum := typ.Annotations.Get("enum")
+	if hasFieldEnum && len(fieldEnum.Params) > 0 {
+		fieldEnums := strings.Split(fieldEnum.Params[0], ",")
 		fieldEnumsCodeToken := ""
 		for _, enumValue := range fieldEnums {
 			fieldEnumsCodeToken = fieldEnumsCodeToken + `, "` + strings.TrimSpace(enumValue) + `"`
@@ -344,10 +344,11 @@ func mapStructFieldTypeToFunctionElementCode(ctx context.Context, typ *sources.T
 		if !hasFieldValidateMessage {
 			fieldValidateMessage = typ.Tags["message"]
 		}
+
 		fieldValidateMessageI18ns := make([]string, 0, 1)
 		validateMessageI18n, hasValidateMessageI18n := typ.Annotations.Get("validate-message-i18n")
-		if hasValidateMessageI18n && validateMessageI18n != "" {
-			reader := bufio.NewReader(bytes.NewReader([]byte(validateMessageI18n)))
+		if hasValidateMessageI18n && len(validateMessageI18n.Params) > 0 {
+			reader := bufio.NewReader(bytes.NewReader([]byte(validateMessageI18n.Params[0])))
 			for {
 				line, _, readErr := reader.ReadLine()
 				if readErr != nil {
@@ -361,18 +362,17 @@ func mapStructFieldTypeToFunctionElementCode(ctx context.Context, typ *sources.T
 			}
 		}
 		fieldValidateMessageI18nsCodeToken := ""
-		for _, fieldValidateMessageI18n := range fieldValidateMessageI18ns {
-			fieldValidateMessageI18nsCodeToken = fieldValidateMessageI18nsCodeToken + `, "` + fieldValidateMessageI18n + `"`
-		}
-		if fieldValidateMessageI18nsCodeToken != "" {
-			fieldValidateMessageI18nsCodeToken = fieldValidateMessageI18nsCodeToken[2:]
+		for i := 0; i < len(fieldValidateMessageI18ns); i = i + 2 {
+			key := fieldValidateMessageI18ns[i]
+			val := fieldValidateMessageI18ns[i+1]
+			fieldValidateMessageI18nsCodeToken = fieldValidateMessageI18nsCodeToken + ".AddI18n(" + "\"" + key + "\", " + "\"" + val + "\"" + ")"
+
 		}
 		stmt = stmt.Dot().Line().Token("SetValidation(").
-			Token("documents.NewElementValidation(").
+			Token("documents.NewValidation(").
 			Token(fmt.Sprintf("\"%s\"", fieldValidateMessage)).
-			Symbol(", ").
-			Token(fieldValidateMessageI18nsCodeToken).
 			Symbol(")").
+			Token(fieldValidateMessageI18nsCodeToken).
 			Symbol(")")
 	}
 	code = stmt

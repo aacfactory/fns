@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	contextUserKey = []byte("$.authorizations")
+	contextUserKey = []byte("authorizations")
 )
 
 func With(ctx context.Context, authorization Authorization) {
@@ -83,7 +83,7 @@ func Decode(ctx context.Context, token Token) (authorization Authorization, err 
 	return
 }
 
-var ErrUnauthorized = errors.Unauthorized("fns: unauthorized")
+var ErrUnauthorized = errors.Unauthorized("unauthorized")
 
 func Validate(ctx context.Context) (err error) {
 	authorization := Load(ctx)

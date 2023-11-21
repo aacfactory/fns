@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	ErrTooBigRequestBody = errors.Warning("fns: request body is too big")
+	ErrTooBigRequestBody = errors.New(http.StatusRequestEntityTooLarge, "***TOO LARGE BODY***", "fns: request body is too large")
 )
 
 var (

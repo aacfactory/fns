@@ -98,7 +98,7 @@ func (r *Request) Body() ([]byte, error) {
 		}
 		if r.maxBodySize > 0 {
 			if buf.Len() > r.maxBodySize {
-				return nil, errors.Warning("fns: read request body failed").WithCause(transports.ErrTooBigRequestBody)
+				return nil, transports.ErrTooBigRequestBody
 			}
 		}
 	}

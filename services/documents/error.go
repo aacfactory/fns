@@ -1,6 +1,9 @@
 package documents
 
 import (
+	"bufio"
+	"bytes"
+	"io"
 	"sort"
 	"strings"
 )
@@ -61,10 +64,50 @@ func (err Error) AddNamedDescription(name string, value string) Error {
 	return err
 }
 
-func NewErrors() Errors {
-	return make(Errors, 0, 1)
+func NewErrors(src string) Errors {
+	errs := make(Errors, 0, 1)
+	if len(src) == 0 {
+		return errs
+	}
+	reader := bufio.NewReader(bytes.NewReader([]byte(src)))
+	pos := -1
+	for {
+		line, _, readErr := reader.ReadLine()
+		if readErr == io.EOF {
+			break
+		}
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		idx := bytes.IndexByte(line, ':')
+		if idx < 0 {
+			errs = errs.Add(NewError(string(line)))
+			pos++
+			continue
+		}
+		name := bytes.TrimSpace(line[0:idx])
+		var value []byte
+		if len(line) > idx+1 {
+			value = bytes.TrimSpace(line[idx+1:])
+		}
+		errs[pos] = errs[pos].AddNamedDescription(string(name), string(value))
+	}
+	return errs
 }
 
+// Errors
+// use @errors
+// @errors >>>
+//
+//	name1
+//	zh: chinese
+//	en: english
+//	name2
+//	zh: chinese
+//	en: english
+//
+// <<<
 type Errors []Error
 
 func (pp Errors) Len() int {

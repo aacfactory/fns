@@ -22,8 +22,12 @@ type Endpoint struct {
 	Elements    Elements         `json:"elements"`
 }
 
-func (endpoint *Endpoint) IsEmpty() bool {
-	return endpoint.Name == ""
+func (endpoint *Endpoint) Defined() bool {
+	return endpoint.Name != ""
+}
+
+func (endpoint *Endpoint) SetDescription(description string) {
+	endpoint.Description = description
 }
 
 func (endpoint *Endpoint) AddFn(fn Fn) {

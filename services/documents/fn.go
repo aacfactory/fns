@@ -29,8 +29,8 @@ func NewFn(name string) Fn {
 		Deprecated:    false,
 		Readonly:      false,
 		Authorization: false,
-		Param:         Nil(),
-		Result:        Nil(),
+		Param:         Unknown(),
+		Result:        Unknown(),
 		Errors:        make(Errors, 0, 1),
 	}
 }
@@ -43,6 +43,7 @@ type Fn struct {
 	Readonly      bool    `json:"readonly,omitempty"`
 	Internal      bool    `json:"internal,omitempty"`
 	Authorization bool    `json:"authorization,omitempty"`
+	Permission    bool    `json:"permission,omitempty"`
 	Param         Element `json:"argument,omitempty"`
 	Result        Element `json:"result,omitempty"`
 	Errors        Errors  `json:"errors,omitempty"`
@@ -54,23 +55,28 @@ func (fn Fn) SetInfo(title string, description string) Fn {
 	return fn
 }
 
-func (fn Fn) SetReadonly() Fn {
-	fn.Readonly = true
+func (fn Fn) SetDeprecated(deprecated bool) Fn {
+	fn.Deprecated = deprecated
 	return fn
 }
 
-func (fn Fn) SetInternal() Fn {
-	fn.Internal = true
+func (fn Fn) SetReadonly(readonly bool) Fn {
+	fn.Readonly = readonly
 	return fn
 }
 
-func (fn Fn) SetAuthorization() Fn {
-	fn.Authorization = true
+func (fn Fn) SetInternal(internal bool) Fn {
+	fn.Internal = internal
 	return fn
 }
 
-func (fn Fn) SetDeprecated() Fn {
-	fn.Deprecated = true
+func (fn Fn) SetAuthorization(authorization bool) Fn {
+	fn.Authorization = authorization
+	return fn
+}
+
+func (fn Fn) SetPermission(permission bool) Fn {
+	fn.Permission = permission
 	return fn
 }
 
@@ -86,6 +92,11 @@ func (fn Fn) SetResult(result Element) Fn {
 
 func (fn Fn) AddError(err Error) Fn {
 	fn.Errors = fn.Errors.Add(err)
+	return fn
+}
+
+func (fn Fn) SetErrors(err string) Fn {
+	fn.Errors = NewErrors(err)
 	return fn
 }
 

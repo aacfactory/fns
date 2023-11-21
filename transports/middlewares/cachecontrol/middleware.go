@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	nilBodyETag = []byte(strconv.FormatUint(xxhash.Sum64([]byte("nil")), 16))
+	nilBodyETag      = []byte(strconv.FormatUint(xxhash.Sum64([]byte("nil")), 16))
+	contextEnableKey = []byte("@fns:cachecontrol:enable")
 )
 
 func NewWithCache(cache Cache) transports.Middleware {
@@ -31,6 +32,8 @@ var (
 	getMethod = []byte("GET")
 )
 
+// Middleware
+// use @cachecontrol max-age=10 public=true must-revalidate=false proxy-revalidate=false
 type Middleware struct {
 	log    logs.Logger
 	cache  Cache
@@ -92,7 +95,8 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 					return
 				}
 			}
-
+			// set enable
+			request.SetLocalValue(contextEnableKey, true)
 			// next
 			next.Handle(writer, request)
 			// check response

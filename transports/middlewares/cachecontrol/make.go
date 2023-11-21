@@ -68,6 +68,14 @@ func MaxAge(age int) MakeOption {
 }
 
 func Make(ctx context.Context, options ...MakeOption) {
+	// check enable
+	enableCV := ctx.LocalValue(contextEnableKey)
+	if enableCV == nil {
+		return
+	}
+	if enable, _ := enableCV.(bool); !enable {
+		return
+	}
 	// check internal
 	sr, hasSR := services.TryLoadRequest(ctx)
 	if !hasSR {

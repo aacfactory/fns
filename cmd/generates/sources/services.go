@@ -73,9 +73,24 @@ func tryLoadService(mod *Module, path string) (service *Service, has bool, err e
 		return
 	}
 	has = true
-	_, hasInternal := annotations.Get("internal")
-	title, _ := annotations.Get("title")
-	Description, _ := annotations.Get("description")
+	title := ""
+	description := ""
+	internal := false
+	titleAnno, hasTitle := annotations.Get("title")
+	if hasTitle && len(titleAnno.Params) > 0 {
+		title = titleAnno.Params[0]
+	}
+	descriptionAnno, hasDescription := annotations.Get("description")
+	if hasDescription && len(descriptionAnno.Params) > 0 {
+		description = descriptionAnno.Params[0]
+	}
+	internalAnno, hasInternal := annotations.Get("internal")
+	if hasInternal && len(descriptionAnno.Params) > 0 {
+		if len(internalAnno.Params) > 0 {
+			internal = true
+		}
+		internal = internalAnno.Params[0] == "true"
+	}
 
 	service = &Service{
 		mod:         mod,
@@ -83,9 +98,9 @@ func tryLoadService(mod *Module, path string) (service *Service, has bool, err e
 		Path:        path,
 		PathIdent:   f.Name.Name,
 		Name:        strings.ToLower(name.Params[0]),
-		Internal:    hasInternal,
-		Title:       title.Params[0],
-		Description: Description.Params[0],
+		Internal:    internal,
+		Title:       title,
+		Description: description,
 		Imports:     Imports{},
 		Functions:   make([]*Function, 0, 1),
 		Components:  make([]*Component, 0, 1),
@@ -175,7 +190,7 @@ func (service *Service) loadFunctions() (err error) {
 				return
 			}
 			proxyIdent := cases.Camel().Format(nameAtoms)
-			constIdent := fmt.Sprintf("_%sFn", ident)
+			constIdent := fmt.Sprintf("_%sFnName", ident)
 			annotations, parseAnnotationsErr := ParseAnnotations(doc)
 			if parseAnnotationsErr != nil {
 				err = errors.Warning("sources: parse func annotations failed").

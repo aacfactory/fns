@@ -21,7 +21,7 @@ func NewWithStore(store Store) services.Service {
 }
 
 // New
-// use @cache, and param must implement KeyParam.
+// use @cache, and param must implement KeyParam. unit of ttl is seconds and default value is 10 seconds.
 // @cache get
 // @cache set 10
 // @cache remove

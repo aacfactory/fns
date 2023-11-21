@@ -158,7 +158,7 @@ func (f *Function) Barrier() (ok bool) {
 	return
 }
 
-func (f *Function) Cache() (params []string, has bool) {
+func (f *Function) Cache() (cmd string, ttl string, has bool) {
 	anno, exist := f.Annotations.Get("cache")
 	if !exist {
 		return
@@ -166,8 +166,57 @@ func (f *Function) Cache() (params []string, has bool) {
 	if len(anno.Params) == 0 {
 		return
 	}
-	params = anno.Params
-	has = true
+	cmd = strings.TrimSpace(anno.Params[0])
+	switch cmd {
+	case "get":
+		has = true
+		break
+	case "set":
+		if len(anno.Params[0]) == 1 {
+			ttl = "10"
+			has = true
+			break
+		}
+		ttl = anno.Params[0]
+		sec, ttlErr := strconv.Atoi(ttl)
+		if ttlErr != nil {
+			ttl = "10"
+			has = true
+			break
+		}
+		if sec < 1 {
+			ttl = "10"
+			has = true
+			break
+		}
+		has = true
+		break
+	case "remove":
+		has = true
+		break
+	case "get-set":
+		if len(anno.Params[0]) == 1 {
+			ttl = "10"
+			has = true
+			break
+		}
+		ttl = anno.Params[0]
+		sec, ttlErr := strconv.Atoi(ttl)
+		if ttlErr != nil {
+			ttl = "10"
+			has = true
+			break
+		}
+		if sec < 1 {
+			ttl = "10"
+			has = true
+			break
+		}
+		has = true
+		break
+	default:
+		break
+	}
 	return
 }
 

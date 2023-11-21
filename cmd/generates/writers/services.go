@@ -53,8 +53,10 @@ func (s *ServiceFile) Write(ctx context.Context) (err error) {
 	}
 
 	file := gcg.NewFileWithoutNote(s.service.Path[strings.LastIndex(s.service.Path, "/")+1:])
+	// comments
 	file.FileComments("NOTE: this file has been automatically generated, DON'T EDIT IT!!!\n")
 
+	// imports
 	packages, importsErr := s.importsCode(ctx)
 	if importsErr != nil {
 		err = errors.Warning("sources: code file write failed").
@@ -68,7 +70,8 @@ func (s *ServiceFile) Write(ctx context.Context) (err error) {
 		}
 	}
 
-	names, namesErr := s.constFunctionNamesCode(ctx)
+	// names
+	names, namesErr := s.constNamesCode(ctx)
 	if namesErr != nil {
 		err = errors.Warning("sources: code file write failed").
 			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
@@ -77,7 +80,8 @@ func (s *ServiceFile) Write(ctx context.Context) (err error) {
 	}
 	file.AddCode(names)
 
-	proxies, proxiesErr := s.proxyFunctionsCode(ctx)
+	// fn handler and proxy
+	proxies, proxiesErr := s.functionsCode(ctx)
 	if proxiesErr != nil {
 		err = errors.Warning("sources: code file write failed").
 			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
@@ -86,6 +90,7 @@ func (s *ServiceFile) Write(ctx context.Context) (err error) {
 	}
 	file.AddCode(proxies)
 
+	// service
 	service, serviceErr := s.serviceCode(ctx)
 	if serviceErr != nil {
 		err = errors.Warning("sources: code file write failed").
@@ -159,22 +164,115 @@ func (s *ServiceFile) importsCode(ctx context.Context) (packages []*gcg.Package,
 	return
 }
 
-func (s *ServiceFile) constFunctionNamesCode(ctx context.Context) (code gcg.Code, err error) {
+func (s *ServiceFile) constNamesCode(ctx context.Context) (code gcg.Code, err error) {
 	if ctx.Err() != nil {
 		err = errors.Warning("sources: service write failed").
 			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
 			WithCause(ctx.Err())
 		return
 	}
-	stmt := gcg.Constants()
-	stmt.Add("_name", s.service.Name)
+	stmt := gcg.Vars()
+	stmt.Add(gcg.Var("_endpointName", gcg.Token(fmt.Sprintf("[]byte(\"%s\")", s.service.Name))))
 	for _, function := range s.service.Functions {
-		stmt.Add(function.ConstIdent, function.Name())
+		stmt.Add(gcg.Var(function.ConstIdent, gcg.Token(fmt.Sprintf("[]byte(\"%s\")", function.Name()))))
 	}
 	code = stmt.Build()
 	return
 }
 
+func (s *ServiceFile) functionsCode(ctx context.Context) (code gcg.Code, err error) {
+	if ctx.Err() != nil {
+		err = errors.Warning("sources: service write failed").
+			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+			WithCause(ctx.Err())
+		return
+	}
+	stmt := gcg.Statements()
+
+	for _, function := range s.service.Functions {
+		stmt.Add(gcg.Token("// +-------------------------------------------------------------------------------------------------------------------+").Line())
+		// proxy
+		proxy, proxyErr := s.functionProxyCode(ctx, function)
+		if proxyErr != nil {
+			err = proxyErr
+			return
+		}
+		stmt.Add(proxy).Line()
+		// handler
+
+	}
+	return
+}
+
+func (s *ServiceFile) functionProxyCode(ctx context.Context, function *sources.Function) (code gcg.Code, err error) {
+	proxyIdent := function.ProxyIdent
+	proxy := gcg.Func()
+	proxy.Name(proxyIdent)
+	proxy.AddParam("ctx", contextCode())
+	if function.Param != nil {
+		var param gcg.Code = nil
+		if s.service.Path == function.Param.Type.Path {
+			param = gcg.Ident(function.Param.Type.Name)
+		} else {
+			pkg, hasPKG := s.service.Imports.Path(function.Param.Type.Path)
+			if !hasPKG {
+				err = errors.Warning("sources: make function proxy code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(errors.Warning("import of param was not found").WithMeta("path", function.Param.Type.Path))
+				return
+			}
+			if pkg.Alias == "" {
+				param = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Param.Type.Name)
+			} else {
+				param = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Param.Type.Name)
+			}
+		}
+		proxy.AddParam("param", param)
+	}
+	if function.Result != nil {
+		var result gcg.Code = nil
+		if s.service.Path == function.Result.Type.Path {
+			result = gcg.Ident(function.Param.Type.Name)
+		} else {
+			pkg, hasPKG := s.service.Imports.Path(function.Result.Type.Path)
+			if !hasPKG {
+				err = errors.Warning("sources: make function proxy code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(errors.Warning("import of result was not found").WithMeta("path", function.Result.Type.Path))
+				return
+			}
+			if pkg.Alias == "" {
+				result = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Result.Type.Name)
+			} else {
+				result = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Result.Type.Name)
+			}
+		}
+		proxy.AddResult("result", result)
+	}
+	proxy.AddResult("err", gcg.Ident("error"))
+	// body >>>
+	body := gcg.Statements()
+	// validate
+	if validTitle, valid := function.Validation(); valid {
+		body.Tab().Token("// validate param").Line()
+		if validTitle == "" {
+			body.Tab().Token("if err = validators.Validate(param); err != nil {").Line()
+			body.Tab().Tab().Token("return").Line()
+			body.Tab().Token("}").Line()
+		} else {
+			body.Tab().Token(fmt.Sprintf("if err = validators.ValidateWithErrorTitle(param, \"%s\"); err != nil {", validTitle)).Line()
+			body.Tab().Tab().Token("return").Line()
+			body.Tab().Token("}").Line()
+		}
+	}
+	// cache
+	function.Cache()
+	// body <<<
+	code = proxy.Build()
+	return
+}
 func (s *ServiceFile) proxyFunctionsCode(ctx context.Context) (code gcg.Code, err error) {
 	if ctx.Err() != nil {
 		err = errors.Warning("sources: service write failed").

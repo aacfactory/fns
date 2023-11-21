@@ -79,6 +79,8 @@ func Service() services.Service {
 	return ServiceWithEncoder(DefaultTokenEncoder())
 }
 
+// service
+// use @authorization
 type service struct {
 	services.Abstract
 }

@@ -165,7 +165,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	endpoint, found := manager.Get(ctx, name, endpointGetOptions...)
 	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
-			WithMeta("service", bytex.ToString(name)).
+			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
 		ReleaseRequest(req)
 		return
@@ -174,7 +174,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	function, hasFunction := endpoint.Functions().Find(fn)
 	if !hasFunction {
 		err = errors.NotFound("fns: endpoint was not found").
-			WithMeta("service", bytex.ToString(name)).
+			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
 		ReleaseRequest(req)
 		return
@@ -214,7 +214,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
 		}
 		err = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
-			WithMeta("service", bytex.ToString(name)).
+			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
 		ReleaseRequest(req)
 		return

@@ -96,7 +96,7 @@ func (fn Fn) AddError(err Error) Fn {
 }
 
 func (fn Fn) SetErrors(err string) Fn {
-	fn.Errors = NewErrors(strings.ReplaceAll(err, "\n", "\\n"))
+	fn.Errors = NewErrors(err)
 	return fn
 }
 

@@ -209,7 +209,7 @@ func (f *Function) Cache() (cmd string, ttl string, has bool) {
 }
 
 func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool, proxyRevalidate bool, has bool, err error) {
-	anno, exist := f.Annotations.Get("cachecontrol")
+	anno, exist := f.Annotations.Get("cache-control")
 	if !exist {
 		return
 	}
@@ -222,7 +222,7 @@ func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool,
 		if hasMaxValue {
 			maxAge, err = strconv.Atoi(strings.TrimSpace(maxAgeValue))
 			if err != nil {
-				err = errors.Warning("fns: parse @cachecontrol max-age failed").WithMeta("max-age", maxAgeValue)
+				err = errors.Warning("fns: parse @cache-control max-age failed").WithMeta("max-age", maxAgeValue)
 				return
 			}
 		}
@@ -230,7 +230,7 @@ func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool,
 		if hasPublic {
 			public, err = strconv.ParseBool(strings.TrimSpace(publicValue))
 			if err != nil {
-				err = errors.Warning("fns: parse @cachecontrol public failed").WithMeta("public", publicValue)
+				err = errors.Warning("fns: parse @cache-control public failed").WithMeta("public", publicValue)
 				return
 			}
 		}
@@ -238,7 +238,7 @@ func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool,
 		if hasMustRevalidate {
 			mustRevalidate, err = strconv.ParseBool(strings.TrimSpace(mustRevalidateValue))
 			if err != nil {
-				err = errors.Warning("fns: parse @cachecontrol must-revalidate failed").WithMeta("must-revalidate", mustRevalidateValue)
+				err = errors.Warning("fns: parse @cache-control must-revalidate failed").WithMeta("must-revalidate", mustRevalidateValue)
 				return
 			}
 		}
@@ -246,7 +246,7 @@ func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool,
 		if hasProxyRevalidate {
 			proxyRevalidate, err = strconv.ParseBool(strings.TrimSpace(proxyRevalidateValue))
 			if err != nil {
-				err = errors.Warning("fns: parse @cachecontrol proxy-revalidate failed").WithMeta("proxy-revalidate", proxyRevalidateValue)
+				err = errors.Warning("fns: parse @cache-control proxy-revalidate failed").WithMeta("proxy-revalidate", proxyRevalidateValue)
 				return
 			}
 		}

@@ -15,7 +15,7 @@ import (
 
 var (
 	nilBodyETag      = []byte(strconv.FormatUint(xxhash.Sum64([]byte("nil")), 16))
-	contextEnableKey = []byte("@fns:cachecontrol:enable")
+	contextEnableKey = []byte("@fns:cache-control:enable")
 )
 
 func NewWithCache(cache Cache) transports.Middleware {
@@ -33,7 +33,7 @@ var (
 )
 
 // Middleware
-// use @cachecontrol max-age=10 public=true must-revalidate=false proxy-revalidate=false
+// use @cache-control max-age=10 public=true must-revalidate=false proxy-revalidate=false
 type Middleware struct {
 	log    logs.Logger
 	cache  Cache

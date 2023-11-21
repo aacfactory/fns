@@ -69,6 +69,8 @@ func Service(enforcer Enforcer) (v services.Service) {
 	return
 }
 
+// service
+// use @permission
 type service struct {
 	services.Abstract
 	enforcer Enforcer

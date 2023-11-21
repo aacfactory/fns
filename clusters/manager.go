@@ -80,7 +80,7 @@ func (manager *Manager) Add(service services.Service) (err error) {
 	sort.Sort(functions)
 	info, infoErr := NewService(service.Name(), service.Internal(), functions, service.Document())
 	if infoErr != nil {
-		err = errors.Warning("fns: create cluster service info failed").WithCause(infoErr).WithMeta("service", service.Name())
+		err = errors.Warning("fns: create cluster service info failed").WithCause(infoErr).WithMeta("endpoint", service.Name())
 		return
 	}
 	manager.cluster.AddService(info)
@@ -218,7 +218,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	endpoint, found := manager.Get(ctx, name, endpointGetOptions...)
 	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
-			WithMeta("service", bytex.ToString(name)).
+			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
 		services.ReleaseRequest(req)
 		return
@@ -227,7 +227,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	function, hasFunction := endpoint.Functions().Find(fn)
 	if !hasFunction {
 		err = errors.NotFound("fns: endpoint was not found").
-			WithMeta("service", bytex.ToString(name)).
+			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
 		services.ReleaseRequest(req)
 		return
@@ -266,7 +266,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		}
 		promise.Failed(
 			errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
-				WithMeta("service", bytex.ToString(name)).
+				WithMeta("endpoint", bytex.ToString(name)).
 				WithMeta("fn", bytex.ToString(fn)),
 		)
 	}

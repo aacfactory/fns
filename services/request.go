@@ -246,7 +246,7 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 	if r.Param().Exist() {
 		pp, err = r.Param().MarshalJSON()
 		if err != nil {
-			err = errors.Warning("fns: hash request failed").WithCause(err).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			err = errors.Warning("fns: hash request failed").WithCause(err)
 			return
 		}
 	}
@@ -258,7 +258,7 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 		token := r.Header().Token()
 		if len(token) == 0 {
 			bytebufferpool.Put(buf)
-			err = errors.Warning("fns: hash request failed").WithCause(fmt.Errorf("fns: token is required")).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			err = errors.Unauthorized("unauthorized").WithCause(errors.Warning("fns: hash request failed").WithCause(fmt.Errorf("fns: token is required")))
 			return
 		}
 		_, _ = buf.Write(token)
@@ -267,7 +267,7 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 		deviceId := r.Header().DeviceId()
 		if len(deviceId) == 0 {
 			bytebufferpool.Put(buf)
-			err = errors.Warning("fns: hash request failed").WithCause(fmt.Errorf("fns: device id is required")).WithMeta("service", string(service)).WithMeta("fn", string(fn))
+			err = errors.Warning("fns: hash request failed").WithCause(fmt.Errorf("fns: device id is required"))
 			return
 		}
 		_, _ = buf.Write(deviceId)

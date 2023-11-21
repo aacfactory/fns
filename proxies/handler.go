@@ -111,7 +111,7 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 		if bodyErr != nil {
 			bytebufferpool.Put(groupKeyBuf)
 			w.Failed(errors.Warning("fns: read request body failed").WithCause(bodyErr).
-				WithMeta("service", bytex.ToString(service)).
+				WithMeta("endpoint", bytex.ToString(service)).
 				WithMeta("fn", bytex.ToString(fn)))
 			return
 		}
@@ -124,7 +124,7 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 		address, has := handler.manager.PublicFnAddress(r, service, fn, endpointGetOptions...)
 		if !has {
 			err = errors.NotFound("fns: endpoint was not found").
-				WithMeta("service", bytex.ToString(service)).
+				WithMeta("endpoint", bytex.ToString(service)).
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
@@ -149,14 +149,14 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 		client, clientErr := handler.dialer.Dial(bytex.FromString(address))
 		if clientErr != nil {
 			err = errors.Warning("fns: dial endpoint failed").WithCause(clientErr).
-				WithMeta("service", bytex.ToString(service)).
+				WithMeta("endpoint", bytex.ToString(service)).
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
 		status, respHeader, respBody, doErr := client.Do(r, method, path, r.Header(), body)
 		if doErr != nil {
 			err = errors.Warning("fns: send request to endpoint failed").WithCause(doErr).
-				WithMeta("service", bytex.ToString(service)).
+				WithMeta("endpoint", bytex.ToString(service)).
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}

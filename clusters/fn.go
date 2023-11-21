@@ -112,7 +112,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	})
 	argument, argumentErr := ctx.Param().MarshalJSON()
 	if argumentErr != nil {
-		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("service", fn.endpointName).WithMeta("fn", fn.name)
+		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
 	}
 	rb := RequestBody{
@@ -121,7 +121,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	}
 	body, bodyErr := json.Marshal(rb)
 	if bodyErr != nil {
-		err = errors.Warning("fns: encode body failed").WithCause(bodyErr).WithMeta("service", fn.endpointName).WithMeta("fn", fn.name)
+		err = errors.Warning("fns: encode body failed").WithCause(bodyErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
 	}
 	// sign
@@ -135,7 +135,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		if n > 10 {
 			fn.health.Store(false)
 		}
-		err = errors.Warning("fns: internal endpoint handle failed").WithCause(doErr).WithMeta("service", fn.endpointName).WithMeta("fn", fn.name)
+		err = errors.Warning("fns: internal endpoint handle failed").WithCause(doErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
 	}
 
@@ -160,7 +160,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		rsb := ResponseBody{}
 		decodeErr := json.Unmarshal(respBody, &rsb)
 		if decodeErr != nil {
-			err = errors.Warning("fns: internal endpoint handle failed").WithCause(decodeErr).WithMeta("service", fn.endpointName).WithMeta("fn", fn.name)
+			err = errors.Warning("fns: internal endpoint handle failed").WithCause(decodeErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 			return
 		}
 		trace, hasTrace := tracings.Load(ctx)

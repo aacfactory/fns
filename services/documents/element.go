@@ -267,38 +267,38 @@ func (element Element) AddEnum(v ...string) Element {
 	return element
 }
 
-func (element Element) isEmpty() (ok bool) {
-	ok = element.isObject() && len(element.Properties) == 0
+func (element Element) IsEmpty() (ok bool) {
+	ok = element.IsObject() && len(element.Properties) == 0
 	return
 }
 
-func (element Element) isBuiltin() (ok bool) {
+func (element Element) IsBuiltin() (ok bool) {
 	ok = element.Path == "_"
 	return
 }
 
-func (element Element) isObject() (ok bool) {
+func (element Element) IsObject() (ok bool) {
 	ok = element.Type == "object"
 	return
 }
 
-func (element Element) isArray() (ok bool) {
+func (element Element) IsArray() (ok bool) {
 	ok = element.Type == "array"
 	return
 }
 
-func (element Element) isRef() (ok bool) {
+func (element Element) IsRef() (ok bool) {
 	ok = element.Type == "ref"
 	return
 }
 
-func (element Element) isAdditional() (ok bool) {
-	ok = element.isObject() && element.Additional
+func (element Element) IsAdditional() (ok bool) {
+	ok = element.IsObject() && element.Additional
 	return
 }
 
 func (element Element) AddProperty(name string, prop Element) Element {
-	if element.isObject() || element.isArray() || element.isAdditional() {
+	if element.IsObject() || element.IsArray() || element.IsAdditional() {
 		element.Properties = element.Properties.Add(name, prop)
 	}
 	return element
@@ -306,13 +306,13 @@ func (element Element) AddProperty(name string, prop Element) Element {
 
 func (element Element) unpack() (elements Elements) {
 	elements = make([]Element, 0, 1)
-	if element.isBuiltin() || element.isRef() {
+	if element.IsBuiltin() || element.IsRef() {
 		elements = append(elements, element)
 		return
 	}
-	if element.isObject() {
-		if element.isAdditional() {
-			item, hasItem := element.getItem()
+	if element.IsObject() {
+		if element.IsAdditional() {
+			item, hasItem := element.GetItem()
 			if hasItem {
 				unpacks := item.unpack()
 				element.Properties = make(Properties, 0, 1)
@@ -335,11 +335,11 @@ func (element Element) unpack() (elements Elements) {
 		}
 		return
 	}
-	if element.isArray() {
+	if element.IsArray() {
 		if element.Path != "" {
 			elements = append(elements, Ref(element.Path, element.Name))
 		}
-		item, hasItem := element.getItem()
+		item, hasItem := element.GetItem()
 		if hasItem {
 			unpacks := item.unpack()
 			element.Properties = make(Properties, 0, 1)
@@ -355,7 +355,7 @@ func (element Element) unpack() (elements Elements) {
 	return
 }
 
-func (element Element) getItem() (v Element, has bool) {
+func (element Element) GetItem() (v Element, has bool) {
 	p, exist := element.Properties.Get("")
 	if exist {
 		v = p.Element

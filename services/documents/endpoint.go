@@ -75,7 +75,7 @@ func (endpoint *Endpoint) addElement(element Element) (ref Element) {
 	}
 	remains := unpacks[1:]
 	for _, remain := range remains {
-		if remain.isBuiltin() || remain.isRef() || remain.Path == "" {
+		if remain.IsBuiltin() || remain.IsRef() || remain.Path == "" {
 			continue
 		}
 		endpoint.Elements = endpoint.Elements.Add(remain)

@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
+	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/fast"
 	"github.com/aacfactory/logs"
@@ -75,11 +76,17 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 	p.log = options.Log
 	// config
 	config := options.Config
+	// builtins
+	builtins := make([]services.Service, 0, 1)
 	// middlewares
 	middlewares := make([]transports.Middleware, 0, 1)
 	middlewares = append(middlewares, runtime.Middleware(options.Runtime))
 	var corsMiddleware transports.Middleware
 	for _, middleware := range p.middlewares {
+		builtin, isBuiltin := middleware.(services.Middleware)
+		if isBuiltin {
+			builtins = append(builtins, builtin.Services()...)
+		}
 		if middleware.Name() == "cors" {
 			corsMiddleware = middleware
 			continue
@@ -106,6 +113,10 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 			return
 		}
 		mux.Add(handler)
+		builtin, isBuiltin := handler.(services.MuxHandler)
+		if isBuiltin {
+			builtins = append(builtins, builtin.Services()...)
+		}
 	}
 	mux.Add(NewProxyHandler(options.Manager, options.Dialer))
 	// transport
@@ -118,6 +129,13 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 	if transportErr != nil {
 		err = errors.Warning("fns: construct proxy failed, new transport failed").WithCause(transportErr)
 		return
+	}
+	for _, builtin := range builtins {
+		err = options.Manager.Add(builtin)
+		if err != nil {
+			err = errors.Warning("fns: construct proxy failed, deploy service failed").WithCause(err)
+			return
+		}
 	}
 	return
 }

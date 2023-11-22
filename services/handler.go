@@ -202,3 +202,13 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 		w.Succeed(nil)
 	}
 }
+
+type MuxHandler interface {
+	transports.MuxHandler
+	Services() []Service
+}
+
+type Middleware interface {
+	transports.Middleware
+	Services() []Service
+}

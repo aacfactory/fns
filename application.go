@@ -166,12 +166,19 @@ func New(options ...Option) (app Application) {
 		barrier, shared,
 	)
 
+	// builtins
+	builtins := make([]services.Service, 0, 1)
+
 	// transport >>>
 	// middlewares
 	middlewares := make([]transports.Middleware, 0, 1)
 	middlewares = append(middlewares, runtime.Middleware(rt))
 	var corsMiddleware transports.Middleware
 	for _, middleware := range opt.middlewares {
+		builtin, isBuiltin := middleware.(services.Middleware)
+		if isBuiltin {
+			builtins = append(builtins, builtin.Services()...)
+		}
 		if middleware.Name() == "cors" {
 			corsMiddleware = middleware
 			continue
@@ -199,6 +206,10 @@ func New(options ...Option) (app Application) {
 			return
 		}
 		mux.Add(handler)
+		builtin, isBuiltin := handler.(services.MuxHandler)
+		if isBuiltin {
+			builtins = append(builtins, builtin.Services()...)
+		}
 	}
 	transport := opt.transport
 	transportErr := transport.Construct(transports.Options{
@@ -285,6 +296,8 @@ func New(options ...Option) (app Application) {
 		synced:          false,
 		signalCh:        signalCh,
 	}
+	// deploy
+	app.Deploy(builtins...)
 	return
 }
 

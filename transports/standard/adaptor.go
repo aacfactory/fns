@@ -45,12 +45,12 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int, write
 		r.maxBodySize = maxRequestBody
 		r.request = request
 
-		var w *responseWriter
+		var w *ResponseWriter
 		cw := responsePool.Get()
 		if cw == nil {
-			w = new(responseWriter)
+			w = new(ResponseWriter)
 		} else {
-			w = cw.(*responseWriter)
+			w = cw.(*ResponseWriter)
 		}
 		w.Context = ctx
 		w.writer = writer

@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-type responseWriter struct {
+type ResponseWriter struct {
 	context.Context
 	writer   http.ResponseWriter
 	header   transports.Header
@@ -37,15 +37,15 @@ type responseWriter struct {
 	hijacked bool
 }
 
-func (w *responseWriter) Status() int {
+func (w *ResponseWriter) Status() int {
 	return w.result.Status()
 }
 
-func (w *responseWriter) SetStatus(status int) {
+func (w *ResponseWriter) SetStatus(status int) {
 	w.result.SetStatus(status)
 }
 
-func (w *responseWriter) SetCookie(cookie *transports.Cookie) {
+func (w *ResponseWriter) SetCookie(cookie *transports.Cookie) {
 	c := http.Cookie{
 		Name:       bytex.ToString(cookie.Key()),
 		Value:      bytex.ToString(cookie.Value()),
@@ -63,11 +63,11 @@ func (w *responseWriter) SetCookie(cookie *transports.Cookie) {
 	http.SetCookie(w.writer, &c)
 }
 
-func (w *responseWriter) Header() transports.Header {
+func (w *ResponseWriter) Header() transports.Header {
 	return w.header
 }
 
-func (w *responseWriter) Succeed(v interface{}) {
+func (w *ResponseWriter) Succeed(v interface{}) {
 	w.result.Succeed(v)
 	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
 		w.Header().Set(transports.ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
@@ -76,7 +76,7 @@ func (w *responseWriter) Succeed(v interface{}) {
 	return
 }
 
-func (w *responseWriter) Failed(cause error) {
+func (w *ResponseWriter) Failed(cause error) {
 	w.result.Failed(cause)
 	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
 		w.Header().Set(transports.ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
@@ -85,19 +85,19 @@ func (w *responseWriter) Failed(cause error) {
 	return
 }
 
-func (w *responseWriter) Write(body []byte) (int, error) {
+func (w *ResponseWriter) Write(body []byte) (int, error) {
 	return w.result.Write(body)
 }
 
-func (w *responseWriter) Body() []byte {
+func (w *ResponseWriter) Body() []byte {
 	return w.result.Body()
 }
 
-func (w *responseWriter) BodyLen() int {
+func (w *ResponseWriter) BodyLen() int {
 	return w.result.BodyLen()
 }
 
-func (w *responseWriter) Hijack(f func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
+func (w *ResponseWriter) Hijack(f func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
 	if f == nil {
 		err = errors.Warning("fns: hijack function is nil")
 		return
@@ -117,14 +117,14 @@ func (w *responseWriter) Hijack(f func(ctx context.Context, conn net.Conn, rw *b
 	return
 }
 
-func (w *responseWriter) Hijacked() bool {
+func (w *ResponseWriter) Hijacked() bool {
 	return w.hijacked
 }
 
-func (w *responseWriter) WriteTimeout() time.Duration {
+func (w *ResponseWriter) WriteTimeout() time.Duration {
 	return w.result.WriteTimeout()
 }
 
-func (w *responseWriter) WriteDeadline() time.Time {
+func (w *ResponseWriter) WriteDeadline() time.Time {
 	return w.result.WriteDeadline()
 }

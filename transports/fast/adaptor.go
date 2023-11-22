@@ -26,37 +26,32 @@ import (
 )
 
 var (
-	requestPool  = sync.Pool{}
-	responsePool = sync.Pool{}
+	ctxPool = sync.Pool{}
 )
 
 func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		var r *Request
-		cr := requestPool.Get()
-		if cr == nil {
-			r = new(Request)
-			r.locals = make(context.Entries, 0, 1)
-		} else {
-			r = cr.(*Request)
+		var c *Context
+		cc := ctxPool.Get()
+		if cc == nil {
+			cc = &Context{
+				locals: make(context.Entries, 0, 1),
+			}
 		}
-		r.ctx = ctx
-
-		var w *responseWriter
-		cw := responsePool.Get()
-		if cw == nil {
-			w = new(responseWriter)
-			w.locals = make(context.Entries, 0, 1)
-		} else {
-			w = cw.(*responseWriter)
+		c = cc.(*Context)
+		c.RequestCtx = ctx
+		r := Request{
+			Context: c,
 		}
-		w.ctx = ctx
-		w.result = transports.AcquireResultResponseWriter(writeTimeout)
+		result := transports.AcquireResultResponseWriter(writeTimeout)
+		w := ResponseWriter{
+			Context: c,
+			result:  result,
+		}
 
-		h.Handle(w, r)
+		h.Handle(&w, &r)
 
 		ctx.SetStatusCode(w.Status())
-
 		if bodyLen := w.BodyLen(); bodyLen > 0 {
 			body := w.Body()
 			n := 0
@@ -69,14 +64,11 @@ func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.R
 			}
 		}
 
-		transports.ReleaseResultResponseWriter(w.result)
-		w.ctx = nil
-		w.locals.Reset()
-		w.result = nil
-		responsePool.Put(w)
-
-		r.ctx = nil
-		r.locals.Reset()
-		requestPool.Put(r)
+		// release result
+		transports.ReleaseResultResponseWriter(result)
+		// release ctx
+		c.RequestCtx = nil
+		c.locals.Reset()
+		ctxPool.Put(c)
 	}
 }

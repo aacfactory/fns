@@ -1,25 +1,9 @@
-/*
- * Copyright 2021 Wang Min Xiang
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * 	http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-package files
+package base
 
 import (
 	"context"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/cmd/fnc/internal/libs/files"
+	"github.com/aacfactory/fns/cmd/generates/files"
 	"github.com/aacfactory/fns/configs"
 	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/shareds"
@@ -74,7 +58,7 @@ func NewConfigFile(kind string, dir string) (cf *ConfigFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
-			err = errors.Warning("fnc: new config file failed").WithCause(err).WithMeta("dir", dir)
+			err = errors.Warning("fns: new config file failed").WithCause(err).WithMeta("dir", dir)
 			return
 		}
 	}
@@ -95,7 +79,8 @@ func NewConfigFile(kind string, dir string) (cf *ConfigFile, err error) {
 			name = "fns-prod.yaml"
 			break
 		default:
-			err = errors.Warning("").WithCause(errors.Warning("kind is invalid")).WithMeta("kind", kind)
+			err = errors.Warning("fns: new config file failed").WithCause(errors.Warning("kind is invalid")).WithMeta("kind", kind)
+			return
 		}
 	}
 	dir = filepath.ToSlash(filepath.Join(dir, "configs"))
@@ -114,21 +99,21 @@ type ConfigFile struct {
 	filename string
 }
 
-func (cf *ConfigFile) Name() (name string) {
-	name = cf.filename
+func (f *ConfigFile) Name() (name string) {
+	name = f.filename
 	return
 }
 
-func (cf *ConfigFile) Write(_ context.Context) (err error) {
-	if !files.ExistFile(cf.dir) {
-		mdErr := os.MkdirAll(cf.dir, 0644)
+func (f *ConfigFile) Write(_ context.Context) (err error) {
+	if !files.ExistFile(f.dir) {
+		mdErr := os.MkdirAll(f.dir, 0644)
 		if mdErr != nil {
-			err = errors.Warning("fnc: config file write failed").WithCause(mdErr).WithMeta("dir", cf.dir)
+			err = errors.Warning("fns: config file write failed").WithCause(mdErr).WithMeta("dir", f.dir)
 			return
 		}
 	}
 	config := configs.Config{}
-	switch cf.kind {
+	switch f.kind {
 	case "local":
 		config.Log = logs.Config{
 			Level:     "debug",
@@ -185,12 +170,12 @@ func (cf *ConfigFile) Write(_ context.Context) (err error) {
 	}
 	p, encodeErr := yaml.Marshal(config)
 	if encodeErr != nil {
-		err = errors.Warning("fnc: config file write failed").WithCause(encodeErr).WithMeta("filename", cf.filename)
+		err = errors.Warning("fns: config file write failed").WithCause(encodeErr).WithMeta("filename", f.filename)
 		return
 	}
-	writeErr := os.WriteFile(cf.filename, p, 0644)
+	writeErr := os.WriteFile(f.filename, p, 0644)
 	if writeErr != nil {
-		err = errors.Warning("fnc: config file write failed").WithCause(writeErr).WithMeta("filename", cf.filename)
+		err = errors.Warning("fns: config file write failed").WithCause(writeErr).WithMeta("filename", f.filename)
 		return
 	}
 	return

@@ -13,7 +13,7 @@ var Command = &cli.Command{
 	Name:        "init",
 	Aliases:     nil,
 	Usage:       "fns init --mod={mod} {project dir}",
-	Description: "create fns project",
+	Description: "init fns project",
 	ArgsUsage:   "",
 	Category:    "",
 	Flags: []cli.Flag{
@@ -32,22 +32,22 @@ var Command = &cli.Command{
 		if !filepath.IsAbs(projectDir) {
 			projectDir, err = filepath.Abs(projectDir)
 			if err != nil {
-				err = errors.Warning("fnc: create fns project failed").WithCause(err).WithMeta("dir", projectDir)
+				err = errors.Warning("fns: init fns project failed").WithCause(err).WithMeta("dir", projectDir)
 				return
 			}
 		}
 		projectDir = filepath.ToSlash(projectDir)
-		projectPath := strings.TrimSpace(ctx.String("path"))
+		projectPath := strings.TrimSpace(ctx.String("mod"))
 		if projectPath == "" {
-			err = errors.Warning("fnc: create fns project failed").WithCause(errors.Warning("path is required")).WithMeta("dir", projectDir)
+			err = errors.Warning("fns: init fns project failed").WithCause(errors.Warning("path is required")).WithMeta("dir", projectDir)
 			return
 		}
 		writeErr := base.Write(ctx.Context, projectPath, projectDir)
 		if writeErr != nil {
-			err = errors.Warning("fnc: create fns project failed").WithCause(writeErr).WithMeta("dir", projectDir).WithMeta("path", projectPath)
+			err = errors.Warning("fns: init fns project failed").WithCause(writeErr).WithMeta("dir", projectDir).WithMeta("path", projectPath)
 			return
 		}
-		fmt.Println("fnc: project has been created, please run `go mod tidy` to fetch requires!")
+		fmt.Println("fns: project has been initialized, please run `go mod tidy` to fetch requires and run `go generate` to generate source files!")
 		return
 	},
 }

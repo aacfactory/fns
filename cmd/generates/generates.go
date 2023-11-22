@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func New(bin string, annotations ...writers.FnAnnotationCodeWriter) (generator *Generator) {
@@ -101,7 +102,9 @@ func (action *Action) Handle(c *cli.Context) (err error) {
 			fmt.Println(result, "->", fmt.Sprintf("[%d/%d]", result.UnitNo, result.UnitNum), result.Data)
 		}
 		if result.Error != nil {
-			fmt.Println(fmt.Sprintf("%+v", result.Error))
+			err = result.Error
+			_ = process.Abort(1 * time.Second)
+			return
 		}
 	}
 	return

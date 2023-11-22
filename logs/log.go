@@ -28,15 +28,15 @@ import (
 )
 
 type WriterConfig struct {
-	Name    string          `json:"name" yaml:"name"`
-	Options json.RawMessage `json:"options" yaml:"options"`
+	Name    string          `json:"name,omitempty" yaml:"name,omitempty"`
+	Options json.RawMessage `json:"options,omitempty" yaml:"options,omitempty"`
 }
 
 type Config struct {
-	Level     string       `json:"level" yaml:"level,omitempty"`
-	Formatter string       `json:"formatter" yaml:"formatter,omitempty"`
-	Color     bool         `json:"color" yaml:"color,omitempty"`
-	Writer    WriterConfig `json:"writer" yaml:"writer"`
+	Level     string       `json:"level,omitempty" yaml:"level,omitempty"`
+	Formatter string       `json:"formatter,omitempty" yaml:"formatter,omitempty"`
+	Color     bool         `json:"color,omitempty" yaml:"color,omitempty"`
+	Writer    WriterConfig `json:"writer,omitempty" yaml:"writer,omitempty"`
 }
 
 func New(name string, config Config) (v Logger, err error) {

@@ -48,6 +48,7 @@ type Request interface {
 	SetCookie(key []byte, value []byte)
 	Path() []byte
 	Params() Params
+	FormValue(name []byte) (value []byte)
 	Body() ([]byte, error)
 	SetBody(body []byte)
 }

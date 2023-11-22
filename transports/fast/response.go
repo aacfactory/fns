@@ -165,13 +165,13 @@ func (w *responseWriter) BodyLen() int {
 	return w.result.BodyLen()
 }
 
-func (w *responseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
+func (w *responseWriter) Hijack(f func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
 	if f == nil {
 		err = errors.Warning("fns: hijack function is nil")
 		return
 	}
 	w.ctx.Hijack(func(c net.Conn) {
-		_ = f(c, nil)
+		_ = f(w, c, nil)
 	})
 	async = true
 	return
@@ -179,4 +179,12 @@ func (w *responseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err
 
 func (w *responseWriter) Hijacked() bool {
 	return w.ctx.Hijacked()
+}
+
+func (w *responseWriter) WriteTimeout() time.Duration {
+	return w.result.WriteTimeout()
+}
+
+func (w *responseWriter) WriteDeadline() time.Time {
+	return w.result.WriteDeadline()
 }

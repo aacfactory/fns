@@ -26,6 +26,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type responseWriter struct {
@@ -96,7 +97,7 @@ func (w *responseWriter) BodyLen() int {
 	return w.result.BodyLen()
 }
 
-func (w *responseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
+func (w *responseWriter) Hijack(f func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
 	if f == nil {
 		err = errors.Warning("fns: hijack function is nil")
 		return
@@ -112,10 +113,18 @@ func (w *responseWriter) Hijack(f func(conn net.Conn, rw *bufio.ReadWriter) (err
 		return
 	}
 	w.hijacked = true
-	err = f(conn, brw)
+	err = f(w.Context, conn, brw)
 	return
 }
 
 func (w *responseWriter) Hijacked() bool {
 	return w.hijacked
+}
+
+func (w *responseWriter) WriteTimeout() time.Duration {
+	return w.result.WriteTimeout()
+}
+
+func (w *responseWriter) WriteDeadline() time.Time {
+	return w.result.WriteDeadline()
 }

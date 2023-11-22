@@ -20,9 +20,9 @@ package hooks
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"github.com/aacfactory/workers"
 )
 
 type Config map[string]json.RawMessage
@@ -51,6 +51,7 @@ type Options struct {
 }
 
 type Hook interface {
-	workers.NamedTask
+	Name() string
 	Construct(options Options) (err error)
+	Execute(ctx context.Context)
 }

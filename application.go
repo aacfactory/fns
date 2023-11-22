@@ -306,6 +306,7 @@ type application struct {
 	hooks           []hooks.Hook
 	shutdownTimeout time.Duration
 	synced          bool
+	cancel          context.CancelFunc
 	signalCh        chan os.Signal
 }
 
@@ -375,8 +376,34 @@ func (app *application) Run(ctx context.Context) Application {
 		}
 	}
 	// hooks
+	ctx, app.cancel = context.WithCancel(ctx)
+	runtime.With(ctx, app.rt)
 	for _, hook := range app.hooks {
-		app.worker.MustDispatch(runtime.With(ctx, app.rt), hook)
+		name := hook.Name()
+		if name == "" {
+			if app.log.DebugEnabled() {
+				app.log.Debug().Message("fns: one hook has no name")
+			}
+			continue
+		}
+		hookConfig, hookConfigErr := app.config.Hooks.Get(name)
+		if hookConfigErr != nil {
+			if app.log.DebugEnabled() {
+				app.log.Debug().With("hook", name).Cause(hookConfigErr).Message("fns: get hook config failed")
+			}
+			continue
+		}
+		hookErr := hook.Construct(hooks.Options{
+			Log:    app.log.With("hook", name),
+			Config: hookConfig,
+		})
+		if hookErr != nil {
+			if app.log.DebugEnabled() {
+				app.log.Debug().With("hook", name).Cause(hookErr).Message("fns: construct hook failed")
+			}
+			continue
+		}
+		go hook.Execute(ctx)
 		if app.log.DebugEnabled() {
 			app.log.Debug().With("hook", hook.Name()).Message("fns: hook is dispatched")
 		}
@@ -404,6 +431,7 @@ func (app *application) shutdown() {
 	if timeout < 1 {
 		timeout = 10 * time.Minute
 	}
+	app.cancel()
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	// status
 	app.status.Off()

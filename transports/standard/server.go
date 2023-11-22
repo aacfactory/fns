@@ -74,7 +74,7 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 			return
 		}
 	}
-	writeTimeout := 30 * time.Second
+	writeTimeout := 10 * time.Second
 	if config.WriteTimeout != "" {
 		writeTimeout, err = time.ParseDuration(strings.TrimSpace(config.WriteTimeout))
 		if err != nil {
@@ -97,7 +97,7 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 
 	server := &http.Server{
 		Addr:                         fmt.Sprintf(":%d", port),
-		Handler:                      HttpTransportHandlerAdaptor(handler, int(maxRequestBodySize)),
+		Handler:                      HttpTransportHandlerAdaptor(handler, int(maxRequestBodySize), writeTimeout),
 		DisableGeneralOptionsHandler: false,
 		TLSConfig:                    srvTLS,
 		ReadTimeout:                  readTimeout,

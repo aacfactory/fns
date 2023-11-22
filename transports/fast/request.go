@@ -152,6 +152,10 @@ func (r *Request) Params() transports.Params {
 	return &Params{args: r.ctx.QueryArgs()}
 }
 
+func (r *Request) FormValue(name []byte) (value []byte) {
+	return r.ctx.FormValue(string(name))
+}
+
 func (r *Request) Body() ([]byte, error) {
 	return r.ctx.PostBody(), nil
 }

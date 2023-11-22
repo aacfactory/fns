@@ -324,12 +324,15 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 			WithCause(ctx.Err())
 		return
 	}
-	if s.service.Title == "" {
+	if s.service.Internal {
 		return
+	}
+	if s.service.Title == "" {
+		s.service.Title = s.service.Name
 	}
 	fnCodes := make([]gcg.Code, 0, 1)
 	for _, function := range s.service.Functions {
-		if function.Title() == "" {
+		if function.Internal() {
 			continue
 		}
 		fnCode := gcg.Statements()
@@ -338,7 +341,6 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 		fnCode.Tab().Token("documents.NewFn(").Token("\"").Token(function.Name()).Token("\"").Token(")").Dot().Line()
 		fnCode.Tab().Tab().Token("SetInfo(").Token("\"").Token(strings.ReplaceAll(function.Title(), "\n", "\\n")).Token("\", ").Token("\"").Token(strings.ReplaceAll(function.Description(), "\n", "\\n")).Token("\"").Token(")").Dot().Line()
 		fnCode.Tab().Tab().
-			Token(fmt.Sprintf("SetInternal(%v)", function.Internal())).Dot().
 			Token(fmt.Sprintf("SetReadonly(%v)", function.Readonly())).Dot().
 			Token(fmt.Sprintf("SetDeprecated(%v)", function.Deprecated())).Dot().Line()
 		fnCode.Tab().Tab().
@@ -382,7 +384,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 	docFnCode.Name("Document")
 	docFnCode.AddResult("document", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/services/documents"), "Endpoint"))
 	body := gcg.Statements()
-	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", \"%s\", svc.Internal(), svc.Version())", strings.ReplaceAll(s.service.Title, "\n", "\\n"), strings.ReplaceAll(s.service.Description, "\n", "\\n")))
+	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", \"%s\")", strings.ReplaceAll(s.service.Title, "\n", "\\n"), strings.ReplaceAll(s.service.Description, "\n", "\\n")))
 	for _, fnCode := range fnCodes {
 		body.Line().Add(fnCode).Line()
 	}

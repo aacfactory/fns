@@ -29,6 +29,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type ResponseWriter interface {
@@ -42,8 +43,10 @@ type ResponseWriter interface {
 	Write(body []byte) (int, error)
 	Body() []byte
 	BodyLen() int
-	Hijack(func(conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error)
+	Hijack(func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error)
 	Hijacked() bool
+	WriteTimeout() time.Duration
+	WriteDeadline() time.Time
 }
 
 type WriteBuffer interface {
@@ -55,17 +58,25 @@ var (
 	responseWriterPool = sync.Pool{}
 )
 
-func AcquireResultResponseWriter() *ResultResponseWriter {
+func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
+	deadline := time.Time{}
+	if timeout > 0 {
+		deadline = deadline.Add(timeout)
+	}
 	buf := bytebufferpool.Get()
 	cached := responseWriterPool.Get()
 	if cached == nil {
 		return &ResultResponseWriter{
-			status: 0,
-			body:   buf,
+			status:   0,
+			timeout:  timeout,
+			deadline: deadline,
+			body:     buf,
 		}
 	}
 	r := cached.(*ResultResponseWriter)
 	r.body = buf
+	r.timeout = timeout
+	r.deadline = deadline
 	return r
 }
 
@@ -73,12 +84,16 @@ func ReleaseResultResponseWriter(w *ResultResponseWriter) {
 	bytebufferpool.Put(w.body)
 	w.body = nil
 	w.status = 0
+	w.timeout = 0
+	w.deadline = time.Time{}
 	responseWriterPool.Put(w)
 }
 
 type ResultResponseWriter struct {
-	status int
-	body   *bytebufferpool.ByteBuffer
+	status   int
+	timeout  time.Duration
+	deadline time.Time
+	body     *bytebufferpool.ByteBuffer
 }
 
 func (w *ResultResponseWriter) Status() int {
@@ -154,6 +169,14 @@ func (w *ResultResponseWriter) Write(body []byte) (int, error) {
 		return 0, nil
 	}
 	return w.body.Write(body)
+}
+
+func (w *ResultResponseWriter) WriteTimeout() time.Duration {
+	return w.timeout
+}
+
+func (w *ResultResponseWriter) WriteDeadline() time.Time {
+	return w.deadline
 }
 
 const (

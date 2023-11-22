@@ -60,6 +60,25 @@ func (documents Documents) Swap(i, j int) {
 	documents[i], documents[j] = documents[j], documents[i]
 }
 
+func (documents Documents) Latest() (document Document) {
+	size := documents.Len()
+	if documents.Len() == 0 {
+		return
+	}
+	return documents[size-1]
+}
+
+func (documents Documents) Version(ver versions.Version) (document Document, has bool) {
+	for _, d := range documents {
+		if d.Version.Equals(ver) {
+			document = d
+			has = true
+			return
+		}
+	}
+	return
+}
+
 func (documents Documents) Add(document Document) Documents {
 	for _, stored := range documents {
 		if stored.Id == document.Id {
@@ -69,4 +88,19 @@ func (documents Documents) Add(document Document) Documents {
 	n := append(documents, document)
 	sort.Sort(n)
 	return n
+}
+
+func (documents Documents) AddEndpoint(id string, version versions.Version, endpoint Endpoint) Documents {
+	for i, stored := range documents {
+		if stored.Id == id {
+			stored.Add(endpoint)
+			documents[i] = stored
+			return documents
+		}
+	}
+	return documents.Add(Document{
+		Id:        id,
+		Version:   version,
+		Endpoints: Endpoints{endpoint},
+	})
 }

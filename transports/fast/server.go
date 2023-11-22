@@ -106,7 +106,7 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 	}
 
 	server := &fasthttp.Server{
-		Handler:                            handlerAdaptor(handler),
+		Handler:                            handlerAdaptor(handler, writeTimeout),
 		ErrorHandler:                       errorHandler,
 		Name:                               "",
 		Concurrency:                        0,

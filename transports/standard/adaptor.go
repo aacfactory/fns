@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"net/http"
 	"sync"
+	"time"
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 	responsePool = sync.Pool{}
 )
 
-func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.Handler {
+func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int, writeTimeout time.Duration) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		ctx := context.Acquire(request.Context())
 
@@ -54,7 +55,7 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int) http.
 		w.Context = ctx
 		w.writer = writer
 		w.header = WrapHttpHeader(writer.Header())
-		w.result = transports.AcquireResultResponseWriter()
+		w.result = transports.AcquireResultResponseWriter(writeTimeout)
 
 		h.Handle(w, r)
 

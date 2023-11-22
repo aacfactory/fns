@@ -17,28 +17,22 @@
 
 package documents
 
-import "github.com/aacfactory/fns/commons/versions"
-
-func New(name string, title string, description string, internal bool, ver versions.Version) Endpoint {
+func New(name string, title string, description string) Endpoint {
 	return Endpoint{
 		Name:        name,
 		Title:       title,
 		Description: description,
-		Internal:    internal,
-		Version:     ver,
 		Functions:   make(Fns, 0, 1),
 		Elements:    make(Elements, 0, 1),
 	}
 }
 
 type Endpoint struct {
-	Name        string           `json:"name"`
-	Title       string           `json:"title"`
-	Description string           `json:"description"`
-	Internal    bool             `json:"internal"`
-	Version     versions.Version `json:"version"`
-	Functions   Fns              `json:"functions"`
-	Elements    Elements         `json:"elements"`
+	Name        string   `json:"name"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Functions   Fns      `json:"functions"`
+	Elements    Elements `json:"elements"`
 }
 
 func (endpoint *Endpoint) Defined() bool {
@@ -57,9 +51,6 @@ func (endpoint *Endpoint) AddFn(fn Fn) {
 	if fn.Result.Exist() {
 		paramRef := endpoint.addElement(fn.Result)
 		fn.Result = paramRef
-	}
-	if endpoint.Internal {
-		fn.Internal = true
 	}
 	endpoint.Functions = endpoint.Functions.Add(fn)
 }

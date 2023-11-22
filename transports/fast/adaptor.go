@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"sync"
+	"time"
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 	responsePool = sync.Pool{}
 )
 
-func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
+func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var r *Request
 		cr := requestPool.Get()
@@ -50,7 +51,7 @@ func handlerAdaptor(h transports.Handler) fasthttp.RequestHandler {
 			w = cw.(*responseWriter)
 		}
 		w.ctx = ctx
-		w.result = transports.AcquireResultResponseWriter()
+		w.result = transports.AcquireResultResponseWriter(writeTimeout)
 
 		h.Handle(w, r)
 

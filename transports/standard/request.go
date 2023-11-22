@@ -97,6 +97,10 @@ func (r *Request) Params() transports.Params {
 	}
 }
 
+func (r *Request) FormValue(name []byte) (value []byte) {
+	return []byte(r.request.FormValue(string(name)))
+}
+
 func (r *Request) Body() ([]byte, error) {
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)

@@ -68,6 +68,10 @@ func (r *Request) Header() transports.Header {
 	return RequestHeader{&r.Context.Request.Header}
 }
 
+func (r *Request) RequestURI() []byte {
+	return r.Context.RequestURI()
+}
+
 func (r *Request) Path() []byte {
 	return r.Context.URI().Path()
 }

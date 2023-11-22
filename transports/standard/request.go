@@ -87,6 +87,10 @@ func (r *Request) Header() transports.Header {
 	return WrapHttpHeader(r.request.Header)
 }
 
+func (r *Request) RequestURI() []byte {
+	return bytex.FromString(r.request.RequestURI)
+}
+
 func (r *Request) Path() []byte {
 	return bytex.FromString(r.request.URL.Path)
 }

@@ -46,6 +46,7 @@ type Request interface {
 	Header() Header
 	Cookie(key []byte) (value []byte)
 	SetCookie(key []byte, value []byte)
+	RequestURI() []byte
 	Path() []byte
 	Params() Params
 	FormValue(name []byte) (value []byte)

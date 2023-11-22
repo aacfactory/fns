@@ -117,18 +117,18 @@ func (action *Action) process(ctx context.Context, project string, workspace str
 		mod, err = sources.New(moduleFilename)
 	}
 	if err != nil {
-		err = errors.Warning("sources: generate failed").WithCause(err)
+		err = errors.Warning("generates: generate failed").WithCause(err)
 		return
 	}
 	parseModErr := mod.Parse(ctx)
 	if parseModErr != nil {
-		err = errors.Warning("sources: generate failed").WithCause(parseModErr)
+		err = errors.Warning("generates: generate failed").WithCause(parseModErr)
 		return
 	}
 	// parse services
 	services, parseServicesErr := mod.Services()
 	if parseServicesErr != nil {
-		err = errors.Warning("sources: generate failed").WithCause(parseServicesErr)
+		err = errors.Warning("generates: generate failed").WithCause(parseServicesErr)
 		return
 	}
 	// make process controller
@@ -146,9 +146,9 @@ func (action *Action) process(ctx context.Context, project string, workspace str
 		}
 		serviceCodeFileUnits = append(serviceCodeFileUnits, writers.Unit(writers.NewServiceFile(service, action.annotations)))
 	}
-	process.Add("services: parsing", functionParseUnits...)
-	process.Add("services: writing", serviceCodeFileUnits...)
-	process.Add("services: deploys", writers.Unit(writers.NewDeploysFile(filepath.ToSlash(filepath.Join(mod.Dir, "modules")), services)))
+	process.Add("generates: parsing", functionParseUnits...)
+	process.Add("generates: writing", serviceCodeFileUnits...)
+	process.Add("generates: deploys", writers.Unit(writers.NewDeploysFile(filepath.ToSlash(filepath.Join(mod.Dir, "modules")), services)))
 	controller = process
 	return
 }

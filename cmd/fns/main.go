@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/fns/cmd/fns/initialization"
+	"github.com/aacfactory/fns/cmd/fns/ssc"
 	"github.com/urfave/cli/v2"
 	"os"
 )
@@ -41,6 +42,7 @@ func main() {
 	app.Copyright = Copyright
 	app.Commands = []*cli.Command{
 		initialization.Command,
+		ssc.Command,
 	}
 	if err := app.RunContext(context.Background(), os.Args); err != nil {
 		fmt.Println(fmt.Sprintf("%+v", err))

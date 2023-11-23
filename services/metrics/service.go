@@ -81,11 +81,10 @@ func (fn *reportFn) Handle(r services.Request) (v interface{}, err error) {
 	if !r.Param().Exist() {
 		return
 	}
-	metric := Metric{}
-	paramErr := r.Param().Scan(&metric)
+	param, paramErr := services.ValueOfParam[Metric](r.Param())
 	if paramErr != nil {
 		return
 	}
-	fn.reporter.Report(r, metric)
+	fn.reporter.Report(r, param)
 	return
 }

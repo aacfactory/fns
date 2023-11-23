@@ -96,8 +96,7 @@ func (fn *setFn) Handle(r services.Request) (v interface{}, err error) {
 		err = errors.Warning("fns: set cache failed").WithCause(errors.Warning("param is invalid"))
 		return
 	}
-	param := setFnParam{}
-	paramErr := r.Param().Scan(&param)
+	param, paramErr := services.ValueOfParam[setFnParam](r.Param())
 	if paramErr != nil {
 		err = errors.Warning("fns: set cache failed").WithCause(paramErr)
 		return

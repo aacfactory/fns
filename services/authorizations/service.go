@@ -39,8 +39,7 @@ func (fn *encodeFn) Readonly() bool {
 }
 
 func (fn *encodeFn) Handle(r services.Request) (v interface{}, err error) {
-	param := Authorization{}
-	paramErr := r.Param().Scan(&param)
+	param, paramErr := services.ValueOfParam[Authorization](r.Param())
 	if paramErr != nil {
 		err = errors.BadRequest("authorizations: invalid param")
 		return
@@ -71,8 +70,7 @@ func (fn *decodeFn) Readonly() bool {
 }
 
 func (fn *decodeFn) Handle(r services.Request) (v interface{}, err error) {
-	param := Token{}
-	paramErr := r.Param().Scan(&param)
+	param, paramErr := services.ValueOfParam[Token](r.Param())
 	if paramErr != nil {
 		err = errors.BadRequest("authorizations: invalid param")
 		return

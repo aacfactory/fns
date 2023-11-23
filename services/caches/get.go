@@ -50,10 +50,9 @@ func Get(ctx context.Context, param interface{}) (p []byte, has bool, err error)
 		err = doErr
 		return
 	}
-	result := getResult{}
-	scanErr := response.Scan(&result)
-	if scanErr != nil {
-		err = errors.Warning("fns: get cache failed").WithCause(scanErr)
+	result, resultErr := services.ValueOfResponse[getResult](response)
+	if resultErr != nil {
+		err = errors.Warning("fns: get cache failed").WithCause(resultErr)
 		return
 	}
 	p = result.Value
@@ -91,8 +90,7 @@ func (fn *getFn) Handle(r services.Request) (v interface{}, err error) {
 		err = errors.Warning("fns: get cache failed").WithCause(errors.Warning("param is invalid"))
 		return
 	}
-	param := getFnParam{}
-	paramErr := r.Param().Scan(&param)
+	param, paramErr := services.ValueOfParam[getFnParam](r.Param())
 	if paramErr != nil {
 		err = errors.Warning("fns: get cache failed").WithCause(paramErr)
 		return

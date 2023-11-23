@@ -72,10 +72,9 @@ func Encode(ctx context.Context, authorization Authorization) (token Token, err 
 		err = handleErr
 		return
 	}
-	token = make([]byte, 0, 1)
-	scanErr := response.Scan(&token)
-	if scanErr != nil {
-		err = errors.Warning("authorizations: scan encode value failed").WithCause(scanErr)
+	token, err = services.ValueOfResponse[Token](response)
+	if err != nil {
+		err = errors.Warning("authorizations: scan encode value failed").WithCause(err)
 		return
 	}
 	return
@@ -92,9 +91,9 @@ func Decode(ctx context.Context, token Token) (authorization Authorization, err 
 		err = handleErr
 		return
 	}
-	scanErr := response.Scan(&authorization)
-	if scanErr != nil {
-		err = errors.Warning("authorizations: scan decode value failed").WithCause(scanErr)
+	authorization, err = services.ValueOfResponse[Authorization](response)
+	if err != nil {
+		err = errors.Warning("authorizations: scan decode value failed").WithCause(err)
 		return
 	}
 	return

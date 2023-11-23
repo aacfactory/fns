@@ -65,9 +65,9 @@ func Enforce(ctx context.Context, param EnforceParam) (ok bool, err error) {
 		err = handleErr
 		return
 	}
-	scanErr := response.Scan(&ok)
-	if scanErr != nil {
-		err = errors.Warning("permissions: enforce failed").WithCause(scanErr)
+	ok, err = services.ValueOfParam[bool](response)
+	if err != nil {
+		err = errors.Warning("permissions: enforce failed").WithCause(err)
 		return
 	}
 	return

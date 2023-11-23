@@ -77,8 +77,7 @@ func (fn *removeFn) Handle(r services.Request) (v interface{}, err error) {
 		err = errors.Warning("fns: remove cache failed").WithCause(errors.Warning("param is invalid"))
 		return
 	}
-	param := removeFnParam{}
-	paramErr := r.Param().Scan(&param)
+	param, paramErr := services.ValueOfParam[removeFnParam](r.Param())
 	if paramErr != nil {
 		err = errors.Warning("fns: remove cache failed").WithCause(paramErr)
 		return

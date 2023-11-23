@@ -45,8 +45,7 @@ func (fn *enforceFn) Readonly() bool {
 }
 
 func (fn *enforceFn) Handle(r services.Request) (v interface{}, err error) {
-	param := EnforceParam{}
-	paramErr := r.Param().Scan(&param)
+	param, paramErr := services.ValueOfParam[EnforceParam](r.Param())
 	if paramErr != nil {
 		err = errors.BadRequest("permissions: invalid enforce param").WithCause(paramErr)
 		return

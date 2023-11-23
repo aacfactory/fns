@@ -190,7 +190,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	if ok {
 		components := service.Components()
 		if len(components) > 0 {
-			WithComponents(ctx, components)
+			WithComponents(ctx, name, components)
 		}
 	}
 	// ctx <<<
@@ -233,11 +233,11 @@ func (manager *Manager) Listen(ctx context.Context) (err error) {
 			continue
 		}
 		errCh := make(chan error, 1)
-
-		lnCtx := context.WithValue(ctx, bytex.FromString("listener"), ln.Name())
-		fLog.With(lnCtx, manager.log.With("service", ln.Name()))
+		name := ln.Name()
+		lnCtx := context.WithValue(ctx, bytex.FromString("listener"), name)
+		fLog.With(lnCtx, manager.log.With("service", name))
 		if components := ln.Components(); len(components) > 0 {
-			WithComponents(lnCtx, components)
+			WithComponents(lnCtx, bytex.FromString(name), components)
 		}
 		go func(ctx context.Context, ln Listenable, errCh chan error) {
 			lnErr := ln.Listen(ctx)

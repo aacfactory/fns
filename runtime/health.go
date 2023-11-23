@@ -62,7 +62,7 @@ func (handler *healthHandler) Handle(w transports.ResponseWriter, r transports.R
 	rt := Load(r)
 	running, _ := rt.Running()
 	w.Succeed(Health{
-		Id:      rt.AppId(),
+		Id:      bytex.ToString(rt.AppId()),
 		Name:    rt.AppName(),
 		Version: rt.AppVersion().String(),
 		Running: running,

@@ -93,6 +93,16 @@ func (s *ServiceFile) Write(ctx context.Context) (err error) {
 	}
 	file.AddCode(proxies)
 
+	// componentCode
+	component, componentErr := s.componentCode(ctx)
+	if componentErr != nil {
+		err = errors.Warning("sources: code file write failed").
+			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+			WithCause(componentErr)
+		return
+	}
+	file.AddCode(component)
+
 	// service
 	service, serviceErr := s.serviceCode(ctx)
 	if serviceErr != nil {
@@ -180,6 +190,32 @@ func (s *ServiceFile) constNamesCode(ctx context.Context) (code gcg.Code, err er
 		stmt.Add(gcg.Var(function.ConstIdent, gcg.Token(fmt.Sprintf(" = []byte(\"%s\")", function.Name()))))
 	}
 	code = stmt.Build()
+	return
+}
+
+func (s *ServiceFile) componentCode(ctx context.Context) (code gcg.Code, err error) {
+	if ctx.Err() != nil {
+		err = errors.Warning("sources: service write failed").
+			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+			WithCause(ctx.Err())
+		return
+	}
+	stmt := gcg.Statements()
+	stmt.Add(gcg.Token("// +-------------------------------------------------------------------------------------------------------------------+").Line().Line())
+
+	fn := gcg.Func()
+	fn.Name("Component[C services.Component]")
+	fn.AddParam("ctx", contextCode())
+	fn.AddParam("name", gcg.Token("string"))
+	fn.AddResult("component", gcg.Token("C"))
+	fn.AddResult("has", gcg.Token("bool"))
+	body := gcg.Statements()
+	body.Tab().Token("component, has = services.LoadComponent[C](ctx, _endpointName, name)").Line()
+	body.Tab().Return()
+	fn.Body(body)
+
+	stmt.Add(fn.Build()).Line()
+	code = stmt
 	return
 }
 

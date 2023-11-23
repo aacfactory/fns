@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
+	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
@@ -49,6 +50,18 @@ func Load(ctx context.Context) *Runtime {
 		return nil
 	}
 	return rt
+}
+
+func AppId(ctx context.Context) []byte {
+	return Load(ctx).AppId()
+}
+
+func AppName(ctx context.Context) string {
+	return Load(ctx).AppName()
+}
+
+func AppVersion(ctx context.Context) versions.Version {
+	return Load(ctx).AppVersion()
 }
 
 func Endpoints(ctx context.Context) services.Endpoints {

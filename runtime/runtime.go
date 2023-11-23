@@ -31,7 +31,7 @@ import (
 
 func New(id string, name string, version versions.Version, status *switchs.Switch, log logs.Logger, worker workers.Workers, endpoints services.Endpoints, barrier barriers.Barrier, shared shareds.Shared) *Runtime {
 	return &Runtime{
-		appId:      id,
+		appId:      []byte(id),
 		appName:    name,
 		appVersion: version,
 		status:     status,
@@ -44,7 +44,7 @@ func New(id string, name string, version versions.Version, status *switchs.Switc
 }
 
 type Runtime struct {
-	appId      string
+	appId      []byte
 	appName    string
 	appVersion versions.Version
 	status     *switchs.Switch
@@ -55,7 +55,7 @@ type Runtime struct {
 	shared     shareds.Shared
 }
 
-func (rt *Runtime) AppId() string {
+func (rt *Runtime) AppId() []byte {
 	return rt.appId
 }
 

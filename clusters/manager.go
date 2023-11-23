@@ -259,7 +259,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	if ok {
 		components := service.Components()
 		if len(components) > 0 {
-			services.WithComponents(ctx, components)
+			services.WithComponents(ctx, name, components)
 		}
 	}
 	// ctx <<<

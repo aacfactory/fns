@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	contextComponentsKey = []byte("@fns:service:components")
+	contextComponentsKeyPrefix = []byte("@fns:service:components:")
 )
 
 type Component interface {
@@ -35,9 +35,9 @@ type Component interface {
 
 type Components []Component
 
-func (components Components) Get(key string) (v Component, has bool) {
+func (components Components) Get(name string) (v Component, has bool) {
 	for _, component := range components {
-		if component.Name() == key {
+		if component.Name() == name {
 			v = component
 			has = true
 			return
@@ -46,12 +46,12 @@ func (components Components) Get(key string) (v Component, has bool) {
 	return
 }
 
-func WithComponents(ctx context.Context, components Components) {
-	ctx.SetLocalValue(contextComponentsKey, components)
+func WithComponents(ctx context.Context, service []byte, components Components) {
+	ctx.SetLocalValue(append(contextComponentsKeyPrefix, service...), components)
 }
 
-func LoadComponents(ctx context.Context) Components {
-	v := ctx.LocalValue(contextComponentsKey)
+func LoadComponents(ctx context.Context, service []byte) Components {
+	v := ctx.LocalValue(append(contextComponentsKeyPrefix, service...))
 	if v == nil {
 		return nil
 	}
@@ -63,10 +63,15 @@ func LoadComponents(ctx context.Context) Components {
 	return c
 }
 
-func LoadComponent(ctx context.Context, name string) (Component, bool) {
-	v := LoadComponents(ctx)
-	if len(v) == 0 {
-		return nil, false
+func LoadComponent[C Component](ctx context.Context, service []byte, name string) (c C, has bool) {
+	cc := LoadComponents(ctx, service)
+	if len(cc) == 0 {
+		return
 	}
-	return v.Get(name)
+	v, exist := cc.Get(name)
+	if !exist {
+		return
+	}
+	c, has = v.(C)
+	return
 }

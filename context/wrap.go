@@ -19,8 +19,6 @@ package context
 
 import (
 	"context"
-	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/scanner"
 	"time"
 )
 
@@ -58,21 +56,6 @@ func WithValue(parent context.Context, key []byte, val any) Context {
 	}
 	ctx.SetLocalValue(key, val)
 	return ctx
-}
-
-func ScanValue(ctx context.Context, key any, val any) (has bool, err error) {
-	v := ctx.Value(key)
-	if v == nil {
-		return
-	}
-	s := scanner.New(v)
-	err = s.Scan(val)
-	if err != nil {
-		err = errors.Warning("fns: scan context value failed").WithCause(err)
-		return
-	}
-	has = true
-	return
 }
 
 type CancelFunc context.CancelFunc

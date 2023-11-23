@@ -178,7 +178,15 @@ func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
 }
 
 func (fn *Fn) verifyAuthorization(r services.Request) (err error) {
-	authorization := authorizations.Load(r)
+	authorization, has, loadErr := authorizations.Load(r)
+	if loadErr != nil {
+		err = authorizations.ErrUnauthorized.WithCause(loadErr)
+		return
+	}
+	if !has {
+		err = authorizations.ErrUnauthorized
+		return
+	}
 	if authorization.Exist() {
 		if !authorization.Validate() {
 			err = authorizations.ErrUnauthorized

@@ -34,10 +34,8 @@ func With(ctx context.Context, authorization Authorization) {
 	ctx.SetUserValue(contextUserKey, authorization)
 }
 
-func Load(ctx context.Context) Authorization {
-	authorization := Authorization{}
-	_, _ = ctx.ScanUserValue(contextUserKey, &authorization)
-	return authorization
+func Load(ctx context.Context) (Authorization, bool, error) {
+	return context.UserValue[Authorization](ctx, contextUserKey)
 }
 
 type Authorization struct {
@@ -102,7 +100,15 @@ func Decode(ctx context.Context, token Token) (authorization Authorization, err 
 var ErrUnauthorized = errors.Unauthorized("unauthorized")
 
 func Validate(ctx context.Context) (err error) {
-	authorization := Load(ctx)
+	authorization, has, loadErr := Load(ctx)
+	if loadErr != nil {
+		err = ErrUnauthorized.WithCause(loadErr)
+		return
+	}
+	if !has {
+		err = ErrUnauthorized
+		return
+	}
 	if authorization.Exist() {
 		if authorization.Validate() {
 			return

@@ -31,7 +31,15 @@ var (
 )
 
 func EnforceContext(ctx context.Context) (err error) {
-	authorization := authorizations.Load(ctx)
+	authorization, has, loadErr := authorizations.Load(ctx)
+	if loadErr != nil {
+		err = authorizations.ErrUnauthorized.WithCause(loadErr)
+		return
+	}
+	if !has {
+		err = authorizations.ErrUnauthorized
+		return
+	}
 	if !authorization.Validate() {
 		err = authorizations.ErrUnauthorized
 		return

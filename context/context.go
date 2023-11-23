@@ -19,9 +19,6 @@ package context
 
 import (
 	"context"
-	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/scanner"
 	"sync"
 	"unsafe"
 )
@@ -57,12 +54,11 @@ func Release(ctx context.Context) {
 type Context interface {
 	context.Context
 	UserValue(key []byte) any
-	ScanUserValue(key []byte, val any) (has bool, err error)
 	SetUserValue(key []byte, val any)
 	UserValues(fn func(key []byte, val any))
 	LocalValue(key []byte) any
-	ScanLocalValue(key []byte, val any) (has bool, err error)
 	SetLocalValue(key []byte, val any)
+	LocalValues(fn func(key []byte, val any))
 }
 
 type context_ struct {
@@ -81,21 +77,6 @@ func (c *context_) UserValue(key []byte) any {
 		return parent.UserValue(key)
 	}
 	return nil
-}
-
-func (c *context_) ScanUserValue(key []byte, val any) (has bool, err error) {
-	v := c.UserValue(key)
-	if v == nil {
-		return
-	}
-	s := scanner.New(v)
-	err = s.Scan(val)
-	if err != nil {
-		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
-		return
-	}
-	has = true
-	return
 }
 
 func (c *context_) SetUserValue(key []byte, val any) {
@@ -122,23 +103,16 @@ func (c *context_) LocalValue(key []byte) any {
 	return nil
 }
 
-func (c *context_) ScanLocalValue(key []byte, val any) (has bool, err error) {
-	v := c.LocalValue(key)
-	if v == nil {
-		return
-	}
-	s := scanner.New(v)
-	err = s.Scan(val)
-	if err != nil {
-		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
-		return
-	}
-	has = true
-	return
-}
-
 func (c *context_) SetLocalValue(key []byte, val any) {
 	c.locals.Set(key, val)
+}
+
+func (c *context_) LocalValues(fn func(key []byte, val any)) {
+	parent, ok := c.Context.(Context)
+	if ok {
+		parent.LocalValues(fn)
+	}
+	c.locals.Foreach(fn)
 }
 
 func (c *context_) Value(key any) any {

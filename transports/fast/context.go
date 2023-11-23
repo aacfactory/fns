@@ -18,9 +18,6 @@
 package fast
 
 import (
-	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/scanner"
 	"github.com/aacfactory/fns/context"
 	"github.com/valyala/fasthttp"
 )
@@ -32,21 +29,6 @@ type Context struct {
 
 func (ctx *Context) UserValue(key []byte) any {
 	return ctx.RequestCtx.UserValueBytes(key)
-}
-
-func (ctx *Context) ScanUserValue(key []byte, val any) (has bool, err error) {
-	v := ctx.RequestCtx.UserValue(key)
-	if v == nil {
-		return
-	}
-	s := scanner.New(v)
-	err = s.Scan(val)
-	if err != nil {
-		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
-		return
-	}
-	has = true
-	return
 }
 
 func (ctx *Context) SetUserValue(key []byte, val any) {
@@ -65,21 +47,10 @@ func (ctx *Context) LocalValue(key []byte) any {
 	return nil
 }
 
-func (ctx *Context) ScanLocalValue(key []byte, val any) (has bool, err error) {
-	v := ctx.LocalValue(key)
-	if v == nil {
-		return
-	}
-	s := scanner.New(v)
-	err = s.Scan(val)
-	if err != nil {
-		err = errors.Warning("fns: scan context value failed").WithMeta("key", bytex.ToString(key)).WithCause(err)
-		return
-	}
-	has = true
-	return
-}
-
 func (ctx *Context) SetLocalValue(key []byte, val any) {
 	ctx.locals.Set(key, val)
+}
+
+func (ctx *Context) LocalValues(fn func(key []byte, val any)) {
+	ctx.locals.Foreach(fn)
 }

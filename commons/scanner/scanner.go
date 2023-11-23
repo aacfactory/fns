@@ -135,3 +135,17 @@ func (obj object) MarshalJSON() (data []byte, err error) {
 	}
 	return
 }
+
+func Value[T any](s Scanner) (v T, err error) {
+	obj, ok := s.(object)
+	if ok {
+		v, ok = obj.value.(T)
+		if ok {
+			return
+		}
+		err = errors.Warning("fns: get value of scanner failed, type is not matched")
+		return
+	}
+	err = s.Scan(&v)
+	return
+}

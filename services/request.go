@@ -39,6 +39,15 @@ func NewParam(src interface{}) Param {
 	return scanner.New(src)
 }
 
+func ValueOfParam[T any](param Param) (v T, err error) {
+	v, err = scanner.Value[T](param)
+	if err != nil {
+		err = errors.Warning("fns: get value of param failed").WithCause(err)
+		return
+	}
+	return
+}
+
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type RequestOption func(*RequestOptions)

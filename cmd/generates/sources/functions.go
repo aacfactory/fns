@@ -407,7 +407,7 @@ func (f *Function) parseFieldType(ctx context.Context, e ast.Expr) (typ *Type, e
 		}
 		break
 	default:
-		err = errors.Warning("sources: field type only support no paradigms value object or array").WithMeta("expr", reflect.TypeOf(e).String())
+		err = errors.Warning("sources: field type only support no paradigms value object or typed slice").WithMeta("expr", reflect.TypeOf(e).String())
 		return
 	}
 	return

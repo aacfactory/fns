@@ -15,26 +15,21 @@
  *
  */
 
-package services
+package scanner_test
 
 import (
-	"github.com/aacfactory/errors"
+	"fmt"
 	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/json"
+	"testing"
+	"time"
 )
 
-type Response interface {
-	scanner.Scanner
-}
-
-func NewResponse(src interface{}) Response {
-	return scanner.New(src)
-}
-
-func ValueOfResponse[T any](response Response) (v T, err error) {
-	v, err = scanner.Value[T](response)
-	if err != nil {
-		err = errors.Warning("fns: get value of response failed").WithCause(err)
-		return
-	}
-	return
+func TestValue(t *testing.T) {
+	now := time.Now()
+	s := scanner.New(now)
+	fmt.Println(scanner.Value[time.Time](s))
+	p, _ := json.Marshal(now)
+	s = json.RawMessage(p)
+	fmt.Println(scanner.Value[time.Time](s))
 }

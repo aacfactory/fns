@@ -69,9 +69,9 @@ func (obj object) Scan(dst interface{}) (err error) {
 	if !obj.Exist() {
 		return
 	}
-	pp, isParam := obj.value.(Scanner)
-	if isParam {
-		err = pp.Scan(dst)
+	scanner, isScanner := obj.value.(Scanner)
+	if isScanner {
+		err = scanner.Scan(dst)
 		if err != nil {
 			err = errors.Warning("fns: scan object failed").WithCause(err)
 			return

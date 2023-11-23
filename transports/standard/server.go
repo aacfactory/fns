@@ -32,7 +32,7 @@ import (
 	"time"
 )
 
-func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, middlewares transports.Middlewares, handler transports.Handler) (srv *Server, err error) {
+func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, handler transports.Handler) (srv *Server, err error) {
 	var srvTLS *tls.Config
 	var lnf ssl.ListenerFunc
 	if tlsConfig != nil {
@@ -91,10 +91,6 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 		}
 	}
 
-	if len(middlewares) > 0 {
-		handler = middlewares.Handler(handler)
-	}
-
 	server := &http.Server{
 		Addr:                         fmt.Sprintf(":%d", port),
 		Handler:                      HttpTransportHandlerAdaptor(handler, int(maxRequestBodySize), writeTimeout),
@@ -109,20 +105,17 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 	}
 
 	srv = &Server{
-		port:        port,
-		lnf:         lnf,
-		srv:         server,
-		middlewares: middlewares,
+		port: port,
+		lnf:  lnf,
+		srv:  server,
 	}
-
 	return
 }
 
 type Server struct {
-	port        int
-	lnf         ssl.ListenerFunc
-	srv         *http.Server
-	middlewares transports.Middlewares
+	port int
+	lnf  ssl.ListenerFunc
+	srv  *http.Server
 }
 
 func (srv *Server) ListenAndServe() (err error) {
@@ -147,9 +140,6 @@ func (srv *Server) ListenAndServe() (err error) {
 }
 
 func (srv *Server) Shutdown(ctx context.Context) (err error) {
-	if len(srv.middlewares) > 0 {
-		srv.middlewares.Close()
-	}
 	err = srv.srv.Shutdown(ctx)
 	if err != nil {
 		err = errors.Warning("fns: transport shutdown failed").WithCause(err).WithMeta("transport", transportName)

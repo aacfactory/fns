@@ -18,7 +18,6 @@
 package standard
 
 import (
-	"bytes"
 	sc "context"
 	"crypto/tls"
 	"fmt"
@@ -203,19 +202,23 @@ type Client struct {
 	host    *http.Client
 }
 
-func (c Client) Key() (key string) {
+func (c *Client) Key() (key string) {
 	key = c.address
 	return
 }
 
-func (c Client) Do(ctx context.Context, method []byte, path []byte, header transports.Header, body []byte) (status int, responseHeader transports.Header, responseBody []byte, err error) {
+func (c *Client) Do(ctx context.Context, method []byte, path []byte, header transports.Header, body []byte) (status int, responseHeader transports.Header, responseBody []byte, err error) {
 	url := ""
 	if c.secured {
 		url = fmt.Sprintf("https://%s%s", c.address, bytex.ToString(path))
 	} else {
 		url = fmt.Sprintf("http://%s%s", c.address, bytex.ToString(path))
 	}
-	r, rErr := http.NewRequestWithContext(ctx, bytex.ToString(method), url, bytes.NewReader(body))
+	rb := bytex.AcquireBuffer()
+	defer bytex.ReleaseBuffer(rb)
+	_, _ = rb.Write(body)
+
+	r, rErr := http.NewRequestWithContext(ctx, bytex.ToString(method), url, rb)
 	if rErr != nil {
 		err = errors.Warning("http: create request failed").WithCause(rErr)
 		return
@@ -260,7 +263,7 @@ func (c Client) Do(ctx context.Context, method []byte, path []byte, header trans
 	return
 }
 
-func (c Client) Close() {
+func (c *Client) Close() {
 	c.host.CloseIdleConnections()
 	return
 }

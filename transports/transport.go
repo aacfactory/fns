@@ -23,10 +23,9 @@ import (
 )
 
 type Options struct {
-	Log         logs.Logger
-	Config      Config
-	Middlewares []Middleware
-	Handler     Handler
+	Log     logs.Logger
+	Config  Config
+	Handler Handler
 }
 
 type Client interface {

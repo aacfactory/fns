@@ -117,5 +117,6 @@ func (middle *Middleware) Handler(next transports.Handler) transports.Handler {
 	return next
 }
 
-func (middle *Middleware) Close() {
+func (middle *Middleware) Close() (err error) {
+	return
 }

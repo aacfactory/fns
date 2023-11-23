@@ -18,6 +18,7 @@
 package proxies
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/context"
@@ -68,7 +69,7 @@ func New(options ...Option) (p Proxy, err error) {
 type proxy struct {
 	log         logs.Logger
 	transport   transports.Transport
-	middlewares []transports.Middleware
+	middlewares transports.Middlewares
 	handlers    []transports.MuxHandler
 }
 
@@ -96,6 +97,12 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 	if corsMiddleware != nil {
 		middlewares = append([]transports.Middleware{corsMiddleware}, middlewares...)
 	}
+	middleware, middlewareErr := transports.WaveMiddlewares(p.log, config.Config, middlewares)
+	if middlewareErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport middleware failed").WithCause(middlewareErr)))
+		return
+	}
+	p.middlewares = middleware
 	// handlers
 	mux := transports.NewMux()
 	for _, handler := range p.handlers {
@@ -121,10 +128,9 @@ func (p *proxy) Construct(options ProxyOptions) (err error) {
 	mux.Add(NewProxyHandler(options.Manager, options.Dialer))
 	// transport
 	transportErr := p.transport.Construct(transports.Options{
-		Log:         p.log.With("transport", p.transport.Name()),
-		Config:      config.Config,
-		Middlewares: middlewares,
-		Handler:     mux,
+		Log:     p.log.With("transport", p.transport.Name()),
+		Config:  config.Config,
+		Handler: middleware.Handler(mux),
 	})
 	if transportErr != nil {
 		err = errors.Warning("fns: construct proxy failed, new transport failed").WithCause(transportErr)
@@ -154,6 +160,7 @@ func (p *proxy) Run(_ context.Context) (err error) {
 }
 
 func (p *proxy) Shutdown(ctx context.Context) {
+	p.middlewares.Close()
 	p.transport.Shutdown(ctx)
 	return
 }

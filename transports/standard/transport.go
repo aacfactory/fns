@@ -64,44 +64,38 @@ func (tr *Transport) Construct(options transports.Options) (err error) {
 	log := options.Log.With("transport", transportName)
 	// tls
 	tlsConfig, tlsConfigErr := options.Config.GetTLS()
-	if tlsConfig != nil {
-		err = errors.Warning("fns: fast transport build failed").WithCause(tlsConfigErr).WithMeta("transport", transportName)
-		return
-	}
-	// middlewares
-	middlewares, middlewaresErr := transports.WaveMiddlewares(options.Log, options.Config, options.Middlewares)
-	if middlewaresErr != nil {
-		err = errors.Warning("fns: fast transport build failed").WithCause(middlewaresErr).WithMeta("transport", transportName)
+	if tlsConfigErr != nil {
+		err = errors.Warning("fns: standard transport construct failed").WithCause(tlsConfigErr).WithMeta("transport", transportName)
 		return
 	}
 	// handler
 	if options.Handler == nil {
-		err = errors.Warning("fns: fast transport build failed").WithCause(fmt.Errorf("handler is nil")).WithMeta("transport", transportName)
+		err = errors.Warning("fns: standard transport construct failed").WithCause(fmt.Errorf("handler is nil")).WithMeta("transport", transportName)
 		return
 	}
 
 	// port
 	port, portErr := options.Config.GetPort()
 	if portErr != nil {
-		err = errors.Warning("fns: fast transport build failed").WithCause(portErr).WithMeta("transport", transportName)
+		err = errors.Warning("fns: standard transport construct failed").WithCause(portErr).WithMeta("transport", transportName)
 		return
 	}
 	// config
 	optConfig, optConfigErr := options.Config.OptionsConfig()
 	if optConfigErr != nil {
-		err = errors.Warning("fns: build transport failed").WithCause(optConfigErr).WithMeta("transport", transportName)
+		err = errors.Warning("fns: standard transport construct failed").WithCause(optConfigErr).WithMeta("transport", transportName)
 		return
 	}
 	config := &Config{}
 	configErr := optConfig.As(config)
 	if configErr != nil {
-		err = errors.Warning("fns: build transport failed").WithCause(configErr).WithMeta("transport", transportName)
+		err = errors.Warning("fns: standard transport construct failed").WithCause(configErr).WithMeta("transport", transportName)
 		return
 	}
 	// server
-	srv, srvErr := newServer(log, port, tlsConfig, config, middlewares, options.Handler)
+	srv, srvErr := newServer(log, port, tlsConfig, config, options.Handler)
 	if srvErr != nil {
-		err = errors.Warning("fns: build transport failed").WithCause(srvErr).WithMeta("transport", transportName)
+		err = errors.Warning("fns: standard transport construct failed").WithCause(srvErr).WithMeta("transport", transportName)
 		return
 	}
 	tr.server = srv
@@ -117,7 +111,7 @@ func (tr *Transport) Construct(options transports.Options) (err error) {
 	}
 	dialer, dialerErr := NewDialer(clientConfig)
 	if dialerErr != nil {
-		err = errors.Warning("http: build transport failed").WithCause(dialerErr)
+		err = errors.Warning("http: standard transport construct failed").WithCause(dialerErr)
 		return
 	}
 	tr.dialer = dialer

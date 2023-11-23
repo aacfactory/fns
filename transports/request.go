@@ -20,7 +20,6 @@ package transports
 import (
 	"crypto/tls"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"net/http"
 )
@@ -54,12 +53,13 @@ type Request interface {
 	SetBody(body []byte)
 }
 
-const (
-	requestContextKey = "@fns:context:transports:request"
+var (
+	requestContextKey       = []byte("@fns:context:transports:request")
+	requestHeaderContextKey = []byte("@fns:context:transports:request:header")
 )
 
 func WithRequest(ctx context.Context, r Request) context.Context {
-	ctx.SetLocalValue(bytex.FromString(requestContextKey), r)
+	ctx.SetLocalValue(requestContextKey, r)
 	return ctx
 }
 
@@ -68,7 +68,7 @@ func TryLoadRequest(ctx context.Context) (Request, bool) {
 	if ok {
 		return r, ok
 	}
-	v := ctx.LocalValue(bytex.FromString(requestContextKey))
+	v := ctx.LocalValue(requestContextKey)
 	if v == nil {
 		return nil, false
 	}
@@ -85,9 +85,19 @@ func LoadRequest(ctx context.Context) Request {
 }
 
 func TryLoadRequestHeader(ctx context.Context) (Header, bool) {
-	r, ok := TryLoadRequest(ctx)
-	if !ok {
-		return nil, false
+	r, has := TryLoadRequest(ctx)
+	if !has {
+		v := ctx.LocalValue(requestHeaderContextKey)
+		if v == nil {
+			return nil, false
+		}
+		header, ok := v.(Header)
+		return header, ok
 	}
-	return r.Header(), ok
+	return r.Header(), has
+}
+
+func WithRequestHeader(ctx context.Context, header Header) context.Context {
+	ctx.SetLocalValue(requestHeaderContextKey, header)
+	return ctx
 }

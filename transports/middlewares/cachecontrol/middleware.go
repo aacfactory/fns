@@ -180,7 +180,7 @@ func (middleware *Middleware) Handler(next transports.Handler) transports.Handle
 	return next
 }
 
-func (middleware *Middleware) Close() {
+func (middleware *Middleware) Close() (err error) {
 	middleware.cache.Close()
 	return
 }

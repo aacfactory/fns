@@ -188,6 +188,11 @@ func New(options ...Option) (app Application) {
 	if corsMiddleware != nil {
 		middlewares = append([]transports.Middleware{corsMiddleware}, middlewares...)
 	}
+	middleware, middlewareErr := transports.WaveMiddlewares(logger, config.Transport, middlewares)
+	if middlewareErr != nil {
+		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport middleware failed").WithCause(middlewareErr)))
+		return
+	}
 	// handler
 	mux := transports.NewMux()
 	handlers = append(handlers, opt.handlers...)
@@ -213,10 +218,9 @@ func New(options ...Option) (app Application) {
 	}
 	transport := opt.transport
 	transportErr := transport.Construct(transports.Options{
-		Log:         logger.With("transport", transport.Name()),
-		Config:      config.Transport,
-		Middlewares: middlewares,
-		Handler:     mux,
+		Log:     logger.With("transport", transport.Name()),
+		Config:  config.Transport,
+		Handler: middleware.Handler(mux),
 	})
 	if transportErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new transport failed").WithCause(transportErr)))
@@ -289,6 +293,7 @@ func New(options ...Option) (app Application) {
 		amp:             amp,
 		worker:          worker,
 		manager:         manager,
+		middlewares:     middleware,
 		transport:       transport,
 		proxy:           proxy,
 		hooks:           opt.hooks,
@@ -314,6 +319,7 @@ type application struct {
 	amp             *procs.AutoMaxProcs
 	worker          workers.Workers
 	manager         services.EndpointsManager
+	middlewares     transports.Middlewares
 	transport       transports.Transport
 	proxy           proxies.Proxy
 	hooks           []hooks.Hook
@@ -453,6 +459,7 @@ func (app *application) shutdown() {
 		// endpoints
 		app.manager.Shutdown(ctx)
 		// transport
+		app.middlewares.Close()
 		app.transport.Shutdown(ctx)
 		// proxy
 		if app.proxy != nil {

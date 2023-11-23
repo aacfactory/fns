@@ -94,7 +94,7 @@ func (middle *middleware) Handler(next transports.Handler) transports.Handler {
 	})
 }
 
-func (middle *middleware) Close() {
+func (middle *middleware) Close() (err error) {
 	middle.counter.Wait()
 	return
 }

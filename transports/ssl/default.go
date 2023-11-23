@@ -326,6 +326,15 @@ func (options DefaultConfigOptions) Build() (srvGmTLS *tlcp.Config, cliGmTLS *tl
 	return
 }
 
+func NewDefaultConfig(srv *tls.Config, cli *tls.Config, srvGM *tlcp.Config, cliGM *tlcp.Config) *DefaultConfig {
+	return &DefaultConfig{
+		srvStdTLS: srv,
+		cliStdTLS: cli,
+		srvGmTLS:  srvGM,
+		cliGmTLS:  cliGM,
+	}
+}
+
 type DefaultConfig struct {
 	srvStdTLS *tls.Config
 	cliStdTLS *tls.Config

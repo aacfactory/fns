@@ -18,17 +18,18 @@
 package bytex
 
 import (
+	"bytes"
 	"sync"
 )
 
 var (
-	bufPool = sync.Pool{New: func() any {
+	array4kPool = sync.Pool{New: func() any {
 		return make([]byte, 4096)
 	}}
 )
 
 func Acquire4KBuffer() []byte {
-	x := bufPool.Get()
+	x := array4kPool.Get()
 	if x == nil {
 		return make([]byte, 4096)
 	}
@@ -36,5 +37,26 @@ func Acquire4KBuffer() []byte {
 }
 
 func Release4KBuffer(buf []byte) {
+	array4kPool.Put(buf)
+}
+
+var (
+	bufPool = sync.Pool{
+		New: func() any {
+			return bytes.NewBuffer([]byte{})
+		},
+	}
+)
+
+func AcquireBuffer() *bytes.Buffer {
+	x := bufPool.Get()
+	if x == nil {
+		return bytes.NewBuffer([]byte{})
+	}
+	return x.(*bytes.Buffer)
+}
+
+func ReleaseBuffer(buf *bytes.Buffer) {
+	buf.Reset()
 	bufPool.Put(buf)
 }

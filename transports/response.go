@@ -21,7 +21,6 @@ import (
 	"bufio"
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
@@ -179,12 +178,12 @@ func (w *ResultResponseWriter) WriteDeadline() time.Time {
 	return w.deadline
 }
 
-const (
-	responseContextKey = "@fns:context:transports:response"
+var (
+	responseContextKey = []byte("@fns:context:transports:response")
 )
 
 func WithResponse(ctx context.Context, w ResponseWriter) context.Context {
-	ctx.SetLocalValue(bytex.FromString(responseContextKey), w)
+	ctx.SetLocalValue(responseContextKey, w)
 	return ctx
 }
 
@@ -193,7 +192,7 @@ func TryLoadResponseWriter(ctx context.Context) (ResponseWriter, bool) {
 	if ok {
 		return w, ok
 	}
-	v := ctx.LocalValue(bytex.FromString(responseContextKey))
+	v := ctx.LocalValue(responseContextKey)
 	if v == nil {
 		return nil, false
 	}

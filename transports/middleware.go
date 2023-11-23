@@ -21,6 +21,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/logs"
+	"io"
 	"strings"
 )
 
@@ -33,7 +34,7 @@ type Middleware interface {
 	Name() string
 	Construct(options MiddlewareOptions) error
 	Handler(next Handler) Handler
-	Close()
+	io.Closer
 }
 
 func WaveMiddlewares(log logs.Logger, config Config, middlewares []Middleware) (v Middlewares, err error) {
@@ -71,6 +72,7 @@ func (middlewares Middlewares) Handler(handler Handler) Handler {
 
 func (middlewares Middlewares) Close() {
 	for _, middleware := range middlewares {
-		middleware.Close()
+		_ = middleware.Close()
 	}
+	return
 }

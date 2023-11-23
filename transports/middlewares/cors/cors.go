@@ -29,7 +29,7 @@ import (
 	"strings"
 )
 
-func CORS() transports.Middleware {
+func New() transports.Middleware {
 	return &corsMiddleware{}
 }
 
@@ -155,7 +155,8 @@ func (c *corsMiddleware) Handler(next transports.Handler) transports.Handler {
 	return c
 }
 
-func (c *corsMiddleware) Close() {
+func (c *corsMiddleware) Close() (err error) {
+	return
 }
 
 func (c *corsMiddleware) Handle(w transports.ResponseWriter, r transports.Request) {

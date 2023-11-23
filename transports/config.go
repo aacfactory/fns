@@ -26,6 +26,12 @@ import (
 	"strings"
 )
 
+func FixedTLSConfig(conf ssl.Config) *TLSConfig {
+	return &TLSConfig{
+		conf: conf,
+	}
+}
+
 type TLSConfig struct {
 	// Kind
 	// ACME
@@ -33,9 +39,14 @@ type TLSConfig struct {
 	// DEFAULT
 	Kind    string          `json:"kind" yaml:"kind,omitempty"`
 	Options json.RawMessage `json:"options" yaml:"options,omitempty"`
+	conf    ssl.Config
 }
 
 func (config *TLSConfig) Config() (conf ssl.Config, err error) {
+	if config.conf != nil {
+		conf = config.conf
+		return
+	}
 	kind := strings.TrimSpace(config.Kind)
 	hasConf := false
 	conf, hasConf = ssl.GetConfig(kind)

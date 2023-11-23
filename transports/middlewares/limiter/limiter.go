@@ -112,7 +112,7 @@ func (middle *middleware) Handler(next transports.Handler) transports.Handler {
 	return next
 }
 
-func (middle *middleware) Close() {
+func (middle *middleware) Close() (err error) {
 	return
 }
 

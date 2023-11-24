@@ -256,6 +256,18 @@ func (f *Function) CacheControl() (maxAge int, public bool, mustRevalidate bool,
 	return
 }
 
+func (f *Function) Middlewares() (middlewares []string) {
+	anno, exist := f.Annotations.Get("middlewares")
+	if !exist || len(anno.Params) == 0 {
+		return
+	}
+	middlewares = make([]string, 0, 1)
+	for _, param := range anno.Params {
+		middlewares = append(middlewares, strings.Split(param, "\n")...)
+	}
+	return
+}
+
 func (f *Function) Annotation(name string) (params []string, has bool) {
 	anno, exist := f.Annotations.Get(name)
 	if exist {

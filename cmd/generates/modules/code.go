@@ -344,7 +344,28 @@ func (s *ServiceFile) serviceConstructCode(ctx context.Context) (code gcg.Code, 
 		body.Token(fmt.Sprintf(", %v", function.Permission()))
 		body.Token(fmt.Sprintf(", %v", function.Metric()))
 		body.Token(fmt.Sprintf(", %v", function.Barrier()))
-		body.Token(fmt.Sprintf(", %s))", function.HandlerIdent))
+		body.Token(fmt.Sprintf(", %s", function.HandlerIdent))
+		middlewares := function.Middlewares()
+		for _, middleware := range middlewares {
+			if idx := strings.LastIndexByte(middleware, '.'); idx > 0 {
+				pkg := middleware[0:idx]
+				name := middleware[idx+1:]
+				middleImport, hasMiddleImport := s.service.Imports.Path(pkg)
+				if !hasMiddleImport {
+					middlewareImports := sources.Imports{}
+					middlewareImports.Add(&sources.Import{
+						Path:  pkg,
+						Alias: "",
+					})
+					s.service.Imports = sources.MergeImports([]sources.Imports{s.service.Imports, middlewareImports})
+					middleImport, _ = s.service.Imports.Path(pkg)
+				}
+				body.Token(fmt.Sprintf(", &%s.%s{}", middleImport.Ident(), name))
+			} else {
+				body.Token(fmt.Sprintf(", &%s{}", middleware))
+			}
+		}
+		body.Token("))")
 		body.Line()
 	}
 	body.Tab().Return()

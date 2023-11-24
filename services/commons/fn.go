@@ -72,6 +72,10 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // @cache-control {options}
 // @barrier
 // @metric
+// @middlewares >>>
+// {path}.{IdentName}
+// ...
+// <<<
 // @title {title}
 // @description >>>
 // {description}

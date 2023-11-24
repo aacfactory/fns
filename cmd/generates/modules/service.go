@@ -211,7 +211,7 @@ func (service *Service) loadFunctions() (err error) {
 					WithCause(parseAnnotationsErr)
 				return
 			}
-			service.Functions = append(service.Functions, &Function{
+			fn := &Function{
 				mod:             service.mod,
 				hostServiceName: service.Name,
 				path:            service.Path,
@@ -226,7 +226,8 @@ func (service *Service) loadFunctions() (err error) {
 				Annotations:     annotations,
 				Param:           nil,
 				Result:          nil,
-			})
+			}
+			service.Functions = append(service.Functions, fn)
 		}
 		return
 	})

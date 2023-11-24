@@ -71,7 +71,7 @@ import (
 )
 
 func main() {
-	g := generates.New("generator")
+	g := generates.New()
 	if err := g.Execute(context.Background(), os.Args...); err != nil {
 		fmt.Println(fmt.Sprintf("%+v", err))
 	}

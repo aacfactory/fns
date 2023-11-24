@@ -15,7 +15,7 @@
  *
  */
 
-package writers
+package modules
 
 import (
 	"context"
@@ -39,28 +39,6 @@ func (writers FnAnnotationCodeWriters) Get(annotation string) (w FnAnnotationCod
 			has = true
 			return
 		}
-	}
-	return
-}
-
-const (
-	fnAnnotationCodeWritersContextKey = "@fns:generates:writers:annotations"
-)
-
-func WithFnAnnotationCodeWriters(ctx context.Context, writers FnAnnotationCodeWriters) context.Context {
-	return context.WithValue(ctx, fnAnnotationCodeWritersContextKey, writers)
-}
-
-func LoadFnAnnotationCodeWriters(ctx context.Context) (w FnAnnotationCodeWriters) {
-	v := ctx.Value(fnAnnotationCodeWritersContextKey)
-	if v == nil {
-		w = make(FnAnnotationCodeWriters, 0, 1)
-		return
-	}
-	ok := false
-	w, ok = v.(FnAnnotationCodeWriters)
-	if !ok {
-		w = make(FnAnnotationCodeWriters, 0, 1)
 	}
 	return
 }

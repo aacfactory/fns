@@ -15,33 +15,23 @@
  *
  */
 
-package writers
+package modules
 
-import (
-	"context"
-	"github.com/aacfactory/fns/cmd/generates/processes"
-)
-
-type CodeFileWriter interface {
-	Name() (name string)
-	Write(ctx context.Context) (err error)
+type Component struct {
+	Indent string
 }
 
-type CodeFileUnit struct {
-	cf CodeFileWriter
+type Components []*Component
+
+func (components Components) Len() int {
+	return len(components)
 }
 
-func (unit *CodeFileUnit) Handle(ctx context.Context) (result interface{}, err error) {
-	err = unit.cf.Write(ctx)
-	if err != nil {
-		return
-	}
-	result = unit.cf.Name()
+func (components Components) Less(i, j int) bool {
+	return components[i].Indent < components[j].Indent
+}
+
+func (components Components) Swap(i, j int) {
+	components[i], components[j] = components[j], components[i]
 	return
-}
-
-func Unit(file CodeFileWriter) (unit processes.Unit) {
-	return &CodeFileUnit{
-		cf: file,
-	}
 }

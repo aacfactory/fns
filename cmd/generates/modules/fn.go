@@ -15,12 +15,13 @@
  *
  */
 
-package sources
+package modules
 
 import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/cmd/generates/sources"
 	"go/ast"
 	"reflect"
 	"strconv"
@@ -28,9 +29,9 @@ import (
 )
 
 type FunctionField struct {
-	mod  *Module
+	mod  *sources.Module
 	Name string
-	Type *Type
+	Type *sources.Type
 }
 
 func (sf *FunctionField) String() (v string) {
@@ -49,18 +50,18 @@ type FunctionError struct {
 }
 
 type Function struct {
-	mod             *Module
+	mod             *sources.Module
 	hostServiceName string
 	path            string
 	filename        string
 	file            *ast.File
-	imports         Imports
+	imports         sources.Imports
 	decl            *ast.FuncDecl
 	Ident           string
-	ConstIdent      string
+	VarIdent        string
 	ProxyIdent      string
 	HandlerIdent    string
-	Annotations     Annotations
+	Annotations     sources.Annotations
 	Param           *FunctionField
 	Result          *FunctionField
 }
@@ -270,8 +271,8 @@ func (f *Function) ForeachAnnotations(fn func(name string, params []string)) {
 	}
 }
 
-func (f *Function) FieldImports() (v Imports) {
-	v = Imports{}
+func (f *Function) FieldImports() (v sources.Imports) {
+	v = sources.Imports{}
 	paths := make([]string, 0, 1)
 	if f.Param != nil {
 		paths = append(paths, f.Param.Paths()...)
@@ -280,7 +281,7 @@ func (f *Function) FieldImports() (v Imports) {
 		paths = append(paths, f.Result.Paths()...)
 	}
 	for _, path := range paths {
-		v.Add(&Import{
+		v.Add(&sources.Import{
 			Path:  path,
 			Alias: "",
 		})
@@ -290,12 +291,12 @@ func (f *Function) FieldImports() (v Imports) {
 
 func (f *Function) Parse(ctx context.Context) (err error) {
 	if ctx.Err() != nil {
-		err = errors.Warning("sources: parse function failed").WithCause(ctx.Err()).
+		err = errors.Warning("modules: parse function failed").WithCause(ctx.Err()).
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 		return
 	}
 	if f.decl.Type.TypeParams != nil && f.decl.Type.TypeParams.List != nil && len(f.decl.Type.TypeParams.List) > 0 {
-		err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("function can not use paradigm")).
+		err = errors.Warning("modules: parse function failed").WithCause(errors.Warning("function can not use paradigm")).
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 		return
 	}
@@ -303,20 +304,20 @@ func (f *Function) Parse(ctx context.Context) (err error) {
 	// params
 	params := f.decl.Type.Params
 	if params == nil || params.List == nil || len(params.List) == 0 || len(params.List) > 2 {
-		err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("params length must be one or two")).
+		err = errors.Warning("modules: parse function failed").WithCause(errors.Warning("params length must be one or two")).
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 		return
 	}
 
-	if !f.mod.types.isContextType(params.List[0].Type, f.imports) {
-		err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("first param must be context.Context")).
+	if !f.mod.Types().IsContextType(params.List[0].Type, f.imports) {
+		err = errors.Warning("modules: parse function failed").WithCause(errors.Warning("first param must be context.Context")).
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 		return
 	}
 	if len(params.List) == 2 {
 		param, parseParamErr := f.parseField(ctx, params.List[1])
 		if parseParamErr != nil {
-			err = errors.Warning("sources: parse function failed").WithCause(parseParamErr).
+			err = errors.Warning("modules: parse function failed").WithCause(parseParamErr).
 				WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 			return
 		}
@@ -325,25 +326,25 @@ func (f *Function) Parse(ctx context.Context) (err error) {
 	// results
 	results := f.decl.Type.Results
 	if results == nil || results.List == nil || len(results.List) == 0 || len(results.List) > 2 {
-		err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("results length must be one or two")).
+		err = errors.Warning("modules: parse function failed").WithCause(errors.Warning("results length must be one or two")).
 			WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 		return
 	}
 	if len(results.List) == 1 {
-		if !f.mod.types.isCodeErrorType(results.List[0].Type, f.imports) {
-			err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("the last results must be error or github.com/aacfactory/errors.CodeError")).
+		if !f.mod.Types().IsCodeErrorType(results.List[0].Type, f.imports) {
+			err = errors.Warning("modules: parse function failed").WithCause(errors.Warning("the last results must be error or github.com/aacfactory/errors.CodeError")).
 				WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 			return
 		}
 	} else {
-		if !f.mod.types.isCodeErrorType(results.List[1].Type, f.imports) {
-			err = errors.Warning("sources: parse function failed").WithCause(errors.Warning("the last results must be error or github.com/aacfactory/errors.CodeError")).
+		if !f.mod.Types().IsCodeErrorType(results.List[1].Type, f.imports) {
+			err = errors.Warning("modules: parse function failed").WithCause(errors.Warning("the last results must be error or github.com/aacfactory/errors.CodeError")).
 				WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 			return
 		}
 		result, parseResultErr := f.parseField(ctx, results.List[0])
 		if parseResultErr != nil {
-			err = errors.Warning("sources: parse function failed").WithCause(parseResultErr).
+			err = errors.Warning("modules: parse function failed").WithCause(parseResultErr).
 				WithMeta("service", f.hostServiceName).WithMeta("function", f.Ident).WithMeta("file", f.filename)
 			return
 		}
@@ -354,13 +355,13 @@ func (f *Function) Parse(ctx context.Context) (err error) {
 
 func (f *Function) parseField(ctx context.Context, field *ast.Field) (v *FunctionField, err error) {
 	if len(field.Names) != 1 {
-		err = errors.Warning("sources: field must has only one name")
+		err = errors.Warning("modules: field must has only one name")
 		return
 	}
 	name := field.Names[0].Name
 	typ, parseTypeErr := f.parseFieldType(ctx, field.Type)
 	if parseTypeErr != nil {
-		err = errors.Warning("sources: parse field failed").WithMeta("field", name).WithCause(parseTypeErr)
+		err = errors.Warning("modules: parse field failed").WithMeta("field", name).WithCause(parseTypeErr)
 		return
 	}
 	v = &FunctionField{
@@ -371,10 +372,10 @@ func (f *Function) parseField(ctx context.Context, field *ast.Field) (v *Functio
 	return
 }
 
-func (f *Function) parseFieldType(ctx context.Context, e ast.Expr) (typ *Type, err error) {
+func (f *Function) parseFieldType(ctx context.Context, e ast.Expr) (typ *sources.Type, err error) {
 	switch e.(type) {
 	case *ast.Ident:
-		typ, err = f.mod.types.parseExpr(ctx, e, &TypeScope{
+		typ, err = f.mod.Types().ParseExpr(ctx, e, &sources.TypeScope{
 			Path:       f.path,
 			Mod:        f.mod,
 			Imports:    f.imports,
@@ -385,13 +386,13 @@ func (f *Function) parseFieldType(ctx context.Context, e ast.Expr) (typ *Type, e
 		}
 		_, isBasic := typ.Basic()
 		if isBasic {
-			err = errors.Warning("sources: field type only support value object")
+			err = errors.Warning("modules: field type only support value object")
 			return
 		}
 		typ.Path = f.path
 		typ.Name = e.(*ast.Ident).Name
 	case *ast.SelectorExpr:
-		typ, err = f.mod.types.parseExpr(ctx, e, &TypeScope{
+		typ, err = f.mod.Types().ParseExpr(ctx, e, &sources.TypeScope{
 			Path:       f.path,
 			Mod:        f.mod,
 			Imports:    f.imports,
@@ -402,12 +403,12 @@ func (f *Function) parseFieldType(ctx context.Context, e ast.Expr) (typ *Type, e
 		}
 		_, isBasic := typ.Basic()
 		if isBasic {
-			err = errors.Warning("sources: field type only support value object")
+			err = errors.Warning("modules: field type only support value object")
 			return
 		}
 		break
 	default:
-		err = errors.Warning("sources: field type only support no paradigms value object or typed slice").WithMeta("expr", reflect.TypeOf(e).String())
+		err = errors.Warning("modules: field type only support no paradigms value object or typed slice").WithMeta("expr", reflect.TypeOf(e).String())
 		return
 	}
 	return

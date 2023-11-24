@@ -15,20 +15,19 @@
  *
  */
 
-package writers
+package modules
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/cmd/generates/sources"
 	"github.com/aacfactory/gcg"
 	"os"
 	"path/filepath"
 )
 
-func NewDeploysFile(dir string, services sources.Services) (file CodeFileWriter) {
+func NewDeploysFile(dir string, services Services) (file CodeFileWriter) {
 	file = &DeploysFile{
 		filename: filepath.ToSlash(filepath.Join(dir, "fns.go")),
 		services: services,
@@ -38,7 +37,7 @@ func NewDeploysFile(dir string, services sources.Services) (file CodeFileWriter)
 
 type DeploysFile struct {
 	filename string
-	services sources.Services
+	services Services
 }
 
 func (s *DeploysFile) Name() (name string) {
@@ -51,7 +50,7 @@ func (s *DeploysFile) Write(ctx context.Context) (err error) {
 		return
 	}
 	if ctx.Err() != nil {
-		err = errors.Warning("sources: services write failed").
+		err = errors.Warning("modules: services write failed").
 			WithMeta("kind", "services").WithMeta("file", s.Name()).
 			WithCause(ctx.Err())
 		return
@@ -79,7 +78,7 @@ func (s *DeploysFile) Write(ctx context.Context) (err error) {
 
 	renderErr := file.Render(buf)
 	if renderErr != nil {
-		err = errors.Warning("sources: services code file write failed").
+		err = errors.Warning("modules: services code file write failed").
 			WithMeta("kind", "services").WithMeta("file", s.Name()).
 			WithCause(renderErr)
 		return
@@ -87,7 +86,7 @@ func (s *DeploysFile) Write(ctx context.Context) (err error) {
 
 	writer, openErr := os.OpenFile(s.Name(), os.O_CREATE|os.O_TRUNC|os.O_RDWR|os.O_SYNC, 0644)
 	if openErr != nil {
-		err = errors.Warning("sources: services code file write failed").
+		err = errors.Warning("modules: services code file write failed").
 			WithMeta("kind", "services").WithMeta("file", s.Name()).
 			WithCause(openErr)
 		return
@@ -99,7 +98,7 @@ func (s *DeploysFile) Write(ctx context.Context) (err error) {
 	for n < bodyLen {
 		nn, writeErr := writer.Write(content[n:])
 		if writeErr != nil {
-			err = errors.Warning("sources: services code file write failed").
+			err = errors.Warning("modules: services code file write failed").
 				WithMeta("kind", "services").WithMeta("file", s.Name()).
 				WithCause(writeErr)
 			return
@@ -108,14 +107,14 @@ func (s *DeploysFile) Write(ctx context.Context) (err error) {
 	}
 	syncErr := writer.Sync()
 	if syncErr != nil {
-		err = errors.Warning("sources: services code file write failed").
+		err = errors.Warning("modules: services code file write failed").
 			WithMeta("kind", "services").WithMeta("file", s.Name()).
 			WithCause(syncErr)
 		return
 	}
 	closeErr := writer.Close()
 	if closeErr != nil {
-		err = errors.Warning("sources: services code file write failed").
+		err = errors.Warning("modules: services code file write failed").
 			WithMeta("kind", "services").WithMeta("file", s.Name()).
 			WithCause(closeErr)
 		return

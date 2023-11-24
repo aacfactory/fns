@@ -115,7 +115,6 @@ func (work *Work) Parse() (err error) {
 				Replace:  nil,
 				locker:   &sync.Mutex{},
 				parsed:   false,
-				services: nil,
 				types:    nil,
 			})
 		}
@@ -168,13 +167,13 @@ func (work *Work) Parse() (err error) {
 					Replace:  nil,
 					locker:   &sync.Mutex{},
 					parsed:   false,
-					services: nil,
 					types:    nil,
 				},
-				locker:   &sync.Mutex{},
-				parsed:   false,
-				services: nil,
-				types:    nil,
+				locker:       &sync.Mutex{},
+				parsed:       false,
+				sources:      nil,
+				builtinTypes: map[string]*Type{},
+				types:        nil,
 			})
 		}
 	}

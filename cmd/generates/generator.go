@@ -15,10 +15,13 @@
  *
  */
 
-package writers
+package generates
 
-import "github.com/aacfactory/gcg"
+import (
+	"context"
+	"github.com/aacfactory/fns/cmd/generates/sources"
+)
 
-func contextCode() gcg.Code {
-	return gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/context"), "Context")
+type Generator interface {
+	Generate(ctx context.Context, mod *sources.Module) (err error)
 }

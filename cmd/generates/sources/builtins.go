@@ -17,25 +17,9 @@
 
 package sources
 
-import (
-	"fmt"
-)
-
-func RegisterBuiltinType(typ *Type) {
-	key := fmt.Sprintf("%s.%s", typ.Path, typ.Name)
-	builtinTypes[key] = typ
-}
-
-var builtinTypes = make(map[string]*Type)
-
-func tryGetBuiltinType(path string, name string) (typ *Type, has bool) {
-	typ, has = builtinTypes[fmt.Sprintf("%s.%s", path, name)]
-	return
-}
-
-func registerBuiltinTypes() {
+func registerBuiltinTypes(mode *Module) {
 	// github.com/aacfactory/fns/commons/passwords.password
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/fns/commons/passwords",
 		Name:        "Password",
@@ -45,7 +29,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// time.Time
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "time",
 		Name:        "Time",
@@ -55,7 +39,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// time.Duration
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "time",
 		Name:        "Duration",
@@ -65,7 +49,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// encoding/json.RawMessage
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "encoding/json",
 		Name:        "RawMessage",
@@ -75,7 +59,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/json.RawMessage
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/json",
 		Name:        "RawMessage",
@@ -85,7 +69,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/json.Date
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/json",
 		Name:        "Date",
@@ -95,7 +79,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/json.Time
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/json",
 		Name:        "Time",
@@ -105,7 +89,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/json.Object
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        AnyKind,
 		Path:        "github.com/aacfactory/json",
 		Name:        "Object",
@@ -115,7 +99,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/json.Array
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        ArrayKind,
 		Path:        "github.com/aacfactory/json",
 		Name:        "Array",
@@ -125,7 +109,7 @@ func registerBuiltinTypes() {
 		Elements:    []*Type{AnyType},
 	})
 	// github.com/aacfactory/services.Empty
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BuiltinKind,
 		Path:        "github.com/aacfactory/services",
 		Name:        "Empty",
@@ -135,7 +119,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/errors.CodeErr
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind: StructKind,
 		Path: "github.com/aacfactory/errors",
 		Name: "CodeError",
@@ -259,7 +243,7 @@ func registerBuiltinTypes() {
 		},
 	})
 	// github.com/aacfactory/fns/commons/times.Date
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/fns/commons/times",
 		Name:        "Date",
@@ -269,7 +253,7 @@ func registerBuiltinTypes() {
 		Elements:    nil,
 	})
 	// github.com/aacfactory/fns/commons/times.Time
-	RegisterBuiltinType(&Type{
+	mode.RegisterBuiltinType(&Type{
 		Kind:        BasicKind,
 		Path:        "github.com/aacfactory/fns/commons/times",
 		Name:        "Time",

@@ -493,7 +493,7 @@ func (types *Types) parseType(ctx context.Context, spec *ast.TypeSpec, scope *Ty
 		var result *Type
 		switch spec.Type.(type) {
 		case *ast.Ident:
-			identType, parseIdentTypeErr := types.parseExpr(ctx, spec.Type, scope)
+			identType, parseIdentTypeErr := types.ParseExpr(ctx, spec.Type, scope)
 			if parseIdentTypeErr != nil {
 				err = errors.Warning("sources: parse ident type spec failed").
 					WithMeta("path", path).WithMeta("name", name).
@@ -554,7 +554,7 @@ func (types *Types) parseType(ctx context.Context, spec *ast.TypeSpec, scope *Ty
 			break
 		case *ast.ArrayType:
 			arrayType := spec.Type.(*ast.ArrayType)
-			arrayElementType, parseArrayElementTypeErr := types.parseExpr(ctx, arrayType.Elt, scope)
+			arrayElementType, parseArrayElementTypeErr := types.ParseExpr(ctx, arrayType.Elt, scope)
 			if parseArrayElementTypeErr != nil {
 				err = errors.Warning("sources: parse array type spec failed").
 					WithMeta("path", path).WithMeta("name", name).
@@ -587,7 +587,7 @@ func (types *Types) parseType(ctx context.Context, spec *ast.TypeSpec, scope *Ty
 			break
 		case *ast.MapType:
 			mapType := spec.Type.(*ast.MapType)
-			keyElement, parseKeyErr := types.parseExpr(ctx, mapType.Key, scope)
+			keyElement, parseKeyErr := types.ParseExpr(ctx, mapType.Key, scope)
 			if parseKeyErr != nil {
 				err = errors.Warning("sources: parse map type spec failed").
 					WithMeta("path", path).WithMeta("name", name).
@@ -600,7 +600,7 @@ func (types *Types) parseType(ctx context.Context, spec *ast.TypeSpec, scope *Ty
 					WithCause(errors.Warning("sources: key kind of map kind field must be basic"))
 				break
 			}
-			valueElement, parseValueErr := types.parseExpr(ctx, mapType.Value, scope)
+			valueElement, parseValueErr := types.ParseExpr(ctx, mapType.Value, scope)
 			if parseValueErr != nil {
 				err = errors.Warning("sources: parse map type spec failed").
 					WithMeta("path", path).WithMeta("name", name).
@@ -632,7 +632,7 @@ func (types *Types) parseType(ctx context.Context, spec *ast.TypeSpec, scope *Ty
 			}
 			break
 		case *ast.IndexExpr, *ast.IndexListExpr:
-			result, err = types.parseExpr(ctx, spec.Type, scope)
+			result, err = types.ParseExpr(ctx, spec.Type, scope)
 			if err != nil {
 				break
 			}
@@ -711,7 +711,7 @@ func (types *Types) parseTypeParadigm(ctx context.Context, param *ast.Field, sco
 	case *ast.BinaryExpr:
 		exprs := types.parseTypeParadigmBinaryExpr(param.Type.(*ast.BinaryExpr))
 		for _, expr := range exprs {
-			typ, parseTypeErr := types.parseExpr(ctx, expr, scope)
+			typ, parseTypeErr := types.ParseExpr(ctx, expr, scope)
 			if parseTypeErr != nil {
 				err = errors.Warning("sources: parse paradigm failed").WithMeta("name", name).WithCause(parseTypeErr)
 				return
@@ -720,7 +720,7 @@ func (types *Types) parseTypeParadigm(ctx context.Context, param *ast.Field, sco
 		}
 		break
 	default:
-		typ, parseTypeErr := types.parseExpr(ctx, param.Type, scope)
+		typ, parseTypeErr := types.ParseExpr(ctx, param.Type, scope)
 		if parseTypeErr != nil {
 			err = errors.Warning("sources: parse paradigm failed").WithMeta("name", name).WithCause(parseTypeErr)
 			return
@@ -748,7 +748,7 @@ func (types *Types) parseTypeParadigmBinaryExpr(bin *ast.BinaryExpr) (exprs []as
 	return
 }
 
-func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope) (typ *Type, err error) {
+func (types *Types) ParseExpr(ctx context.Context, x ast.Expr, scope *TypeScope) (typ *Type, err error) {
 	switch x.(type) {
 	case *ast.Ident:
 		expr := x.(*ast.Ident)
@@ -831,7 +831,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 		}
 		// name
 		name := expr.Sel.Name
-		builtin, isBuiltin := tryGetBuiltinType(importer.Path, name)
+		builtin, isBuiltin := scope.Mod.GetBuiltinType(importer.Path, name)
 		if isBuiltin {
 			typ = builtin
 			break
@@ -841,7 +841,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 		break
 	case *ast.StarExpr:
 		expr := x.(*ast.StarExpr)
-		starElement, parseStarErr := types.parseExpr(ctx, expr.X, scope)
+		starElement, parseStarErr := types.ParseExpr(ctx, expr.X, scope)
 		if parseStarErr != nil {
 			err = parseStarErr
 			break
@@ -858,7 +858,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 		break
 	case *ast.ArrayType:
 		expr := x.(*ast.ArrayType)
-		arrayElement, parseArrayErr := types.parseExpr(ctx, expr.Elt, scope)
+		arrayElement, parseArrayErr := types.ParseExpr(ctx, expr.Elt, scope)
 		if parseArrayErr != nil {
 			err = parseArrayErr
 			break
@@ -875,7 +875,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 		break
 	case *ast.MapType:
 		expr := x.(*ast.MapType)
-		keyElement, parseKeyErr := types.parseExpr(ctx, expr.Key, scope)
+		keyElement, parseKeyErr := types.ParseExpr(ctx, expr.Key, scope)
 		if parseKeyErr != nil {
 			err = parseKeyErr
 			break
@@ -884,7 +884,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 			err = errors.Warning("sources: key kind of map kind field must be basic")
 			break
 		}
-		valueElement, parseValueErr := types.parseExpr(ctx, expr.Value, scope)
+		valueElement, parseValueErr := types.ParseExpr(ctx, expr.Value, scope)
 		if parseValueErr != nil {
 			err = parseValueErr
 			break
@@ -901,7 +901,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 		break
 	case *ast.IndexExpr:
 		expr := x.(*ast.IndexExpr)
-		paradigmType, parseParadigmTypeErr := types.parseExpr(ctx, expr.Index, scope)
+		paradigmType, parseParadigmTypeErr := types.ParseExpr(ctx, expr.Index, scope)
 		if parseParadigmTypeErr != nil {
 			err = parseParadigmTypeErr
 			break
@@ -910,7 +910,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 			Name:  "",
 			Types: []*Type{paradigmType},
 		}}
-		xType, parseXErr := types.parseExpr(ctx, expr.X, scope)
+		xType, parseXErr := types.ParseExpr(ctx, expr.X, scope)
 		if parseXErr != nil {
 			err = parseXErr
 			break
@@ -942,7 +942,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 		expr := x.(*ast.IndexListExpr)
 		paradigmTypes := make([]*Type, 0, 1)
 		for _, index := range expr.Indices {
-			paradigmType, parseParadigmTypeErr := types.parseExpr(ctx, index, scope)
+			paradigmType, parseParadigmTypeErr := types.ParseExpr(ctx, index, scope)
 			if parseParadigmTypeErr != nil {
 				err = parseParadigmTypeErr
 				break
@@ -956,7 +956,7 @@ func (types *Types) parseExpr(ctx context.Context, x ast.Expr, scope *TypeScope)
 				Types: []*Type{paradigmType},
 			})
 		}
-		xType, parseXErr := types.parseExpr(ctx, expr.X, scope)
+		xType, parseXErr := types.ParseExpr(ctx, expr.X, scope)
 		if parseXErr != nil {
 			err = parseXErr
 			break
@@ -1049,7 +1049,7 @@ func (types *Types) parseStructType(ctx context.Context, spec *ast.TypeSpec, sco
 			if field.Names == nil || len(field.Names) == 0 {
 				// compose
 				if field.Type != nil {
-					fieldElementType, parseFieldElementTypeErr := types.parseExpr(ctx, field.Type, scope)
+					fieldElementType, parseFieldElementTypeErr := types.ParseExpr(ctx, field.Type, scope)
 					if parseFieldElementTypeErr != nil {
 						err = errors.Warning("sources: parse struct type failed").
 							WithMeta("path", path).WithMeta("name", name).
@@ -1105,7 +1105,7 @@ func (types *Types) parseStructType(ctx context.Context, spec *ast.TypeSpec, sco
 				ft.Annotations = fieldAnnotations
 			}
 			// element
-			fieldElementType, parseFieldElementTypeErr := types.parseExpr(ctx, field.Type, scope)
+			fieldElementType, parseFieldElementTypeErr := types.ParseExpr(ctx, field.Type, scope)
 			if parseFieldElementTypeErr != nil {
 				err = errors.Warning("sources: parse struct type failed").
 					WithMeta("path", path).WithMeta("name", name).
@@ -1121,7 +1121,7 @@ func (types *Types) parseStructType(ctx context.Context, spec *ast.TypeSpec, sco
 	return
 }
 
-func (types *Types) isContextType(expr ast.Expr, imports Imports) (ok bool) {
+func (types *Types) IsContextType(expr ast.Expr, imports Imports) (ok bool) {
 	e, isSelector := expr.(*ast.SelectorExpr)
 	if !isSelector {
 		return
@@ -1152,7 +1152,7 @@ func (types *Types) isContextType(expr ast.Expr, imports Imports) (ok bool) {
 	return
 }
 
-func (types *Types) isCodeErrorType(expr ast.Expr, imports Imports) (ok bool) {
+func (types *Types) IsCodeErrorType(expr ast.Expr, imports Imports) (ok bool) {
 	switch e := expr.(type) {
 	case *ast.Ident:
 		ok = e.Name == "error"

@@ -23,7 +23,7 @@ import (
 	"strings"
 )
 
-func newImportsFromAstFileImports(specs []*ast.ImportSpec) (v Imports) {
+func NewImportsFromAstFileImports(specs []*ast.ImportSpec) (v Imports) {
 	v = Imports{}
 	if specs == nil || len(specs) == 0 {
 		return

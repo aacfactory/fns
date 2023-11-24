@@ -44,7 +44,7 @@ type Sources struct {
 	readers map[string]*SourceDirReader
 }
 
-func (sources *Sources) destinationPath(path string) (v string, err error) {
+func (sources *Sources) DestinationPath(path string) (v string, err error) {
 	sub, cut := strings.CutPrefix(path, sources.path+"/")
 	if !cut {
 		if path == sources.path {
@@ -73,7 +73,7 @@ func (sources *Sources) ReadFile(path string, name string) (file *ast.File, file
 		err = errors.Warning("sources: read file failed").WithCause(errors.Warning("no file found")).WithMeta("path", path).WithMeta("file", name).WithMeta("mod", sources.path)
 		return
 	}
-	dir, dirErr := sources.destinationPath(path)
+	dir, dirErr := sources.DestinationPath(path)
 	if dirErr != nil {
 		err = errors.Warning("sources: read file failed").WithCause(dirErr).WithMeta("path", path).WithMeta("file", name).WithMeta("mod", sources.path)
 		return
@@ -92,7 +92,7 @@ func (sources *Sources) getReader(path string) (reader *SourceDirReader, err err
 	has := false
 	reader, has = sources.readers[path]
 	if !has {
-		dir, dirErr := sources.destinationPath(path)
+		dir, dirErr := sources.DestinationPath(path)
 		if dirErr != nil {
 			err = errors.Warning("sources: get source reader failed").WithCause(dirErr).WithMeta("path", path).WithMeta("mod", sources.path)
 			sources.locker.Unlock()
@@ -186,7 +186,7 @@ func (sources *Sources) FindTypeSpec(path string, name string) (spec *ast.TypeSp
 				}
 				if ts.Name.Name == name {
 					spec = ts
-					imports = newImportsFromAstFileImports(file.Imports)
+					imports = NewImportsFromAstFileImports(file.Imports)
 					if genDecl.Doc != nil {
 						genericDoc = genDecl.Doc.Text()
 					}

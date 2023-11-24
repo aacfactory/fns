@@ -86,33 +86,51 @@ func NewWithWork(path string, workPath string) (v *Module, err error) {
 		}
 	} else {
 		v = &Module{
-			Dir:      filepath.ToSlash(filepath.Dir(path)),
-			Path:     "",
-			Version:  "",
-			Requires: nil,
-			Work:     nil,
-			Replace:  nil,
-			locker:   &sync.Mutex{},
-			parsed:   false,
-			services: nil,
-			types:    nil,
+			Dir:          filepath.ToSlash(filepath.Dir(path)),
+			Path:         "",
+			Version:      "",
+			Requires:     nil,
+			Work:         nil,
+			Replace:      nil,
+			locker:       &sync.Mutex{},
+			parsed:       false,
+			sources:      nil,
+			builtinTypes: map[string]*Type{},
+			types:        nil,
 		}
+		registerBuiltinTypes(v)
 	}
 	return
 }
 
 type Module struct {
-	Dir      string
-	Path     string
-	Version  string
-	Requires Requires
-	Work     *Work
-	Replace  *Module
-	locker   sync.Locker
-	parsed   bool
-	sources  *Sources
-	services map[string]*Service
-	types    *Types
+	Dir          string
+	Path         string
+	Version      string
+	Requires     Requires
+	Work         *Work
+	Replace      *Module
+	locker       sync.Locker
+	parsed       bool
+	sources      *Sources
+	builtinTypes map[string]*Type
+	types        *Types
+}
+
+func (mod *Module) RegisterBuiltinType(typ *Type) {
+	if mod.builtinTypes == nil {
+		mod.builtinTypes = make(map[string]*Type)
+	}
+	key := fmt.Sprintf("%s.%s", typ.Path, typ.Name)
+	mod.builtinTypes[key] = typ
+}
+
+func (mod *Module) GetBuiltinType(path string, name string) (typ *Type, has bool) {
+	if mod.builtinTypes == nil {
+		return
+	}
+	typ, has = mod.builtinTypes[fmt.Sprintf("%s.%s", path, name)]
+	return
 }
 
 func (mod *Module) Parse(ctx context.Context) (err error) {
@@ -184,7 +202,6 @@ func (mod *Module) parse(ctx context.Context, host *Module) (err error) {
 				Replace:  nil,
 				locker:   &sync.Mutex{},
 				parsed:   false,
-				services: nil,
 				types:    nil,
 			})
 		}
@@ -237,7 +254,6 @@ func (mod *Module) parse(ctx context.Context, host *Module) (err error) {
 						Replace:  nil,
 						locker:   &sync.Mutex{},
 						parsed:   false,
-						services: nil,
 						types:    nil,
 					}
 				}
@@ -294,61 +310,6 @@ func (mod *Module) parse(ctx context.Context, host *Module) (err error) {
 
 	mod.sources = newSource(mod.Path, mod.Dir)
 	mod.parsed = true
-	return
-}
-
-func (mod *Module) Services() (services Services, err error) {
-	mod.locker.Lock()
-	defer mod.locker.Unlock()
-	if mod.services != nil {
-		services = make([]*Service, 0, 1)
-		for _, service := range mod.services {
-			services = append(services, service)
-		}
-		sort.Sort(services)
-		return
-	}
-	servicesDir := filepath.ToSlash(filepath.Join(mod.Dir, "modules"))
-	entries, readServicesDirErr := os.ReadDir(servicesDir)
-	if readServicesDirErr != nil {
-		err = errors.Warning("read services dir failed").WithCause(readServicesDirErr).WithMeta("dir", servicesDir)
-		return
-	}
-	if entries == nil || len(entries) == 0 {
-		return
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		path := filepath.ToSlash(filepath.Join(mod.Path, "modules", entry.Name()))
-		docFilename := filepath.ToSlash(filepath.Join(mod.Dir, "modules", entry.Name(), "doc.go"))
-		if !files.ExistFile(docFilename) {
-			continue
-		}
-		service, loaded, loadErr := tryLoadService(mod, path)
-		if loadErr != nil {
-			err = errors.Warning("load service failed").WithCause(loadErr).WithMeta("file", docFilename)
-			return
-		}
-		if !loaded {
-			continue
-		}
-		if mod.services == nil {
-			mod.services = make(map[string]*Service)
-		}
-		_, exist := mod.services[service.Name]
-		if exist {
-			err = errors.Warning("load service failed").WithCause(errors.Warning("sources: services was duplicated")).WithMeta("service", service.Name)
-			return
-		}
-		mod.services[service.Name] = service
-	}
-	services = make([]*Service, 0, 1)
-	for _, service := range mod.services {
-		services = append(services, service)
-	}
-	sort.Sort(services)
 	return
 }
 
@@ -432,22 +393,31 @@ func (mod *Module) GetType(path string, name string) (typ *Type, has bool) {
 	return
 }
 
-func (mod *Module) Types() (types map[string]*Type) {
-	types = make(map[string]*Type)
-	mod.types.values.Range(func(key, value any) bool {
-		typ, ok := value.(*Type)
-		if !ok {
-			return true
-		}
-		flats := typ.Flats()
-		for k, t := range flats {
-			_, exist := types[k]
-			if !exist {
-				types[k] = t
-			}
-		}
-		return true
-	})
+func (mod *Module) Sources() *Sources {
+	return mod.sources
+}
+
+//func (mod *Module) Types() (types map[string]*Type) {
+//	types = make(map[string]*Type)
+//	mod.types.values.Range(func(key, value any) bool {
+//		typ, ok := value.(*Type)
+//		if !ok {
+//			return true
+//		}
+//		flats := typ.Flats()
+//		for k, t := range flats {
+//			_, exist := types[k]
+//			if !exist {
+//				types[k] = t
+//			}
+//		}
+//		return true
+//	})
+//	return
+//}
+
+func (mod *Module) Types() (types *Types) {
+	types = mod.types
 	return
 }
 
@@ -464,32 +434,6 @@ func (mod *Module) String() (s string) {
 			}
 		}
 		_, _ = buf.WriteString("\n")
-	}
-	services, servicesErr := mod.Services()
-	if servicesErr != nil {
-		_, _ = buf.WriteString("service: load failed\n")
-		_, _ = buf.WriteString(fmt.Sprintf("%+v", servicesErr))
-
-	} else {
-		for _, service := range services {
-			_, _ = buf.WriteString(fmt.Sprintf("service: %s", service.Name))
-			if len(service.Components) > 0 {
-				_, _ = buf.WriteString("component: ")
-				for i, component := range service.Components {
-					if i == 0 {
-						_, _ = buf.WriteString(fmt.Sprintf("%s", component.Indent))
-					} else {
-						_, _ = buf.WriteString(fmt.Sprintf(", %s", component.Indent))
-					}
-				}
-			}
-			_, _ = buf.WriteString("\n")
-			if len(service.Functions) > 0 {
-				for _, function := range service.Functions {
-					_, _ = buf.WriteString(fmt.Sprintf("fn: %s\n", function.Name()))
-				}
-			}
-		}
 	}
 	s = buf.String()
 	return

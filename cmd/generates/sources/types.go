@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	BasicKind   = TypeKind(iota + 1) // 基本类型，oas时不需要ref
-	BuiltinKind                      // 内置类型，oas时需要ref，但不需要建component
+	BasicKind = TypeKind(iota + 1)
+	BuiltinKind
 	IdentKind
 	InterfaceKind
 	StructKind
@@ -286,7 +286,7 @@ func (typ *Type) Basic() (name string, ok bool) {
 	return
 }
 
-func (typ *Type) Copied() (v *Type) {
+func (typ *Type) Clone() (v *Type) {
 	v = &Type{
 		Kind:            typ.Kind,
 		Path:            typ.Path,
@@ -300,7 +300,7 @@ func (typ *Type) Copied() (v *Type) {
 	if typ.Elements != nil && len(typ.Elements) > 0 {
 		v.Elements = make([]*Type, 0, 1)
 		for _, element := range typ.Elements {
-			v.Elements = append(v.Elements, element.Copied())
+			v.Elements = append(v.Elements, element.Clone())
 		}
 	}
 	return
@@ -398,7 +398,7 @@ func (typ *Type) packParadigms(ctx context.Context) (err error) {
 		if stop {
 			break
 		}
-		packed := pt.Copied()
+		packed := pt.Clone()
 		err = packed.packParadigms(context.WithValue(ctx, "packing", paradigms))
 		if err != nil {
 			break

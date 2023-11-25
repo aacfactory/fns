@@ -79,6 +79,8 @@ type Abstract struct {
 
 func (abstract *Abstract) Construct(options Options) (err error) {
 	abstract.log = options.Log
+	abstract.id = options.Id
+	abstract.version = options.Version
 	if abstract.components != nil {
 		for _, component := range abstract.components {
 			config, hasConfig := options.Config.Node(component.Name())

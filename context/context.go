@@ -32,7 +32,7 @@ func Acquire(ctx context.Context) Context {
 	if cached == nil {
 		return &context_{
 			Context: ctx,
-			entries: make(Entries, 0, 1),
+			users:   make(Entries, 0, 1),
 			locals:  make(Entries, 0, 1),
 		}
 	}
@@ -45,7 +45,7 @@ func Release(ctx context.Context) {
 	v, ok := ctx.(*context_)
 	if ok {
 		v.Context = nil
-		v.entries.Reset()
+		v.users.Reset()
 		v.locals.Reset()
 		pool.Put(v)
 	}
@@ -63,12 +63,12 @@ type Context interface {
 
 type context_ struct {
 	context.Context
-	entries Entries
-	locals  Entries
+	users  Entries
+	locals Entries
 }
 
 func (c *context_) UserValue(key []byte) any {
-	v := c.entries.Get(key)
+	v := c.users.Get(key)
 	if v != nil {
 		return v
 	}
@@ -80,7 +80,7 @@ func (c *context_) UserValue(key []byte) any {
 }
 
 func (c *context_) SetUserValue(key []byte, val any) {
-	c.entries.Set(key, val)
+	c.users.Set(key, val)
 }
 
 func (c *context_) UserValues(fn func(key []byte, val any)) {
@@ -88,7 +88,7 @@ func (c *context_) UserValues(fn func(key []byte, val any)) {
 	if ok {
 		parent.UserValues(fn)
 	}
-	c.entries.Foreach(fn)
+	c.users.Foreach(fn)
 }
 
 func (c *context_) LocalValue(key []byte) any {
@@ -118,7 +118,7 @@ func (c *context_) LocalValues(fn func(key []byte, val any)) {
 func (c *context_) Value(key any) any {
 	switch k := key.(type) {
 	case []byte:
-		v := c.entries.Get(k)
+		v := c.users.Get(k)
 		if v == nil {
 			v = c.locals.Get(k)
 			if v == nil {
@@ -128,7 +128,7 @@ func (c *context_) Value(key any) any {
 		return v
 	case string:
 		s := unsafe.Slice(unsafe.StringData(k), len(k))
-		v := c.entries.Get(s)
+		v := c.users.Get(s)
 		if v == nil {
 			v = c.locals.Get(s)
 			if v == nil {

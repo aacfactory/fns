@@ -234,7 +234,7 @@ func (manager *Manager) Listen(ctx context.Context) (err error) {
 		}
 		errCh := make(chan error, 1)
 		name := ln.Name()
-		lnCtx := context.WithValue(ctx, bytex.FromString("listener"), name)
+		lnCtx := context.WithValue(ctx, "listener", name)
 		fLog.With(lnCtx, manager.log.With("service", name))
 		if components := ln.Components(); len(components) > 0 {
 			WithComponents(lnCtx, bytex.FromString(name), components)

@@ -34,7 +34,7 @@ func Wrap(ctx context.Context) Context {
 	}
 	return &context_{
 		Context: ctx,
-		entries: make(Entries, 0, 1),
+		users:   make(Entries, 0, 1),
 		locals:  make(Entries, 0, 1),
 	}
 }
@@ -43,19 +43,12 @@ func TODO() Context {
 	return Wrap(context.TODO())
 }
 
-func WithValue(parent context.Context, key []byte, val any) Context {
-	ctx, ok := parent.(Context)
-	if ok {
-		ctx.SetLocalValue(key, val)
-		return ctx
+func WithValue(parent context.Context, key any, val any) Context {
+	return &valueContext{
+		Context: Wrap(parent),
+		key:     key,
+		val:     val,
 	}
-	ctx = &context_{
-		Context: ctx,
-		entries: make(Entries, 0, 1),
-		locals:  make(Entries, 0, 1),
-	}
-	ctx.SetLocalValue(key, val)
-	return ctx
 }
 
 type CancelFunc context.CancelFunc

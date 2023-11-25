@@ -39,6 +39,8 @@ func NewParam(src interface{}) Param {
 	return scanner.New(src)
 }
 
+// ValueOfParam
+// type of T must be struct value or slice, can not be ptr
 func ValueOfParam[T any](param Param) (v T, err error) {
 	v, err = scanner.Value[T](param)
 	if err != nil {

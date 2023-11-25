@@ -30,6 +30,8 @@ func NewResponse(src interface{}) Response {
 	return scanner.New(src)
 }
 
+// ValueOfResponse
+// type of T must be struct value or slice, can not be ptr
 func ValueOfResponse[T any](response Response) (v T, err error) {
 	v, err = scanner.Value[T](response)
 	if err != nil {

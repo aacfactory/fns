@@ -143,7 +143,7 @@ func Value[T any](s Scanner) (v T, err error) {
 		if ok {
 			return
 		}
-		err = errors.Warning("fns: get value of scanner failed, type is not matched")
+		err = obj.Scan(&v)
 		return
 	}
 	err = s.Scan(&v)

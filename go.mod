@@ -8,7 +8,7 @@ require (
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.13.5
 	github.com/aacfactory/gcg v1.0.5
-	github.com/aacfactory/json v1.16.2
+	github.com/aacfactory/json v1.16.3
 	github.com/aacfactory/logs v1.13.0
 	github.com/aacfactory/workers v1.8.4
 	github.com/cespare/xxhash/v2 v2.2.0
@@ -22,11 +22,11 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.51.0
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/crypto v0.15.0
+	golang.org/x/crypto v0.16.0
 	golang.org/x/mod v0.14.0
 	golang.org/x/sync v0.5.0
-	golang.org/x/sys v0.14.0
-	golang.org/x/time v0.4.0
+	golang.org/x/sys v0.15.0
+	golang.org/x/time v0.5.0
 )
 
 require (
@@ -52,8 +52,8 @@ require (
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
-	golang.org/x/net v0.18.0 // indirect
+	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.15.0 // indirect
+	golang.org/x/tools v0.16.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 )

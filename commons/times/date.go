@@ -19,13 +19,12 @@ package times
 
 import (
 	"fmt"
-	"github.com/aacfactory/json"
 	"reflect"
 	"time"
 )
 
 func DateNow() Date {
-	return MapToDate(time.Now())
+	return DataOf(time.Now())
 }
 
 func NewDate(year int, month time.Month, day int) Date {
@@ -36,12 +35,8 @@ func NewDate(year int, month time.Month, day int) Date {
 	}
 }
 
-func MapToDate(t time.Time) Date {
+func DataOf(t time.Time) Date {
 	return NewDate(t.Year(), t.Month(), t.Day())
-}
-
-func NewDateFromJsonDate(d json.Date) Date {
-	return NewDate(d.Year, d.Month, d.Day)
 }
 
 type Date struct {

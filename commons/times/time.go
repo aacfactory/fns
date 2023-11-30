@@ -24,7 +24,7 @@ import (
 )
 
 func TimeNow() Time {
-	return MapToTime(time.Now())
+	return TimeOf(time.Now())
 }
 
 func NewTime(hour int, min int, sec int) Time {
@@ -35,7 +35,7 @@ func NewTime(hour int, min int, sec int) Time {
 	}
 }
 
-func MapToTime(t time.Time) Time {
+func TimeOf(t time.Time) Time {
 	return NewTime(t.Hour(), t.Minute(), t.Second())
 }
 

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/commons/uid"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
@@ -32,17 +32,17 @@ import (
 )
 
 type Param interface {
-	scanner.Scanner
+	objects.Object
 }
 
 func NewParam(src interface{}) Param {
-	return scanner.New(src)
+	return objects.New(src)
 }
 
 // ValueOfParam
 // type of T must be struct value or slice, can not be ptr
 func ValueOfParam[T any](param Param) (v T, err error) {
-	v, err = scanner.Value[T](param)
+	v, err = objects.Value[T](param)
 	if err != nil {
 		err = errors.Warning("fns: get value of param failed").WithCause(err)
 		return
@@ -255,7 +255,7 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 	}
 	service, fn := r.Fn()
 	var pp []byte
-	if r.Param().Exist() {
+	if r.Param().Valid() {
 		pp, err = r.Param().MarshalJSON()
 		if err != nil {
 			err = errors.Warning("fns: hash request failed").WithCause(err)

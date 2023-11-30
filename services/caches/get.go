@@ -86,7 +86,7 @@ func (fn *getFn) Readonly() bool {
 }
 
 func (fn *getFn) Handle(r services.Request) (v interface{}, err error) {
-	if !r.Param().Exist() {
+	if !r.Param().Valid() {
 		err = errors.Warning("fns: get cache failed").WithCause(errors.Warning("param is invalid"))
 		return
 	}

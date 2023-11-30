@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/valyala/bytebufferpool"
 	"reflect"
 	"sort"
@@ -41,27 +41,27 @@ type Params interface {
 	Encode() (p []byte)
 }
 
-func ParamsScanner(params Params) scanner.Scanner {
-	return paramsScanner{
+func ObjectParams(params Params) objects.Object {
+	return paramsObject{
 		value: params,
 	}
 }
 
-type paramsScanner struct {
+type paramsObject struct {
 	value Params
 }
 
-func (p paramsScanner) Exist() (ok bool) {
+func (p paramsObject) Valid() (ok bool) {
 	ok = p.value.Len() > 0
 	return
 }
 
-func (p paramsScanner) Scan(dst interface{}) (err error) {
+func (p paramsObject) TransformTo(dst interface{}) (err error) {
 	err = DecodeParams(p.value, dst)
 	return
 }
 
-func (p paramsScanner) MarshalJSON() ([]byte, error) {
+func (p paramsObject) MarshalJSON() ([]byte, error) {
 	encoded := p.value.Encode()
 	capacity := len(encoded) + 2
 	b := make([]byte, capacity)

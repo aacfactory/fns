@@ -15,7 +15,7 @@
  *
  */
 
-package scanner
+package objects
 
 import (
 	stdjson "encoding/json"
@@ -25,17 +25,11 @@ import (
 	"reflect"
 )
 
-type Scanner interface {
-	Exist() (ok bool)
-	Scan(dst interface{}) (err error)
-	json.Marshaler
-}
-
-func New(src interface{}) Scanner {
+func New(src interface{}) Object {
 	if src == nil {
 		return object{}
 	}
-	s, ok := src.(Scanner)
+	s, ok := src.(Object)
 	if ok {
 		return s
 	}
@@ -44,43 +38,49 @@ func New(src interface{}) Scanner {
 	}
 }
 
-type object struct {
-	value interface{}
+type Object interface {
+	Valid() (ok bool)
+	TransformTo(dst any) (err error)
+	json.Marshaler
 }
 
-func (obj object) Exist() (ok bool) {
+type object struct {
+	value any
+}
+
+func (obj object) Valid() (ok bool) {
 	if obj.value == nil {
 		return
 	}
-	pp, isParam := obj.value.(Scanner)
-	if isParam {
-		ok = pp.Exist()
+	o, isObject := obj.value.(Object)
+	if isObject {
+		ok = o.Valid()
 		return
 	}
 	ok = true
 	return
 }
 
-func (obj object) Scan(dst interface{}) (err error) {
+func (obj object) TransformTo(dst interface{}) (err error) {
 	if dst == nil {
-		err = errors.Warning("fns: scan object failed").WithCause(fmt.Errorf("dst is nil"))
+		err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("dst is nil"))
 		return
 	}
-	if !obj.Exist() {
+	if !obj.Valid() {
 		return
 	}
-	scanner, isScanner := obj.value.(Scanner)
-	if isScanner {
-		err = scanner.Scan(dst)
+	o, isObject := obj.value.(Object)
+	if isObject {
+		err = o.TransformTo(dst)
 		if err != nil {
-			err = errors.Warning("fns: scan object failed").WithCause(err)
+			err = errors.Warning("fns: transform object failed").WithCause(err)
 			return
 		}
 		return
 	}
 	dpv := reflect.ValueOf(dst)
 	if dpv.Kind() != reflect.Ptr {
-		err = errors.Warning("fns: scan object failed").WithCause(fmt.Errorf("type of dst is not pointer"))
+		err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("type of dst is not pointer"))
 		return
 	}
 	sv := reflect.ValueOf(obj.value)
@@ -99,12 +99,12 @@ func (obj object) Scan(dst interface{}) (err error) {
 		dv.Set(sv.Convert(dv.Type()))
 		return
 	}
-	err = errors.Warning("fns: scan object failed").WithCause(fmt.Errorf("type of dst is not matched"))
+	err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("type of dst is not matched"))
 	return
 }
 
 func (obj object) MarshalJSON() (data []byte, err error) {
-	if !obj.Exist() {
+	if !obj.Valid() {
 		data = json.NullBytes
 		return
 	}
@@ -129,23 +129,23 @@ func (obj object) MarshalJSON() (data []byte, err error) {
 	default:
 		data, err = json.Marshal(obj.value)
 		if err != nil {
-			err = errors.Warning("fns: encode scanner object to json bytes failed").WithCause(err)
+			err = errors.Warning("fns: encode object to json bytes failed").WithCause(err)
 			return
 		}
 	}
 	return
 }
 
-func Value[T any](s Scanner) (v T, err error) {
-	obj, ok := s.(object)
+func Value[T any](obj Object) (v T, err error) {
+	o, ok := obj.(object)
 	if ok {
-		v, ok = obj.value.(T)
+		v, ok = o.value.(T)
 		if ok {
 			return
 		}
-		err = obj.Scan(&v)
+		err = obj.TransformTo(&v)
 		return
 	}
-	err = s.Scan(&v)
+	err = obj.TransformTo(&v)
 	return
 }

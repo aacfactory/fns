@@ -19,7 +19,7 @@ package context
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 )
 
 func UserValue[T any](ctx Context, key []byte) (v T, has bool, err error) {
@@ -31,7 +31,7 @@ func UserValue[T any](ctx Context, key []byte) (v T, has bool, err error) {
 	if has {
 		return
 	}
-	v, err = scanner.Value[T](scanner.New(vv))
+	v, err = objects.Value[T](objects.New(vv))
 	if err != nil {
 		err = errors.Warning("fns: get context user value failed").WithCause(err).WithMeta("key", string(key))
 		return

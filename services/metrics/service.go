@@ -78,7 +78,7 @@ func (fn *reportFn) Readonly() bool {
 }
 
 func (fn *reportFn) Handle(r services.Request) (v interface{}, err error) {
-	if !r.Param().Exist() {
+	if !r.Param().Valid() {
 		return
 	}
 	param, paramErr := services.ValueOfParam[Metric](r.Param())

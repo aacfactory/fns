@@ -41,7 +41,7 @@ func TestNew(t *testing.T) {
 		return
 	}
 	v := 0
-	err = r.Scan(&v)
+	err = r.TransformTo(&v)
 	fmt.Println(v, err)
 }
 

@@ -18,7 +18,6 @@
 package transports
 
 import (
-	"github.com/aacfactory/fns/commons/objects"
 	"sync"
 	"time"
 )
@@ -33,8 +32,13 @@ const (
 
 type CookieSameSite int
 
+type nocopy struct{}
+
+func (*nocopy) Lock()   {}
+func (*nocopy) Unlock() {}
+
 type Cookie struct {
-	noCopy   objects.NoCopy
+	nocopy   nocopy
 	key      []byte
 	value    []byte
 	expire   time.Time

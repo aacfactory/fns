@@ -73,7 +73,7 @@ func (fn *removeFn) Readonly() bool {
 }
 
 func (fn *removeFn) Handle(r services.Request) (v interface{}, err error) {
-	if !r.Param().Exist() {
+	if !r.Param().Valid() {
 		err = errors.Warning("fns: remove cache failed").WithCause(errors.Warning("param is invalid"))
 		return
 	}

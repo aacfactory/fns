@@ -25,8 +25,8 @@ import (
 
 type Result interface {
 	json.Marshaler
-	Exist() (ok bool)
-	Scan(dst interface{}) (err error)
+	Valid() (ok bool)
+	TransformTo(dst interface{}) (err error)
 }
 
 type result struct {
@@ -37,29 +37,29 @@ func (r result) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.value)
 }
 
-func (r result) Exist() (ok bool) {
+func (r result) Valid() (ok bool) {
 	if r.value == nil {
 		return
 	}
 	rr, matched := r.value.(Result)
 	if matched {
-		ok = rr.Exist()
+		ok = rr.Valid()
 		return
 	}
 	ok = true
 	return
 }
 
-func (r result) Scan(dst interface{}) (err error) {
+func (r result) TransformTo(dst interface{}) (err error) {
 	if dst == nil {
 		return
 	}
-	if !r.Exist() {
+	if !r.Valid() {
 		return
 	}
 	rr, matched := r.value.(Result)
 	if matched {
-		err = rr.Scan(dst)
+		err = rr.TransformTo(dst)
 		return
 	}
 	dpv := reflect.ValueOf(dst)

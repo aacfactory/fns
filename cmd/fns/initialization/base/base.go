@@ -23,7 +23,6 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/generates/files"
 	"github.com/aacfactory/fns/cmd/generates/processes"
-	"github.com/aacfactory/fns/cmd/generates/writers"
 	"path/filepath"
 	"time"
 )
@@ -40,7 +39,7 @@ func Write(ctx context.Context, path string, dir string) (err error) {
 		err = modErr
 		return
 	}
-	process.Add("mod: writing", writers.Unit(mod))
+	process.Add("mod: writing", Unit(mod))
 	// configs
 	configs, configsErr := NewConfigFiles(dir)
 	if configsErr != nil {
@@ -49,7 +48,7 @@ func Write(ctx context.Context, path string, dir string) (err error) {
 	}
 	configsUints := make([]processes.Unit, 0, 1)
 	for _, config := range configs {
-		configsUints = append(configsUints, writers.Unit(config))
+		configsUints = append(configsUints, Unit(config))
 	}
 	process.Add("configs: writing", configsUints...)
 	// hooks
@@ -58,14 +57,14 @@ func Write(ctx context.Context, path string, dir string) (err error) {
 		err = hooksErr
 		return
 	}
-	process.Add("hooks: writing", writers.Unit(hooks))
+	process.Add("hooks: writing", Unit(hooks))
 	// internal >>>
 	generator, generatorErr := NewInternalGeneratorsFile(dir)
 	if generatorErr != nil {
 		err = generatorErr
 		return
 	}
-	process.Add("generator: writing", writers.Unit(generator))
+	process.Add("generator: writing", Unit(generator))
 	// internal <<<
 	// modules
 	modules, modulesErr := NewModulesFile(path, dir)
@@ -73,21 +72,21 @@ func Write(ctx context.Context, path string, dir string) (err error) {
 		err = modulesErr
 		return
 	}
-	process.Add("modules: writing", writers.Unit(modules))
+	process.Add("modules: writing", Unit(modules))
 	// repositories
 	repositories, repositoriesErr := NewRepositoryFile(dir)
 	if repositoriesErr != nil {
 		err = repositoriesErr
 		return
 	}
-	process.Add("repositories: writing", writers.Unit(repositories))
+	process.Add("repositories: writing", Unit(repositories))
 	// main
 	main, mainErr := NewMainFile(path, dir)
 	if mainErr != nil {
 		err = mainErr
 		return
 	}
-	process.Add("main: writing", writers.Unit(main))
+	process.Add("main: writing", Unit(main))
 	// start
 	results := process.Start(ctx)
 	for {

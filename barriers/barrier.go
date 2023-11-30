@@ -20,13 +20,13 @@ package barriers
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/context"
 	"golang.org/x/sync/singleflight"
 )
 
 type Result interface {
-	scanner.Scanner
+	objects.Object
 }
 
 type Barrier interface {
@@ -60,7 +60,7 @@ func (b *barrier) Do(_ context.Context, key []byte, fn func() (result interface{
 		err = errors.Map(doErr)
 		return
 	}
-	r = scanner.New(v)
+	r = objects.New(v)
 	return
 }
 

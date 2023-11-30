@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/mmhash"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
@@ -146,9 +146,9 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 			return
 		}
 		if address == handler.manager.Address() {
-			var param scanner.Scanner
+			var param objects.Object
 			if bytes.Equal(method, transports.MethodGet) {
-				param = transports.ParamsScanner(queryParams)
+				param = transports.ObjectParams(queryParams)
 			} else {
 				param = json.RawMessage(body)
 			}

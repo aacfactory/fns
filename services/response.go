@@ -19,21 +19,21 @@ package services
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 )
 
 type Response interface {
-	scanner.Scanner
+	objects.Object
 }
 
 func NewResponse(src interface{}) Response {
-	return scanner.New(src)
+	return objects.New(src)
 }
 
 // ValueOfResponse
 // type of T must be struct value or slice, can not be ptr
 func ValueOfResponse[T any](response Response) (v T, err error) {
-	v, err = scanner.Value[T](response)
+	v, err = objects.Value[T](response)
 	if err != nil {
 		err = errors.Warning("fns: get value of response failed").WithCause(err)
 		return

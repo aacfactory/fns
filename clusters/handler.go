@@ -218,7 +218,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	var dataErr error
 	var span *tracings.Span
 	if succeed {
-		if response.Exist() {
+		if response.Valid() {
 			data, dataErr = json.Marshal(response)
 		}
 	} else {

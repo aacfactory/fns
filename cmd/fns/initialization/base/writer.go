@@ -15,9 +15,33 @@
  *
  */
 
-package objects
+package base
 
-type NoCopy struct{}
+import (
+	"context"
+	"github.com/aacfactory/fns/cmd/generates/processes"
+)
 
-func (*NoCopy) Lock()   {}
-func (*NoCopy) Unlock() {}
+type CodeFileWriter interface {
+	Name() (name string)
+	Write(ctx context.Context) (err error)
+}
+
+type CodeFileUnit struct {
+	cf CodeFileWriter
+}
+
+func (unit *CodeFileUnit) Handle(ctx context.Context) (result interface{}, err error) {
+	err = unit.cf.Write(ctx)
+	if err != nil {
+		return
+	}
+	result = unit.cf.Name()
+	return
+}
+
+func Unit(file CodeFileWriter) (unit processes.Unit) {
+	return &CodeFileUnit{
+		cf: file,
+	}
+}

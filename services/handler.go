@@ -22,7 +22,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/mmhash"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
@@ -161,12 +161,12 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 	// header <<<
 
 	// param
-	var param scanner.Scanner
+	var param objects.Object
 	method := r.Method()
 	if bytes.Equal(method, transports.MethodGet) {
 		// query
 		queryParams := r.Params()
-		param = transports.ParamsScanner(queryParams)
+		param = transports.ObjectParams(queryParams)
 		_, _ = groupKeyBuf.Write(queryParams.Encode())
 	} else {
 		// body
@@ -196,7 +196,7 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 		return
 	}
 	response := v.(Response)
-	if response.Exist() {
+	if response.Valid() {
 		w.Succeed(response)
 	} else {
 		w.Succeed(nil)

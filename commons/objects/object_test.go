@@ -15,11 +15,11 @@
  *
  */
 
-package scanner_test
+package objects_test
 
 import (
 	"fmt"
-	"github.com/aacfactory/fns/commons/scanner"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/json"
 	"testing"
 	"time"
@@ -27,9 +27,9 @@ import (
 
 func TestValue(t *testing.T) {
 	now := time.Now()
-	s := scanner.New(now)
-	fmt.Println(scanner.Value[time.Time](s))
+	s := objects.New(now)
+	fmt.Println(objects.Value[time.Time](s))
 	p, _ := json.Marshal(now)
 	s = json.RawMessage(p)
-	fmt.Println(scanner.Value[time.Time](s))
+	fmt.Println(objects.Value[time.Time](s))
 }

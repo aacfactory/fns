@@ -46,17 +46,18 @@ type Node struct {
 }
 
 func TestConvertListToTree(t *testing.T) {
-	nodes := []*Node{
+	nodes := []Node{
+		{Id: "C", Parent: "D"},
 		{Id: "A", Parent: ""},
 		{Id: "A2", Parent: "A"},
 		{Id: "A1", Parent: "A"},
 		{Id: "A12", Parent: "A1"},
 		{Id: "A11", Parent: "A1"},
+		{Id: "B1", Parent: "B"},
+		{Id: "B1", Parent: "B"},
 		{Id: "B", Parent: ""},
-		{Id: "B1", Parent: "B"},
-		{Id: "B1", Parent: "B"},
 	}
-	v, treesErr := trees.ConvertListToTree[*Node](nodes)
+	v, treesErr := trees.ConvertListToTree[Node](nodes)
 	if treesErr != nil {
 		t.Errorf("%+v", treesErr)
 		return

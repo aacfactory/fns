@@ -19,12 +19,11 @@ package shareds
 
 import (
 	"encoding/binary"
-	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/caches"
-	"github.com/aacfactory/fns/commons/container/smap"
+	"github.com/aacfactory/fns/commons/container/bmap"
 	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/logs"
@@ -72,17 +71,19 @@ func defaultLocalStoreBuild(log logs.Logger, config configures.Config) (store St
 	}
 	cache := caches.New(cacheSize)
 	store = &localStore{
+		log:       log,
 		locker:    new(sync.RWMutex),
 		cache:     cache,
-		persisted: smap.New(),
+		persisted: bmap.New[uint64, []byte](),
 	}
 	return
 }
 
 type localStore struct {
+	log       logs.Logger
 	locker    *sync.RWMutex
 	cache     *caches.Cache
-	persisted *smap.Map
+	persisted bmap.BMap[uint64, []byte]
 }
 
 func (store *localStore) Get(_ context.Context, key []byte) (value []byte, has bool, err error) {
@@ -144,12 +145,7 @@ func (store *localStore) Incr(_ context.Context, key []byte, delta int64) (v int
 	n := int64(0)
 	p, has := store.persisted.Get(k)
 	if has {
-		encoded, ok := p.([]byte)
-		if !ok {
-			err = errors.Warning("fns: shared store incr failed").WithCause(fmt.Errorf("value of key is not varint bytes")).WithMeta("key", string(key))
-			return
-		}
-		n, _ = binary.Varint(encoded)
+		n, _ = binary.Varint(p)
 	}
 	v = n + delta
 	encoded := make([]byte, 10)
@@ -167,7 +163,7 @@ func (store *localStore) Remove(_ context.Context, key []byte) (err error) {
 	defer store.locker.Unlock()
 	store.cache.Remove(key)
 	k := mmhash.Sum64(key)
-	store.persisted.Delete(k)
+	store.persisted.Remove(k)
 	return
 }
 

@@ -133,7 +133,6 @@ func New(options ...Option) (app Application) {
 		var clusterErr error
 		manager, shared, barrier, clusterHandlers, clusterErr = clusters.New(clusters.Options{
 			Id:      appId,
-			Name:    "",
 			Version: appVersion,
 			Port:    port,
 			Log:     logger.With("fns", "cluster"),

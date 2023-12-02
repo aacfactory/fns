@@ -37,7 +37,6 @@ type ClusterOptions struct {
 	Log     logs.Logger
 	Config  configures.Config
 	Id      string
-	Name    string
 	Version versions.Version
 	Address string
 }
@@ -71,7 +70,6 @@ func loadCluster(name string) (cluster Cluster, has bool) {
 
 type Options struct {
 	Id      string
-	Name    string
 	Version versions.Version
 	Port    int
 	Log     logs.Logger
@@ -124,7 +122,6 @@ func New(options Options) (manager services.EndpointsManager, shared shareds.Sha
 		Log:     options.Log.With("cluster", options.Config.Name),
 		Config:  clusterConfig,
 		Id:      options.Id,
-		Name:    options.Name,
 		Version: options.Version,
 		Address: address,
 	})

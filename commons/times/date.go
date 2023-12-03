@@ -60,11 +60,11 @@ func (d *Date) UnmarshalJSON(p []byte) error {
 	return nil
 }
 
-func (d *Date) MarshalJSON() ([]byte, error) {
+func (d Date) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("\"%s\"", d.ToTime().Format("2006-01-02"))), nil
 }
 
-func (d *Date) ToTime() time.Time {
+func (d Date) ToTime() time.Time {
 	if d.Year < 1 {
 		d.Year = 1
 	}
@@ -77,12 +77,12 @@ func (d *Date) ToTime() time.Time {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.Local)
 }
 
-func (d *Date) IsZero() (ok bool) {
+func (d Date) IsZero() (ok bool) {
 	ok = d.Year < 2 && d.Month < 2 && d.Day < 2
 	return
 }
 
-func (d *Date) String() string {
+func (d Date) String() string {
 	return d.ToTime().Format("2006-01-02")
 }
 

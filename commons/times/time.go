@@ -60,11 +60,11 @@ func (t *Time) UnmarshalJSON(p []byte) error {
 	return nil
 }
 
-func (t *Time) MarshalJSON() ([]byte, error) {
+func (t Time) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("\"%s\"", t.ToTime().Format("15:04:05"))), nil
 }
 
-func (t *Time) ToTime() time.Time {
+func (t Time) ToTime() time.Time {
 	if t.Hour < 0 || t.Hour > 23 {
 		t.Hour = 0
 	}
@@ -77,12 +77,12 @@ func (t *Time) ToTime() time.Time {
 	return time.Date(1, 1, 1, t.Hour, t.Minutes, t.Second, 0, time.Local)
 }
 
-func (t *Time) IsZero() (ok bool) {
+func (t Time) IsZero() (ok bool) {
 	ok = t.Hour == 0 && t.Minutes == 0 && t.Second == 0
 	return
 }
 
-func (t *Time) String() string {
+func (t Time) String() string {
 	return t.ToTime().Format("15:04:05")
 }
 

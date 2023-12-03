@@ -18,6 +18,7 @@
 package times
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"time"
@@ -116,4 +117,11 @@ func (d *Date) Scan(src interface{}) error {
 	d.Month = v.Month()
 	d.Day = v.Day()
 	return nil
+}
+
+func (d Date) Value() (driver.Value, error) {
+	if d.IsZero() {
+		return nil, nil
+	}
+	return d.String(), nil
 }

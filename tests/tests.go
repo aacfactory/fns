@@ -301,5 +301,7 @@ func Teardown() {
 }
 
 func TODO() context.Context {
-	return runtime.With(context.TODO(), app.rt)
+	ctx := runtime.With(context.TODO(), app.rt)
+	logs.With(ctx, app.rt.RootLog().With("tests", "testing"))
+	return ctx
 }

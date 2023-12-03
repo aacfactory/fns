@@ -18,6 +18,7 @@
 package times
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"time"
@@ -118,4 +119,11 @@ func (t *Time) Scan(src interface{}) error {
 	t.Minutes = v.Minute()
 	t.Second = v.Second()
 	return nil
+}
+
+func (t Time) Value() (driver.Value, error) {
+	if t.IsZero() {
+		return nil, nil
+	}
+	return t.String(), nil
 }

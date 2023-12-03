@@ -18,6 +18,7 @@
 package configs
 
 import (
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/hooks"
 	"github.com/aacfactory/fns/logs"
@@ -25,6 +26,7 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/json"
 )
 
 type WorkersConfig struct {
@@ -45,9 +47,55 @@ type RuntimeConfig struct {
 type Config struct {
 	Runtime   RuntimeConfig     `json:"runtime,omitempty" yaml:"runtime,omitempty"`
 	Log       logs.Config       `json:"log,omitempty" yaml:"log,omitempty"`
-	Cluster   *clusters.Config  `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+	Cluster   clusters.Config   `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 	Transport transports.Config `json:"transport,omitempty" yaml:"transport,omitempty"`
 	Proxy     proxies.Config    `json:"proxy,omitempty" yaml:"proxy,omitempty"`
 	Services  services.Config   `json:"services,omitempty" yaml:"services,omitempty"`
 	Hooks     hooks.Config      `json:"hooks,omitempty" yaml:"hooks,omitempty"`
+}
+
+func (config *Config) AddService(name string, conf any) (err error) {
+	p, encodeErr := json.Marshal(conf)
+	if encodeErr != nil {
+		err = errors.Warning("fns: config add service failed").WithMeta("service", name).WithCause(encodeErr)
+		return
+	}
+	if config.Services == nil {
+		config.Services = make(services.Config)
+	}
+	config.Services[name] = p
+	return
+}
+
+func (config *Config) SetCluster(cluster clusters.Config) {
+	config.Cluster = cluster
+	return
+}
+
+func (config *Config) SetTransport(transport transports.Config) {
+	config.Transport = transport
+	return
+}
+
+func New() *Config {
+	return &Config{
+		Runtime: RuntimeConfig{
+			Procs:   ProcsConfig{},
+			Workers: WorkersConfig{},
+			Shared:  shareds.LocalSharedConfig{},
+		},
+		Log: logs.Config{
+			Level:     "debug",
+			Formatter: "console",
+			Color:     true,
+			Writer:    logs.WriterConfig{},
+		},
+		Cluster: clusters.Config{},
+		Transport: transports.Config{
+			Port: 18080,
+		},
+		Proxy:    proxies.Config{},
+		Services: make(services.Config),
+		Hooks:    nil,
+	}
 }

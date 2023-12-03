@@ -123,7 +123,7 @@ func New(options ...Option) (app Application) {
 	// shared
 	var shared shareds.Shared
 	// cluster
-	if clusterConfig := config.Cluster; clusterConfig != nil {
+	if clusterConfig := config.Cluster; clusterConfig.Name != "" {
 		port, portErr := config.Transport.GetPort()
 		if portErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(portErr)))
@@ -139,7 +139,7 @@ func New(options ...Option) (app Application) {
 			Worker:  worker,
 			Local:   local,
 			Dialer:  opt.transport,
-			Config:  *clusterConfig,
+			Config:  clusterConfig,
 		})
 		if clusterErr != nil {
 			panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed").WithCause(clusterErr)))

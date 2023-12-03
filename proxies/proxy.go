@@ -25,7 +25,6 @@ import (
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/fns/transports/fast"
 	"github.com/aacfactory/logs"
 )
 
@@ -46,7 +45,7 @@ type Proxy interface {
 
 func New(options ...Option) (p Proxy, err error) {
 	opt := Options{
-		transport:   fast.New(),
+		transport:   nil,
 		middlewares: make([]transports.Middleware, 0, 1),
 		handlers:    make([]transports.MuxHandler, 0, 1),
 	}
@@ -56,6 +55,10 @@ func New(options ...Option) (p Proxy, err error) {
 			err = errors.Warning("fns: new proxy failed").WithCause(optErr)
 			return
 		}
+	}
+	if opt.transport == nil {
+		err = errors.Warning("fns: new proxy failed").WithCause(fmt.Errorf("transport is required"))
+		return
 	}
 	p = &proxy{
 		log:         nil,

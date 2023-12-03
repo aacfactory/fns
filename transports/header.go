@@ -92,7 +92,7 @@ var (
 func AcquireHeader() Header {
 	cached := headerPool.Get()
 	if cached == nil {
-		return newHeader()
+		return NewHeader()
 	}
 	return cached.(Header)
 }
@@ -102,7 +102,7 @@ func ReleaseHeader(h Header) {
 	headerPool.Put(h)
 }
 
-func newHeader() Header {
+func NewHeader() Header {
 	hh := make(defaultHeader, 0, 1)
 	return &hh
 }

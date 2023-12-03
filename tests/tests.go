@@ -57,6 +57,7 @@ var (
 
 type Options struct {
 	deps                  []services.Service
+	config                *configs.Config
 	configRetrieverOption configures.RetrieverOption
 	transport             transports.Transport
 }
@@ -66,6 +67,13 @@ type Option func(options *Options) (err error)
 func WithDependence(dep ...services.Service) Option {
 	return func(options *Options) (err error) {
 		options.deps = append(options.deps, dep...)
+		return
+	}
+}
+
+func WithConfig(config *configs.Config) Option {
+	return func(options *Options) (err error) {
+		options.config = config
 		return
 	}
 }
@@ -146,37 +154,41 @@ func Setup(service services.Service, options ...Option) (err error) {
 		err = errors.Warning("fns: setup testing failed").WithCause(fmt.Errorf("service is nil"))
 		return
 	}
-	if reflect.ValueOf(opt.configRetrieverOption).IsZero() {
-		configDir, configDirErr := getConfigDir(".")
-		if configDirErr != nil {
-			err = errors.Warning("fns: setup testing failed").WithCause(configDirErr)
-			return
-		}
-		opt.configRetrieverOption = configures.RetrieverOption{
-			Active: "local",
-			Format: "YAML",
-			Store:  configures.NewFileStore(configDir, "fns", '-'),
-		}
-	}
 	appId := "tests"
 	appVersion := versions.Origin()
 	// config
-	configRetriever, configRetrieverErr := configures.NewRetriever(opt.configRetrieverOption)
-	if configRetrieverErr != nil {
-		err = errors.Warning("fns: setup testing failed").WithCause(configRetrieverErr)
-		return
+	config := opt.config
+	if config == nil {
+		if reflect.ValueOf(opt.configRetrieverOption).IsZero() {
+			configDir, configDirErr := getConfigDir(".")
+			if configDirErr != nil {
+				err = errors.Warning("fns: setup testing failed").WithCause(configDirErr)
+				return
+			}
+			opt.configRetrieverOption = configures.RetrieverOption{
+				Active: "local",
+				Format: "YAML",
+				Store:  configures.NewFileStore(configDir, "fns", '-'),
+			}
+		}
+		configRetriever, configRetrieverErr := configures.NewRetriever(opt.configRetrieverOption)
+		if configRetrieverErr != nil {
+			err = errors.Warning("fns: setup testing failed").WithCause(configRetrieverErr)
+			return
+		}
+		configure, configureErr := configRetriever.Get()
+		if configureErr != nil {
+			err = errors.Warning("fns: setup testing failed").WithCause(configureErr)
+			return
+		}
+		config = &configs.Config{}
+		configErr := configure.As(config)
+		if configErr != nil {
+			err = errors.Warning("fns: setup testing failed").WithCause(configErr)
+			return
+		}
 	}
-	configure, configureErr := configRetriever.Get()
-	if configureErr != nil {
-		err = errors.Warning("fns: setup testing failed").WithCause(configureErr)
-		return
-	}
-	config := configs.Config{}
-	configErr := configure.As(&config)
-	if configErr != nil {
-		err = errors.Warning("fns: setup testing failed").WithCause(configErr)
-		return
-	}
+
 	// log
 	logger, loggerErr := logs.New("tests", config.Log)
 	if loggerErr != nil {
@@ -205,7 +217,7 @@ func Setup(service services.Service, options ...Option) (err error) {
 	var shared shareds.Shared
 
 	// cluster
-	if clusterConfig := config.Cluster; clusterConfig != nil {
+	if clusterConfig := config.Cluster; clusterConfig.Name != "" {
 		transport := opt.transport
 		transportErr := transport.Construct(transports.Options{
 			Log:    logger.With("transport", transport.Name()),
@@ -226,7 +238,7 @@ func Setup(service services.Service, options ...Option) (err error) {
 			Worker:  worker,
 			Local:   local,
 			Dialer:  opt.transport,
-			Config:  *clusterConfig,
+			Config:  clusterConfig,
 		})
 		if clusterErr != nil {
 			err = errors.Warning("fns: setup testing failed").WithCause(clusterErr)

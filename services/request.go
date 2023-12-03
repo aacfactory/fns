@@ -18,6 +18,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
@@ -256,7 +257,7 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 	service, fn := r.Fn()
 	var pp []byte
 	if r.Param().Valid() {
-		pp, err = r.Param().MarshalJSON()
+		pp, err = json.Marshal(r.Param())
 		if err != nil {
 			err = errors.Warning("fns: hash request failed").WithCause(err)
 			return

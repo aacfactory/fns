@@ -8,8 +8,8 @@ github.com/aacfactory/errors v1.13.5 h1:E6+6kg/UCg8YafjlTedMRWLGZ6eu2STBFULMbobb
 github.com/aacfactory/errors v1.13.5/go.mod h1:WUwbURzkHAraSqTIy6QGhq/W7TL+piTYHzdi/bbpk5s=
 github.com/aacfactory/gcg v1.0.5 h1:PqRSru7R7oefBWQcMnvYPWs12YBOXlHyDXxkPSq0JCQ=
 github.com/aacfactory/gcg v1.0.5/go.mod h1:e2WAmGbOdjFMXkcx3bRQcq9f9Hpcv70sUGSbYYWW6CE=
-github.com/aacfactory/json v1.16.4 h1:3ws84oPfpy/QlqI9TGnEhXVL+TSsBc6D3sby0C9h2IA=
-github.com/aacfactory/json v1.16.4/go.mod h1:1bRJNT+UXqPyDWtzSvnkKfe5aN3hRErWossAggLeRcc=
+github.com/aacfactory/json v1.16.5 h1:mkEF3HNr1xRZrj2MW2+NeV+qymhZ6aRqB0RAbhnYO9M=
+github.com/aacfactory/json v1.16.5/go.mod h1:1bRJNT+UXqPyDWtzSvnkKfe5aN3hRErWossAggLeRcc=
 github.com/aacfactory/logs v1.13.0 h1:7FOV8ne311Z6X1Acr63Bcp4S/ywxLb/qZmANJV17zj8=
 github.com/aacfactory/logs v1.13.0/go.mod h1:IZu/iTIKjtvskfek3Vp0/of8dHd1sT57aRgd7vgooOU=
 github.com/aacfactory/workers v1.8.4 h1:cS9+VzMTngwPs2bSESn6jGAEao7gKfcnPxgdq5n8Esk=

@@ -59,6 +59,7 @@ type Options struct {
 	deps                  []services.Service
 	config                *configs.Config
 	configRetrieverOption configures.RetrieverOption
+	configActive          string
 	transport             transports.Transport
 }
 
@@ -74,6 +75,13 @@ func WithDependence(dep ...services.Service) Option {
 func WithConfig(config *configs.Config) Option {
 	return func(options *Options) (err error) {
 		options.config = config
+		return
+	}
+}
+
+func WithConfigActive(active string) Option {
+	return func(options *Options) (err error) {
+		options.configActive = active
 		return
 	}
 }
@@ -140,7 +148,9 @@ func getConfigDir(src string) (dir string, err error) {
 func Setup(service services.Service, options ...Option) (err error) {
 	opt := Options{
 		deps:                  nil,
+		config:                nil,
 		configRetrieverOption: configures.RetrieverOption{},
+		configActive:          "local",
 		transport:             fast.New(),
 	}
 	for _, option := range options {
@@ -166,7 +176,7 @@ func Setup(service services.Service, options ...Option) (err error) {
 				return
 			}
 			opt.configRetrieverOption = configures.RetrieverOption{
-				Active: "local",
+				Active: opt.configActive,
 				Format: "YAML",
 				Store:  configures.NewFileStore(configDir, "fns", '-'),
 			}

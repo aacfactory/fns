@@ -30,8 +30,9 @@ var (
 	contextUserKey = []byte("authorizations")
 )
 
-func With(ctx context.Context, authorization Authorization) {
+func With(ctx context.Context, authorization Authorization) context.Context {
 	ctx.SetUserValue(contextUserKey, authorization)
+	return ctx
 }
 
 func Load(ctx context.Context) (Authorization, bool, error) {

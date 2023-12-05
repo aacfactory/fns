@@ -51,7 +51,7 @@ func (t *Time) UnmarshalJSON(p []byte) error {
 		return nil
 	}
 	p = p[1 : len(p)-1]
-	v, parseErr := time.Parse("15:04:05", string(p))
+	v, parseErr := time.Parse(time.TimeOnly, string(p))
 	if parseErr != nil {
 		return fmt.Errorf("unmarshal %s failed, layout of date must be 15:04:05, %v", string(p), parseErr)
 	}
@@ -62,7 +62,7 @@ func (t *Time) UnmarshalJSON(p []byte) error {
 }
 
 func (t Time) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("\"%s\"", t.ToTime().Format("15:04:05"))), nil
+	return []byte(fmt.Sprintf("\"%s\"", t.ToTime().Format(time.TimeOnly))), nil
 }
 
 func (t Time) ToTime() time.Time {
@@ -84,7 +84,7 @@ func (t Time) IsZero() (ok bool) {
 }
 
 func (t Time) String() string {
-	return t.ToTime().Format("15:04:05")
+	return t.ToTime().Format(time.TimeOnly)
 }
 
 func (t *Time) Scan(src interface{}) error {
@@ -111,7 +111,7 @@ func (t *Time) Scan(src interface{}) error {
 	if x == "" {
 		return nil
 	}
-	v, parseErr := time.Parse("15:04:05", x)
+	v, parseErr := time.Parse(time.TimeOnly, x)
 	if parseErr != nil {
 		return fmt.Errorf("fns: scan time date value failed, parse %s failed, %v", x, parseErr)
 	}

@@ -104,7 +104,7 @@ func (bv BarrierValue) Failed(v error) (n BarrierValue) {
 		n = append(n, p...)
 	} else {
 		n = append(n, 'S')
-		n = append(n, bytex.FromString(v.Error())...)
+		n = append(n, v.Error()...)
 	}
 	return
 }

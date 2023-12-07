@@ -31,7 +31,7 @@ import (
 
 var (
 	handlerPathPrefix = []byte("/proxy")
-	contentType       = bytex.FromString("application/json+proxy")
+	contentType       = []byte("application/json+proxy")
 )
 
 var (

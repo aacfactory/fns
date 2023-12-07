@@ -32,7 +32,7 @@ import (
 
 var (
 	slashBytes          = []byte{'/'}
-	internalContentType = bytex.FromString("application/json+fns")
+	internalContentType = []byte("application/json+fns")
 )
 
 type Entry struct {

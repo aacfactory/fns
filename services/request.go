@@ -245,6 +245,10 @@ func HashRequestBySumFn(fn func(p []byte) uint64) HashRequestOption {
 	}
 }
 
+var (
+	requestHashContextKeyPrefix = []byte("@fns:context:services:requestHash:")
+)
+
 func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) {
 	opt := HashRequestOptions{
 		withToken:    false,
@@ -291,5 +295,15 @@ func HashRequest(r Request, options ...HashRequestOption) (p []byte, err error) 
 	b := buf.Bytes()
 	p = bytex.FromString(strconv.FormatUint(opt.sumFn(b), 16))
 	bytebufferpool.Put(buf)
+	r.SetLocalValue(append(requestHashContextKeyPrefix, r.Header().RequestId()...), p)
+	return
+}
+
+func TryLoadRequestHash(ctx context.Context) (p []byte, has bool) {
+	r, ok := TryLoadRequest(ctx)
+	if !ok {
+		return
+	}
+	p, has = context.LocalValue[[]byte](ctx, append(requestHashContextKeyPrefix, r.Header().RequestId()...))
 	return
 }

@@ -45,7 +45,7 @@ func LatestVersion(path string) (v string, err error) {
 	http.DefaultClient.Timeout = 2 * time.Second
 	resp, getErr := http.Get(fmt.Sprintf("%s/%s", deps, path))
 	if getErr != nil {
-		if errors.Map(getErr).Contains(http.ErrHandlerTimeout) {
+		if errors.Wrap(getErr).Contains(http.ErrHandlerTimeout) {
 			v, err = LatestVersionFromProxy(path)
 			return
 		}

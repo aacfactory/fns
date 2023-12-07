@@ -6,7 +6,7 @@ require (
 	github.com/aacfactory/afssl v1.10.0
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
-	github.com/aacfactory/errors v1.13.6
+	github.com/aacfactory/errors v1.13.10
 	github.com/aacfactory/gcg v1.0.5
 	github.com/aacfactory/json v1.16.5
 	github.com/aacfactory/logs v1.13.0
@@ -16,7 +16,7 @@ require (
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/goccy/go-yaml v1.11.2
 	github.com/hashicorp/golang-lru/arc/v2 v2.0.7
-	github.com/klauspost/compress v1.17.3
+	github.com/klauspost/compress v1.17.4
 	github.com/rs/xid v1.5.0
 	github.com/urfave/cli/v2 v2.25.7
 	github.com/valyala/bytebufferpool v1.0.0

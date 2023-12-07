@@ -118,7 +118,7 @@ func (w *ResponseWriter) Failed(cause error) {
 		w.ResponseWriter.Failed(cause)
 		return
 	}
-	err := errors.Map(cause)
+	err := errors.Wrap(cause)
 	body, encodeErr := json.Marshal(err)
 	if encodeErr != nil {
 		w.SetStatus(555)

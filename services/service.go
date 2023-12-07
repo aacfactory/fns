@@ -95,7 +95,7 @@ func (abstract *Abstract) Construct(options Options) (err error) {
 			})
 			if constructErr != nil {
 				if abstract.log.ErrorEnabled() {
-					abstract.log.Error().Caller().Cause(errors.Map(constructErr).WithMeta("component", component.Name())).Message("service: construct component failed")
+					abstract.log.Error().Caller().Cause(errors.Wrap(constructErr).WithMeta("component", component.Name())).Message("service: construct component failed")
 				}
 				err = errors.Warning(fmt.Sprintf("fns: %s construct failed", abstract.name)).WithMeta("service", abstract.name).WithCause(constructErr)
 				return

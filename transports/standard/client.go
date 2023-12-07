@@ -233,7 +233,7 @@ func (c *Client) Do(ctx context.Context, method []byte, path []byte, header tran
 
 	resp, doErr := c.host.Do(r)
 	if doErr != nil {
-		if errors.Map(doErr).Contains(context.Canceled) || errors.Map(doErr).Contains(context.DeadlineExceeded) {
+		if errors.Wrap(doErr).Contains(context.Canceled) || errors.Wrap(doErr).Contains(context.DeadlineExceeded) {
 			err = errors.Timeout("http: do failed").WithCause(doErr)
 			return
 		}

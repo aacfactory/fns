@@ -89,7 +89,7 @@ func EndWithCause(ctx context.Context, cause error) {
 	if cause == nil {
 		metric.Succeed = true
 	} else {
-		err := errors.Map(cause)
+		err := errors.Wrap(cause)
 		metric.ErrorCode = err.Code()
 		metric.ErrorName = err.Name()
 	}

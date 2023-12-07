@@ -4,10 +4,14 @@ github.com/aacfactory/cases v1.1.0 h1:oY7wSX57PJav72ZDFmmdmWPrEUXjc5zh8ckDAJM4iS
 github.com/aacfactory/cases v1.1.0/go.mod h1:Utk93dgZ/xXw2GTSM1QU2y1+R4LDEUVel2LtO09Mxt0=
 github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=
 github.com/aacfactory/configures v1.12.1/go.mod h1:Iw63k3WoJD8eb1HWE6cvkBTFXfoeCqutuj8vVnia1Kg=
-github.com/aacfactory/errors v1.13.5 h1:E6+6kg/UCg8YafjlTedMRWLGZ6eu2STBFULMbobbqXQ=
-github.com/aacfactory/errors v1.13.5/go.mod h1:WUwbURzkHAraSqTIy6QGhq/W7TL+piTYHzdi/bbpk5s=
 github.com/aacfactory/errors v1.13.6 h1:puE1J1/exk/nEJ3dfU15hVJFg6c5NRl0QL7ZnUyw3Is=
 github.com/aacfactory/errors v1.13.6/go.mod h1:rDQWXiO1L4tT/n0xpk9xIcXeq2YxAhSy2f0TVKydPiI=
+github.com/aacfactory/errors v1.13.8 h1:iXFH+XrfUL82tPv0VHHBfrJI3tpPqICDn4oB/Ug6OVg=
+github.com/aacfactory/errors v1.13.8/go.mod h1:D63VqtkV+Yrz9st8R97h6mxaaI8bAVvkQMpQ0zsjNec=
+github.com/aacfactory/errors v1.13.9 h1:12mOEMoc83bhrkdd+WP9X0Pzttx8Z04QZBCT0MBITmU=
+github.com/aacfactory/errors v1.13.9/go.mod h1:D63VqtkV+Yrz9st8R97h6mxaaI8bAVvkQMpQ0zsjNec=
+github.com/aacfactory/errors v1.13.10 h1:vQy6ZiwN6ASi1CpiUJT2ekkTJF89dla81V3jTxLVFRg=
+github.com/aacfactory/errors v1.13.10/go.mod h1:D63VqtkV+Yrz9st8R97h6mxaaI8bAVvkQMpQ0zsjNec=
 github.com/aacfactory/gcg v1.0.5 h1:PqRSru7R7oefBWQcMnvYPWs12YBOXlHyDXxkPSq0JCQ=
 github.com/aacfactory/gcg v1.0.5/go.mod h1:e2WAmGbOdjFMXkcx3bRQcq9f9Hpcv70sUGSbYYWW6CE=
 github.com/aacfactory/json v1.16.5 h1:mkEF3HNr1xRZrj2MW2+NeV+qymhZ6aRqB0RAbhnYO9M=
@@ -52,8 +56,8 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/klauspost/compress v1.17.3 h1:qkRjuerhUU1EmXLYGkSH6EZL+vPSxIrYjLNAK4slzwA=
-github.com/klauspost/compress v1.17.3/go.mod h1:/dCuZOvVtNoHsyb+cuJD3itjs3NbnF6KH9zAO4BDxPM=
+github.com/klauspost/compress v1.17.4 h1:Ej5ixsIri7BrIjBkRZLTo6ghwrEtHFk7ijlczPW4fZ4=
+github.com/klauspost/compress v1.17.4/go.mod h1:/dCuZOvVtNoHsyb+cuJD3itjs3NbnF6KH9zAO4BDxPM=
 github.com/leodido/go-urn v1.2.4 h1:XlAE/cm/ms7TE/VMVoduSpNBoyc2dOxHs5MZSwAN63Q=
 github.com/leodido/go-urn v1.2.4/go.mod h1:7ZrI8mTSeBSHl/UaRyKQW1qZeMgak41ANeCNaVckg+4=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=

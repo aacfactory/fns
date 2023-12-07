@@ -168,7 +168,7 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 		return
 	})
 	if doErr != nil {
-		err = errors.Map(doErr)
+		err = errors.Wrap(doErr)
 		return
 	}
 	result = objects.New(r)

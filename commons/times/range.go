@@ -32,15 +32,15 @@ func NewTimeRange(left time.Time, right time.Time) (v *TimeRange) {
 
 // TimeRange
 // @title TimeRange
-// @description `['2006-01-01T15:04:06', '2006-01-01T15:04:06')`
+// @description `['2006-01-01T15:04:06Z', '2006-01-01T15:04:06Z')`
 type TimeRange struct {
 	// Beg
 	// @title Beg
-	// @description `2006-01-01T15:04:06`
+	// @description `2006-01-01T15:04:06Z`
 	Beg time.Time `json:"beg"`
 	// End
 	// @title End
-	// @description `2006-01-01T15:04:06`
+	// @description `2006-01-01T15:04:06Z`
 	End time.Time `json:"end"`
 }
 

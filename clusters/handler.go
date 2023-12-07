@@ -222,7 +222,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 			data, dataErr = json.Marshal(response)
 		}
 	} else {
-		data, dataErr = json.Marshal(errors.Map(err))
+		data, dataErr = json.Marshal(errors.Wrap(err))
 	}
 	if dataErr != nil {
 		succeed = false

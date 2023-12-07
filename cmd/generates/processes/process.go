@@ -133,6 +133,6 @@ func (p *Process) Abort(timeout time.Duration) (err error) {
 }
 
 func IsAbortErr(err error) (ok bool) {
-	ok = errors.Map(err).Contains(ErrAborted) || errors.Map(err).Contains(context.Canceled)
+	ok = errors.Wrap(err).Contains(ErrAborted) || errors.Wrap(err).Contains(context.Canceled)
 	return
 }

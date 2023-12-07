@@ -57,7 +57,7 @@ func (b *barrier) Do(_ context.Context, key []byte, fn func() (result interface{
 		return
 	})
 	if doErr != nil {
-		err = errors.Map(doErr)
+		err = errors.Wrap(doErr)
 		return
 	}
 	r = objects.New(v)

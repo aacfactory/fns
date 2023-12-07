@@ -336,7 +336,7 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 			result.Value = value
 			result.Has = has
 		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
+			result.Error, _ = json.Marshal(errors.Wrap(err))
 		}
 		w.Succeed(result)
 		break
@@ -351,7 +351,7 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		err := handler.store.Set(r, param.Key, param.Value)
 		if err == nil {
 		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
+			result.Error, _ = json.Marshal(errors.Wrap(err))
 		}
 		w.Succeed(result)
 		break
@@ -366,7 +366,7 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		err := handler.store.SetWithTTL(r, param.Key, param.Value, param.TTL)
 		if err == nil {
 		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
+			result.Error, _ = json.Marshal(errors.Wrap(err))
 		}
 		w.Succeed(result)
 		break
@@ -382,7 +382,7 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		if err == nil {
 			result.N = n
 		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
+			result.Error, _ = json.Marshal(errors.Wrap(err))
 		}
 		w.Succeed(result)
 		break
@@ -397,7 +397,7 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		err := handler.store.Remove(r, param.Key)
 		if err == nil {
 		} else {
-			result.Error, _ = json.Marshal(errors.Map(err))
+			result.Error, _ = json.Marshal(errors.Wrap(err))
 		}
 		w.Succeed(result)
 		break

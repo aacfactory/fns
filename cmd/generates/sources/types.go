@@ -269,6 +269,8 @@ func (typ *Type) GetTopPaths() (paths []string) {
 		paths = append(paths, typ.Elements[0].GetTopPaths()...)
 		paths = append(paths, typ.Elements[1].GetTopPaths()...)
 		break
+	default:
+		break
 	}
 	return
 }

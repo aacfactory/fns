@@ -41,7 +41,7 @@ func (task FnTask) Execute(ctx sc.Context) {
 	v, err := task.Fn.Handle(r)
 	if err != nil {
 		ep, fn := r.Fn()
-		codeErr := errors.Map(err).WithMeta("endpoint", bytex.ToString(ep)).WithMeta("fn", bytex.ToString(fn))
+		codeErr := errors.Wrap(err).WithMeta("endpoint", bytex.ToString(ep)).WithMeta("fn", bytex.ToString(fn))
 		if hasTrace {
 			trace.Finish("succeed", "false", "cause", codeErr.Name())
 		}

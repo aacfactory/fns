@@ -151,7 +151,7 @@ func (w *ResultResponseWriter) Failed(cause error) {
 	if cause == nil {
 		cause = errors.Warning("fns: error is lost")
 	}
-	err := errors.Map(cause)
+	err := errors.Wrap(cause)
 	body, encodeErr := json.Marshal(err)
 	if encodeErr != nil {
 		body = []byte(`{"message": "fns: transport write failed result failed"}`)

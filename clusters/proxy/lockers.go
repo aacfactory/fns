@@ -286,7 +286,7 @@ func (handler *SharedLockersHandler) Handle(w transports.ResponseWriter, r trans
 		result := LockResult{}
 		locker, lockerErr := handler.lockers.Acquire(r, param.Key, param.TTL)
 		if lockerErr != nil {
-			result.Error, _ = json.Marshal(errors.Map(lockerErr))
+			result.Error, _ = json.Marshal(errors.Wrap(lockerErr))
 			w.Succeed(result)
 			return
 		}

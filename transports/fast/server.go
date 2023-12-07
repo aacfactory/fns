@@ -130,7 +130,7 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 		CloseOnShutdown:                    true,
 		StreamRequestBody:                  config.StreamRequestBody,
 		ConnState:                          nil,
-		Logger:                             logs.MapToLogger(log, logs.DebugLevel, false),
+		Logger:                             logs.ConvertToStandardLogger(log, logs.DebugLevel, false),
 		TLSConfig:                          srvTLS,
 	}
 	// http2

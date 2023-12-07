@@ -18,14 +18,12 @@
 package logs
 
 import (
-	"fmt"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
-	"os"
 	"strings"
+	"time"
 )
 
 type WriterConfig struct {
@@ -33,82 +31,155 @@ type WriterConfig struct {
 	Options json.RawMessage `json:"options,omitempty" yaml:"options,omitempty"`
 }
 
-type Config struct {
-	Level     string       `json:"level,omitempty" yaml:"level,omitempty"`
-	Formatter string       `json:"formatter,omitempty" yaml:"formatter,omitempty"`
-	Color     bool         `json:"color,omitempty" yaml:"color,omitempty"`
-	Writer    WriterConfig `json:"writer,omitempty" yaml:"writer,omitempty"`
+func (writer WriterConfig) Config() (v configures.Config, err error) {
+	if len(writer.Options) < 2 {
+		writer.Options = []byte{'{', '}'}
+	}
+	v, err = configures.NewJsonConfig(writer.Options)
+	return
 }
 
-func New(name string, config Config) (v Logger, err error) {
-	formatter := logs.ConsoleFormatter
-	if strings.ToLower(strings.TrimSpace(config.Formatter)) == "json" {
-		formatter = logs.JsonFormatter
-	}
-	level := logs.ErrorLevel
-	levelValue := strings.ToLower(strings.TrimSpace(config.Level))
-	switch levelValue {
-	case "debug":
-		level = logs.DebugLevel
-	case "info":
-		level = logs.InfoLevel
-	case "warn":
-		level = logs.WarnLevel
-	case "error":
-		level = logs.ErrorLevel
+const (
+	TextConsoleFormatter         = ConsoleFormatter("text")
+	TextColorfulConsoleFormatter = ConsoleFormatter("text_colorful")
+	JsonConsoleFormatter         = ConsoleFormatter("json")
+)
+
+type ConsoleFormatter string
+
+func (formatter ConsoleFormatter) Code() logs.ConsoleWriterFormatter {
+	switch formatter {
+	case TextColorfulConsoleFormatter:
+		return logs.ColorTextFormatter
+	case JsonConsoleFormatter:
+		return logs.JsonFormatter
 	default:
-		level = logs.InfoLevel
+		return logs.TextFormatter
 	}
-	writer, hasWriter := getWriter(config.Writer.Name)
-	if !hasWriter {
-		err = errors.Warning("fns: new log failed").WithCause(fmt.Errorf("writer was not found")).WithMeta("writer", config.Writer.Name)
+}
+
+const (
+	Stdout = ConsoleWriterOutType("stdout")
+	Stderr = ConsoleWriterOutType("stderr")
+	Stdmix = ConsoleWriterOutType("stdout_stderr")
+)
+
+type ConsoleWriterOutType string
+
+func (ot ConsoleWriterOutType) Code() logs.ConsoleWriterOutType {
+	switch ot {
+	case Stdout:
+		return logs.StdErr
+	case Stderr:
+		return logs.StdErr
+	default:
+		return logs.StdMix
+	}
+}
+
+const (
+	Debug = Level("debug")
+	Info  = Level("info")
+	Warn  = Level("warn")
+	Error = Level("error")
+)
+
+type Level string
+
+func (level Level) Code() logs.Level {
+	switch level {
+	case Debug:
+		return logs.DebugLevel
+	case Warn:
+		return logs.WarnLevel
+	case Error:
+		return logs.ErrorLevel
+	default:
+		return logs.InfoLevel
+	}
+}
+
+type Config struct {
+	Level           Level                `json:"level,omitempty" yaml:"level,omitempty"`
+	Formatter       ConsoleFormatter     `json:"formatter,omitempty" yaml:"formatter,omitempty"`
+	Console         ConsoleWriterOutType `json:"console,omitempty" yaml:"console,omitempty"`
+	DisableConsole  bool                 `json:"disableConsole,omitempty" yaml:"disableConsole,omitempty"`
+	Consumes        int                  `json:"consumes,omitempty" yaml:"consumes,omitempty"`
+	Buffer          int                  `json:"buffer,omitempty" yaml:"buffer,omitempty"`
+	SendTimeout     string               `json:"sendTimeout,omitempty" yaml:"sendTimeout,omitempty"`
+	ShutdownTimeout string               `json:"shutdownTimeout,omitempty" yaml:"shutdownTimeout,omitempty"`
+	Writers         []WriterConfig       `json:"writers,omitempty" yaml:"writer,omitempty"`
+}
+
+func (config *Config) GetWriter(name string) (writer configures.Config, err error) {
+	for _, writerConfig := range config.Writers {
+		if writerConfig.Name == name {
+			writer, err = writerConfig.Config()
+			return
+		}
+	}
+	writer, err = configures.NewJsonConfig([]byte("{}"))
+	return
+}
+
+func New(config Config, writers []Writer) (v Logger, err error) {
+	options := make([]logs.Option, 0, 1)
+	options = append(options, logs.WithLevel(config.Level.Code()))
+
+	if config.DisableConsole {
+		options = append(options, logs.DisableConsoleWriter())
+	} else {
+		options = append(options, logs.WithConsoleWriterOutType(config.Console.Code()))
+		options = append(options, logs.WithConsoleWriterFormatter(config.Formatter.Code()))
+	}
+	if consumes := config.Consumes; consumes > 0 {
+		options = append(options, logs.WithConsumes(consumes))
+	}
+	if buffer := config.Buffer; buffer > 0 {
+		options = append(options, logs.WithBuffer(buffer))
+	}
+	if sendTimeout := strings.TrimSpace(config.SendTimeout); sendTimeout != "" {
+		sendTimeouts, parseErr := time.ParseDuration(sendTimeout)
+		if parseErr != nil {
+			err = errors.Warning("fns: new log failed").WithCause(parseErr).WithMeta("config", "sendTimeout")
+			return
+		}
+		options = append(options, logs.WithSendTimeout(sendTimeouts))
+	}
+	if shutdownTimeout := strings.TrimSpace(config.ShutdownTimeout); shutdownTimeout != "" {
+		shutdownTimeout, parseErr := time.ParseDuration(shutdownTimeout)
+		if parseErr != nil {
+			err = errors.Warning("fns: new log failed").WithCause(parseErr).WithMeta("config", "shutdownTimeout")
+			return
+		}
+		options = append(options, logs.WithShutdownTimeout(shutdownTimeout))
+	}
+	if len(writers) > 0 {
+		for _, writer := range writers {
+			writerConfig, writerConfigErr := config.GetWriter(writer.Name())
+			if writerConfigErr != nil {
+				err = errors.Warning("fns: new log failed").WithCause(writerConfigErr).WithMeta("writer", writer.Name())
+				return
+			}
+			writerErr := writer.Construct(WriterOptions{
+				Config: writerConfig,
+			})
+			if writerErr != nil {
+				err = errors.Warning("fns: new log failed").WithCause(writerErr).WithMeta("writer", writer.Name())
+				return
+			}
+			options = append(options, logs.WithWriter(writer))
+		}
+	}
+	logger, newErr := logs.New(options...)
+	if newErr != nil {
+		err = errors.Warning("fns: new log failed").WithCause(newErr)
 		return
 	}
-	if len(config.Writer.Options) < 2 {
-		config.Writer.Options = []byte{'{', '}'}
-	}
-	writerConfig, writerConfigErr := configures.NewJsonConfig(config.Writer.Options)
-	if writerConfigErr != nil {
-		err = errors.Warning("fns: new log failed").WithCause(writerConfigErr).WithMeta("writer", config.Writer.Name)
-		return
-	}
-	writerErr := writer.Construct(WriterOptions{
-		Config: writerConfig,
-	})
-	if writerErr != nil {
-		err = errors.Warning("fns: new log failed").WithCause(writerErr).WithMeta("writer", config.Writer.Name)
-		return
-	}
-	core, coreErr := logs.New(
-		logs.WithFormatter(formatter),
-		logs.Name(name),
-		logs.WithLevel(level),
-		logs.Writer(os.Stdout),
-		logs.Color(config.Color),
-		logs.Writer(writer),
-	)
-	if coreErr != nil {
-		writer.Shutdown(context.TODO())
-		err = errors.Warning("fns: new log failed").WithCause(coreErr).WithMeta("writer", config.Writer.Name)
-		return
-	}
-	v = &logger{
-		Logger: core,
-		w:      writer,
-	}
+	v = logger
 	return
 }
 
 type Logger interface {
 	logs.Logger
-	Shutdown(ctx context.Context)
-}
-
-type logger struct {
-	logs.Logger
-	w Writer
-}
-
-func (l *logger) Shutdown(ctx context.Context) {
-	l.w.Shutdown(ctx)
 }

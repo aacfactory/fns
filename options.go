@@ -24,6 +24,7 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/configs"
 	"github.com/aacfactory/fns/hooks"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/proxies"
 	"github.com/aacfactory/fns/services/validators"
 	"github.com/aacfactory/fns/transports"
@@ -43,6 +44,7 @@ var (
 		name:                  "fns",
 		version:               versions.New(0, 0, 1),
 		configRetrieverOption: configs.DefaultConfigRetrieverOption(),
+		logWriters:            nil,
 		transport:             fast.New(),
 		middlewares:           make([]transports.Middleware, 0, 1),
 		handlers:              make([]transports.MuxHandler, 0, 1),
@@ -59,6 +61,7 @@ type Options struct {
 	name                  string
 	version               versions.Version
 	configRetrieverOption configures.RetrieverOption
+	logWriters            []logs.Writer
 	transport             transports.Transport
 	middlewares           []transports.Middleware
 	handlers              []transports.MuxHandler
@@ -163,6 +166,15 @@ func Hooks(h ...hooks.Hook) Option {
 			}
 			options.hooks = append(options.hooks, hook)
 		}
+		return nil
+	}
+}
+
+// +-------------------------------------------------------------------------------------------------------------------+
+
+func LogWriters(writers ...logs.Writer) Option {
+	return func(options *Options) error {
+		options.logWriters = append(options.logWriters, writers...)
 		return nil
 	}
 }

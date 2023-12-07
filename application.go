@@ -91,7 +91,7 @@ func New(options ...Option) (app Application) {
 		return
 	}
 	// log
-	logger, loggerErr := logs.New(appName, config.Log)
+	logger, loggerErr := logs.New(config.Log, opt.logWriters)
 	if loggerErr != nil {
 		panic(fmt.Errorf("%+v", errors.Warning("fns: new application failed, new log failed").WithCause(loggerErr)))
 		return
@@ -465,7 +465,7 @@ func (app *application) shutdown() {
 			app.proxy.Shutdown(ctx)
 		}
 		// log
-		app.log.Shutdown(ctx)
+		_ = app.log.Shutdown(ctx)
 		cancel()
 	}(context.Wrap(ctx), cancel, app)
 	<-ctx.Done()

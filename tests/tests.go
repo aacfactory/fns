@@ -200,7 +200,7 @@ func Setup(service services.Service, options ...Option) (err error) {
 	}
 
 	// log
-	logger, loggerErr := logs.New("tests", config.Log)
+	logger, loggerErr := logs.New(config.Log, nil)
 	if loggerErr != nil {
 		err = errors.Warning("fns: setup testing failed").WithCause(loggerErr)
 		return

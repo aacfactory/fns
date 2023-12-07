@@ -133,9 +133,15 @@ func (f *ConfigFile) Write(_ context.Context) (err error) {
 	switch f.kind {
 	case "local":
 		config.Log = logs.Config{
-			Level:     "debug",
-			Formatter: "console",
-			Color:     true,
+			Level:           logs.Debug,
+			Formatter:       logs.TextConsoleFormatter,
+			Console:         logs.Stdout,
+			DisableConsole:  false,
+			Consumes:        0,
+			Buffer:          0,
+			SendTimeout:     "",
+			ShutdownTimeout: "",
+			Writers:         nil,
 		}
 		config.Runtime = configs.RuntimeConfig{
 			Procs:   configs.ProcsConfig{},
@@ -145,9 +151,15 @@ func (f *ConfigFile) Write(_ context.Context) (err error) {
 		break
 	case "dev":
 		config.Log = logs.Config{
-			Level:     "info",
-			Formatter: "json",
-			Color:     false,
+			Level:           logs.Info,
+			Formatter:       logs.JsonConsoleFormatter,
+			Console:         logs.Stdout,
+			DisableConsole:  false,
+			Consumes:        0,
+			Buffer:          0,
+			SendTimeout:     "",
+			ShutdownTimeout: "",
+			Writers:         nil,
 		}
 		config.Runtime = configs.RuntimeConfig{
 			Procs:   configs.ProcsConfig{Min: 2},
@@ -157,9 +169,15 @@ func (f *ConfigFile) Write(_ context.Context) (err error) {
 		break
 	case "test":
 		config.Log = logs.Config{
-			Level:     "warn",
-			Formatter: "json",
-			Color:     false,
+			Level:           logs.Warn,
+			Formatter:       logs.JsonConsoleFormatter,
+			Console:         logs.Stdout,
+			DisableConsole:  false,
+			Consumes:        0,
+			Buffer:          0,
+			SendTimeout:     "",
+			ShutdownTimeout: "",
+			Writers:         nil,
 		}
 		config.Runtime = configs.RuntimeConfig{
 			Procs:   configs.ProcsConfig{Min: 2},
@@ -169,9 +187,15 @@ func (f *ConfigFile) Write(_ context.Context) (err error) {
 		break
 	case "prod":
 		config.Log = logs.Config{
-			Level:     "error",
-			Formatter: "json",
-			Color:     false,
+			Level:           logs.Error,
+			Formatter:       logs.JsonConsoleFormatter,
+			Console:         logs.Stdout,
+			DisableConsole:  false,
+			Consumes:        0,
+			Buffer:          0,
+			SendTimeout:     "",
+			ShutdownTimeout: "",
+			Writers:         nil,
 		}
 		config.Runtime = configs.RuntimeConfig{
 			Procs:   configs.ProcsConfig{Min: 8},

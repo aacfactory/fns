@@ -3,10 +3,10 @@
 ---
 
 ## Create service
-1. create service pkg under `modules`
+1. Create service pkg under `modules`
 2. Create `doc.go` under service pkg
 
-For example
+Example:
 ```go
 // Package users
 // @service users
@@ -16,52 +16,39 @@ For example
 package users
 ```
 
-## Create service components if required
+## Create service components when required
 
-Create `{component name}` dir under created service dir,
-then create `component` which is implement `service.Component`,
-last create `components.go` under created service dir and use `@component` to register it into service,
-Components are not required in most cases,
-unless the service needs to integrate third-party services.
+Create `components` dir under created service dir,
+then create `component` which is implement `services.Component`.  
+Components are not required in most cases, unless the service needs to integrate third-party services.
 
 Structure of component:
 
 ```text
 |-- {service dir}
-    |-- {component name}
+    |-- components
         |-- component.go
-    |-- components.go
 ```
 
 component.go
 
 ```go
-type Foo struct {
+// HelloComponent
+// @component
+type HelloComponent struct {
 }
 
-func (c *Foo) Name() (name string) {
-    name = "component_name"
+func (component *HelloComponent) Name() (name string) {
+    return "hello"
+}
+
+func (component *HelloComponent) Construct(options services.Options) (err error) {
     return
 }
 
-func (c *Foo) Build(options service.ComponentOptions) (err error) {
-    // build with config
-    return
+func (component *HelloComponent) Shutdown(ctx context.Context) {
 }
 
-func (c *Foo) Close() {
-    return
-}
-```
-
-components.go, value of `@component` is keypair, key is component_name, value is component position.
-
-```go
-// fooLoader
-// @component {component_name}:{package}.Foo
-func fooLoader() service.Component {
-return &foo.Foo{}
-}
 ```
 
 ## Create fn

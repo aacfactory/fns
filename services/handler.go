@@ -29,7 +29,6 @@ import (
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"golang.org/x/sync/singleflight"
-	"net/http"
 	"strconv"
 	"sync/atomic"
 )
@@ -39,7 +38,7 @@ var (
 )
 
 var (
-	ErrDeviceId               = errors.New(http.StatusNotAcceptable, "***NOT ACCEPTABLE**", "fns: X-Fns-Device-Id is required")
+	ErrDeviceId               = errors.NotAcceptable("fns: X-Fns-Device-Id is required")
 	ErrInvalidPath            = errors.Warning("fns: invalid path")
 	ErrInvalidBody            = errors.Warning("fns: invalid body")
 	ErrInvalidRequestVersions = errors.Warning("fns: invalid request versions")

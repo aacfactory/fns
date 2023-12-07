@@ -1,12 +1,12 @@
 module github.com/aacfactory/fns
 
-go 1.21
+go 1.21.0
 
 require (
 	github.com/aacfactory/afssl v1.10.0
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
-	github.com/aacfactory/errors v1.13.5
+	github.com/aacfactory/errors v1.13.6
 	github.com/aacfactory/gcg v1.0.5
 	github.com/aacfactory/json v1.16.5
 	github.com/aacfactory/logs v1.13.0

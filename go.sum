@@ -6,6 +6,8 @@ github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+Vz
 github.com/aacfactory/configures v1.12.1/go.mod h1:Iw63k3WoJD8eb1HWE6cvkBTFXfoeCqutuj8vVnia1Kg=
 github.com/aacfactory/errors v1.13.5 h1:E6+6kg/UCg8YafjlTedMRWLGZ6eu2STBFULMbobbqXQ=
 github.com/aacfactory/errors v1.13.5/go.mod h1:WUwbURzkHAraSqTIy6QGhq/W7TL+piTYHzdi/bbpk5s=
+github.com/aacfactory/errors v1.13.6 h1:puE1J1/exk/nEJ3dfU15hVJFg6c5NRl0QL7ZnUyw3Is=
+github.com/aacfactory/errors v1.13.6/go.mod h1:rDQWXiO1L4tT/n0xpk9xIcXeq2YxAhSy2f0TVKydPiI=
 github.com/aacfactory/gcg v1.0.5 h1:PqRSru7R7oefBWQcMnvYPWs12YBOXlHyDXxkPSq0JCQ=
 github.com/aacfactory/gcg v1.0.5/go.mod h1:e2WAmGbOdjFMXkcx3bRQcq9f9Hpcv70sUGSbYYWW6CE=
 github.com/aacfactory/json v1.16.5 h1:mkEF3HNr1xRZrj2MW2+NeV+qymhZ6aRqB0RAbhnYO9M=

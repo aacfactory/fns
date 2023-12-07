@@ -3,7 +3,7 @@
 
 ---
 
-Fn services for Golang. Simplify the development process by using standardized development scheme. Every thing is service.
+Fn services for Golang. Simplify the development process by using standardized development scheme. Every thing is function.
 
 ## Features
 * [x] Applicable to enterprise projects
@@ -11,91 +11,64 @@ Fn services for Golang. Simplify the development process by using standardized d
   * [x] Environmental configuration
   * [x] Rapid development by code generations
   * [x] Built in authorizations service (schema is customizable)
-  * [x] Built in RBAC permission service
-  * [x] Built in metric service (schema is customizable)
-  * [x] Built in tracing service (schema is customizable)
+  * [x] Built in permission service
+  * [x] Built in metric
+  * [x] Built in tracing
   * [x] Traceable and searchable error schema
   * [x] Searchable log content schema
-* [x] Code generations
-    * [x] Service of fn
-    * [x] Proxy of fn
-    * [x] Open api documents
-    * [x] Request argument validation
-    * [x] Authorizations validation
-    * [x] Permissions validation
 * [x] High concurrency
   * [x] Goroutines pool
   * [x] Fasthttp as default http server (Http3 is optionally)
-  * [x] Request Barrier (Multiple identical requests will only process the first one, and others will share the results of the first one)
+  * [x] Request Barrier (Used for sharing result and idempotent)
 * [x] TLS
   * [x] Standard 
-  * [x] SSC (Auto generate cert and key by self sign ca, it is useful for building http3 based cluster)
+  * [x] SSC (Auto generate cert and key by self sign ca)
   * [x] ACMEs (Easy to use and supports auto-renew)
 * [x] Cluster
-  * [x] Designated members 
-  * [x] DOCKER SWARM (Auto find members by container label)
-  * [x] KUBERNETES (Auto find members by pod label)
-* [x] Databases 
+  * [ ] Hazelcast 
+  * [ ] Redis
+* [x] Official built-in services 
     * [x] SQL
-      * [x] Serviceability (Internal service)
-      * [x] Distributed SQL transaction (Non-intrusive and all databases are supported)
-      * [x] Postgres ORM (High performance)
-      * [x] Mysql ORM (To be tested)
-      * [ ] GraphQL to SQL
-    * [x] Redis (Internal service)
-    * [ ] Dgraph
-* [x] Message queue
-    * [x] RabbitMQ
-    * [x] Kafka
-    * [x] Nats.IO
-* [ ] DDD
-* [ ] Extra listeners
-  * [ ] MQTT
-* [ ] Third party integration
-  * [ ] Oauth
-  * [ ] Payments
-  * [ ] SMS
-  * [ ] Notifications
+      * [x] Distributed SQL transaction 
+      * [x] Postgres ORM 
+      * [x] Mysql ORM
+    * [x] Redis
+      * [ ] Shared store
+      * [ ] Shared lockers
+      * [ ] Shared barrier
+    * [x] Message queue
+        * [x] RabbitMQ
+        * [x] Kafka
+        * [x] Nats.IO
+    * [ ] Third party integration
+      * [ ] Oauth
+      * [ ] Payments
+      * [ ] SMS
+      * [ ] Notifications
 
 ## Quickstart
-### Create project
-First: install `fnc` commander.
+### Creation
+First: install `fns` commander.
 ```shell
-go install github.com/aacfactory/fnc@latest
+go install github.com/aacfactory/fns/cmd/fns@latest
 ```
-Second: use `fnc` create a fns project.
+Second: use `fns` create a fns project.
 ```shell
 mkdir {your project path}
 cd {your project path}
-fnc create 
+fns init --mod={mod} . 
 ```
-Third: look `main.go`, `config`, `modules` to understand [project structure](https://github.com/aacfactory/fns/blob/main/docs/structure.md). 
+Third: look `main.go`, `configs`, `modules` to understand [project structure](https://github.com/aacfactory/fns/blob/main/docs/structure.md). 
+
+Last: add dependencies and setup config.
+
+### Coding
+First: create a service ident.
+Second: create a function.
+Last: run `go generate` to generate source codes.
 
 Happy coding. Read [usage](https://github.com/aacfactory/fns/blob/main/docs/usage.md) for more.
-### Read openapi document
-Setup `swagger-ui`, then open it.
-```shell
-docker run -d --rm --name swagger-ui \
- -p 80:8080 \
- -e SWAGGER_JSON_URL=http://ip:port/documents/oas \ 
- swaggerapi/swagger-ui 
-```
-### Send request to fn
-```shell
-curl -H "Content-Type: application/json" -H "X-Fns-Device-Id: client-uuid" -X POST -d '{}' http://ip:port/service/fn
-```
 
-## Environmental configuration
-Use `FNS-ACTIVE` environment to control which configuration to be merged into default configuration and used. 
-The environment value could be `local`, `dev`, `qa`, and `prod`.
-Read [configuration](https://github.com/aacfactory/fns/blob/main/docs/config.md) for more.
-
-## Cluster
-Fns use Gossip-like schema to manage a cluster. 
-Just turn on the cluster mode in project, 
-then the endpoints of fn service will be auto registered and discovered,
-there is no difference of coding between cluster mode and standalone mode,
-so it is very easy to use. Read [cluster](https://github.com/aacfactory/fns/blob/main/docs/cluster.md) for more.
 
 ## Benchmark
 CPU: AMD 3950X;   

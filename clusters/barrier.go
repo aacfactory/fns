@@ -97,7 +97,7 @@ func (bv BarrierValue) Succeed(v interface{}) (n BarrierValue, err error) {
 func (bv BarrierValue) Failed(v error) (n BarrierValue) {
 	n = bv[:1]
 	n[0] = 'F'
-	codeErr, ok := v.(errors.CodeError)
+	codeErr, ok := errors.As(v)
 	if ok {
 		n = append(n, 'C')
 		p, _ := json.Marshal(codeErr)

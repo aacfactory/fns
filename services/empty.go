@@ -17,7 +17,13 @@
 
 package services
 
+import "github.com/aacfactory/json"
+
 // Empty
 // @name Empty
 // @description Empty object
 type Empty struct{}
+
+func (e Empty) MarshalJSON() ([]byte, error) {
+	return json.EmptyObjectBytes, nil
+}

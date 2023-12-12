@@ -33,6 +33,7 @@ type Shared interface {
 	Construct(options Options) (err error)
 	Lockers() (lockers Lockers)
 	Store() (store Store)
+	Close()
 }
 
 type LocalSharedConfig struct {
@@ -65,14 +66,16 @@ type localShared struct {
 	store   Store
 }
 
-func (s localShared) Construct(_ Options) (err error) {
+func (s *localShared) Construct(_ Options) (err error) {
 	return
 }
 
-func (s localShared) Lockers() (lockers Lockers) {
+func (s *localShared) Lockers() (lockers Lockers) {
 	return s.lockers
 }
 
-func (s localShared) Store() (store Store) {
+func (s *localShared) Store() (store Store) {
 	return s.store
 }
+
+func (s *localShared) Close() {}

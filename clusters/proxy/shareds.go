@@ -62,6 +62,8 @@ func (shared *Shared) Store() (store shareds.Store) {
 	return
 }
 
+func (shared *Shared) Close() {}
+
 // +-------------------------------------------------------------------------------------------------------------------+
 
 func NewSharedHandler(shared shareds.Shared) transports.Handler {

@@ -48,6 +48,7 @@ type Cluster interface {
 	Leave(ctx context.Context) (err error)
 	NodeEvents() (events <-chan NodeEvent)
 	Shared() (shared shareds.Shared)
+	Barrier() (barrier barriers.Barrier)
 }
 
 type ClusterBuilderOptions struct {
@@ -132,7 +133,7 @@ func New(options Options) (manager services.EndpointsManager, shared shareds.Sha
 	// shared
 	shared = cluster.Shared()
 	// barrier
-	barrier = NewBarrier(options.Config.Barrier, shared)
+	barrier = cluster.Barrier()
 	// manager
 	manager = NewManager(options.Id, options.Version, address, cluster, options.Local, options.Worker, options.Log, options.Dialer, signature)
 	// handlers

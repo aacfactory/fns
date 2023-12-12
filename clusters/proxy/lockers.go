@@ -242,6 +242,8 @@ func (lockers *Lockers) Acquire(_ context.Context, key []byte, ttl time.Duration
 	return
 }
 
+func (lockers *Lockers) Close() {}
+
 // +-------------------------------------------------------------------------------------------------------------------+
 
 type LockerStatus struct {

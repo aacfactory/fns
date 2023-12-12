@@ -20,6 +20,7 @@ package clusters
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters/proxy"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
@@ -105,6 +106,11 @@ func (cluster *Development) NodeEvents() (events <-chan NodeEvent) {
 
 func (cluster *Development) Shared() (shared shareds.Shared) {
 	shared = proxy.NewShared(cluster.client, cluster.signature)
+	return
+}
+
+func (cluster *Development) Barrier() (barrier barriers.Barrier) {
+	barrier = barriers.New()
 	return
 }
 

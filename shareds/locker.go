@@ -38,6 +38,7 @@ type Locker interface {
 
 type Lockers interface {
 	Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err error)
+	Close()
 }
 
 type localLocker struct {
@@ -129,6 +130,8 @@ func (lockers *localLockers) Acquire(_ context.Context, key []byte, ttl time.Dur
 	lockers.mutex.Unlock()
 	return
 }
+
+func (lockers *localLockers) Close() {}
 
 func (lockers *localLockers) listenRelease() {
 	for {

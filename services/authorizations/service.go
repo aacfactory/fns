@@ -84,14 +84,14 @@ func (fn *decodeFn) Handle(r services.Request) (v interface{}, err error) {
 	return
 }
 
-func ServiceWithEncoder(encoder TokenEncoder) services.Service {
+func NewWithEncoder(encoder TokenEncoder) services.Service {
 	return &service{
 		Abstract: services.NewAbstract(endpointName, true, encoder),
 	}
 }
 
-func Service() services.Service {
-	return ServiceWithEncoder(DefaultTokenEncoder())
+func New() services.Service {
+	return NewWithEncoder(DefaultTokenEncoder())
 }
 
 // service

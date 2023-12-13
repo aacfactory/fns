@@ -27,7 +27,7 @@ var (
 	reportFnName = []byte("report")
 )
 
-func Service(reporter Reporter) services.Service {
+func New(reporter Reporter) services.Service {
 	return &service{
 		Abstract: services.NewAbstract(string(endpointName), true, reporter),
 	}

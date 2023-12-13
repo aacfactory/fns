@@ -12,6 +12,8 @@ github.com/aacfactory/json v1.16.5 h1:mkEF3HNr1xRZrj2MW2+NeV+qymhZ6aRqB0RAbhnYO9
 github.com/aacfactory/json v1.16.5/go.mod h1:1bRJNT+UXqPyDWtzSvnkKfe5aN3hRErWossAggLeRcc=
 github.com/aacfactory/logs v1.13.11 h1:KvCd6zB7xGn/UM/IghVX5cfU1Yn1oUSzg1LbhanV5sM=
 github.com/aacfactory/logs v1.13.11/go.mod h1:kgIwnpSXtWPhp+bfhvbDTTbtu8Goy+JenUlHZmte7hY=
+github.com/aacfactory/logs v1.13.12 h1:9wtMk8YYxnPOGTzPMcORQpLQcotGp43+80gPSQHFiss=
+github.com/aacfactory/logs v1.13.12/go.mod h1:kgIwnpSXtWPhp+bfhvbDTTbtu8Goy+JenUlHZmte7hY=
 github.com/aacfactory/workers v1.8.4 h1:cS9+VzMTngwPs2bSESn6jGAEao7gKfcnPxgdq5n8Esk=
 github.com/aacfactory/workers v1.8.4/go.mod h1:0lSeaqBM412R8u6xvadB2plZzNqfo/CA85vWfXpuCdU=
 github.com/andybalholm/brotli v1.0.6 h1:Yf9fFpf49Zrxb9NlQaluyE92/+X7UVHlhMNJN2sxfOI=

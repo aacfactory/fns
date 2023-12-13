@@ -9,7 +9,7 @@ require (
 	github.com/aacfactory/errors v1.13.11
 	github.com/aacfactory/gcg v1.0.5
 	github.com/aacfactory/json v1.16.5
-	github.com/aacfactory/logs v1.13.11
+	github.com/aacfactory/logs v1.13.12
 	github.com/aacfactory/workers v1.8.4
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dgrr/http2 v0.3.6-0.20231023141632-12370d352f5f

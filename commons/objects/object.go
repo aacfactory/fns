@@ -78,10 +78,20 @@ func (obj object) TransformTo(dst interface{}) (err error) {
 		}
 		return
 	}
+
 	dpv := reflect.ValueOf(dst)
 	if dpv.Kind() != reflect.Ptr {
 		err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("type of dst is not pointer"))
 		return
+	}
+	bytes, isBytes := obj.value.([]byte)
+	isJson := isBytes && json.Validate(bytes) &&
+		(dpv.Elem().Type().Kind() != reflect.Slice || !(dpv.Elem().Type().Kind() == reflect.Slice && dpv.Elem().Type().Elem().Kind() == reflect.Uint8))
+	if isJson {
+		err = json.Unmarshal(bytes, dst)
+		if err == nil {
+			return
+		}
 	}
 	sv := reflect.ValueOf(obj.value)
 	dv := reflect.Indirect(dpv)

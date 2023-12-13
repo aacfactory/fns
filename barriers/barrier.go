@@ -18,6 +18,7 @@
 package barriers
 
 import (
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
@@ -32,6 +33,10 @@ type Result interface {
 type Barrier interface {
 	Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error)
 	Forget(ctx context.Context, key []byte)
+}
+
+type BarrierBuilder interface {
+	Build(ctx context.Context, config configures.Config) (barrier Barrier, err error)
 }
 
 func New() (b Barrier) {

@@ -19,6 +19,7 @@ package shareds
 
 import (
 	"fmt"
+	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
@@ -39,6 +40,10 @@ type Locker interface {
 type Lockers interface {
 	Acquire(ctx context.Context, key []byte, ttl time.Duration) (locker Locker, err error)
 	Close()
+}
+
+type LockersBuilder interface {
+	Build(ctx context.Context, config configures.Config) (lockers Lockers, err error)
 }
 
 type localLocker struct {

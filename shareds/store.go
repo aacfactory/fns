@@ -40,6 +40,10 @@ type Store interface {
 	Close()
 }
 
+type StoreBuilder interface {
+	Build(ctx context.Context, config configures.Config) (store Store, err error)
+}
+
 var (
 	localStoreBuilder LocalStoreBuild = defaultLocalStoreBuild
 )

@@ -58,7 +58,7 @@ func (fn *enforceFn) Handle(r services.Request) (v interface{}, err error) {
 	return
 }
 
-func Service(enforcer Enforcer) (v services.Service) {
+func New(enforcer Enforcer) (v services.Service) {
 	if enforcer == nil {
 		panic(fmt.Sprintf("%+v", errors.Warning("permissions: service requires enforcer component")))
 		return

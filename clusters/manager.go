@@ -335,6 +335,13 @@ func (manager *Manager) watching() {
 			if !ok {
 				break
 			}
+			if eps.log.DebugEnabled() {
+				eps.log.Debug().
+					With("event", event.Kind.String()).
+					Message(fmt.Sprintf(
+						"fns: get node(id:%s addr:%s ver:%s, services:%d) event",
+						event.Node.Id, event.Node.Address, event.Node.Version.String(), len(event.Node.Services)))
+			}
 			switch event.Kind {
 			case Add:
 				endpoints := make(Endpoints, 0, 1)

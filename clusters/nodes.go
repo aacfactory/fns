@@ -105,6 +105,17 @@ const (
 
 type NodeEventKind int
 
+func (kind NodeEventKind) String() string {
+	switch kind {
+	case Add:
+		return "add"
+	case Remove:
+		return "evict"
+	default:
+		return "unknown"
+	}
+}
+
 type NodeEvent struct {
 	Kind NodeEventKind
 	Node Node

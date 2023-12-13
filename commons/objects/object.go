@@ -109,6 +109,16 @@ func (obj object) TransformTo(dst interface{}) (err error) {
 		dv.Set(sv.Convert(dv.Type()))
 		return
 	}
+	if dv.Type().Kind() == reflect.Interface && dv.CanSet() {
+		if sv.Type().Implements(dv.Type()) {
+			dv.Set(sv)
+			return
+		}
+		if sv.CanAddr() && sv.Addr().Type().Implements(dv.Type()) {
+			dv.Set(sv.Addr())
+			return
+		}
+	}
 	err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("type of dst is not matched"))
 	return
 }

@@ -72,9 +72,13 @@ func WithDependence(dep ...services.Service) Option {
 	}
 }
 
-func WithConfig(config *configs.Config) Option {
+func Config() configs.Config {
+	return configs.New()
+}
+
+func WithConfig(config configs.Config) Option {
 	return func(options *Options) (err error) {
-		options.config = config
+		options.config = &config
 		return
 	}
 }

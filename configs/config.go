@@ -18,6 +18,7 @@
 package configs
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/hooks"
@@ -54,31 +55,46 @@ type Config struct {
 	Hooks     hooks.Config      `json:"hooks,omitempty" yaml:"hooks,omitempty"`
 }
 
-func (config *Config) AddService(name string, conf any) (err error) {
+func (config Config) AddService(name string, conf any) Config {
 	p, encodeErr := json.Marshal(conf)
 	if encodeErr != nil {
-		err = errors.Warning("fns: config add service failed").WithMeta("service", name).WithCause(encodeErr)
-		return
+		panic(fmt.Sprintf("%+v", errors.Warning("fns: config add service failed").WithMeta("service", name).WithCause(encodeErr)))
+		return config
 	}
 	if config.Services == nil {
 		config.Services = make(services.Config)
 	}
 	config.Services[name] = p
-	return
+	return config
 }
 
-func (config *Config) SetCluster(cluster clusters.Config) {
+func (config Config) SetCluster(cluster clusters.Config) Config {
 	config.Cluster = cluster
-	return
+	return config
 }
 
-func (config *Config) SetTransport(transport transports.Config) {
+func (config Config) SetTransport(transport transports.Config) Config {
 	config.Transport = transport
-	return
+	return config
 }
 
-func New() *Config {
-	return &Config{
+func (config Config) SetLoggerLevel(level logs.Level) Config {
+	config.Log.Level = level
+	return config
+}
+
+func (config Config) SetConsoleFormatter(formatter logs.ConsoleFormatter) Config {
+	config.Log.Formatter = formatter
+	return config
+}
+
+func (config Config) SetConsole(out logs.ConsoleWriterOutType) Config {
+	config.Log.Console = out
+	return config
+}
+
+func New() Config {
+	return Config{
 		Runtime: RuntimeConfig{
 			Procs:   ProcsConfig{},
 			Workers: WorkersConfig{},

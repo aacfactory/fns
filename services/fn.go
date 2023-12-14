@@ -76,7 +76,7 @@ type Fn interface {
 	Name() string
 	Internal() bool
 	Readonly() bool
-	Handle(r Request) (v interface{}, err error)
+	Handle(ctx Request) (v any, err error)
 }
 
 type Fns []Fn

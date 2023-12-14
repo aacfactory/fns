@@ -42,7 +42,7 @@ func NewFn(name string, readonly bool, internal bool, authorized bool, permissio
 	}
 }
 
-type FnHandler func(r services.Request) (v interface{}, err error)
+type FnHandler func(ctx services.Request) (v any, err error)
 
 type FnHandlerMiddleware interface {
 	Handler(next FnHandler) FnHandler

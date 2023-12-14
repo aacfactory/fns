@@ -48,8 +48,8 @@ func EnforceContext(ctx context.Context) (err error) {
 	endpoint, fn := r.Fn()
 	ok, enforceErr := Enforce(ctx, EnforceParam{
 		Account:  authorization.Account,
-		Endpoint: endpoint,
-		Fn:       fn,
+		Endpoint: bytex.ToString(endpoint),
+		Fn:       bytex.ToString(fn),
 	})
 	if enforceErr != nil {
 		err = errors.Warning("permissions: enforce failed").WithCause(enforceErr)

@@ -25,8 +25,8 @@ import (
 
 type EnforceParam struct {
 	Account  authorizations.Id `json:"account"`
-	Endpoint []byte            `json:"endpoint"`
-	Fn       []byte            `json:"fn"`
+	Endpoint string            `json:"endpoint"`
+	Fn       string            `json:"fn"`
 }
 
 type Enforcer interface {

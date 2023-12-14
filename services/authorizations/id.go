@@ -18,12 +18,28 @@
 package authorizations
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"strconv"
 )
 
 type Id []byte
+
+func (id Id) MarshalJSON() ([]byte, error) {
+	return bytex.FromString(fmt.Sprintf("\"%s\"", id.String())), nil
+}
+
+func (id *Id) UnmarshalJSON(p []byte) error {
+	pLen := len(p)
+	if pLen < 2 {
+		return nil
+	}
+	s := make([]byte, pLen-2)
+	copy(s, p[1:pLen-1])
+	*id = s
+	return nil
+}
 
 func (id Id) Int() int64 {
 	if len(id) == 0 {

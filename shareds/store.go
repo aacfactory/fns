@@ -35,8 +35,8 @@ type Store interface {
 	Get(ctx context.Context, key []byte) (value []byte, has bool, err error)
 	Set(ctx context.Context, key []byte, value []byte) (err error)
 	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error)
-	Incr(ctx context.Context, key []byte, delta int64) (v int64, err error)
 	Remove(ctx context.Context, key []byte) (err error)
+	Incr(ctx context.Context, key []byte, delta int64) (v int64, err error)
 	Close()
 }
 

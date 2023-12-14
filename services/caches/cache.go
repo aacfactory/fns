@@ -48,7 +48,7 @@ func (store *defaultStore) Name() (name string) {
 
 func (store *defaultStore) Construct(options services.Options) (err error) {
 	store.log = options.Log
-	store.prefix = []byte("fns/caches/")
+	store.prefix = []byte("fns:caches:")
 	return
 }
 

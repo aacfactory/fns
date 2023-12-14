@@ -66,7 +66,7 @@ func Enforce(ctx context.Context, param EnforceParam) (ok bool, err error) {
 	rt := runtime.Load(ctx)
 	response, handleErr := rt.Endpoints().Request(
 		ctx,
-		bytex.FromString(endpointName), bytex.FromString(enforceFnName),
+		endpointName, enforceFnName,
 		param,
 	)
 	if handleErr != nil {

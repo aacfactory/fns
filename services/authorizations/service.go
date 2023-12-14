@@ -18,86 +18,53 @@
 package authorizations
 
 import (
-	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/services"
 )
 
-type encodeFn struct {
+var (
+	endpointName = []byte("authorizations")
+)
+
+type Options struct {
 	encoder TokenEncoder
+	store   TokenStore
 }
 
-func (fn *encodeFn) Name() string {
-	return encodeFnName
-}
+type Option func(options *Options)
 
-func (fn *encodeFn) Internal() bool {
-	return true
-}
-
-func (fn *encodeFn) Readonly() bool {
-	return false
-}
-
-func (fn *encodeFn) Handle(r services.Request) (v interface{}, err error) {
-	param, paramErr := services.ValueOfParam[Authorization](r.Param())
-	if paramErr != nil {
-		err = errors.BadRequest("authorizations: invalid param")
-		return
+func WithTokenEncoder(encoder TokenEncoder) Option {
+	return func(options *Options) {
+		options.encoder = encoder
 	}
-	token, encodeErr := fn.encoder.Encode(r, param)
-	if encodeErr != nil {
-		err = errors.ServiceError("authorizations: encode authorization failed").WithCause(encodeErr)
-		return
+}
+
+func WithTokenStore(store TokenStore) Option {
+	return func(options *Options) {
+		options.store = store
 	}
-	v = token
-	return
 }
 
-type decodeFn struct {
-	encoder TokenEncoder
-}
-
-func (fn *decodeFn) Name() string {
-	return decodeFnName
-}
-
-func (fn *decodeFn) Internal() bool {
-	return true
-}
-
-func (fn *decodeFn) Readonly() bool {
-	return false
-}
-
-func (fn *decodeFn) Handle(r services.Request) (v interface{}, err error) {
-	param, paramErr := services.ValueOfParam[Token](r.Param())
-	if paramErr != nil {
-		err = errors.BadRequest("authorizations: invalid param")
-		return
+func New(options ...Option) services.Service {
+	opt := Options{
+		encoder: &defaultTokenEncoder{},
+		store:   &defaultTokenStore{},
 	}
-	authorization, decodeErr := fn.encoder.Decode(r, param)
-	if decodeErr != nil {
-		err = errors.ServiceError("authorizations: decode token failed").WithCause(decodeErr)
-		return
+	for _, option := range options {
+		option(&opt)
 	}
-	v = authorization
-	return
-}
-
-func NewWithEncoder(encoder TokenEncoder) services.Service {
 	return &service{
-		Abstract: services.NewAbstract(endpointName, true, encoder),
+		Abstract: services.NewAbstract(string(endpointName), true, opt.encoder, opt.store),
+		encoder:  opt.encoder,
+		store:    opt.store,
 	}
-}
-
-func New() services.Service {
-	return NewWithEncoder(DefaultTokenEncoder())
 }
 
 // service
 // use @authorization
 type service struct {
 	services.Abstract
+	encoder TokenEncoder
+	store   TokenStore
 }
 
 func (svc *service) Construct(options services.Options) (err error) {
@@ -105,24 +72,19 @@ func (svc *service) Construct(options services.Options) (err error) {
 	if err != nil {
 		return
 	}
-	var encoder TokenEncoder
-	has := false
-	components := svc.Abstract.Components()
-	for _, component := range components {
-		encoder, has = component.(TokenEncoder)
-		if has {
-			break
-		}
-	}
-	if encoder == nil {
-		err = errors.Warning("authorizations: service need token encoder component")
-		return
-	}
 	svc.AddFunction(&encodeFn{
-		encoder: encoder,
+		encoder: svc.encoder,
+		store:   svc.store,
 	})
 	svc.AddFunction(&decodeFn{
-		encoder: encoder,
+		encoder: svc.encoder,
+		store:   svc.store,
+	})
+	svc.AddFunction(&listFn{
+		store: svc.store,
+	})
+	svc.AddFunction(&removeFn{
+		store: svc.store,
 	})
 	return
 }

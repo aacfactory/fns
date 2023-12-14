@@ -23,9 +23,9 @@ import (
 	"github.com/aacfactory/fns/services"
 )
 
-const (
-	endpointName  = "permissions"
-	enforceFnName = "enforce"
+var (
+	endpointName  = []byte("permissions")
+	enforceFnName = []byte("enforce")
 )
 
 type enforceFn struct {
@@ -33,7 +33,7 @@ type enforceFn struct {
 }
 
 func (fn *enforceFn) Name() string {
-	return enforceFnName
+	return string(enforceFnName)
 }
 
 func (fn *enforceFn) Internal() bool {
@@ -64,7 +64,7 @@ func New(enforcer Enforcer) (v services.Service) {
 		return
 	}
 	v = &service{
-		Abstract: services.NewAbstract(endpointName, true, enforcer),
+		Abstract: services.NewAbstract(string(endpointName), true, enforcer),
 	}
 	return
 }

@@ -36,7 +36,7 @@ func (attributes *Attributes) Get(key []byte, value interface{}) (has bool, err 
 		if bytes.Equal(key, attribute.Key) {
 			decodeErr := json.Unmarshal(attribute.Value, value)
 			if decodeErr != nil {
-				err = errors.Warning("fns: attributes get failed").WithCause(decodeErr).WithMeta("key", string(key))
+				err = errors.Warning("authorizations: attributes get failed").WithCause(decodeErr).WithMeta("key", string(key))
 				return
 			}
 			has = true
@@ -49,7 +49,7 @@ func (attributes *Attributes) Get(key []byte, value interface{}) (has bool, err 
 func (attributes *Attributes) Set(key []byte, value interface{}) (err error) {
 	p, encodeErr := json.Marshal(value)
 	if encodeErr != nil {
-		err = errors.Warning("fns: attributes set failed").WithCause(encodeErr).WithMeta("key", string(key))
+		err = errors.Warning("authorizations: attributes set failed").WithCause(encodeErr).WithMeta("key", string(key))
 		return
 	}
 	attrs := *attributes

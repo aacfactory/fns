@@ -19,9 +19,7 @@ package authorizations
 
 import (
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"time"
 )
@@ -54,50 +52,6 @@ func (authorization Authorization) Validate() bool {
 	return authorization.Exist() && authorization.ExpireAT.After(time.Now())
 }
 
-const (
-	endpointName = "authorizations"
-	encodeFnName = "encode"
-	decodeFnName = "decode"
-)
-
-func Encode(ctx context.Context, authorization Authorization) (token Token, err error) {
-	rt := runtime.Load(ctx)
-	response, handleErr := rt.Endpoints().Request(
-		ctx,
-		bytex.FromString(endpointName), bytex.FromString(encodeFnName),
-		authorization,
-	)
-	if handleErr != nil {
-		err = handleErr
-		return
-	}
-	token, err = services.ValueOfResponse[Token](response)
-	if err != nil {
-		err = errors.Warning("authorizations: scan encode value failed").WithCause(err)
-		return
-	}
-	return
-}
-
-func Decode(ctx context.Context, token Token) (authorization Authorization, err error) {
-	rt := runtime.Load(ctx)
-	response, handleErr := rt.Endpoints().Request(
-		ctx,
-		bytex.FromString(endpointName), bytex.FromString(decodeFnName),
-		token,
-	)
-	if handleErr != nil {
-		err = handleErr
-		return
-	}
-	authorization, err = services.ValueOfResponse[Authorization](response)
-	if err != nil {
-		err = errors.Warning("authorizations: scan decode value failed").WithCause(err)
-		return
-	}
-	return
-}
-
 var ErrUnauthorized = errors.Unauthorized("unauthorized")
 
 func Validate(ctx context.Context) (err error) {
@@ -106,17 +60,14 @@ func Validate(ctx context.Context) (err error) {
 		err = ErrUnauthorized.WithCause(loadErr)
 		return
 	}
-	if !has {
-		err = ErrUnauthorized
-		return
-	}
-	if authorization.Exist() {
+	if has {
 		if authorization.Validate() {
 			return
 		}
 		err = ErrUnauthorized
 		return
 	}
+
 	r := services.LoadRequest(ctx)
 	token := r.Header().Token()
 	if len(token) == 0 {
@@ -128,10 +79,10 @@ func Validate(ctx context.Context) (err error) {
 		err = ErrUnauthorized.WithCause(err).WithMeta("token", string(token))
 		return
 	}
-	if authorization.Validate() {
-		With(ctx, authorization)
+	if !authorization.Validate() {
+		err = ErrUnauthorized
 		return
 	}
-	err = ErrUnauthorized
+	With(ctx, authorization)
 	return
 }

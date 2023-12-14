@@ -27,3 +27,7 @@ type Empty struct{}
 func (e Empty) MarshalJSON() ([]byte, error) {
 	return json.EmptyObjectBytes, nil
 }
+
+var (
+	EmptyBytes []byte
+)

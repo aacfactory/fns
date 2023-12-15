@@ -24,7 +24,7 @@ import (
 )
 
 func TestParseAnnotations(t *testing.T) {
-	s := `@title title
+	s := `@title title foo
 @desc >>>
 
 	name1:

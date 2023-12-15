@@ -17,7 +17,9 @@
 
 package documents
 
-import "github.com/aacfactory/fns/commons/versions"
+import (
+	"github.com/aacfactory/fns/commons/versions"
+)
 
 func New(name string, title string, description string) Endpoint {
 	return Endpoint{
@@ -64,19 +66,20 @@ func (endpoint *Endpoint) AddFn(fn Fn) {
 
 func (endpoint *Endpoint) addElement(element Element) (ref Element) {
 	if !element.Exist() {
+		ref = element
 		return
 	}
-	unpacks := element.unpack()
+	if element.IsRef() || element.IsAny() {
+		ref = element
+		return
+	}
+	unpacks := unpack(element)
 	ref = unpacks[0]
-	if len(unpacks) <= 1 {
-		return
-	}
-	remains := unpacks[1:]
-	for _, remain := range remains {
-		if remain.IsBuiltin() || remain.IsRef() || remain.Path == "" {
+	for _, unpacked := range unpacks {
+		if unpacked.IsBuiltin() || unpacked.IsRef() || unpacked.Path == "" {
 			continue
 		}
-		endpoint.Elements = endpoint.Elements.Add(remain)
+		endpoint.Elements = endpoint.Elements.Add(unpacked)
 	}
 	return
 }

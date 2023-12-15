@@ -72,7 +72,7 @@ func (f *Function) HostServiceName() (name string) {
 }
 
 func (f *Function) Name() (name string) {
-	name, _ = f.Annotations.FirstParam("fn")
+	name, _ = f.Annotations.Value("fn")
 	return
 }
 
@@ -88,7 +88,7 @@ func (f *Function) Internal() (ok bool) {
 
 func (f *Function) Title() (title string) {
 	has := false
-	title, has = f.Annotations.FirstParam("title")
+	title, has = f.Annotations.Value("title")
 	if !has {
 		title = f.Name()
 	}
@@ -96,12 +96,12 @@ func (f *Function) Title() (title string) {
 }
 
 func (f *Function) Description() (description string) {
-	description, _ = f.Annotations.FirstParam("description")
+	description, _ = f.Annotations.Value("description")
 	return
 }
 
 func (f *Function) Errors() (errs string) {
-	errs, _ = f.Annotations.FirstParam("errors")
+	errs, _ = f.Annotations.Value("errors")
 	return
 }
 

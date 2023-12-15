@@ -148,7 +148,7 @@ func Ref(path string, name string) Element {
 func JsonRaw() Element {
 	v := NewElement("github.com/aacfactory/json", "RawMessage", "object", "", "JsonRawMessage", "Json Raw Message")
 	v.Additional = true
-	v.AddProperty("", Empty())
+	v = v.AddProperty("", Empty())
 	return v
 }
 
@@ -164,14 +164,14 @@ func Empty() Element {
 
 func Array(item Element) Element {
 	v := NewElement("", "", "array", "", "", "")
-	v.AddProperty("", item)
+	v = v.AddProperty("", item)
 	return v
 }
 
 func Map(value Element) Element {
 	v := NewElement("", "", "object", "", "", "")
 	v.Additional = true
-	v.AddProperty("", value)
+	v = v.AddProperty("", value)
 	return v
 }
 
@@ -214,6 +214,9 @@ type Element struct {
 }
 
 func (element Element) Exist() bool {
+	if element.Path == "_" && element.Name == "unknown" {
+		return false
+	}
 	return !element.Nil || element.Type != ""
 }
 
@@ -292,6 +295,11 @@ func (element Element) IsRef() (ok bool) {
 	return
 }
 
+func (element Element) IsAny() (ok bool) {
+	ok = element.Name == "any"
+	return
+}
+
 func (element Element) IsAdditional() (ok bool) {
 	ok = element.IsObject() && element.Additional
 	return
@@ -304,61 +312,11 @@ func (element Element) AddProperty(name string, prop Element) Element {
 	return element
 }
 
-func (element Element) unpack() (elements Elements) {
-	elements = make([]Element, 0, 1)
-	if element.IsBuiltin() || element.IsRef() {
-		elements = append(elements, element)
-		return
-	}
-	if element.IsObject() {
-		if element.IsAdditional() {
-			item, hasItem := element.GetItem()
-			if hasItem {
-				unpacks := item.unpack()
-				element.Properties = make(Properties, 0, 1)
-				element.AddProperty("", unpacks[0])
-				elements = append(elements, element)
-				if len(unpacks) > 1 {
-					elements = append(elements, unpacks[1:]...)
-				}
-			}
-
-			return
-		}
-		elements = append(elements, Ref(element.Path, element.Name))
-		for i, property := range element.Properties {
-			unpacks := property.Element.unpack()
-			element.Properties[i].Element = unpacks[0]
-			if len(unpacks) > 1 {
-				elements = append(elements, unpacks[1:]...)
-			}
-		}
-		return
-	}
-	if element.IsArray() {
-		if element.Path != "" {
-			elements = append(elements, Ref(element.Path, element.Name))
-		}
-		item, hasItem := element.GetItem()
-		if hasItem {
-			unpacks := item.unpack()
-			element.Properties = make(Properties, 0, 1)
-			element.AddProperty("", unpacks[0])
-			elements = append(elements, element)
-			if len(unpacks) > 1 {
-				elements = append(elements, unpacks[1:]...)
-			}
-		}
-
-		return
-	}
-	return
-}
-
 func (element Element) GetItem() (v Element, has bool) {
 	p, exist := element.Properties.Get("")
 	if exist {
 		v = p.Element
+		has = true
 		return
 	}
 	return
@@ -397,4 +355,60 @@ func (elements Elements) Add(element Element) Elements {
 	n = append(elements, element)
 	sort.Sort(n)
 	return n
+}
+
+// unpack
+// []{ref, unpacked_prop..., unpacked_self}
+func unpack(element Element) (elements []Element) {
+	if element.IsBuiltin() || element.IsRef() {
+		elements = append(elements, element)
+		return
+	}
+	if element.IsObject() {
+		// map
+		if element.IsAdditional() {
+			item, hasItem := element.GetItem()
+			if hasItem {
+				unpacks := unpack(item)
+				element.Properties = make(Properties, 0, 1)
+				element = element.AddProperty("", unpacks[0])
+				elements = append(elements, element)
+				if len(unpacks) > 1 {
+					elements = append(elements, unpacks[1:]...)
+				}
+			}
+			return
+		}
+		// object
+		// add ref
+		elements = append(elements, Ref(element.Path, element.Name))
+		// properties
+		for i, property := range element.Properties {
+			unpacks := unpack(property.Element)
+			element.Properties[i].Element = unpacks[0]
+			if len(unpacks) > 1 {
+				elements = append(elements, unpacks[1:]...)
+			}
+		}
+		elements = append(elements, element)
+		return
+	}
+	// array
+	if element.IsArray() {
+		if element.Path != "" {
+			elements = append(elements, Ref(element.Path, element.Name))
+		}
+		item, hasItem := element.GetItem()
+		if hasItem {
+			unpacks := unpack(item)
+			if len(unpacks) > 1 {
+				elements = append(elements, unpacks[1:]...)
+			}
+			element.Properties = make(Properties, 0, 1)
+			element = element.AddProperty("", unpacks[0])
+			elements = append(elements, element)
+		}
+		return
+	}
+	return
 }

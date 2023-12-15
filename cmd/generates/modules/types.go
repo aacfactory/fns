@@ -211,11 +211,11 @@ func mapInterfaceTypeToFunctionElementCode(ctx context.Context, typ *sources.Typ
 	}
 	stmt := gcg.Statements()
 	stmt = stmt.Token("documents.Struct(").Token(fmt.Sprintf("\"%s\",\"%s\"", typ.Path, typ.Name)).Symbol(")")
-	title, hasTitle := typ.Annotations.FirstParam("title")
+	title, hasTitle := typ.Annotations.Value("title")
 	if hasTitle {
 		stmt = stmt.Dot().Line().Token("SetTitle(").Token(fmt.Sprintf("\"%s\"", strings.ReplaceAll(title, "\n", "\\n"))).Symbol(")")
 	}
-	description, hasDescription := typ.Annotations.FirstParam("description")
+	description, hasDescription := typ.Annotations.Value("description")
 	if hasDescription {
 		stmt = stmt.Dot().Line().Token("SetDescription(").Token(fmt.Sprintf("\"%s\"", description)).Symbol(")")
 	}
@@ -250,11 +250,11 @@ func mapStructTypeToFunctionElementCode(ctx context.Context, typ *sources.Type) 
 	}
 	stmt := gcg.Statements()
 	stmt = stmt.Token("documents.Struct(").Token(fmt.Sprintf("\"%s\",\"%s\"", typ.Path, typ.Name)).Symbol(")")
-	title, hasTitle := typ.Annotations.FirstParam("title")
+	title, hasTitle := typ.Annotations.Value("title")
 	if hasTitle {
 		stmt = stmt.Dot().Line().Token("SetTitle(").Token(fmt.Sprintf("\"%s\"", strings.ReplaceAll(title, "\n", "\\n"))).Symbol(")")
 	}
-	description, hasDescription := typ.Annotations.FirstParam("description")
+	description, hasDescription := typ.Annotations.Value("description")
 	if hasDescription {
 		stmt = stmt.Dot().Line().Token("SetDescription(").Token(fmt.Sprintf("\"%s\"", description)).Symbol(")")
 	}
@@ -304,11 +304,11 @@ func mapStructFieldTypeToFunctionElementCode(ctx context.Context, typ *sources.T
 		return
 	}
 	stmt := elementCode.(*gcg.Statement)
-	fieldTitle, hasFieldTitle := typ.Annotations.FirstParam("title")
+	fieldTitle, hasFieldTitle := typ.Annotations.Value("title")
 	if hasFieldTitle {
 		stmt = stmt.Dot().Line().Token("SetTitle(").Token(fmt.Sprintf("\"%s\"", strings.ReplaceAll(fieldTitle, "\n", "\\n"))).Symbol(")")
 	}
-	fieldDescription, hasFieldDescription := typ.Annotations.FirstParam("description")
+	fieldDescription, hasFieldDescription := typ.Annotations.Value("description")
 	if hasFieldDescription {
 		stmt = stmt.Dot().Line().Token("SetDescription(").Token(fmt.Sprintf("\"%s\"", fieldDescription)).Symbol(")")
 	}
@@ -407,11 +407,11 @@ func mapArrayTypeToFunctionElementCode(ctx context.Context, typ *sources.Type) (
 		stmt = stmt.Dot().Line().Token(fmt.Sprintf("SetPath(\"%s\")", typ.Path))
 		stmt = stmt.Dot().Line().Token(fmt.Sprintf("SetName(\"%s\")", typ.Name))
 	}
-	title, hasTitle := typ.Annotations.FirstParam("title")
+	title, hasTitle := typ.Annotations.Value("title")
 	if hasTitle {
 		stmt = stmt.Dot().Line().Token("SetTitle(").Token(fmt.Sprintf("\"%s\"", strings.ReplaceAll(title, "\n", "\\n"))).Symbol(")")
 	}
-	description, hasDescription := typ.Annotations.FirstParam("description")
+	description, hasDescription := typ.Annotations.Value("description")
 	if hasDescription {
 		stmt = stmt.Dot().Line().Token("SetDescription(").Token(fmt.Sprintf("\"%s\"", description)).Symbol(")")
 	}
@@ -444,11 +444,11 @@ func mapMapTypeToFunctionElementCode(ctx context.Context, typ *sources.Type) (co
 		stmt = stmt.Dot().Line().Token(fmt.Sprintf("SetPath(\"%s\")", typ.Path))
 		stmt = stmt.Dot().Line().Token(fmt.Sprintf("SetName(\"%s\")", typ.Name))
 	}
-	title, hasTitle := typ.Annotations.FirstParam("title")
+	title, hasTitle := typ.Annotations.Value("title")
 	if hasTitle {
 		stmt = stmt.Dot().Line().Token("SetTitle(").Token(fmt.Sprintf("\"%s\"", strings.ReplaceAll(title, "\n", "\\n"))).Symbol(")")
 	}
-	description, hasDescription := typ.Annotations.FirstParam("description")
+	description, hasDescription := typ.Annotations.Value("description")
 	if hasDescription {
 		stmt = stmt.Dot().Line().Token("SetDescription(").Token(fmt.Sprintf("\"%s\"", description)).Symbol(")")
 	}

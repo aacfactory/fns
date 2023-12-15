@@ -70,6 +70,23 @@ func (annotations *Annotations) FirstParam(name string) (value string, has bool)
 	return
 }
 
+func (annotations *Annotations) Value(name string) (value string, has bool) {
+	ss := *annotations
+	for _, target := range ss {
+		if target.Name == name {
+			if len(target.Params) > 0 {
+				for _, param := range target.Params {
+					value = value + " " + param
+				}
+				value = strings.TrimSpace(value)
+				has = true
+			}
+			return
+		}
+	}
+	return
+}
+
 func (annotations *Annotations) Add(name string, param string) {
 	ss := *annotations
 	for i, s := range ss {

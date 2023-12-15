@@ -381,9 +381,6 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 			WithCause(ctx.Err())
 		return
 	}
-	if s.service.Internal {
-		return
-	}
 	if s.service.Title == "" {
 		s.service.Title = s.service.Name
 	}
@@ -399,6 +396,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 		fnCode.Tab().Tab().Token("SetInfo(").Token("\"").Token(strings.ReplaceAll(function.Title(), "\n", "\\n")).Token("\", ").Token("\"").Token(strings.ReplaceAll(function.Description(), "\n", "\\n")).Token("\"").Token(")").Dot().Line()
 		fnCode.Tab().Tab().
 			Token(fmt.Sprintf("SetReadonly(%v)", function.Readonly())).Dot().
+			Token(fmt.Sprintf("SetInternal(%v)", function.Internal())).Dot().
 			Token(fmt.Sprintf("SetDeprecated(%v)", function.Deprecated())).Dot().Line()
 		fnCode.Tab().Tab().
 			Token(fmt.Sprintf("SetAuthorization(%v)", function.Authorization())).Dot().
@@ -442,6 +440,9 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 	docFnCode.AddResult("document", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/services/documents"), "Endpoint"))
 	body := gcg.Statements()
 	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", \"%s\")", strings.ReplaceAll(s.service.Title, "\n", "\\n"), strings.ReplaceAll(s.service.Description, "\n", "\\n")))
+	if s.service.Internal {
+		body.Token("document.SetInternal()").Line()
+	}
 	for _, fnCode := range fnCodes {
 		body.Line().Add(fnCode).Line()
 	}

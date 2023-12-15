@@ -17,6 +17,8 @@
 
 package documents
 
+import "github.com/aacfactory/fns/commons/versions"
+
 func New(name string, title string, description string) Endpoint {
 	return Endpoint{
 		Name:        name,
@@ -28,25 +30,30 @@ func New(name string, title string, description string) Endpoint {
 }
 
 type Endpoint struct {
-	Name        string   `json:"name"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Functions   Fns      `json:"functions"`
-	Elements    Elements `json:"elements"`
+	Id          []string         `json:"id,omitempty"`
+	Version     versions.Version `json:"version"`
+	Name        string           `json:"name"`
+	Title       string           `json:"title"`
+	Description string           `json:"description"`
+	Internal    bool             `json:"internal"`
+	Functions   Fns              `json:"functions"`
+	Elements    Elements         `json:"elements"`
 }
 
 func (endpoint *Endpoint) Defined() bool {
 	return endpoint.Name != ""
 }
 
-func (endpoint *Endpoint) SetDescription(description string) {
-	endpoint.Description = description
+func (endpoint *Endpoint) SetInternal() {
+	endpoint.Internal = true
 }
 
 func (endpoint *Endpoint) AddFn(fn Fn) {
 	if fn.Param.Exist() {
-		paramRef := endpoint.addElement(fn.Param)
-		fn.Param = paramRef
+		if !fn.Readonly {
+			paramRef := endpoint.addElement(fn.Param)
+			fn.Param = paramRef
+		}
 	}
 	if fn.Result.Exist() {
 		paramRef := endpoint.addElement(fn.Result)

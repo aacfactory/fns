@@ -41,6 +41,7 @@ type Fn struct {
 	Title         string  `json:"title,omitempty"`
 	Description   string  `json:"description,omitempty"`
 	Deprecated    bool    `json:"deprecated,omitempty"`
+	Internal      bool    `json:"internal,omitempty"`
 	Readonly      bool    `json:"readonly,omitempty"`
 	Authorization bool    `json:"authorization,omitempty"`
 	Permission    bool    `json:"permission,omitempty"`
@@ -57,6 +58,11 @@ func (fn Fn) SetInfo(title string, description string) Fn {
 
 func (fn Fn) SetDeprecated(deprecated bool) Fn {
 	fn.Deprecated = deprecated
+	return fn
+}
+
+func (fn Fn) SetInternal(internal bool) Fn {
+	fn.Internal = internal
 	return fn
 }
 

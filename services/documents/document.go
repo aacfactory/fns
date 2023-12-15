@@ -32,6 +32,15 @@ type Document struct {
 
 func (document *Document) Add(endpoint Endpoint) {
 	if endpoint.Defined() {
+		for i, ep := range document.Endpoints {
+			if ep.Name == endpoint.Name {
+				ep.Id = append(ep.Id, endpoint.Id...)
+				document.Endpoints[i] = ep
+				return
+			}
+		}
+		endpoint.Id = []string{document.Id}
+		endpoint.Version = document.Version
 		document.Endpoints = append(document.Endpoints, endpoint)
 		sort.Sort(document.Endpoints)
 	}
@@ -46,6 +55,8 @@ func (document *Document) Get(name []byte) (v Endpoint) {
 	return Endpoint{}
 }
 
+// Documents
+// version based
 type Documents []Document
 
 func (documents Documents) Len() int {
@@ -79,28 +90,19 @@ func (documents Documents) Version(ver versions.Version) (document Document, has
 	return
 }
 
-func (documents Documents) Add(document Document) Documents {
-	for _, stored := range documents {
-		if stored.Id == document.Id {
-			return documents
-		}
-	}
-	n := append(documents, document)
-	sort.Sort(n)
-	return n
-}
-
-func (documents Documents) AddEndpoint(id string, version versions.Version, endpoint Endpoint) Documents {
+func (documents Documents) Add(endpoint Endpoint) Documents {
 	for i, stored := range documents {
-		if stored.Id == id {
+		if stored.Version.Equals(endpoint.Version) {
 			stored.Add(endpoint)
 			documents[i] = stored
 			return documents
 		}
 	}
-	return documents.Add(Document{
-		Id:        id,
-		Version:   version,
-		Endpoints: Endpoints{endpoint},
-	})
+	doc := Document{
+		Version:   endpoint.Version,
+		Endpoints: []Endpoint{endpoint},
+	}
+	v := append(documents, doc)
+	sort.Sort(v)
+	return v
 }

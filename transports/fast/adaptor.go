@@ -63,12 +63,13 @@ func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.R
 				n += nn
 			}
 		}
-
-		// release result
-		transports.ReleaseResultResponseWriter(result)
-		// release ctx
-		c.RequestCtx = nil
-		c.locals.Reset()
-		ctxPool.Put(c)
+		if !w.Hijacked() {
+			// release result
+			transports.ReleaseResultResponseWriter(result)
+			// release ctx
+			c.RequestCtx = nil
+			c.locals.Reset()
+			ctxPool.Put(c)
+		}
 	}
 }

@@ -23,48 +23,48 @@ import (
 )
 
 type RequestHeader struct {
-	*fasthttp.RequestHeader
+	ctx *fasthttp.RequestCtx
 }
 
 func (h RequestHeader) Add(key []byte, value []byte) {
-	h.RequestHeader.AddBytesKV(key, value)
+	h.ctx.Request.Header.AddBytesKV(key, value)
 }
 
 func (h RequestHeader) Set(key []byte, value []byte) {
-	h.RequestHeader.SetBytesKV(key, value)
+	h.ctx.Request.Header.SetBytesKV(key, value)
 }
 
 func (h RequestHeader) Get(key []byte) []byte {
-	return h.RequestHeader.PeekBytes(key)
+	return h.ctx.Request.Header.PeekBytes(key)
 }
 
 func (h RequestHeader) Del(key []byte) {
-	h.RequestHeader.DelBytes(key)
+	h.ctx.Request.Header.DelBytes(key)
 }
 
 func (h RequestHeader) Values(key []byte) [][]byte {
-	return h.RequestHeader.PeekAll(bytex.ToString(key))
+	return h.ctx.Request.Header.PeekAll(bytex.ToString(key))
 }
 
 func (h RequestHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	if fn == nil {
 		return
 	}
-	keys := h.PeekKeys()
+	keys := h.ctx.Request.Header.PeekKeys()
 	if len(keys) == 0 {
 		return
 	}
 	for _, key := range keys {
-		fn(key, h.RequestHeader.PeekAll(bytex.ToString(key)))
+		fn(key, h.ctx.Request.Header.PeekAll(bytex.ToString(key)))
 	}
 }
 
 func (h RequestHeader) Len() int {
-	return h.RequestHeader.Len()
+	return h.ctx.Request.Header.Len()
 }
 
 func (h RequestHeader) Reset() {
-	h.RequestHeader.Reset()
+	h.ctx.Request.Header.Reset()
 }
 
 type ResponseHeader struct {

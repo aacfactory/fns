@@ -454,6 +454,8 @@ func (app *application) shutdown() {
 	// status
 	app.status.Off()
 
+	runtime.With(ctx, app.rt)
+
 	go func(ctx context.Context, cancel context.CancelFunc, app *application) {
 		// endpoints
 		app.manager.Shutdown(ctx)

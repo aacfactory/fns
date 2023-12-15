@@ -65,7 +65,9 @@ func (r *Request) SetCookie(key []byte, value []byte) {
 }
 
 func (r *Request) Header() transports.Header {
-	return RequestHeader{&r.Context.Request.Header}
+	return RequestHeader{
+		ctx: r.Context.RequestCtx,
+	}
 }
 
 func (r *Request) RequestURI() []byte {

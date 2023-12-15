@@ -78,6 +78,7 @@ func (middle *middleware) Handler(next transports.Handler) transports.Handler {
 		}
 		// set runtime into request context
 		With(r, middle.rt)
+		With(w, middle.rt)
 		// set request and response into context
 		transports.WithRequest(r, r)
 		transports.WithResponse(r, w)

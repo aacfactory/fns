@@ -73,19 +73,22 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int, write
 			}
 		}
 
-		transports.ReleaseResultResponseWriter(w.result)
-		w.Context = nil
-		w.writer = nil
-		w.header = nil
-		w.result = nil
-		w.hijacked = false
-		responsePool.Put(w)
+		if !w.Hijacked() {
+			transports.ReleaseResultResponseWriter(w.result)
+			w.Context = nil
+			w.writer = nil
+			w.header = nil
+			w.result = nil
+			w.hijacked = false
+			responsePool.Put(w)
 
-		r.Context = nil
-		r.maxBodySize = 0
-		r.request = nil
-		requestPool.Put(r)
+			r.Context = nil
+			r.maxBodySize = 0
+			r.request = nil
+			requestPool.Put(r)
 
-		context.Release(ctx)
+			context.Release(ctx)
+		}
+
 	})
 }

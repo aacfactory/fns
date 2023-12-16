@@ -22,7 +22,6 @@ import (
 	"github.com/aacfactory/errors"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 const (
@@ -90,7 +89,7 @@ func (f *DockerFile) Name() (name string) {
 }
 
 func (f *DockerFile) Write(_ context.Context) (err error) {
-	writeErr := os.WriteFile(f.filename, []byte(strings.ReplaceAll(dockerfile, "#path#", f.path)), 0644)
+	writeErr := os.WriteFile(f.filename, []byte(dockerfile), 0644)
 	if writeErr != nil {
 		err = errors.Warning("fns: dockerfile write failed").WithCause(writeErr).WithMeta("filename", f.filename)
 		return

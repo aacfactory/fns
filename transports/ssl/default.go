@@ -343,8 +343,8 @@ type DefaultConfig struct {
 }
 
 func (config *DefaultConfig) Build(options configures.Config) (err error) {
-	opt := &DefaultConfigOptions{}
-	optErr := options.As(opt)
+	opt := DefaultConfigOptions{}
+	optErr := options.As(&opt)
 	if optErr != nil {
 		err = errors.Warning("fns: build default tls config failed").WithCause(optErr)
 		return

@@ -32,8 +32,28 @@ import (
 )
 
 type SSCConfigOptions struct {
-	CA    string `json:"ca"`
-	CAKEY string `json:"caKey"`
+	CA                 string `json:"ca"`
+	CAKEY              string `json:"caKey"`
+	ClientAuth         string `json:"clientAuth"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify"`
+	ExpireDays         int    `json:"expireDays"`
+}
+
+func (opt *SSCConfigOptions) ClientAuthType() tls.ClientAuthType {
+	switch opt.ClientAuth {
+	case "NoClientCert":
+		return tls.NoClientCert
+	case "RequestClientCert":
+		return tls.RequestClientCert
+	case "RequireAnyClientCert":
+		return tls.RequireAnyClientCert
+	case "VerifyClientCertIfGiven":
+		return tls.VerifyClientCertIfGiven
+	case "RequireAndVerifyClientCert":
+		return tls.RequireAndVerifyClientCert
+	default:
+		return tls.NoClientCert
+	}
 }
 
 type SSCConfig struct {
@@ -44,8 +64,8 @@ type SSCConfig struct {
 func (config *SSCConfig) Build(options configures.Config) (err error) {
 	caPEM := defaultTestSSCCaPEM
 	caKeyPEM := defaultTestSSCCaKeyPEM
-	opt := &SSCConfigOptions{}
-	optErr := options.As(opt)
+	opt := SSCConfigOptions{}
+	optErr := options.As(&opt)
 	if optErr != nil {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(optErr)
 		return
@@ -105,9 +125,13 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 	config.serverTLS = &tls.Config{
 		ClientCAs:    cas,
 		Certificates: []tls.Certificate{serverCertificate},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientAuth:   opt.ClientAuthType(),
 	}
-	clientCert, clientKey, createClientErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(int(ca0.NotAfter.Sub(time.Now()).Hours())/24))
+	expireDays := opt.ExpireDays
+	if expireDays < 1 {
+		expireDays = 365
+	}
+	clientCert, clientKey, createClientErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(expireDays))
 	if createClientErr != nil {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createClientErr)
 		return
@@ -120,7 +144,7 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 	config.clientTLS = &tls.Config{
 		RootCAs:            cas,
 		Certificates:       []tls.Certificate{clientCertificate},
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: opt.InsecureSkipVerify,
 	}
 	return
 }

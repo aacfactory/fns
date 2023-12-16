@@ -28,69 +28,14 @@ import (
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
 	slashBytes          = []byte{'/'}
-	internalContentType = []byte("application/json+fns")
+	internalContentType = []byte("application/proto+fns")
+	spanAttachmentKey   = []byte("span")
 )
-
-type Entry struct {
-	Key []byte          `json:"key"`
-	Val json.RawMessage `json:"val"`
-}
-
-type RequestBody struct {
-	ContextUserValues []Entry         `json:"contextUserValues"`
-	Params            json.RawMessage `json:"params"`
-}
-
-type ResponseAttachment struct {
-	Name  string          `json:"name"`
-	Value json.RawMessage `json:"value"`
-}
-
-func (attachment *ResponseAttachment) Load(dst interface{}) (err error) {
-	err = json.Unmarshal(attachment.Value, dst)
-	return
-}
-
-type ResponseAttachments []ResponseAttachment
-
-func (attachments *ResponseAttachments) Get(name string) (attachment ResponseAttachment, has bool) {
-	aa := *attachments
-	for _, responseAttachment := range aa {
-		if responseAttachment.Name == name {
-			attachment = responseAttachment
-			has = true
-			return
-		}
-	}
-	return
-}
-
-func (attachments *ResponseAttachments) Set(name string, value interface{}) (err error) {
-	p, encodeErr := json.Marshal(value)
-	if encodeErr != nil {
-		err = encodeErr
-		return
-	}
-	aa := *attachments
-	for i, responseAttachment := range aa {
-		if responseAttachment.Name == name {
-			responseAttachment.Value = p
-		}
-		aa[i] = responseAttachment
-	}
-	*attachments = aa
-	return
-}
-
-type ResponseBody struct {
-	Succeed     bool                `json:"succeed"`
-	Data        json.RawMessage     `json:"data"`
-	Attachments ResponseAttachments `json:"attachments"`
-}
 
 func NewInternalHandler(local services.Endpoints, signature signatures.Signature) transports.MuxHandler {
 	return &InternalHandler{
@@ -150,14 +95,14 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 
 	rb := RequestBody{}
-	decodeErr := json.Unmarshal(body, &rb)
+	decodeErr := proto.Unmarshal(body, &rb)
 	if decodeErr != nil {
 		w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)).WithCause(decodeErr))
 		return
 	}
 	// user values
 	for _, userValue := range rb.ContextUserValues {
-		r.SetUserValue(userValue.Key, userValue.Val)
+		r.SetUserValue(userValue.Key, userValue.Value)
 	}
 
 	// header >>>
@@ -239,11 +184,15 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	rsb := ResponseBody{
 		Succeed:     succeed,
 		Data:        data,
-		Attachments: make(ResponseAttachments, 0, 1),
+		Attachments: make([]*Entry, 0, 1),
 	}
 	if span != nil {
-		_ = rsb.Attachments.Set("span", span)
+		p, _ := json.Marshal(span)
+		rsb.Attachments = append(rsb.Attachments, &Entry{
+			Key:   spanAttachmentKey,
+			Value: p,
+		})
 	}
 
-	w.Succeed(rsb)
+	w.Succeed(&rsb)
 }

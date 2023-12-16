@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package clusters;
+option go_package ="../clusters";
+
+message Entry {
+  bytes key = 1;
+  bytes value = 2;
+}
+
+message RequestBody {
+  repeated Entry contextUserValues = 1;
+  bytes params = 2;
+}
+
+message ResponseBody {
+  bool succeed = 1;
+  bytes data = 2;
+  repeated Entry attachments = 3;
+}

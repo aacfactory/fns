@@ -26,6 +26,7 @@ import (
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
+	"google.golang.org/protobuf/proto"
 	"net/http"
 	"sync/atomic"
 )
@@ -116,15 +117,15 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	// header <<<
 
 	// body
-	userValues := make([]Entry, 0, 1)
+	userValues := make([]*Entry, 0, 1)
 	ctx.UserValues(func(key []byte, val any) {
 		p, encodeErr := json.Marshal(val)
 		if encodeErr != nil {
 			return
 		}
-		userValues = append(userValues, Entry{
-			Key: key,
-			Val: p,
+		userValues = append(userValues, &Entry{
+			Key:   key,
+			Value: p,
 		})
 	})
 	argument, argumentErr := ctx.Param().MarshalJSON()
@@ -136,7 +137,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		ContextUserValues: userValues,
 		Params:            argument,
 	}
-	body, bodyErr := json.Marshal(rb)
+	body, bodyErr := proto.Marshal(&rb)
 	if bodyErr != nil {
 		err = errors.Warning("fns: encode body failed").WithCause(bodyErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
@@ -182,12 +183,13 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		}
 		trace, hasTrace := tracings.Load(ctx)
 		if hasTrace {
-			spanAttachment, hasSpanAttachment := rsb.Attachments.Get("span")
-			if hasSpanAttachment {
-				span := tracings.Span{}
-				spanErr := spanAttachment.Load(&span)
-				if spanErr == nil {
-					trace.Mount(&span)
+			for _, attachment := range rsb.Attachments {
+				if bytes.Equal(spanAttachmentKey, attachment.Key) {
+					span := tracings.Span{}
+					spanErr := json.Unmarshal(attachment.Value, &span)
+					if spanErr == nil {
+						trace.Mount(&span)
+					}
 				}
 			}
 		}

@@ -185,7 +185,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			spanAttachment, hasSpanAttachment := rsb.Attachments.Get("span")
 			if hasSpanAttachment {
 				span := tracings.Span{}
-				spanErr := spanAttachment.Scan(&span)
+				spanErr := spanAttachment.Load(&span)
 				if spanErr == nil {
 					trace.Mount(&span)
 				}

@@ -21,6 +21,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"sort"
+	"sync"
 	"sync/atomic"
 )
 
@@ -29,9 +30,12 @@ type Registration struct {
 	length int
 	pos    uint64
 	values Endpoints
+	lock   sync.RWMutex
 }
 
 func (registration *Registration) Add(endpoint *Endpoint) {
+	registration.lock.Lock()
+	defer registration.lock.Unlock()
 	_, exist := registration.Get(bytex.FromString(endpoint.id))
 	if exist {
 		return
@@ -42,6 +46,8 @@ func (registration *Registration) Add(endpoint *Endpoint) {
 }
 
 func (registration *Registration) Remove(id string) {
+	registration.lock.Lock()
+	defer registration.lock.Unlock()
 	n := -1
 	for i, value := range registration.values {
 		if value.id == id {
@@ -57,6 +63,8 @@ func (registration *Registration) Remove(id string) {
 }
 
 func (registration *Registration) Get(id []byte) (endpoint *Endpoint, has bool) {
+	registration.lock.RLock()
+	defer registration.lock.RUnlock()
 	if registration.length == 0 {
 		return
 	}
@@ -65,7 +73,7 @@ func (registration *Registration) Get(id []byte) (endpoint *Endpoint, has bool) 
 		if value.Running() {
 			if value.id == idString {
 				endpoint = value
-				has = true
+				has = endpoint.IsHealth()
 				break
 			}
 		}
@@ -74,6 +82,8 @@ func (registration *Registration) Get(id []byte) (endpoint *Endpoint, has bool) 
 }
 
 func (registration *Registration) Range(interval versions.Interval) (endpoint *Endpoint, has bool) {
+	registration.lock.RLock()
+	defer registration.lock.RUnlock()
 	if registration.length == 0 {
 		return
 	}
@@ -86,13 +96,22 @@ func (registration *Registration) Range(interval versions.Interval) (endpoint *E
 		}
 	}
 	n := uint64(len(targets))
-	pos := int(atomic.AddUint64(&registration.pos, 1) % n)
-	endpoint = targets[pos]
-	has = true
+	idx := atomic.AddUint64(&registration.pos, 1)
+	for i := uint64(0); i < n; i++ {
+		pos := idx % n
+		endpoint = targets[pos]
+		if endpoint.IsHealth() {
+			has = true
+			break
+		}
+		idx++
+	}
 	return
 }
 
 func (registration *Registration) MaxOne() (endpoint *Endpoint, has bool) {
+	registration.lock.RLock()
+	defer registration.lock.RUnlock()
 	if registration.length == 0 {
 		return
 	}
@@ -112,9 +131,16 @@ func (registration *Registration) MaxOne() (endpoint *Endpoint, has bool) {
 		break
 	}
 	n := uint64(len(targets))
-	pos := int(atomic.AddUint64(&registration.pos, 1) % n)
-	endpoint = targets[pos]
-	has = true
+	idx := atomic.AddUint64(&registration.pos, 1)
+	for i := uint64(0); i < n; i++ {
+		pos := idx % n
+		endpoint = targets[pos]
+		if endpoint.IsHealth() {
+			has = true
+			break
+		}
+		idx++
+	}
 	return
 }
 
@@ -146,6 +172,7 @@ func (registrations Registrations) Add(endpoint *Endpoint) Registrations {
 		length: 0,
 		pos:    0,
 		values: make(Endpoints, 0, 1),
+		lock:   sync.RWMutex{},
 	}
 	registration.Add(endpoint)
 	return append(registrations, &registration)

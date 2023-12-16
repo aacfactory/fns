@@ -44,6 +44,7 @@ func NewEndpoint(address string, id string, version versions.Version, name strin
 		functions: make(services.Fns, 0, 1),
 		client:    client,
 		signature: signature,
+		errs:      window.NewTimes(10 * time.Second),
 	}
 	endpoint.running.Store(true)
 	return
@@ -60,6 +61,7 @@ type Endpoint struct {
 	functions services.Fns
 	client    transports.Client
 	signature signatures.Signature
+	errs      *window.Times
 }
 
 func (endpoint *Endpoint) Running() bool {
@@ -91,6 +93,10 @@ func (endpoint *Endpoint) Shutdown(_ context.Context) {
 	endpoint.client.Close()
 }
 
+func (endpoint *Endpoint) IsHealth() bool {
+	return endpoint.errs.Value() < 5
+}
+
 func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
 	fn := &Fn{
 		endpointName: endpoint.name,
@@ -99,7 +105,7 @@ func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
 		readonly:     readonly,
 		path:         bytex.FromString(fmt.Sprintf("/%s/%s", endpoint.name, name)),
 		signature:    endpoint.signature,
-		errs:         window.NewTimes(10 * time.Second),
+		errs:         endpoint.errs,
 		health:       atomic.Bool{},
 		client:       endpoint.client,
 	}

@@ -50,6 +50,7 @@ type ResponseAttachment struct {
 	Value json.RawMessage `json:"value"`
 }
 
+// todo as objects
 func (attachment *ResponseAttachment) Scan(dst interface{}) (err error) {
 	err = json.Unmarshal(attachment.Value, dst)
 	return

@@ -20,6 +20,6 @@ message ResponseBody {
   bool succeed = 1;
   int64 encoding = 2;
   bytes data = 3;
-  tracings.Span span = 4;
-  repeated Entry attachments = 5;
+  repeated Entry attachments = 4;
+  tracings.Span span = 5;
 }

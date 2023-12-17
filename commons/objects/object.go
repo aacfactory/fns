@@ -111,6 +111,7 @@ func (obj object) Unmarshal(dst interface{}) (err error) {
 				err = errors.Warning("fns: unmarshal object failed").WithCause(err)
 				return
 			}
+			return
 		}
 		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not matched"))
 		return

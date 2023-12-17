@@ -185,7 +185,7 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 			})
 			v = Response{
 				Header: respHeader,
-				Value:  respBody,
+				Value:  json.RawMessage(respBody),
 			}
 			return
 		}

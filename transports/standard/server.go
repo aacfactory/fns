@@ -101,7 +101,7 @@ func newServer(log logs.Logger, port int, tlsConfig ssl.Config, config *Config, 
 		WriteTimeout:                 writeTimeout,
 		IdleTimeout:                  idleTimeout,
 		MaxHeaderBytes:               int(maxRequestHeaderSize),
-		ErrorLog:                     logs.MapToLogger(log, logs.DebugLevel, false),
+		ErrorLog:                     logs.ConvertToStandardLogger(log, logs.DebugLevel, false),
 	}
 
 	srv = &Server{

@@ -21,12 +21,15 @@ import (
 	"bufio"
 	stdjson "encoding/json"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -69,6 +72,7 @@ func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
 			status:   0,
 			timeout:  timeout,
 			deadline: deadline,
+			header:   NewHeader(),
 			body:     buf,
 		}
 	}
@@ -81,6 +85,7 @@ func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
 
 func ReleaseResultResponseWriter(w *ResultResponseWriter) {
 	bytebufferpool.Put(w.body)
+	w.header.Reset()
 	w.body = nil
 	w.status = 0
 	w.timeout = 0
@@ -92,6 +97,7 @@ type ResultResponseWriter struct {
 	status   int
 	timeout  time.Duration
 	deadline time.Time
+	header   Header
 	body     *bytebufferpool.ByteBuffer
 }
 
@@ -101,6 +107,11 @@ func (w *ResultResponseWriter) Status() int {
 
 func (w *ResultResponseWriter) SetStatus(status int) {
 	w.status = status
+}
+
+func (w *ResultResponseWriter) Header() (h Header) {
+	h = w.header
+	return
 }
 
 func (w *ResultResponseWriter) Body() []byte {
@@ -116,34 +127,42 @@ func (w *ResultResponseWriter) Succeed(v interface{}) {
 		w.status = http.StatusOK
 		return
 	}
-	var body []byte
-	var bodyErr error
-	switch vv := v.(type) {
-	case []byte:
-		if json.Validate(vv) {
-			body = vv
-		} else {
-			body, bodyErr = json.Marshal(v)
-		}
-		break
-	case json.RawMessage:
-		body = vv
-		break
-	case stdjson.RawMessage:
-		body = vv
-		break
-	default:
-		body, bodyErr = json.Marshal(v)
-		break
+	obj, isObject := v.(objects.Object)
+	if isObject {
+		v = obj.Value()
 	}
-	if bodyErr != nil {
-		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(bodyErr))
+	if v == nil {
+		w.status = http.StatusOK
 		return
 	}
-	w.status = http.StatusOK
-	if bodyLen := len(body); bodyLen > 0 {
-		_, _ = w.Write(body)
+
+	var p []byte
+	var err error
+	switch vv := v.(type) {
+	case json.RawMessage:
+		p = vv
+		break
+	case stdjson.RawMessage:
+		p = vv
+		break
+	case []byte:
+		if json.Validate(vv) {
+			p = vv
+		} else {
+			p, err = json.Marshal(v)
+		}
+		break
+	default:
+		p, err = json.Marshal(vv)
+		break
 	}
+	if err != nil {
+		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(err))
+		return
+	}
+	_, _ = w.Write(p)
+	w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
+	w.status = http.StatusOK
 	return
 }
 
@@ -157,17 +176,18 @@ func (w *ResultResponseWriter) Failed(cause error) {
 		body = []byte(`{"message": "fns: transport write failed result failed"}`)
 	}
 	w.status = err.Code()
-	if bodyLen := len(body); bodyLen > 0 {
-		_, _ = w.Write(body)
-	}
+	_, _ = w.Write(body)
+	w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
 	return
 }
 
 func (w *ResultResponseWriter) Write(body []byte) (int, error) {
-	if body == nil {
-		return 0, nil
+	bodyLen := len(body)
+	w.Header().Set(ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
+	if bodyLen > 0 {
+		return w.body.Write(body)
 	}
-	return w.body.Write(body)
+	return 0, nil
 }
 
 func (w *ResultResponseWriter) WriteTimeout() time.Duration {

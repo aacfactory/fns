@@ -20,12 +20,10 @@ package fast
 import (
 	"bufio"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/fasthttp"
 	"net"
-	"strconv"
 	"time"
 )
 
@@ -65,19 +63,11 @@ func (w *ResponseWriter) Header() transports.Header {
 
 func (w *ResponseWriter) Succeed(v interface{}) {
 	w.result.Succeed(v)
-	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
-		w.Header().Set(transports.ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
-		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
-	}
 	return
 }
 
 func (w *ResponseWriter) Failed(cause error) {
 	w.result.Failed(cause)
-	if bodyLen := w.result.BodyLen(); bodyLen > 0 {
-		w.Header().Set(transports.ContentLengthHeaderName, bytex.FromString(strconv.Itoa(bodyLen)))
-		w.Header().Set(transports.ContentTypeHeaderName, transports.ContentTypeJsonHeaderValue)
-	}
 	return
 }
 

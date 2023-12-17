@@ -56,12 +56,17 @@ func (p paramsObject) Valid() (ok bool) {
 	return
 }
 
-func (p paramsObject) TransformTo(dst interface{}) (err error) {
+func (p paramsObject) Value() (v any) {
+	v = p.value
+	return
+}
+
+func (p paramsObject) Unmarshal(dst interface{}) (err error) {
 	err = DecodeParams(p.value, dst)
 	return
 }
 
-func (p paramsObject) MarshalJSON() ([]byte, error) {
+func (p paramsObject) Marshal() ([]byte, error) {
 	encoded := p.value.Encode()
 	capacity := len(encoded) + 2
 	b := make([]byte, capacity)

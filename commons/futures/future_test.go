@@ -41,7 +41,7 @@ func TestNew(t *testing.T) {
 		return
 	}
 	v := 0
-	err = r.TransformTo(&v)
+	err = r.Unmarshal(&v)
 	fmt.Println(v, err)
 }
 

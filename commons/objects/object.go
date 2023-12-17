@@ -18,7 +18,6 @@
 package objects
 
 import (
-	stdjson "encoding/json"
 	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
@@ -40,8 +39,9 @@ func New(src interface{}) Object {
 
 type Object interface {
 	Valid() (ok bool)
-	TransformTo(dst any) (err error)
-	json.Marshaler
+	Unmarshal(dst any) (err error)
+	Marshal() (p []byte, err error)
+	Value() (v any)
 }
 
 type object struct {
@@ -61,9 +61,21 @@ func (obj object) Valid() (ok bool) {
 	return
 }
 
-func (obj object) TransformTo(dst interface{}) (err error) {
+func (obj object) Value() (v any) {
+	if obj.value == nil {
+		return
+	}
+	o, isObject := obj.value.(Object)
+	if isObject {
+		v = o.Value()
+		return
+	}
+	return
+}
+
+func (obj object) Unmarshal(dst interface{}) (err error) {
 	if dst == nil {
-		err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("dst is nil"))
+		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("dst is nil"))
 		return
 	}
 	if !obj.Valid() {
@@ -71,9 +83,9 @@ func (obj object) TransformTo(dst interface{}) (err error) {
 	}
 	o, isObject := obj.value.(Object)
 	if isObject {
-		err = o.TransformTo(dst)
+		err = o.Unmarshal(dst)
 		if err != nil {
-			err = errors.Warning("fns: transform object failed").WithCause(err)
+			err = errors.Warning("fns: unmarshal object failed").WithCause(err)
 			return
 		}
 		return
@@ -81,78 +93,79 @@ func (obj object) TransformTo(dst interface{}) (err error) {
 
 	dpv := reflect.ValueOf(dst)
 	if dpv.Kind() != reflect.Ptr {
-		err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("type of dst is not pointer"))
+		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not pointer"))
 		return
 	}
+
+	// bytes
 	bytes, isBytes := obj.value.([]byte)
-	isJson := isBytes && json.Validate(bytes) &&
-		(dpv.Elem().Type().Kind() != reflect.Slice || !(dpv.Elem().Type().Kind() == reflect.Slice && dpv.Elem().Type().Elem().Kind() == reflect.Uint8))
-	if isJson {
-		err = json.Unmarshal(bytes, dst)
-		if err == nil {
+	if isBytes {
+		isBytesDst := dpv.Elem().Type().Kind() == reflect.Slice && dpv.Elem().Type().Elem().Kind() == reflect.Uint8
+		if isBytesDst {
+			dpv.Elem().Set(reflect.ValueOf(bytes))
 			return
 		}
+		if json.Validate(bytes) {
+			err = json.Unmarshal(bytes, dst)
+			if err != nil {
+				err = errors.Warning("fns: unmarshal object failed").WithCause(err)
+				return
+			}
+		}
+		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not matched"))
+		return
 	}
+
+	// copy
 	sv := reflect.ValueOf(obj.value)
+	st := sv.Type()
 	dv := reflect.Indirect(dpv)
+	dt := dv.Type()
 	if sv.Kind() == reflect.Ptr {
 		if sv.IsNil() {
 			return
 		}
 		sv = sv.Elem()
 	}
-	if sv.IsValid() && sv.Type().AssignableTo(dv.Type()) {
+	if sv.IsValid() && st.AssignableTo(dt) {
 		dv.Set(sv)
 		return
 	}
-	if dv.Kind() == sv.Kind() && sv.Type().ConvertibleTo(dv.Type()) {
-		dv.Set(sv.Convert(dv.Type()))
+	if dv.Kind() == sv.Kind() && st.ConvertibleTo(dt) {
+		dv.Set(sv.Convert(dt))
 		return
 	}
 	if dv.Type().Kind() == reflect.Interface && dv.CanSet() {
-		if sv.Type().Implements(dv.Type()) {
+		if st.Implements(dt) {
 			dv.Set(sv)
 			return
 		}
-		if sv.CanAddr() && sv.Addr().Type().Implements(dv.Type()) {
+		if sv.CanAddr() && sv.Addr().Type().Implements(dt) {
 			dv.Set(sv.Addr())
 			return
 		}
 	}
-	err = errors.Warning("fns: transform object failed").WithCause(fmt.Errorf("type of dst is not matched"))
+	err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not matched"))
+	return
+}
+
+func (obj object) Marshal() (p []byte, err error) {
+	v, ok := obj.value.(Object)
+	if ok {
+		p, err = v.Marshal()
+		return
+	}
+	bytes, isBytes := obj.value.([]byte)
+	if isBytes && json.Validate(bytes) {
+		p = bytes
+		return
+	}
+	p, err = json.Marshal(obj.value)
 	return
 }
 
 func (obj object) MarshalJSON() (data []byte, err error) {
-	if !obj.Valid() {
-		data = json.NullBytes
-		return
-	}
-	switch obj.value.(type) {
-	case struct{}, *struct{}:
-		data = json.NullBytes
-		break
-	case []byte:
-		value := obj.value.([]byte)
-		if !json.Validate(value) {
-			data, err = json.Marshal(obj.value)
-			return
-		}
-		data = value
-		break
-	case json.RawMessage:
-		data = obj.value.(json.RawMessage)
-		break
-	case stdjson.RawMessage:
-		data = obj.value.(stdjson.RawMessage)
-		break
-	default:
-		data, err = json.Marshal(obj.value)
-		if err != nil {
-			err = errors.Warning("fns: encode object to json bytes failed").WithCause(err)
-			return
-		}
-	}
+	data, err = obj.Marshal()
 	return
 }
 
@@ -163,9 +176,9 @@ func Value[T any](obj Object) (v T, err error) {
 		if ok {
 			return
 		}
-		err = obj.TransformTo(&v)
+		err = obj.Unmarshal(&v)
 		return
 	}
-	err = obj.TransformTo(&v)
+	err = obj.Unmarshal(&v)
 	return
 }

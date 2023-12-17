@@ -147,7 +147,6 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	if len(authorization) > 0 {
 		options = append(options, services.WithToken(authorization))
 	}
-
 	// header <<<
 
 	var ctx context.Context = r
@@ -163,9 +162,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	var dataErr error
 	var span *tracings.Span
 	if succeed {
-		if response.Valid() {
-			data, dataErr = json.Marshal(response)
-		}
+		data, dataErr = response.Marshal()
 	} else {
 		data, dataErr = json.Marshal(errors.Wrap(err))
 	}

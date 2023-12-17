@@ -128,7 +128,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			Value: p,
 		})
 	})
-	argument, argumentErr := ctx.Param().MarshalJSON()
+	argument, argumentErr := ctx.Param().Marshal()
 	if argumentErr != nil {
 		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
@@ -176,7 +176,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			fn.errs.Decr()
 		}
 		rsb := ResponseBody{}
-		decodeErr := json.Unmarshal(respBody, &rsb)
+		decodeErr := proto.Unmarshal(respBody, &rsb)
 		if decodeErr != nil {
 			err = errors.Warning("fns: internal endpoint handle failed").WithCause(decodeErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 			return
@@ -194,7 +194,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			}
 		}
 		if rsb.Succeed {
-			v = rsb.Data
+			v = json.RawMessage(rsb.Data)
 		} else {
 			err = errors.Decode(rsb.Data)
 		}

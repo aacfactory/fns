@@ -20,12 +20,17 @@ package futures
 import (
 	"context"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/objects"
 	"sync"
 )
 
 type Promise interface {
 	Succeed(v interface{})
 	Failed(err error)
+}
+
+type Result interface {
+	objects.Object
 }
 
 type Future interface {
@@ -136,9 +141,7 @@ func (f future) Get(ctx context.Context) (r Result, err error) {
 			err = data.err
 			break
 		}
-		r = result{
-			value: data.val,
-		}
+		r = objects.New(data.val)
 		break
 	}
 	return

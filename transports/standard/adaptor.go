@@ -18,6 +18,7 @@
 package standard
 
 import (
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
 	"net/http"
@@ -58,9 +59,12 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int, write
 		w.result = transports.AcquireResultResponseWriter(writeTimeout)
 
 		h.Handle(w, r)
-
+		w.result.Header().Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				writer.Header().Add(bytex.ToString(key), bytex.ToString(value))
+			}
+		})
 		writer.WriteHeader(w.Status())
-
 		if bodyLen := w.BodyLen(); bodyLen > 0 {
 			body := w.Body()
 			n := 0

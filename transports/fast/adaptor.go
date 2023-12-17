@@ -50,7 +50,11 @@ func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.R
 		}
 
 		h.Handle(&w, &r)
-
+		w.result.Header().Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				ctx.Response.Header.AddBytesKV(key, value)
+			}
+		})
 		ctx.SetStatusCode(w.Status())
 		if bodyLen := w.BodyLen(); bodyLen > 0 {
 			body := w.Body()

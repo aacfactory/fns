@@ -180,12 +180,28 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	if succeed {
 		if response.Valid() {
 			responseValue := response.Value()
-			msg, isMsg := responseValue.(proto.Message)
-			if isMsg {
+			switch rv := responseValue.(type) {
+			case json.RawMessage:
+				data = rv
+				break
+			case protos.RawMessage:
 				encoding = protoEncoding
-				data, dataErr = proto.Marshal(msg)
-			} else {
-				data, dataErr = json.Marshal(responseValue)
+				data = rv
+				break
+			case []byte:
+				if json.Validate(rv) {
+					data = rv
+					break
+				}
+				data, dataErr = json.Marshal(rv)
+				break
+			case proto.Message:
+				encoding = protoEncoding
+				data, dataErr = proto.Marshal(rv)
+				break
+			default:
+				data, dataErr = json.Marshal(rv)
+				break
 			}
 		} else {
 			data = json.NullBytes

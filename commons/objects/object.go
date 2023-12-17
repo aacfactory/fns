@@ -70,6 +70,7 @@ func (obj object) Value() (v any) {
 		v = o.Value()
 		return
 	}
+	v = obj.value
 	return
 }
 

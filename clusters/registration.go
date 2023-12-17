@@ -34,12 +34,12 @@ type Registration struct {
 }
 
 func (registration *Registration) Add(endpoint *Endpoint) {
-	registration.lock.Lock()
-	defer registration.lock.Unlock()
 	_, exist := registration.Get(bytex.FromString(endpoint.id))
 	if exist {
 		return
 	}
+	registration.lock.Lock()
+	defer registration.lock.Unlock()
 	registration.values = append(registration.values, endpoint)
 	sort.Sort(registration.values)
 	registration.length = len(registration.values)

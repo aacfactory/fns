@@ -250,16 +250,14 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		return
 	}
 
-	// ctx >>>
-	ctx = req
 	// log
-	fLog.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(services.Service)
 	if ok {
 		components := service.Components()
 		if len(components) > 0 {
-			services.WithComponents(ctx, name, components)
+			services.WithComponents(req, name, components)
 		}
 	}
 	// ctx <<<
@@ -272,7 +270,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	// promise
 	promise, future := futures.New()
 	// dispatch
-	dispatched := manager.worker.Dispatch(ctx, services.FnTask{
+	dispatched := manager.worker.Dispatch(req, services.FnTask{
 		Fn:      function,
 		Promise: promise,
 	})
@@ -287,7 +285,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 				WithMeta("fn", bytex.ToString(fn)),
 		)
 	}
-	response, err = future.Get(ctx)
+	response, err = future.Get(req)
 	services.ReleaseRequest(req)
 	return
 }
@@ -339,13 +337,25 @@ func (manager *Manager) watching() {
 				eps.log.Debug().
 					With("event", event.Kind.String()).
 					Message(fmt.Sprintf(
-						"fns: get node(id:%s addr:%s ver:%s, services:%d) event",
-						event.Node.Id, event.Node.Address, event.Node.Version.String(), len(event.Node.Services)))
+						"fns: get node(id:%s addr:%s ver:%s, services:%d) event(%s)",
+						event.Node.Id, event.Node.Address, event.Node.Version.String(), len(event.Node.Services), event.Kind.String()))
 			}
 			switch event.Kind {
 			case Add:
 				endpoints := make(Endpoints, 0, 1)
 				client, clientErr := eps.dialer.Dial(bytex.FromString(event.Node.Address))
+				if eps.log.DebugEnabled() {
+					succeed := "succeed"
+					var cause error
+					if clientErr != nil {
+						succeed = "failed"
+						cause = errors.Warning(fmt.Sprintf("fns: dial %s failed", event.Node.Address)).WithMeta("address", event.Node.Address).WithCause(clientErr)
+					}
+					eps.log.Debug().
+						With("cluster", "registrations").
+						Cause(cause).
+						Message(fmt.Sprintf("fns: dial %s %s", event.Node.Address, succeed))
+				}
 				if clientErr != nil {
 					if eps.log.WarnEnabled() {
 						eps.log.Warn().
@@ -365,7 +375,14 @@ func (manager *Manager) watching() {
 						break
 					}
 					cancel()
+					if eps.log.DebugEnabled() {
+						eps.log.Debug().With("cluster", "registrations").Message(fmt.Sprintf("fns: %s is not health", event.Node.Address))
+					}
 					time.Sleep(1 * time.Second)
+				}
+
+				if eps.log.DebugEnabled() {
+					eps.log.Debug().With("cluster", "registrations").Message(fmt.Sprintf("fns: health of %s is %v", event.Node.Address, active))
 				}
 				if !active {
 					break
@@ -397,6 +414,9 @@ func (manager *Manager) watching() {
 				}
 				eps.infos = infos
 				eps.locker.Unlock()
+				if eps.log.DebugEnabled() {
+					eps.log.Debug().With("cluster", "registrations").Message(fmt.Sprintf("fns: %s added", event.Node.Address))
+				}
 				break
 			case Remove:
 				eps.locker.Lock()

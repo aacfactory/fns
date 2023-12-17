@@ -20,6 +20,7 @@ package clusters
 import (
 	"bytes"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
@@ -54,7 +55,7 @@ func NewService(name string, internal bool, functions services.FnInfos, document
 		}
 		_, _ = w.Write(p)
 		_ = w.Close()
-		service.DocumentRaw = buf.Bytes()
+		service.DocumentRaw = bytex.FromString(buf.String())
 	}
 	return
 }

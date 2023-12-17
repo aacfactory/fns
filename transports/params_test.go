@@ -36,17 +36,19 @@ type Range struct {
 
 type Param struct {
 	Range
-	Id    Id          `json:"id"`
-	Name  string      `json:"name"`
-	Score float64     `json:"score"`
-	Age   uint        `json:"age"`
-	Date  Date        `json:"date"`
-	Dates []time.Time `json:"dates"`
+	Id     Id          `json:"id"`
+	UserId Id          `json:"userId"`
+	Name   string      `json:"name"`
+	Score  float64     `json:"score"`
+	Age    uint        `json:"age"`
+	Date   Date        `json:"date"`
+	Dates  []time.Time `json:"dates"`
 }
 
 func TestDecodeParams(t *testing.T) {
 	params := transports.NewParams()
 	params.Set([]byte("id"), []byte("1"))
+	params.Set([]byte("userId"), []byte("1"))
 	params.Set([]byte("name"), []byte("name"))
 	params.Set([]byte("score"), []byte("99.99"))
 	params.Set([]byte("age"), []byte("13"))

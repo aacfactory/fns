@@ -1,7 +1,9 @@
 syntax = "proto3";
 
 package clusters;
-option go_package ="../clusters";
+option go_package ="github.com/aacfactory/fns/clusters";
+
+import "services/tracings/span.proto";
 
 message Entry {
   bytes key = 1;
@@ -11,10 +13,13 @@ message Entry {
 message RequestBody {
   repeated Entry contextUserValues = 1;
   bytes params = 2;
+  int64 encoding = 3;
 }
 
 message ResponseBody {
   bool succeed = 1;
-  bytes data = 2;
-  repeated Entry attachments = 3;
+  int64 encoding = 2;
+  bytes data = 3;
+  tracings.Span span = 4;
+  repeated Entry attachments = 5;
 }

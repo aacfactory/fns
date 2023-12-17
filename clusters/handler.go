@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/objects"
+	"github.com/aacfactory/fns/commons/protos"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
@@ -35,6 +37,11 @@ var (
 	slashBytes          = []byte{'/'}
 	internalContentType = []byte("application/proto+fns")
 	spanAttachmentKey   = []byte("span")
+)
+
+const (
+	jsonEncoding int64 = iota + 1
+	protoEncoding
 )
 
 func NewInternalHandler(local services.Endpoints, signature signatures.Signature) transports.MuxHandler {
@@ -149,24 +156,45 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 	// header <<<
 
+	// param
+	var param objects.Object
+	if rb.Encoding == jsonEncoding {
+		param = json.RawMessage(rb.Params)
+	} else if rb.Encoding == protoEncoding {
+		param = protos.RawMessage(rb.Params)
+	}
+
 	var ctx context.Context = r
 
 	// handle
 	response, err := handler.endpoints.Request(
 		ctx, service, fn,
-		rb.Params,
+		param,
 		options...,
 	)
 	succeed := err == nil
+	encoding := jsonEncoding
 	var data []byte
 	var dataErr error
 	var span *tracings.Span
 	if succeed {
-		data, dataErr = response.Marshal()
+		if response.Valid() {
+			responseValue := response.Value()
+			msg, isMsg := responseValue.(proto.Message)
+			if isMsg {
+				encoding = protoEncoding
+				data, dataErr = proto.Marshal(msg)
+			} else {
+				data, dataErr = json.Marshal(responseValue)
+			}
+		} else {
+			data = json.NullBytes
+		}
 	} else {
 		data, dataErr = json.Marshal(errors.Wrap(err))
 	}
 	if dataErr != nil {
+		encoding = jsonEncoding
 		succeed = false
 		data, _ = json.Marshal(errors.Warning("fns: encode endpoint response failed").WithMeta("path", bytex.ToString(path)).WithCause(dataErr))
 	}
@@ -180,16 +208,19 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 
 	rsb := ResponseBody{
 		Succeed:     succeed,
+		Encoding:    encoding,
 		Data:        data,
 		Attachments: make([]*Entry, 0, 1),
 	}
 	if span != nil {
-		p, _ := json.Marshal(span)
-		rsb.Attachments = append(rsb.Attachments, &Entry{
-			Key:   spanAttachmentKey,
-			Value: p,
-		})
+		rsb.Span = span
 	}
 
-	w.Succeed(&rsb)
+	p, encodeErr := proto.Marshal(&rsb)
+	if encodeErr != nil {
+		w.Failed(errors.Warning("fns: proto marshal failed").WithCause(encodeErr))
+		return
+	}
+	w.Header().Set(transports.ContentTypeHeaderName, internalContentType)
+	_, _ = w.Write(p)
 }

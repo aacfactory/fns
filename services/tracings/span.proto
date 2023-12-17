@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package tracings;
+option go_package = "github.com/aacfactory/fns/services/tracings";
+
+import "google/protobuf/timestamp.proto";
+
+message Span {
+  string id = 1;
+  string endpoint = 2;
+  string fn = 3;
+  google.protobuf.Timestamp begin = 4;
+  google.protobuf.Timestamp waited = 5;
+  google.protobuf.Timestamp end = 6;
+  map<string, string> tags = 7;
+  repeated Span children = 8;
+  Span parent = 9;
+}
+
+message Trace {
+  string id = 1;
+  Span span = 2;
+}

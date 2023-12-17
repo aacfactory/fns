@@ -19,24 +19,32 @@ package tracings
 
 import (
 	"github.com/aacfactory/fns/commons/bytex"
-	"time"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func New(id []byte) Trace {
-	return Trace{
+func New(id []byte) *Tracer {
+	return &Tracer{
 		Id:      bytex.ToString(id),
 		Span:    nil,
 		current: nil,
 	}
 }
 
-type Trace struct {
-	Id      string `json:"id"`
-	Span    *Span  `json:"span"`
+type Tracer struct {
+	Id      string
+	Span    *Span
 	current *Span
 }
 
-func (trace *Trace) Begin(pid []byte, endpoint []byte, fn []byte, tags ...string) {
+func (trace *Tracer) Trace() (v *Trace) {
+	v = &Trace{
+		Id:   trace.Id,
+		Span: trace.Span,
+	}
+	return
+}
+
+func (trace *Tracer) Begin(pid []byte, endpoint []byte, fn []byte, tags ...string) {
 	if trace.current != nil && trace.current.Id == bytex.ToString(pid) {
 		return
 	}
@@ -44,12 +52,12 @@ func (trace *Trace) Begin(pid []byte, endpoint []byte, fn []byte, tags ...string
 		Id:       bytex.ToString(pid),
 		Endpoint: bytex.ToString(endpoint),
 		Fn:       bytex.ToString(fn),
-		Begin:    time.Now(),
-		Waited:   time.Time{},
-		End:      time.Time{},
+		Begin:    timestamppb.Now(),
+		Waited:   nil,
+		End:      nil,
 		Tags:     make(map[string]string),
 		Children: nil,
-		parent:   nil,
+		Parent:   nil,
 	}
 	current.setTags(tags)
 	if trace.Span == nil {
@@ -62,20 +70,20 @@ func (trace *Trace) Begin(pid []byte, endpoint []byte, fn []byte, tags ...string
 		parent.Children = make([]*Span, 0, 1)
 	}
 	parent.Children = append(parent.Children, current)
-	current.parent = parent
+	current.Parent = parent
 	trace.current = current
 }
 
-func (trace *Trace) Waited(tags ...string) {
+func (trace *Tracer) Waited(tags ...string) {
 	if trace.current == nil {
 		return
 	}
-	trace.current.Waited = time.Now()
+	trace.current.Waited = timestamppb.Now()
 	trace.current.setTags(tags)
 	return
 }
 
-func (trace *Trace) Tagging(tags ...string) {
+func (trace *Tracer) Tagging(tags ...string) {
 	if trace.current == nil {
 		return
 	}
@@ -83,21 +91,21 @@ func (trace *Trace) Tagging(tags ...string) {
 	return
 }
 
-func (trace *Trace) Finish(tags ...string) {
+func (trace *Tracer) Finish(tags ...string) {
 	if trace.current == nil {
 		return
 	}
-	if trace.current.Waited.IsZero() {
+	if trace.current.Waited == nil {
 		trace.current.Waited = trace.current.Begin
 	}
-	trace.current.End = time.Now()
+	trace.current.End = timestamppb.Now()
 	trace.current.setTags(tags)
-	if trace.current.parent != nil {
-		trace.current = trace.current.parent
+	if trace.current.Parent != nil {
+		trace.current = trace.current.Parent
 	}
 }
 
-func (trace *Trace) Mount(child *Span) {
+func (trace *Tracer) Mount(child *Span) {
 	if trace.current == nil {
 		return
 	}
@@ -107,7 +115,7 @@ func (trace *Trace) Mount(child *Span) {
 	if trace.current.Children == nil {
 		trace.current.Children = make([]*Span, 0, 1)
 	}
-	child.parent = trace.current
+	child.Parent = trace.current
 	child.mountChildrenParent()
 	trace.current.Children = append(trace.current.Children, child)
 }

@@ -15,28 +15,38 @@
  *
  */
 
-package tracings
+package protos
 
-func (span *Span) setTags(tags []string) {
-	n := len(tags)
-	if n == 0 {
-		return
-	}
-	if n%2 != 0 {
-		return
-	}
-	for i := 0; i < n; i += 2 {
-		k := tags[i]
-		v := tags[i+1]
-		span.Tags[k] = v
-	}
+import (
+	"fmt"
+	"github.com/aacfactory/errors"
+	"google.golang.org/protobuf/proto"
+)
+
+type RawMessage []byte
+
+func (raw RawMessage) Valid() (ok bool) {
+
+	ok = len(raw) > 0
+	return
 }
 
-func (span *Span) mountChildrenParent() {
-	for _, child := range span.Children {
-		if child.Parent == nil {
-			child.Parent = span
-		}
-		child.mountChildrenParent()
+func (raw RawMessage) Unmarshal(dst any) (err error) {
+	msg, ok := dst.(proto.Message)
+	if !ok {
+		err = errors.Warning("fns: proto raw message unmarshal failed").WithCause(fmt.Errorf("dst type is not proto.Message"))
+		return
 	}
+	err = proto.Unmarshal(raw, msg)
+	return
+}
+
+func (raw RawMessage) Marshal() (p []byte, err error) {
+	p = raw
+	return
+}
+
+func (raw RawMessage) Value() (v any) {
+	v = raw
+	return
 }

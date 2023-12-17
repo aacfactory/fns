@@ -23,15 +23,15 @@ var (
 	contextKey = []byte("@fns:context:tracings")
 )
 
-func With(ctx context.Context, trace *Trace) {
+func With(ctx context.Context, trace *Tracer) {
 	ctx.SetLocalValue(contextKey, trace)
 }
 
-func Load(ctx context.Context) (trace *Trace, found bool) {
+func Load(ctx context.Context) (trace *Tracer, found bool) {
 	v := ctx.LocalValue(contextKey)
 	if v == nil {
 		return
 	}
-	trace, found = v.(*Trace)
+	trace, found = v.(*Tracer)
 	return
 }

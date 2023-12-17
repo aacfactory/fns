@@ -15,28 +15,32 @@
  *
  */
 
-package tracings
+package protos
 
-func (span *Span) setTags(tags []string) {
-	n := len(tags)
-	if n == 0 {
-		return
-	}
-	if n%2 != 0 {
-		return
-	}
-	for i := 0; i < n; i += 2 {
-		k := tags[i]
-		v := tags[i+1]
-		span.Tags[k] = v
-	}
+import (
+	"google.golang.org/protobuf/proto"
+)
+
+type Object[T proto.Message] struct {
+	Entry T
 }
 
-func (span *Span) mountChildrenParent() {
-	for _, child := range span.Children {
-		if child.Parent == nil {
-			child.Parent = span
-		}
-		child.mountChildrenParent()
-	}
+func (obj Object[T]) Valid() (ok bool) {
+	ok = obj.Entry != nil
+	return
+}
+
+func (obj Object[T]) Unmarshal(dst any) (err error) {
+	dst = obj.Entry
+	return
+}
+
+func (obj Object[T]) Marshal() (p []byte, err error) {
+	p, err = proto.Marshal(obj.Entry)
+	return
+}
+
+func (obj Object[T]) Value() (v any) {
+	v = obj.Entry
+	return
 }

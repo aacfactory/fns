@@ -30,5 +30,5 @@ type ReporterOptions struct {
 
 type Reporter interface {
 	Construct(options ReporterOptions) (err error)
-	Report(ctx context.Context, trace Trace)
+	Report(ctx context.Context, trace *Trace)
 }

@@ -36,7 +36,7 @@ type Config struct {
 type Middleware struct {
 	log      logs.Logger
 	enable   bool
-	events   chan Trace
+	events   chan *Trace
 	cancel   context.CancelFunc
 	reporter Reporter
 }
@@ -75,7 +75,7 @@ func (middle *Middleware) Construct(options transports.MiddlewareOptions) (err e
 		if chs < 0 {
 			chs = 4096
 		}
-		middle.events = make(chan Trace, chs)
+		middle.events = make(chan *Trace, chs)
 		ctx, cancel := context.WithCancel(context.TODO())
 		middle.cancel = cancel
 		for i := 0; i < batchSize; i++ {
@@ -93,9 +93,10 @@ func (middle *Middleware) Handler(next transports.Handler) transports.Handler {
 				next.Handle(w, r)
 				return
 			}
-			trace := New(id)
-			With(r, &trace)
+			tracer := New(id)
+			With(r, tracer)
 			next.Handle(w, r)
+			trace := tracer.Trace()
 			middle.events <- trace
 		})
 	}
@@ -109,7 +110,7 @@ func (middle *Middleware) Close() {
 }
 
 func (middle *Middleware) listen(ctx context.Context) {
-	go func(ctx context.Context, events chan Trace, reporter Reporter) {
+	go func(ctx context.Context, events chan *Trace, reporter Reporter) {
 		stop := false
 		for {
 			select {

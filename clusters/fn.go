@@ -20,6 +20,7 @@ package clusters
 import (
 	"bytes"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/protos"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/window"
 	"github.com/aacfactory/fns/services"
@@ -128,7 +129,21 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			Value: p,
 		})
 	})
-	argument, argumentErr := ctx.Param().Marshal()
+	encoding := jsonEncoding
+	var argument []byte
+	var argumentErr error
+	if ctx.Param().Valid() {
+		param := ctx.Param().Value()
+		msg, isMsg := param.(proto.Message)
+		if isMsg {
+			argument, argumentErr = proto.Marshal(msg)
+			encoding = protoEncoding
+		} else {
+			argument, argumentErr = json.Marshal(param)
+		}
+	} else {
+		argument = json.NullBytes
+	}
 	if argumentErr != nil {
 		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
@@ -136,6 +151,7 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	rb := RequestBody{
 		ContextUserValues: userValues,
 		Params:            argument,
+		Encoding:          encoding,
 	}
 	body, bodyErr := proto.Marshal(&rb)
 	if bodyErr != nil {
@@ -182,19 +198,17 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			return
 		}
 		trace, hasTrace := tracings.Load(ctx)
-		if hasTrace {
-			for _, attachment := range rsb.Attachments {
-				if bytes.Equal(spanAttachmentKey, attachment.Key) {
-					span := tracings.Span{}
-					spanErr := json.Unmarshal(attachment.Value, &span)
-					if spanErr == nil {
-						trace.Mount(&span)
-					}
-				}
-			}
+		if hasTrace && rsb.Span != nil {
+			trace.Mount(rsb.Span)
 		}
 		if rsb.Succeed {
-			v = json.RawMessage(rsb.Data)
+			if rsb.Encoding == jsonEncoding {
+				v = json.RawMessage(rsb.Data)
+			} else if rsb.Encoding == protoEncoding {
+				v = protos.RawMessage(rsb.Data)
+			} else {
+				v = rsb.Data
+			}
 		} else {
 			err = errors.Decode(rsb.Data)
 		}
@@ -210,6 +224,9 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		break
 	case http.StatusTooEarly:
 		err = ErrTooEarly
+		break
+	case 555:
+		err = errors.Decode(respBody)
 		break
 	}
 	return

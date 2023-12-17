@@ -25,21 +25,21 @@ Fn services for Golang. Simplify the development process by using standardized d
   * [x] SSC (Auto generate cert and key by self sign ca)
   * [x] ACMEs (Easy to use and supports auto-renew)
 * [x] Cluster
-  * [ ] Hazelcast 
-  * [ ] Redis
+  * [x] Hazelcast 
+  * [x] Redis
 * [x] Official built-in services 
     * [x] SQL
       * [x] Distributed SQL transaction 
       * [x] Postgres ORM 
       * [x] Mysql ORM
     * [x] Redis
-      * [ ] Shared store
-      * [ ] Shared lockers
-      * [ ] Shared barrier
+      * [x] Shared store
+      * [x] Shared lockers
+      * [x] Shared barrier
     * [x] Message queue
-        * [x] RabbitMQ
+        * [ ] RabbitMQ
         * [x] Kafka
-        * [x] Nats.IO
+        * [ ] RocketMQ
     * [ ] Third party integration
       * [ ] Oauth
       * [ ] Payments

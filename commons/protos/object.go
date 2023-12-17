@@ -19,6 +19,7 @@ package protos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"reflect"
 )
 
 type Object[T proto.Message] struct {
@@ -26,7 +27,7 @@ type Object[T proto.Message] struct {
 }
 
 func (obj Object[T]) Valid() (ok bool) {
-	ok = obj.Entry != nil
+	ok = reflect.ValueOf(obj.Entry).IsValid()
 	return
 }
 

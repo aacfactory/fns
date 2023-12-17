@@ -194,15 +194,17 @@ func (mod *Module) parse(ctx context.Context, host *Module) (err error) {
 			requireDir := filepath.ToSlash(filepath.Join(PKG(), fmt.Sprintf("%s@%s", require.Mod.Path, require.Mod.Version)))
 
 			mod.Requires = append(mod.Requires, &Module{
-				Dir:      requireDir,
-				Path:     require.Mod.Path,
-				Version:  require.Mod.Version,
-				Requires: nil,
-				Work:     nil,
-				Replace:  nil,
-				locker:   &sync.Mutex{},
-				parsed:   false,
-				types:    nil,
+				Dir:          requireDir,
+				Path:         require.Mod.Path,
+				Version:      require.Mod.Version,
+				Requires:     nil,
+				Work:         nil,
+				Replace:      nil,
+				locker:       &sync.Mutex{},
+				parsed:       false,
+				sources:      nil,
+				builtinTypes: mod.builtinTypes,
+				types:        nil,
 			})
 		}
 	}
@@ -246,15 +248,17 @@ func (mod *Module) parse(ctx context.Context, host *Module) (err error) {
 			for _, require := range mod.Requires {
 				if require.Path == replace.Old.Path && require.Version == replace.Old.Version {
 					require.Replace = &Module{
-						Dir:      replaceDir,
-						Path:     rmf.Module.Mod.Path,
-						Version:  rmf.Module.Mod.Version,
-						Requires: nil,
-						Work:     nil,
-						Replace:  nil,
-						locker:   &sync.Mutex{},
-						parsed:   false,
-						types:    nil,
+						Dir:          replaceDir,
+						Path:         rmf.Module.Mod.Path,
+						Version:      rmf.Module.Mod.Version,
+						Requires:     nil,
+						Work:         nil,
+						Replace:      nil,
+						locker:       &sync.Mutex{},
+						parsed:       false,
+						sources:      nil,
+						builtinTypes: mod.builtinTypes,
+						types:        nil,
 					}
 				}
 			}
@@ -396,25 +400,6 @@ func (mod *Module) GetType(path string, name string) (typ *Type, has bool) {
 func (mod *Module) Sources() *Sources {
 	return mod.sources
 }
-
-//func (mod *Module) Types() (types map[string]*Type) {
-//	types = make(map[string]*Type)
-//	mod.types.values.Range(func(key, value any) bool {
-//		typ, ok := value.(*Type)
-//		if !ok {
-//			return true
-//		}
-//		flats := typ.Flats()
-//		for k, t := range flats {
-//			_, exist := types[k]
-//			if !exist {
-//				types[k] = t
-//			}
-//		}
-//		return true
-//	})
-//	return
-//}
 
 func (mod *Module) Types() (types *Types) {
 	types = mod.types

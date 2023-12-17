@@ -106,17 +106,21 @@ func (work *Work) Parse() (err error) {
 					WithCause(errors.Warning("sources: parse mod file failed").WithCause(parseModErr).WithMeta("mod", moduleFile))
 				return
 			}
-			work.Uses = append(work.Uses, &Module{
-				Dir:      usePath,
-				Path:     mf.Module.Mod.Path,
-				Version:  "",
-				Requires: nil,
-				Work:     work,
-				Replace:  nil,
-				locker:   &sync.Mutex{},
-				parsed:   false,
-				types:    nil,
-			})
+			mod := &Module{
+				Dir:          usePath,
+				Path:         mf.Module.Mod.Path,
+				Version:      "",
+				Requires:     nil,
+				Work:         work,
+				Replace:      nil,
+				locker:       &sync.Mutex{},
+				parsed:       false,
+				sources:      nil,
+				builtinTypes: nil,
+				types:        nil,
+			}
+			registerBuiltinTypes(mod)
+			work.Uses = append(work.Uses, mod)
 		}
 	}
 	if file.Replace != nil && len(file.Replace) > 0 {

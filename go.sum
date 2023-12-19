@@ -1,5 +1,5 @@
-github.com/aacfactory/afssl v1.10.0 h1:kshlbGbkpL+j0cm2X4TlLfNFaILEW7s2MzIzL+ZZFwI=
-github.com/aacfactory/afssl v1.10.0/go.mod h1:DexdbKc91WSTHMclzZfy0YmYwjSz3GKqvUOh5DGCG1o=
+github.com/aacfactory/afssl v1.12.0 h1:kMaF0ox+mGAEmBTXALhw6C2EKu3sDASKRyi1TsYMRco=
+github.com/aacfactory/afssl v1.12.0/go.mod h1:mNXZh8KnQID7fzQqxGbaxjYCHuDWXLN7EoKjn6lyGDE=
 github.com/aacfactory/cases v1.1.0 h1:oY7wSX57PJav72ZDFmmdmWPrEUXjc5zh8ckDAJM4iSQ=
 github.com/aacfactory/cases v1.1.0/go.mod h1:Utk93dgZ/xXw2GTSM1QU2y1+R4LDEUVel2LtO09Mxt0=
 github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=
@@ -8,8 +8,6 @@ github.com/aacfactory/errors v1.13.11 h1:r7YtWEQg3/74ejsg/jnuPTkhUxiBjq+sLrrsTQK
 github.com/aacfactory/errors v1.13.11/go.mod h1:D63VqtkV+Yrz9st8R97h6mxaaI8bAVvkQMpQ0zsjNec=
 github.com/aacfactory/gcg v1.0.5 h1:PqRSru7R7oefBWQcMnvYPWs12YBOXlHyDXxkPSq0JCQ=
 github.com/aacfactory/gcg v1.0.5/go.mod h1:e2WAmGbOdjFMXkcx3bRQcq9f9Hpcv70sUGSbYYWW6CE=
-github.com/aacfactory/json v1.16.5 h1:mkEF3HNr1xRZrj2MW2+NeV+qymhZ6aRqB0RAbhnYO9M=
-github.com/aacfactory/json v1.16.5/go.mod h1:1bRJNT+UXqPyDWtzSvnkKfe5aN3hRErWossAggLeRcc=
 github.com/aacfactory/json v1.16.6 h1:SWAubiLJXx8/v8dNfzCs9G+JWF8bFlfcMh/5lovuoto=
 github.com/aacfactory/json v1.16.6/go.mod h1:1bRJNT+UXqPyDWtzSvnkKfe5aN3hRErWossAggLeRcc=
 github.com/aacfactory/logs v1.13.12 h1:9wtMk8YYxnPOGTzPMcORQpLQcotGp43+80gPSQHFiss=
@@ -107,8 +105,8 @@ github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 h1:bAn7/zixMGCfxrRT
 github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673/go.mod h1:N3UwUGtsrSj3ccvlPHLoLsHnpR27oXr4ZE984MbSER8=
 go.uber.org/automaxprocs v1.5.3 h1:kWazyxZUrS3Gs4qUpbwo5kEIMGe/DAvi5Z4tl2NW4j8=
 go.uber.org/automaxprocs v1.5.3/go.mod h1:eRbA25aqJrxAbsLO0xy5jVwPt7FQnRgjW+efnwa1WM0=
-golang.org/x/crypto v0.16.0 h1:mMMrFzRSCF0GvB7Ne27XVtVAaXLrPmgPC7/v0tkwHaY=
-golang.org/x/crypto v0.16.0/go.mod h1:gCAAfMLgwOJRpTjQ2zCCt2OcSfYMTeZVSRtQlPC7Nq4=
+golang.org/x/crypto v0.17.0 h1:r8bRNjWL3GshPW3gkd+RpvzWrZAwPS49OmTGZ/uhM4k=
+golang.org/x/crypto v0.17.0/go.mod h1:gCAAfMLgwOJRpTjQ2zCCt2OcSfYMTeZVSRtQlPC7Nq4=
 golang.org/x/mod v0.14.0 h1:dGoOF9QVLYng8IHTm7BAyWqCqSheQ5pYWGhzW00YJr0=
 golang.org/x/mod v0.14.0/go.mod h1:hTbmBsO62+eylJbnUtE2MGJUyE7QWk4xUqPFrRgJ+7c=
 golang.org/x/net v0.19.0 h1:zTwKpTd2XuCqf8huc7Fo2iSy+4RHPd10s4KzeTnVr1c=

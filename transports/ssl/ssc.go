@@ -20,7 +20,6 @@ package ssl
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"github.com/aacfactory/afssl"
 	"github.com/aacfactory/configures"
@@ -28,28 +27,28 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
 )
 
 type SSCConfigOptions struct {
 	CA                 string `json:"ca"`
 	CAKEY              string `json:"caKey"`
 	ClientAuth         string `json:"clientAuth"`
+	ServerName         string `json:"serverName"`
 	InsecureSkipVerify bool   `json:"insecureSkipVerify"`
-	ExpireDays         int    `json:"expireDays"`
 }
 
 func (opt *SSCConfigOptions) ClientAuthType() tls.ClientAuthType {
-	switch opt.ClientAuth {
-	case "NoClientCert":
+	clientAuth := strings.ToLower(strings.TrimSpace(opt.ClientAuth))
+	switch clientAuth {
+	case "no_client_cert":
 		return tls.NoClientCert
-	case "RequestClientCert":
+	case "request_client_cert":
 		return tls.RequestClientCert
-	case "RequireAnyClientCert":
+	case "require_any_client_cert":
 		return tls.RequireAnyClientCert
-	case "VerifyClientCertIfGiven":
+	case "verify_client_cert_if_given":
 		return tls.VerifyClientCertIfGiven
-	case "RequireAndVerifyClientCert":
+	case "require_and_verify_client_cert":
 		return tls.RequireAndVerifyClientCert
 	default:
 		return tls.NoClientCert
@@ -88,26 +87,8 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 			return
 		}
 	}
-	block, _ := pem.Decode(caPEM)
-	ca0, parseCaErr := x509.ParseCertificate(block.Bytes)
-	if parseCaErr != nil {
-		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(parseCaErr)
-		return
-	}
-	sscConfig := afssl.CertificateConfig{
-		Subject: &afssl.CertificatePkixName{
-			Country:            ca0.Subject.Country[0],
-			Province:           ca0.Subject.Province[0],
-			Locality:           ca0.Subject.Locality[0],
-			Organization:       ca0.Subject.Organization[0],
-			OrganizationalUnit: ca0.Subject.OrganizationalUnit[0],
-			CommonName:         ca0.Subject.CommonName,
-		},
-		IPs:      nil,
-		Emails:   nil,
-		DNSNames: nil,
-	}
-	serverCert, serverKey, createServerErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(int(ca0.NotAfter.Sub(time.Now()).Hours())/24))
+	// server
+	serverCert, serverKey, createServerErr := afssl.GenerateCertificate(afssl.CertificateConfig{}, afssl.WithParent(caPEM, caKeyPEM))
 	if createServerErr != nil {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createServerErr)
 		return
@@ -127,11 +108,8 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 		Certificates: []tls.Certificate{serverCertificate},
 		ClientAuth:   opt.ClientAuthType(),
 	}
-	expireDays := opt.ExpireDays
-	if expireDays < 1 {
-		expireDays = 365
-	}
-	clientCert, clientKey, createClientErr := afssl.GenerateCertificate(sscConfig, afssl.WithParent(caPEM, caKeyPEM), afssl.WithExpirationDays(expireDays))
+	// client
+	clientCert, clientKey, createClientErr := afssl.GenerateCertificate(afssl.CertificateConfig{}, afssl.WithParent(caPEM, caKeyPEM))
 	if createClientErr != nil {
 		err = errors.Warning("fns: load ssc kind tls config failed").WithCause(createClientErr)
 		return
@@ -145,6 +123,7 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 		RootCAs:            cas,
 		Certificates:       []tls.Certificate{clientCertificate},
 		InsecureSkipVerify: opt.InsecureSkipVerify,
+		ServerName:         opt.ServerName,
 	}
 	return
 }

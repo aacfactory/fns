@@ -3,7 +3,7 @@ module github.com/aacfactory/fns
 go 1.21.0
 
 require (
-	github.com/aacfactory/afssl v1.10.0
+	github.com/aacfactory/afssl v1.12.0
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.13.11
@@ -22,7 +22,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.51.0
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/crypto v0.16.0
+	golang.org/x/crypto v0.17.0
 	golang.org/x/mod v0.14.0
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.15.0

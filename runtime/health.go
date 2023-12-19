@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/json"
 	"time"
 )
 
@@ -30,8 +31,16 @@ var (
 )
 
 func CheckHealth(ctx context.Context, client transports.Client) (ok bool) {
-	status, _, _, _ := client.Do(ctx, transports.MethodGet, healthPath, nil, nil)
-	ok = status == 200
+	status, _, body, _ := client.Do(ctx, transports.MethodGet, healthPath, nil, nil)
+	if status != 200 {
+		return
+	}
+	health := Health{}
+	decodeErr := json.Unmarshal(body, &health)
+	if decodeErr != nil {
+		return
+	}
+	ok = health.Running
 	return
 }
 
@@ -60,12 +69,13 @@ func (handler *healthHandler) Match(_ context.Context, method []byte, path []byt
 
 func (handler *healthHandler) Handle(w transports.ResponseWriter, r transports.Request) {
 	rt := Load(r)
-	running, _ := rt.Running()
+	running, serving := rt.Running()
 	w.Succeed(Health{
 		Id:      bytex.ToString(rt.AppId()),
 		Name:    rt.AppName(),
 		Version: rt.AppVersion().String(),
 		Running: running,
+		Serving: serving,
 		Launch:  handler.launch,
 		Now:     time.Now(),
 	})
@@ -77,6 +87,7 @@ type Health struct {
 	Name    string    `json:"name"`
 	Version string    `json:"version"`
 	Running bool      `json:"running"`
+	Serving bool      `json:"serving"`
 	Launch  time.Time `json:"launch"`
 	Now     time.Time `json:"now"`
 }

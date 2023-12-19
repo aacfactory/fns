@@ -67,7 +67,7 @@ func (rt *Runtime) AppVersion() versions.Version {
 	return rt.appVersion
 }
 
-func (rt *Runtime) Running() (running bool, upped bool) {
+func (rt *Runtime) Running() (running bool, serving bool) {
 	return rt.status.IsOn()
 }
 

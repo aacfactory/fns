@@ -324,7 +324,6 @@ type application struct {
 	hooks           []hooks.Hook
 	shutdownTimeout time.Duration
 	synced          bool
-	cancel          context.CancelFunc
 	signalCh        chan os.Signal
 }
 
@@ -341,6 +340,10 @@ func (app *application) Deploy(s ...services.Service) Application {
 
 func (app *application) Run(ctx context.Context) Application {
 	app.amp.Enable()
+	// with runtime
+	runtime.With(ctx, app.rt)
+	// on
+	app.status.On()
 	// transport
 	trErrs := make(chan error, 1)
 	go func(ctx context.Context, transport transports.Transport, errs chan error) {
@@ -361,8 +364,6 @@ func (app *application) Run(ctx context.Context) Application {
 	if app.log.DebugEnabled() {
 		app.log.Debug().With("port", strconv.Itoa(app.transport.Port())).Message("fns: transport is serving...")
 	}
-	app.status.On()
-	app.status.Confirm()
 
 	// endpoints
 	lnErr := app.manager.Listen(ctx)
@@ -371,6 +372,8 @@ func (app *application) Run(ctx context.Context) Application {
 		panic(fmt.Sprintf("%+v", errors.Warning("fns: application run failed").WithCause(lnErr)))
 		return app
 	}
+	// confirm
+	app.status.Confirm()
 	// proxy
 	if app.proxy != nil {
 		prErrs := make(chan error, 1)
@@ -394,8 +397,6 @@ func (app *application) Run(ctx context.Context) Application {
 		}
 	}
 	// hooks
-	ctx, app.cancel = context.WithCancel(ctx)
-	runtime.With(ctx, app.rt)
 	for _, hook := range app.hooks {
 		name := hook.Name()
 		if name == "" {
@@ -444,19 +445,26 @@ func (app *application) Sync() {
 }
 
 func (app *application) shutdown() {
+	if off, _ := app.status.IsOff(); off {
+		return
+	}
+	// status
+	app.status.Off()
+
 	defer app.amp.Reset()
 	timeout := app.shutdownTimeout
 	if timeout < 1 {
 		timeout = 10 * time.Minute
 	}
-	app.cancel()
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
-	// status
-	app.status.Off()
 
 	runtime.With(ctx, app.rt)
 
 	go func(ctx context.Context, cancel context.CancelFunc, app *application) {
+		// hooks
+		for _, hook := range app.hooks {
+			hook.Shutdown(ctx)
+		}
 		// endpoints
 		app.manager.Shutdown(ctx)
 		// transport

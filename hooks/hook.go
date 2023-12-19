@@ -54,4 +54,5 @@ type Hook interface {
 	Name() string
 	Construct(options Options) (err error)
 	Execute(ctx context.Context)
+	Shutdown(ctx context.Context)
 }

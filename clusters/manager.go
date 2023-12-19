@@ -299,17 +299,18 @@ func (manager *Manager) Listen(ctx context.Context) (err error) {
 	}
 	// watching
 	manager.watching()
-	// local.listen
-	err = manager.local.Listen(ctx)
-	if err != nil {
-		return
-	}
 	// cluster.join
 	err = manager.cluster.Join(ctx)
 	if err != nil {
 		if manager.log.WarnEnabled() {
 			manager.log.Warn().With("cluster", "join").Cause(err).Message("fns: cluster join failed")
 		}
+		return
+	}
+	// local.listen
+	err = manager.local.Listen(ctx)
+	if err != nil {
+		_ = manager.cluster.Leave(ctx)
 		return
 	}
 	return

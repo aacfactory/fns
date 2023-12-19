@@ -6,35 +6,34 @@ Fn services for Golang. Simplify the development process by using standardized d
 
 ## Features
 * [x] Applicable to enterprise projects
-  * [x] Standardization
-  * [x] Environmental configuration
-  * [x] Rapid development by code generations
-  * [x] Built in authorizations service (schema is customizable)
-  * [x] Built in permission service
-  * [x] Built in metric
-  * [x] Built in tracing
-  * [x] Traceable and searchable error schema
-  * [x] Searchable log content schema
+  * [x] [Standardization]()
+  * [x] Environmental [configuration]()
+  * [x] Rapid development by [code-generations]()
+  * [x] Built in [authorizations]() service
+  * [x] Built in [permission]() service
+  * [x] Built in [metric]()
+  * [x] Built in [tracing]()
+  * [x] Traceable and searchable [error]()
+  * [x] Searchable [log]()
 * [x] High concurrency
   * [x] Goroutines pool
-  * [x] Fasthttp as default http server ([Http3]() is optionally)
-  * [x] Request Barrier (Used for sharing result and idempotent)
+  * [x] Fasthttp
+  * [x] [Barrier]()
 * [x] TLS
   * [x] Standard 
-  * [x] SSC (Auto generate cert and key by self sign ca)
-  * [x] ACMEs (Easy to use and supports auto-renew)
+  * [x] [SSC]() 
+  * [x] [ACMEs]() 
 * [x] Cluster
+  * [x] [sharding]()
   * [x] [Hazelcast]() 
   * [x] [Redis]()
 * [x] Official services 
-    * [x] [SQL]()
-      * [x] Distributed SQL transaction 
-      * [x] [Postgres ORM]() 
-      * [x] [Mysql ORM]()
-    * [x] [Redis]()
-      * [x] Shared store
-      * [x] Shared lockers
-      * [x] Shared barrier
+    * [x] Database
+      * [x] [SQL]()
+        * [x] [Distributed transaction]() 
+        * [x] [Postgres ORM]() 
+        * [x] [Mysql ORM]()
+      * [x] [Redis]()
     * [x] Message queue
         * [ ] RabbitMQ
         * [x] [Kafka]()
@@ -44,7 +43,7 @@ Fn services for Golang. Simplify the development process by using standardized d
       * [ ] Payments
       * [ ] SMS
       * [ ] Notifications
-* [x] Documents
+* [x] [Documents]()
   * [x] Openapi
   * [ ] Official
 
@@ -77,8 +76,13 @@ Setup `FNS-ACTIVE` env, such as `FNS-ACTIVE=local`, that the `fns-local.yaml` is
 Setup [documents](), then done, so easy.
 
 ### Testing
-Just write test units, read [tests]() for more details.
+* Use [tests]() to make writing test units easy.
+* Use [pprof]() to analysis of profiling data.
 
 ## Cluster
 Use [hazelcast]() or [redis](), and create a [proxy]() server as gateway, then done, so easy.   
 When used in `kubernetes`, then [inject](https://kubernetes.io/zh-cn/docs/tasks/inject-data-application/environment-variable-expose-pod-information/) pod ip into `FNS-HOST`, and set `env` into config field `cluster.hostRetriever`.
+
+## Customize transport
+* [Server]()
+* [Middleware]()

@@ -62,7 +62,7 @@ func (config *TLSConfig) Config() (conf ssl.Config, err error) {
 		err = errors.Warning(fmt.Sprintf("fns: can not get options of %s tls config", kind)).WithCause(confOptionsErr)
 		return
 	}
-	err = conf.Build(confOptions)
+	err = conf.Construct(confOptions)
 	return
 }
 

@@ -32,7 +32,7 @@ type Dialer interface {
 }
 
 type Config interface {
-	Build(options configures.Config) (err error)
+	Construct(options configures.Config) (err error)
 	Server() (srvTLS *tls.Config, ln ListenerFunc)
 	Client() (cliTLS *tls.Config, dialer Dialer)
 }

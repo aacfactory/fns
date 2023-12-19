@@ -60,7 +60,7 @@ type SSCConfig struct {
 	clientTLS *tls.Config
 }
 
-func (config *SSCConfig) Build(options configures.Config) (err error) {
+func (config *SSCConfig) Construct(options configures.Config) (err error) {
 	caPEM := defaultTestSSCCaPEM
 	caKeyPEM := defaultTestSSCCaKeyPEM
 	opt := SSCConfigOptions{}
@@ -129,18 +129,16 @@ func (config *SSCConfig) Build(options configures.Config) (err error) {
 }
 
 func (config *SSCConfig) Server() (srvTLS *tls.Config, ln ListenerFunc) {
-
+	srvTLS = config.serverTLS
+	ln = func(inner net.Listener) (v net.Listener) {
+		v = tls.NewListener(inner, config.serverTLS)
+		return
+	}
 	return
 }
 
 func (config *SSCConfig) Client() (cliTLS *tls.Config, dialer Dialer) {
-
-	return
-}
-
-func (config *SSCConfig) TLS() (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
-	serverTLS = config.serverTLS
-	clientTLS = config.clientTLS
+	cliTLS = config.clientTLS
 	return
 }
 

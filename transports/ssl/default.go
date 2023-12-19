@@ -342,7 +342,7 @@ type DefaultConfig struct {
 	cliGmTLS  *tlcp.Config
 }
 
-func (config *DefaultConfig) Build(options configures.Config) (err error) {
+func (config *DefaultConfig) Construct(options configures.Config) (err error) {
 	opt := DefaultConfigOptions{}
 	optErr := options.As(&opt)
 	if optErr != nil {
@@ -372,7 +372,7 @@ func (config *DefaultConfig) Server() (srvTLS *tls.Config, ln ListenerFunc) {
 	if config.srvStdTLS != nil {
 		srvTLS = config.srvStdTLS
 		ln = func(inner net.Listener) (v net.Listener) {
-			v = tls.NewListener(inner, config.srvStdTLS.Clone())
+			v = tls.NewListener(inner, config.srvStdTLS)
 			return
 		}
 	}

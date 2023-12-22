@@ -231,7 +231,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 		})
 	}
 
-	p, encodeErr := avro.Marshal(&rsb)
+	p, encodeErr := avro.Marshal(rsb)
 	if encodeErr != nil {
 		w.Failed(errors.Warning("fns: proto marshal failed").WithCause(encodeErr))
 		return

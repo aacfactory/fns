@@ -4,7 +4,7 @@ go 1.21.0
 
 require (
 	github.com/aacfactory/afssl v1.12.0
-	github.com/aacfactory/avro v1.2.1
+	github.com/aacfactory/avro v1.2.2
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.13.12

@@ -1,7 +1,7 @@
 github.com/aacfactory/afssl v1.12.0 h1:kMaF0ox+mGAEmBTXALhw6C2EKu3sDASKRyi1TsYMRco=
 github.com/aacfactory/afssl v1.12.0/go.mod h1:mNXZh8KnQID7fzQqxGbaxjYCHuDWXLN7EoKjn6lyGDE=
-github.com/aacfactory/avro v1.2.1 h1:L8P8DiyIQNSZjLSnj3lG3nUGbQ2LDfiSfbv3bKyJQ8I=
-github.com/aacfactory/avro v1.2.1/go.mod h1:8swXenEp4SKDLzS6sO7U6Ux8jZoTJZwjen8oJn4KwJo=
+github.com/aacfactory/avro v1.2.2 h1:yFiwesqTvLneIJ5li7+Q7BiE0VFBuDpF7jgqKst0eOA=
+github.com/aacfactory/avro v1.2.2/go.mod h1:8swXenEp4SKDLzS6sO7U6Ux8jZoTJZwjen8oJn4KwJo=
 github.com/aacfactory/cases v1.1.0 h1:oY7wSX57PJav72ZDFmmdmWPrEUXjc5zh8ckDAJM4iSQ=
 github.com/aacfactory/cases v1.1.0/go.mod h1:Utk93dgZ/xXw2GTSM1QU2y1+R4LDEUVel2LtO09Mxt0=
 github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=

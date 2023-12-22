@@ -19,15 +19,31 @@ package caches
 
 import (
 	"fmt"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/json"
 )
 
-func Get(ctx context.Context, param interface{}) (p []byte, has bool, err error) {
+func Load(ctx context.Context, param any, value any) (has bool, err error) {
+	p, exist, getErr := Get(ctx, param)
+	if getErr != nil {
+		err = getErr
+		return
+	}
+	if exist {
+		err = avro.Unmarshal(p, value)
+		if err != nil {
+			err = errors.Warning("fns: get cache failed").WithCause(err)
+			return
+		}
+	}
+	return
+}
+
+func Get(ctx context.Context, param any) (p []byte, has bool, err error) {
 	if param == nil {
 		err = errors.Warning("fns: get cache failed").WithCause(fmt.Errorf("param is nil"))
 		return
@@ -65,8 +81,8 @@ type getFnParam struct {
 }
 
 type getResult struct {
-	Has   bool            `json:"has"`
-	Value json.RawMessage `json:"value"`
+	Has   bool   `json:"has"`
+	Value []byte `json:"value"`
 }
 
 type getFn struct {

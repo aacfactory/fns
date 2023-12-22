@@ -20,6 +20,7 @@ package services
 import (
 	"bytes"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/avros"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/objects"
@@ -98,7 +99,10 @@ func (handler *endpointsHandler) Match(_ context.Context, method []byte, path []
 		ok := bytes.Equal(method, transports.MethodGet)
 		return ok
 	}
-	ok := bytes.Equal(method, transports.MethodPost) && bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue)
+	if !bytes.Equal(method, transports.MethodPost) {
+		return false
+	}
+	ok := bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue) || bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeAvroHeaderValue)
 	return ok
 }
 
@@ -175,7 +179,20 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 			w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
 			return
 		}
-		param = json.RawMessage(body)
+		contentType := r.Header().Get(transports.ContentTypeHeaderName)
+		if bytes.Equal(contentType, transports.ContentTypeJsonHeaderValue) {
+			param = json.RawMessage(body)
+		} else if bytes.Equal(contentType, transports.ContentTypeAvroHeaderValue) {
+			param = avros.RawMessage(body)
+		} else {
+			if json.Validate(body) {
+				param = json.RawMessage(body)
+			} else {
+				bytebufferpool.Put(groupKeyBuf)
+				w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
+				return
+			}
+		}
 		_, _ = groupKeyBuf.Write(body)
 	}
 

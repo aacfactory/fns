@@ -23,8 +23,8 @@ import (
 )
 
 type I18n struct {
-	Name  string `json:"name,omitempty"`
-	Value string `json:"value,omitempty"`
+	Name  string `json:"name,omitempty" avro:"name"`
+	Value string `json:"value,omitempty" avro:"value"`
 }
 
 type I18ns []I18n
@@ -70,9 +70,9 @@ func NewValidation(name string) Validation {
 }
 
 type Validation struct {
-	Enable bool   `json:"enable,omitempty"`
-	Name   string `json:"name,omitempty"`
-	I18ns  I18ns  `json:"i18ns,omitempty"`
+	Enable bool   `json:"enable,omitempty" avro:"enable"`
+	Name   string `json:"name,omitempty" avro:"name"`
+	I18ns  I18ns  `json:"i18ns,omitempty" avro:"i18Ns"`
 }
 
 func (validation Validation) AddI18n(name string, value string) Validation {

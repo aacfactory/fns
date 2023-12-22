@@ -19,30 +19,57 @@ package clusters
 
 import (
 	"bytes"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/commons/avros"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/objects"
-	"github.com/aacfactory/fns/commons/protos"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/json"
-	"google.golang.org/protobuf/proto"
 )
 
 var (
-	slashBytes          = []byte{'/'}
-	internalContentType = []byte("application/proto+fns")
-	spanAttachmentKey   = []byte("span")
+	slashBytes                = []byte{'/'}
+	internalContentTypeHeader = []byte("application/avro+fns")
+	spanKey                   = []byte("span")
 )
 
-const (
-	jsonEncoding int64 = iota + 1
-	protoEncoding
-)
+type Entry struct {
+	Key   []byte `json:"key" avro:"key"`
+	Value []byte `json:"value" avro:"value"`
+}
+
+type RequestBody struct {
+	ContextUserValues []Entry `json:"contextUserValues" avro:"contextUserValues"`
+	Params            []byte  `json:"params" avro:"params"`
+}
+
+type ResponseBody struct {
+	Succeed     bool    `json:"succeed" avro:"succeed"`
+	Data        []byte  `json:"data" avro:"data"`
+	Attachments []Entry `json:"attachments" avro:"attachments"`
+}
+
+func (rsp ResponseBody) GetSpan() (v *tracings.Span, has bool) {
+	for _, attachment := range rsp.Attachments {
+		if bytes.Equal(attachment.Key, spanKey) {
+			if len(attachment.Value) == 0 {
+				return
+			}
+			v = new(tracings.Span)
+			err := avro.Unmarshal(attachment.Value, v)
+			if err != nil {
+				return
+			}
+			has = true
+			return
+		}
+	}
+	return
+}
 
 func NewInternalHandler(local services.Endpoints, signature signatures.Signature) transports.MuxHandler {
 	return &InternalHandler{
@@ -67,8 +94,8 @@ func (handler *InternalHandler) Construct(_ transports.MuxHandlerOptions) error 
 func (handler *InternalHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
 	matched := bytes.Equal(method, transports.MethodPost) &&
 		len(bytes.Split(path, slashBytes)) == 3 &&
-		bytes.Equal(header.Get(transports.ContentTypeHeaderName), internalContentType) &&
-		len(header.Get(transports.SignatureHeaderName)) != 0
+		len(header.Get(transports.SignatureHeaderName)) != 0 &&
+		bytes.Equal(header.Get(transports.ContentTypeHeaderName), internalContentTypeHeader)
 	return matched
 }
 
@@ -102,7 +129,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 
 	rb := RequestBody{}
-	decodeErr := proto.Unmarshal(body, &rb)
+	decodeErr := avro.Unmarshal(body, &rb)
 	if decodeErr != nil {
 		w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)).WithCause(decodeErr))
 		return
@@ -157,12 +184,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	// header <<<
 
 	// param
-	var param objects.Object
-	if rb.Encoding == jsonEncoding {
-		param = json.RawMessage(rb.Params)
-	} else if rb.Encoding == protoEncoding {
-		param = protos.RawMessage(rb.Params)
-	}
+	param := avros.RawMessage(rb.Params)
 
 	var ctx context.Context = r
 
@@ -173,46 +195,20 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 		options...,
 	)
 	succeed := err == nil
-	encoding := jsonEncoding
 	var data []byte
 	var dataErr error
 	var span *tracings.Span
 	if succeed {
 		if response.Valid() {
 			responseValue := response.Value()
-			switch rv := responseValue.(type) {
-			case json.RawMessage:
-				data = rv
-				break
-			case protos.RawMessage:
-				encoding = protoEncoding
-				data = rv
-				break
-			case []byte:
-				if json.Validate(rv) {
-					data = rv
-					break
-				}
-				data, dataErr = json.Marshal(rv)
-				break
-			case proto.Message:
-				encoding = protoEncoding
-				data, dataErr = proto.Marshal(rv)
-				break
-			default:
-				data, dataErr = json.Marshal(rv)
-				break
-			}
-		} else {
-			data = json.NullBytes
+			data, dataErr = avro.Marshal(responseValue)
 		}
 	} else {
-		data, dataErr = json.Marshal(errors.Wrap(err))
+		data, _ = avro.Marshal(errors.Wrap(err))
 	}
 	if dataErr != nil {
-		encoding = jsonEncoding
 		succeed = false
-		data, _ = json.Marshal(errors.Warning("fns: encode endpoint response failed").WithMeta("path", bytex.ToString(path)).WithCause(dataErr))
+		data, _ = avro.Marshal(errors.Warning("fns: encode endpoint response failed").WithMeta("path", bytex.ToString(path)).WithCause(dataErr))
 	}
 
 	if hasRequestId {
@@ -224,19 +220,21 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 
 	rsb := ResponseBody{
 		Succeed:     succeed,
-		Encoding:    encoding,
 		Data:        data,
-		Attachments: make([]*Entry, 0, 1),
+		Attachments: make([]Entry, 0, 1),
 	}
 	if span != nil {
-		rsb.Span = span
+		spanBytes, _ := avro.Marshal(span)
+		rsb.Attachments = append(rsb.Attachments, Entry{
+			Key:   spanKey,
+			Value: spanBytes,
+		})
 	}
 
-	p, encodeErr := proto.Marshal(&rsb)
+	p, encodeErr := avro.Marshal(&rsb)
 	if encodeErr != nil {
 		w.Failed(errors.Warning("fns: proto marshal failed").WithCause(encodeErr))
 		return
 	}
-	w.Header().Set(transports.ContentTypeHeaderName, internalContentType)
 	_, _ = w.Write(p)
 }

@@ -53,7 +53,7 @@ func Remove(ctx context.Context, param interface{}) (err error) {
 }
 
 type removeFnParam struct {
-	Key string `json:"key"`
+	Key string `json:"key" avro:"key"`
 }
 
 type removeFn struct {

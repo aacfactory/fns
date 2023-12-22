@@ -23,8 +23,8 @@ import (
 )
 
 type Property struct {
-	Name    string
-	Element Element
+	Name    string  `json:"name" avro:"name"`
+	Element Element `json:"element" avro:"element"`
 }
 
 type Properties []Property

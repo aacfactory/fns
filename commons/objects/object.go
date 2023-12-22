@@ -19,6 +19,7 @@ package objects
 
 import (
 	"fmt"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/json"
 	"reflect"
@@ -113,9 +114,14 @@ func (obj object) Unmarshal(dst interface{}) (err error) {
 				return
 			}
 			return
+		} else {
+			err = avro.Unmarshal(bytes, dst)
+			if err != nil {
+				err = errors.Warning("fns: unmarshal object failed").WithCause(err)
+				return
+			}
+			return
 		}
-		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not matched"))
-		return
 	}
 
 	// copy
@@ -163,11 +169,6 @@ func (obj object) Marshal() (p []byte, err error) {
 		return
 	}
 	p, err = json.Marshal(obj.value)
-	return
-}
-
-func (obj object) MarshalJSON() (data []byte, err error) {
-	data, err = obj.Marshal()
 	return
 }
 

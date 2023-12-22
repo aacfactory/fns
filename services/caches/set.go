@@ -19,18 +19,22 @@ package caches
 
 import (
 	"fmt"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/json"
 	"time"
 )
 
 func Set(ctx context.Context, param interface{}, value interface{}, ttl time.Duration) (err error) {
 	if param == nil {
 		err = errors.Warning("fns: set cache failed").WithCause(fmt.Errorf("param is nil"))
+		return
+	}
+	if value == nil {
+		err = errors.Warning("fns: set cache failed").WithCause(fmt.Errorf("value is invalid"))
 		return
 	}
 	kp, ok := param.(KeyParam)
@@ -43,11 +47,7 @@ func Set(ctx context.Context, param interface{}, value interface{}, ttl time.Dur
 		err = errors.Warning("fns: set cache failed").WithCause(keyErr)
 		return
 	}
-	if value == nil {
-		err = errors.Warning("fns: set cache failed").WithCause(fmt.Errorf("value is invalid"))
-		return
-	}
-	p, encodeErr := json.Marshal(value)
+	p, encodeErr := avro.Marshal(value)
 	if encodeErr != nil {
 		err = errors.Warning("fns: set cache failed").WithCause(encodeErr)
 		return
@@ -70,9 +70,9 @@ func Set(ctx context.Context, param interface{}, value interface{}, ttl time.Dur
 }
 
 type setFnParam struct {
-	Key   string          `json:"key"`
-	Value json.RawMessage `json:"value"`
-	TTL   time.Duration   `json:"ttl"`
+	Key   string        `json:"key" avro:"key"`
+	Value []byte        `json:"value" avro:"value"`
+	TTL   time.Duration `json:"ttl" avro:"ttl"`
 }
 
 type setFn struct {

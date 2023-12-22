@@ -25,9 +25,9 @@ import (
 )
 
 type Document struct {
-	Id        string           `json:"id"`
-	Version   versions.Version `json:"version"`
-	Endpoints Endpoints        `json:"endpoints"`
+	Id        string           `json:"id" avro:"id"`
+	Version   versions.Version `json:"version" avro:"version"`
+	Endpoints Endpoints        `json:"endpoints" avro:"endpoints"`
 }
 
 func (document *Document) Add(endpoint Endpoint) {

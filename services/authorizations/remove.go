@@ -42,8 +42,8 @@ func Remove(ctx context.Context, account Id, ids ...Id) (err error) {
 }
 
 type removeParam struct {
-	Account Id   `json:"account"`
-	Ids     []Id `json:"ids"`
+	Account Id   `json:"account" avro:"account"`
+	Ids     []Id `json:"ids" avro:"ids"`
 }
 
 type removeFn struct {

@@ -549,7 +549,7 @@ func (s *ServiceFile) functionProxyCode(ctx context.Context, function *Function)
 		}
 		// cache
 		cacheCmd, _, hasCache := function.Cache()
-		if hasCache {
+		if hasCache && function.Result != nil {
 			if cacheCmd == "get" || cacheCmd == "get-set" {
 				body.Tab().Token("// cache get").Line()
 				body.Tab().Token("cached, cacheExist, cacheGetErr := caches.Get(ctx, &param)", gcg.NewPackage("github.com/aacfactory/fns/services/caches")).Line()
@@ -560,7 +560,12 @@ func (s *ServiceFile) functionProxyCode(ctx context.Context, function *Function)
 				body.Tab().Tab().Token("}").Line()
 				body.Tab().Token("}").Line()
 				body.Tab().Token("if cacheExist {").Line()
-				body.Tab().Tab().Token("response := services.NewResponse(cached)").Line()
+				body.Tab().Tab().Token("result := ").Add(result).Token("{}").Line()
+				body.Tab().Tab().Token("if decodeErr := avro.Unmarshal(cached, &result); decodeErr != nil {", gcg.NewPackage("github.com/aacfactory/avro")).Line()
+				body.Tab().Tab().Tab().Token("err := errors.Warp(decodeErr)").Line()
+				body.Tab().Tab().Tab().Token("return").Line()
+				body.Tab().Tab().Token("}").Line()
+				body.Tab().Tab().Token("response := services.NewResponse(result)").Line()
 				body.Tab().Tab().Token("result, err = services.ValueOfResponse[").Add(result).Token("](response)").Line()
 				body.Tab().Tab().Token("if err == nil {").Line()
 				body.Tab().Tab().Tab().Token("return").Line()
@@ -662,6 +667,26 @@ func (s *ServiceFile) functionHandlerCode(ctx context.Context, function *Functio
 
 	// body >>>
 	body := gcg.Statements()
+	var result gcg.Code = nil
+	if function.Result != nil {
+		if s.service.Path == function.Result.Type.Path {
+			result = gcg.Ident(function.Result.Type.Name)
+		} else {
+			pkg, hasPKG := s.service.Imports.Path(function.Result.Type.Path)
+			if !hasPKG {
+				err = errors.Warning("modules: make function proxy code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(errors.Warning("import of result was not found").WithMeta("path", function.Result.Type.Path))
+				return
+			}
+			if pkg.Alias == "" {
+				result = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Result.Type.Name)
+			} else {
+				result = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Result.Type.Name)
+			}
+		}
+	}
 	if function.Param != nil {
 		// param
 		var param gcg.Code = nil
@@ -703,7 +728,7 @@ func (s *ServiceFile) functionHandlerCode(ctx context.Context, function *Functio
 		}
 		// cache
 		cacheCmd, _, hasCache := function.Cache()
-		if hasCache {
+		if hasCache && function.Result != nil {
 			if cacheCmd == "get" || cacheCmd == "get-set" {
 				body.Tab().Token("// cache get").Line()
 				body.Tab().Token("cached, cacheExist, cacheGetErr := caches.Get(ctx, param)", gcg.NewPackage("github.com/aacfactory/fns/services/caches")).Line()
@@ -714,7 +739,12 @@ func (s *ServiceFile) functionHandlerCode(ctx context.Context, function *Functio
 				body.Tab().Tab().Token("}").Line()
 				body.Tab().Token("}").Line()
 				body.Tab().Token("if cacheExist {").Line()
-				body.Tab().Tab().Token("v = cached").Line()
+				body.Tab().Tab().Token("result := ").Add(result).Token("{}").Line()
+				body.Tab().Tab().Token("if decodeErr := avro.Unmarshal(cached, &result); decodeErr != nil {", gcg.NewPackage("github.com/aacfactory/avro")).Line()
+				body.Tab().Tab().Tab().Token("err := errors.Warp(decodeErr)").Line()
+				body.Tab().Tab().Tab().Token("return").Line()
+				body.Tab().Tab().Token("}").Line()
+				body.Tab().Tab().Token("v = result").Line()
 				body.Tab().Tab().Token("return").Line()
 				body.Tab().Token("}").Line()
 			}

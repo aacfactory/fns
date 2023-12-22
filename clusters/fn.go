@@ -19,15 +19,15 @@ package clusters
 
 import (
 	"bytes"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/protos"
+	"github.com/aacfactory/fns/commons/avros"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/window"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
-	"google.golang.org/protobuf/proto"
 	"net/http"
 	"sync/atomic"
 )
@@ -83,8 +83,11 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			}
 		})
 	}
+	// accept
+	header.Set(transports.AcceptEncodingHeaderName, transports.ContentTypeAvroHeaderValue)
 	// content-type
-	header.Set(transports.ContentTypeHeaderName, internalContentType)
+	header.Set(transports.ContentTypeHeaderName, internalContentTypeHeader)
+
 	// endpoint id
 	endpointId := ctx.Header().EndpointId()
 	if len(endpointId) > 0 {
@@ -118,31 +121,22 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	// header <<<
 
 	// body
-	userValues := make([]*Entry, 0, 1)
+	userValues := make([]Entry, 0, 1)
 	ctx.UserValues(func(key []byte, val any) {
 		p, encodeErr := json.Marshal(val)
 		if encodeErr != nil {
 			return
 		}
-		userValues = append(userValues, &Entry{
+		userValues = append(userValues, Entry{
 			Key:   key,
 			Value: p,
 		})
 	})
-	encoding := jsonEncoding
 	var argument []byte
 	var argumentErr error
 	if ctx.Param().Valid() {
 		param := ctx.Param().Value()
-		msg, isMsg := param.(proto.Message)
-		if isMsg {
-			argument, argumentErr = proto.Marshal(msg)
-			encoding = protoEncoding
-		} else {
-			argument, argumentErr = json.Marshal(param)
-		}
-	} else {
-		argument = json.NullBytes
+		argument, argumentErr = avro.Marshal(param)
 	}
 	if argumentErr != nil {
 		err = errors.Warning("fns: encode request argument failed").WithCause(argumentErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
@@ -151,9 +145,8 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 	rb := RequestBody{
 		ContextUserValues: userValues,
 		Params:            argument,
-		Encoding:          encoding,
 	}
-	body, bodyErr := proto.Marshal(&rb)
+	body, bodyErr := avro.Marshal(rb)
 	if bodyErr != nil {
 		err = errors.Warning("fns: encode body failed").WithCause(bodyErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
@@ -192,23 +185,20 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 			fn.errs.Decr()
 		}
 		rsb := ResponseBody{}
-		decodeErr := proto.Unmarshal(respBody, &rsb)
+		decodeErr := avro.Unmarshal(respBody, &rsb)
 		if decodeErr != nil {
 			err = errors.Warning("fns: internal endpoint handle failed").WithCause(decodeErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 			return
 		}
 		trace, hasTrace := tracings.Load(ctx)
-		if hasTrace && rsb.Span != nil {
-			trace.Mount(rsb.Span)
+		if hasTrace {
+			span, hasSpan := rsb.GetSpan()
+			if hasSpan {
+				trace.Mount(span)
+			}
 		}
 		if rsb.Succeed {
-			if rsb.Encoding == jsonEncoding {
-				v = json.RawMessage(rsb.Data)
-			} else if rsb.Encoding == protoEncoding {
-				v = protos.RawMessage(rsb.Data)
-			} else {
-				v = rsb.Data
-			}
+			v = avros.RawMessage(rsb.Data)
 		} else {
 			err = errors.Decode(rsb.Data)
 		}
@@ -226,7 +216,9 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		err = ErrTooEarly
 		break
 	case 555:
-		err = errors.Decode(respBody)
+		codeErr := &errors.CodeErrorImpl{}
+		_ = avro.Unmarshal(respBody, codeErr)
+		err = codeErr
 		break
 	}
 	return

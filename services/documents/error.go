@@ -26,8 +26,8 @@ import (
 )
 
 type ErrorDescription struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name  string `json:"name" avro:"name"`
+	Value string `json:"value" avro:"value"`
 }
 
 type ErrorDescriptions []ErrorDescription
@@ -72,8 +72,8 @@ func NewError(name string) Error {
 }
 
 type Error struct {
-	Name         string            `json:"name"`
-	Descriptions ErrorDescriptions `json:"descriptions"`
+	Name         string            `json:"name" avro:"name"`
+	Descriptions ErrorDescriptions `json:"descriptions" avro:"descriptions"`
 }
 
 func (err Error) AddNamedDescription(name string, value string) Error {

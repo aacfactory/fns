@@ -193,24 +193,24 @@ func NewElementValidation(name string, i18ns ...string) (v *ElementValidation) {
 }
 
 type ElementValidation struct {
-	Name string            `json:"name,omitempty"`
-	I18n map[string]string `json:"i18n,omitempty"`
+	Name string            `json:"name,omitempty" avro:"name"`
+	I18n map[string]string `json:"i18n,omitempty" avro:"i18N"`
 }
 
 type Element struct {
-	Nil         bool       `json:"non"`
-	Path        string     `json:"path,omitempty"`
-	Name        string     `json:"name,omitempty"`
-	Title       string     `json:"title,omitempty"`
-	Description string     `json:"description,omitempty"`
-	Type        string     `json:"type,omitempty"`
-	Format      string     `json:"format,omitempty"`
-	Enums       []string   `json:"enums,omitempty"`
-	Required    bool       `json:"required,omitempty"`
-	Validation  Validation `json:"validation,omitempty"`
-	Properties  Properties `json:"properties,omitempty"`
-	Additional  bool       `json:"additional,omitempty"`
-	Deprecated  bool       `json:"deprecated,omitempty"`
+	Nil         bool       `json:"non" avro:"nil"`
+	Path        string     `json:"path,omitempty" avro:"path"`
+	Name        string     `json:"name,omitempty" avro:"name"`
+	Title       string     `json:"title,omitempty" avro:"title"`
+	Description string     `json:"description,omitempty" avro:"description"`
+	Type        string     `json:"type,omitempty" avro:"type"`
+	Format      string     `json:"format,omitempty" avro:"format"`
+	Enums       []string   `json:"enums,omitempty" avro:"enums"`
+	Required    bool       `json:"required,omitempty" avro:"required"`
+	Validation  Validation `json:"validation,omitempty" avro:"validation"`
+	Properties  Properties `json:"properties,omitempty" avro:"properties"`
+	Additional  bool       `json:"additional,omitempty" avro:"additional"`
+	Deprecated  bool       `json:"deprecated,omitempty" avro:"deprecated"`
 }
 
 func (element Element) Exist() bool {

@@ -24,8 +24,8 @@ import (
 )
 
 type Attribute struct {
-	Key   []byte
-	Value json.RawMessage
+	Key   []byte          `json:"key" avro:"key"`
+	Value json.RawMessage `json:"value" avro:"value"`
 }
 
 type Attributes []Attribute

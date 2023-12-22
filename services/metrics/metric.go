@@ -32,14 +32,14 @@ var (
 // Metric
 // use @metric to enable in fn
 type Metric struct {
-	Endpoint  string `json:"endpoint"`
-	Fn        string `json:"fn"`
-	Latency   int64  `json:"latency"`
-	Succeed   bool   `json:"succeed"`
-	ErrorCode int    `json:"errorCode"`
-	ErrorName string `json:"errorName"`
-	DeviceId  string `json:"deviceId"`
-	DeviceIp  string `json:"deviceIp"`
+	Endpoint  string `json:"endpoint" avro:"endpoint"`
+	Fn        string `json:"fn" avro:"fn"`
+	Latency   int64  `json:"latency" avro:"latency"`
+	Succeed   bool   `json:"succeed" avro:"succeed"`
+	ErrorCode int    `json:"errorCode" avro:"errorCode"`
+	ErrorName string `json:"errorName" avro:"errorName"`
+	DeviceId  string `json:"deviceId" avro:"deviceId"`
+	DeviceIp  string `json:"deviceIp" avro:"deviceIp"`
 	beg       time.Time
 }
 

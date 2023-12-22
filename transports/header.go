@@ -21,12 +21,15 @@ import (
 	"bytes"
 	"github.com/aacfactory/fns/commons/bytex"
 	"net/textproto"
+	"sort"
+	"strconv"
 	"sync"
 )
 
 var (
 	ContentTypeHeaderName                        = []byte("Content-Type")
 	ContentTypeJsonHeaderValue                   = []byte("application/json")
+	ContentTypeAvroHeaderValue                   = []byte("application/avro")
 	ContentLengthHeaderName                      = []byte("Content-Length")
 	AuthorizationHeaderName                      = []byte("Authorization")
 	CookieHeaderName                             = []byte("Cookie")
@@ -200,4 +203,91 @@ func (h *defaultHeader) Reset() {
 	hh := *h
 	hh = hh[:0]
 	*h = hh
+}
+
+type AcceptEncoding struct {
+	Name    []byte
+	Quality float64
+}
+
+type AcceptEncodings []AcceptEncoding
+
+func (encodings AcceptEncodings) Len() int {
+	return len(encodings)
+}
+
+func (encodings AcceptEncodings) Less(i, j int) bool {
+	return encodings[i].Quality < encodings[j].Quality
+}
+
+func (encodings AcceptEncodings) Swap(i, j int) {
+	encodings[i], encodings[j] = encodings[j], encodings[i]
+}
+
+func (encodings AcceptEncodings) Get(name []byte) (quality float64, has bool) {
+	for _, enc := range encodings {
+		if bytes.Equal(enc.Name, name) {
+			quality = enc.Quality
+			has = true
+			return
+		}
+	}
+	return
+}
+
+var (
+	comma     = []byte{','}
+	semicolon = []byte{';'}
+)
+
+func GetAcceptEncodings(header Header) (encodings AcceptEncodings) {
+	p := header.Get(AcceptEncodingHeaderName)
+	if len(p) == 0 {
+		return
+	}
+	items := bytes.Split(p, comma)
+	encodings = make(AcceptEncodings, 0, len(items))
+	for _, item := range items {
+		idx := bytes.Index(item, semicolon)
+		if idx < 0 {
+			item = bytes.TrimSpace(item)
+			if len(item) == 0 {
+				continue
+			}
+			encodings = append(encodings, AcceptEncoding{
+				Name:    item,
+				Quality: 0,
+			})
+			continue
+		}
+		if idx == len(item) {
+			item = bytes.TrimSpace(item[0 : idx-1])
+			if len(item) == 0 {
+				continue
+			}
+			encodings = append(encodings, AcceptEncoding{
+				Name:    item,
+				Quality: 0,
+			})
+			continue
+		}
+		name := bytes.TrimSpace(item[0:idx])
+		if len(name) == 0 {
+			continue
+		}
+		qp := bytes.TrimSpace(bytes.TrimSpace(item[idx+1:]))
+		quality, qualityErr := strconv.ParseFloat(bytex.ToString(qp), 64)
+		if qualityErr != nil {
+			continue
+		}
+		encodings = append(encodings, AcceptEncoding{
+			Name:    name,
+			Quality: quality,
+		})
+	}
+	if len(encodings) == 0 {
+		return
+	}
+	sort.Sort(encodings)
+	return
 }

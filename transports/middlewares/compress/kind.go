@@ -18,11 +18,8 @@
 package compress
 
 import (
-	"bytes"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/transports"
-	"sort"
-	"strconv"
 )
 
 const (
@@ -59,88 +56,28 @@ func (kind Kind) String() string {
 	}
 }
 
-type KindWeight struct {
-	kind   Kind
-	weight float64
-}
-
-type KindWeights []KindWeight
-
-func (k KindWeights) Len() int {
-	return len(k)
-}
-
-func (k KindWeights) Less(i, j int) bool {
-	return k[i].weight < k[j].weight
-}
-
-func (k KindWeights) Swap(i, j int) {
-	k[i], k[j] = k[j], k[i]
-}
-
-var (
-	comma = []byte{','}
-)
-
 func getKind(r transports.Request) Kind {
-	accepts := r.Header().Get(transports.AcceptEncodingHeaderName)
-	if len(accepts) == 0 {
+	accepts := transports.GetAcceptEncodings(r.Header())
+	acceptsLen := len(accepts)
+	if acceptsLen == 0 {
 		return No
 	}
-	items := bytes.Split(accepts, comma)
-	kinds := make(KindWeights, 0, len(items))
-	weighted := 0
-	for _, item := range items {
-		kind := No
-		weight := 0.0
-		idx := bytes.IndexByte(item, ';')
-		if idx > 0 {
-			weightBytes := bytes.TrimSpace(item[idx+1:])
-			if len(weightBytes) > 0 {
-				f, parseErr := strconv.ParseFloat(bytex.ToString(weightBytes), 64)
-				if parseErr != nil {
-					continue
-				}
-				weight = f
-				weighted++
-			}
-			item = item[0:idx]
-		}
-		item = bytes.TrimSpace(item)
-		switch string(item) {
+	for i := acceptsLen - 1; i >= 0; i-- {
+		accept := accepts[i]
+		switch bytex.ToString(accept.Name) {
 		case DefaultName:
-			kind = Default
-			break
+			return Default
 		case GzipName:
-			kind = Gzip
-			break
+			return Gzip
 		case DeflateName:
-			kind = Deflate
-			break
+			return Deflate
 		case BrotliName:
-			kind = Brotli
-			break
+			return Brotli
 		case AnyName:
-			kind = Any
-			break
+			return Any
 		default:
-			kind = Default
 			break
 		}
-		if kind == No {
-			continue
-		}
-		kinds = append(kinds, KindWeight{
-			kind:   kind,
-			weight: weight,
-		})
 	}
-	if len(kinds) == 0 {
-		return No
-	}
-	if weighted == 0 {
-		return kinds[0].kind
-	}
-	sort.Sort(kinds)
-	return kinds[kinds.Len()-1].kind
+	return No
 }

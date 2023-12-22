@@ -20,11 +20,11 @@ package authorizations
 import (
 	"bytes"
 	"encoding/base64"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/json"
 	"strings"
 )
 
@@ -35,7 +35,7 @@ type TokenEncoder interface {
 }
 
 type defaultTokenEncoderConfig struct {
-	Key string `json:"key"`
+	Key string `json:"key" avro:"key"`
 }
 
 func DefaultTokenEncoder() TokenEncoder {
@@ -71,7 +71,7 @@ func (encoder *defaultTokenEncoder) Shutdown(_ context.Context) {
 }
 
 func (encoder *defaultTokenEncoder) Encode(_ context.Context, param Authorization) (token Token, err error) {
-	p, encodeErr := json.Marshal(param)
+	p, encodeErr := avro.Marshal(param)
 	if encodeErr != nil {
 		err = errors.Warning("authorizations: encode token failed").WithMeta("encoder", encoder.Name()).WithCause(encodeErr)
 		return
@@ -127,7 +127,7 @@ func (encoder *defaultTokenEncoder) Decode(_ context.Context, token Token) (resu
 		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
 		return
 	}
-	decodeErr := json.Unmarshal(p, &result)
+	decodeErr := avro.Unmarshal(p, &result)
 	if decodeErr != nil {
 		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(decodeErr)
 		return

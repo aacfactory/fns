@@ -19,7 +19,7 @@ package transports
 
 import (
 	"bufio"
-	stdjson "encoding/json"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
@@ -51,6 +51,8 @@ type ResponseWriter interface {
 	WriteDeadline() time.Time
 }
 
+type Marshal func(v any) (p []byte, err error)
+
 type WriteBuffer interface {
 	io.Writer
 	Bytes() []byte
@@ -60,7 +62,7 @@ var (
 	responseWriterPool = sync.Pool{}
 )
 
-func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
+func AcquireResultResponseWriter(timeout time.Duration, accepts AcceptEncodings) *ResultResponseWriter {
 	deadline := time.Time{}
 	if timeout > 0 {
 		deadline = deadline.Add(timeout)
@@ -69,6 +71,7 @@ func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
 	cached := responseWriterPool.Get()
 	if cached == nil {
 		return &ResultResponseWriter{
+			accepts:  accepts,
 			status:   0,
 			timeout:  timeout,
 			deadline: deadline,
@@ -77,6 +80,7 @@ func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
 		}
 	}
 	r := cached.(*ResultResponseWriter)
+	r.accepts = accepts
 	r.body = buf
 	r.timeout = timeout
 	r.deadline = deadline
@@ -86,6 +90,7 @@ func AcquireResultResponseWriter(timeout time.Duration) *ResultResponseWriter {
 func ReleaseResultResponseWriter(w *ResultResponseWriter) {
 	bytebufferpool.Put(w.body)
 	w.header.Reset()
+	w.accepts = nil
 	w.body = nil
 	w.status = 0
 	w.timeout = 0
@@ -94,6 +99,7 @@ func ReleaseResultResponseWriter(w *ResultResponseWriter) {
 }
 
 type ResultResponseWriter struct {
+	accepts  AcceptEncodings
 	status   int
 	timeout  time.Duration
 	deadline time.Time
@@ -122,6 +128,34 @@ func (w *ResultResponseWriter) BodyLen() int {
 	return w.body.Len()
 }
 
+func (w *ResultResponseWriter) GetMarshal() (v Marshal) {
+	qualityOfAvro, hasAvro := w.accepts.Get(ContentTypeAvroHeaderValue)
+	qualityOfJson, hasJson := w.accepts.Get(ContentTypeJsonHeaderValue)
+	if hasAvro && !hasJson {
+		v = avro.Marshal
+		w.header.Set(ContentTypeHeaderName, ContentTypeAvroHeaderValue)
+		return
+	}
+	if hasJson && !hasAvro {
+		v = json.Marshal
+		w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
+		return
+	}
+	if hasAvro && hasJson {
+		if qualityOfAvro < qualityOfJson {
+			v = json.Marshal
+			w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
+		} else {
+			v = avro.Marshal
+			w.header.Set(ContentTypeHeaderName, ContentTypeAvroHeaderValue)
+		}
+		return
+	}
+	v = json.Marshal
+	w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
+	return
+}
+
 func (w *ResultResponseWriter) Succeed(v interface{}) {
 	if v == nil {
 		w.status = http.StatusOK
@@ -136,33 +170,13 @@ func (w *ResultResponseWriter) Succeed(v interface{}) {
 		return
 	}
 
-	var p []byte
-	var err error
-	switch vv := v.(type) {
-	case json.RawMessage:
-		p = vv
-		break
-	case stdjson.RawMessage:
-		p = vv
-		break
-	case []byte:
-		if json.Validate(vv) {
-			p = vv
-		} else {
-			p, err = json.Marshal(v)
-		}
-		break
-	default:
-		p, err = json.Marshal(vv)
-		break
-	}
+	fn := w.GetMarshal()
+	p, err := fn(v)
 	if err != nil {
-		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(err))
-		return
+		p, _ = fn(errors.Warning("fns: transport write succeed result failed").WithCause(err))
 	}
-	_, _ = w.Write(p)
-	w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
 	w.status = http.StatusOK
+	_, _ = w.Write(p)
 	return
 }
 
@@ -171,13 +185,10 @@ func (w *ResultResponseWriter) Failed(cause error) {
 		cause = errors.Warning("fns: error is lost")
 	}
 	err := errors.Wrap(cause)
-	body, encodeErr := json.Marshal(err)
-	if encodeErr != nil {
-		body = []byte(`{"message": "fns: transport write failed result failed"}`)
-	}
+	fn := w.GetMarshal()
+	body, _ := fn(err)
 	w.status = err.Code()
 	_, _ = w.Write(body)
-	w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
 	return
 }
 

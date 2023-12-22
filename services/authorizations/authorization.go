@@ -38,10 +38,10 @@ func Load(ctx context.Context) (Authorization, bool, error) {
 }
 
 type Authorization struct {
-	Id         Id         `json:"id"`
-	Account    Id         `json:"account"`
-	Attributes Attributes `json:"attributes"`
-	ExpireAT   time.Time  `json:"expireAT"`
+	Id         Id         `json:"id" avro:"id"`
+	Account    Id         `json:"account" avro:"account"`
+	Attributes Attributes `json:"attributes" avro:"attributes"`
+	ExpireAT   time.Time  `json:"expireAT" avro:"expireAt"`
 }
 
 func (authorization Authorization) Exist() bool {

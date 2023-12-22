@@ -37,17 +37,17 @@ func NewFn(name string) Fn {
 }
 
 type Fn struct {
-	Name          string  `json:"name,omitempty"`
-	Title         string  `json:"title,omitempty"`
-	Description   string  `json:"description,omitempty"`
-	Deprecated    bool    `json:"deprecated,omitempty"`
-	Internal      bool    `json:"internal,omitempty"`
-	Readonly      bool    `json:"readonly,omitempty"`
-	Authorization bool    `json:"authorization,omitempty"`
-	Permission    bool    `json:"permission,omitempty"`
-	Param         Element `json:"argument,omitempty"`
-	Result        Element `json:"result,omitempty"`
-	Errors        Errors  `json:"errors,omitempty"`
+	Name          string  `json:"name,omitempty" avro:"name"`
+	Title         string  `json:"title,omitempty" avro:"title"`
+	Description   string  `json:"description,omitempty" avro:"description"`
+	Deprecated    bool    `json:"deprecated,omitempty" avro:"deprecated"`
+	Internal      bool    `json:"internal,omitempty" avro:"internal"`
+	Readonly      bool    `json:"readonly,omitempty" avro:"readonly"`
+	Authorization bool    `json:"authorization,omitempty" avro:"authorization"`
+	Permission    bool    `json:"permission,omitempty" avro:"permission"`
+	Param         Element `json:"argument,omitempty" avro:"param"`
+	Result        Element `json:"result,omitempty" avro:"result"`
+	Errors        Errors  `json:"errors,omitempty" avro:"errors"`
 }
 
 func (fn Fn) SetInfo(title string, description string) Fn {

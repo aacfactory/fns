@@ -15,29 +15,22 @@
  *
  */
 
-package protos
+package avros
 
-import (
-	"fmt"
-	"github.com/aacfactory/errors"
-	"google.golang.org/protobuf/proto"
-)
+import "github.com/aacfactory/avro"
 
 type RawMessage []byte
 
 func (raw RawMessage) Valid() (ok bool) {
-
 	ok = len(raw) > 0
 	return
 }
 
 func (raw RawMessage) Unmarshal(dst any) (err error) {
-	msg, ok := dst.(proto.Message)
-	if !ok {
-		err = errors.Warning("fns: proto raw message unmarshal failed").WithCause(fmt.Errorf("dst type is not proto.Message"))
+	if len(raw) == 0 {
 		return
 	}
-	err = proto.Unmarshal(raw, msg)
+	err = avro.Unmarshal(raw, dst)
 	return
 }
 

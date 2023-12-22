@@ -43,7 +43,7 @@ func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.R
 		r := Request{
 			Context: c,
 		}
-		result := transports.AcquireResultResponseWriter(writeTimeout)
+		result := transports.AcquireResultResponseWriter(writeTimeout, transports.GetAcceptEncodings(r.Header()))
 		w := ResponseWriter{
 			Context: c,
 			result:  result,

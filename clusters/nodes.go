@@ -19,12 +19,12 @@ package clusters
 
 import (
 	"bytes"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
-	"github.com/aacfactory/json"
 	"github.com/klauspost/compress/zlib"
 	"github.com/valyala/bytebufferpool"
 	"io"
@@ -41,7 +41,7 @@ func NewService(name string, internal bool, functions services.FnInfos, document
 		DocumentRaw: nil,
 	}
 	if document.Defined() {
-		p, encodeErr := json.Marshal(document)
+		p, encodeErr := avro.Marshal(document)
 		if encodeErr != nil {
 			err = errors.Warning("fns: new endpoint info failed").WithCause(encodeErr)
 			return
@@ -84,7 +84,7 @@ func (service Service) Document() (document documents.Endpoint, err error) {
 	}
 	_ = r.Close()
 	document = documents.Endpoint{}
-	decodeErr := json.Unmarshal(p, &document)
+	decodeErr := avro.Unmarshal(p, &document)
 	if decodeErr != nil {
 		err = errors.Warning("fns: service get document failed").WithCause(decodeErr)
 		return

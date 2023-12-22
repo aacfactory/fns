@@ -19,6 +19,7 @@ package runtime
 
 import (
 	"bytes"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/transports"
@@ -31,14 +32,21 @@ var (
 )
 
 func CheckHealth(ctx context.Context, client transports.Client) (ok bool) {
-	status, _, body, _ := client.Do(ctx, transports.MethodGet, healthPath, nil, nil)
+	status, header, body, _ := client.Do(ctx, transports.MethodGet, healthPath, nil, nil)
 	if status != 200 {
 		return
 	}
 	health := Health{}
-	decodeErr := json.Unmarshal(body, &health)
-	if decodeErr != nil {
-		return
+	if bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeAvroHeaderValue) {
+		decodeErr := avro.Unmarshal(body, &health)
+		if decodeErr != nil {
+			return
+		}
+	} else {
+		decodeErr := json.Unmarshal(body, &health)
+		if decodeErr != nil {
+			return
+		}
 	}
 	ok = health.Running
 	return
@@ -83,11 +91,11 @@ func (handler *healthHandler) Handle(w transports.ResponseWriter, r transports.R
 }
 
 type Health struct {
-	Id      string    `json:"id"`
-	Name    string    `json:"name"`
-	Version string    `json:"version"`
-	Running bool      `json:"running"`
-	Serving bool      `json:"serving"`
-	Launch  time.Time `json:"launch"`
-	Now     time.Time `json:"now"`
+	Id      string    `json:"id" avro:"id"`
+	Name    string    `json:"name" avro:"name"`
+	Version string    `json:"version" avro:"version"`
+	Running bool      `json:"running" avro:"running"`
+	Serving bool      `json:"serving" avro:"serving"`
+	Launch  time.Time `json:"launch" avro:"launch"`
+	Now     time.Time `json:"now" avro:"now"`
 }

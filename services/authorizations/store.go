@@ -20,11 +20,11 @@ package authorizations
 import (
 	"bytes"
 	"fmt"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/json"
 	"time"
 )
 
@@ -89,7 +89,7 @@ func (store *defaultTokenStore) List(ctx context.Context, account Id) (v []Autho
 		return
 	}
 	v = make([]Authorization, 0)
-	err = json.Unmarshal(p, &v)
+	err = avro.Unmarshal(p, &v)
 	if err != nil {
 		err = errors.Warning("authorizations: list authorization failed").WithCause(err)
 		return
@@ -113,7 +113,7 @@ func (store *defaultTokenStore) Save(ctx context.Context, v Authorization) (err 
 			expire = entry.ExpireAT
 		}
 	}
-	p, encodeErr := json.Marshal(entries)
+	p, encodeErr := avro.Marshal(entries)
 	if encodeErr != nil {
 		err = errors.Warning("authorizations: save authorization failed").WithCause(encodeErr)
 		return
@@ -176,7 +176,7 @@ func (store *defaultTokenStore) Remove(ctx context.Context, account Id, ids []Id
 		}
 		return
 	}
-	p, encodeErr := json.Marshal(news)
+	p, encodeErr := avro.Marshal(news)
 	if encodeErr != nil {
 		err = errors.Warning("authorizations: remove authorization failed").WithCause(encodeErr)
 		return

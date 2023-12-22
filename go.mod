@@ -4,9 +4,10 @@ go 1.21.0
 
 require (
 	github.com/aacfactory/afssl v1.12.0
+	github.com/aacfactory/avro v1.1.1
 	github.com/aacfactory/cases v1.1.0
 	github.com/aacfactory/configures v1.12.1
-	github.com/aacfactory/errors v1.13.11
+	github.com/aacfactory/errors v1.13.12
 	github.com/aacfactory/gcg v1.0.5
 	github.com/aacfactory/json v1.16.6
 	github.com/aacfactory/logs v1.13.12
@@ -25,7 +26,6 @@ require (
 	golang.org/x/mod v0.14.0
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.15.0
-	google.golang.org/protobuf v1.31.0
 )
 
 require (
@@ -39,6 +39,7 @@ require (
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

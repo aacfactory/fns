@@ -17,6 +17,22 @@
 
 package tracings
 
+import (
+	"time"
+)
+
+type Span struct {
+	Id       string            `json:"id" avro:"id"`
+	Endpoint string            `json:"endpoint" avro:"endpoint"`
+	Fn       string            `json:"fn" avro:"fn"`
+	Begin    time.Time         `json:"begin" avro:"begin"`
+	Waited   time.Time         `json:"waited" avro:"waited"`
+	End      time.Time         `json:"end" avro:"end"`
+	Tags     map[string]string `json:"tags" avro:"tags"`
+	Children []*Span           `json:"children" avro:"children"`
+	parent   *Span
+}
+
 func (span *Span) setTags(tags []string) {
 	n := len(tags)
 	if n == 0 {
@@ -34,8 +50,8 @@ func (span *Span) setTags(tags []string) {
 
 func (span *Span) mountChildrenParent() {
 	for _, child := range span.Children {
-		if child.Parent == nil {
-			child.Parent = span
+		if child.parent == nil {
+			child.parent = span
 		}
 		child.mountChildrenParent()
 	}

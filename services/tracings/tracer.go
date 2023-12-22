@@ -19,8 +19,13 @@ package tracings
 
 import (
 	"github.com/aacfactory/fns/commons/bytex"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
+
+type Trace struct {
+	Id   string
+	Span *Span
+}
 
 func New(id []byte) *Tracer {
 	return &Tracer{
@@ -52,12 +57,12 @@ func (trace *Tracer) Begin(pid []byte, endpoint []byte, fn []byte, tags ...strin
 		Id:       bytex.ToString(pid),
 		Endpoint: bytex.ToString(endpoint),
 		Fn:       bytex.ToString(fn),
-		Begin:    timestamppb.Now(),
-		Waited:   nil,
-		End:      nil,
+		Begin:    time.Now(),
+		Waited:   time.Time{},
+		End:      time.Time{},
 		Tags:     make(map[string]string),
 		Children: nil,
-		Parent:   nil,
+		parent:   nil,
 	}
 	current.setTags(tags)
 	if trace.Span == nil {
@@ -70,7 +75,7 @@ func (trace *Tracer) Begin(pid []byte, endpoint []byte, fn []byte, tags ...strin
 		parent.Children = make([]*Span, 0, 1)
 	}
 	parent.Children = append(parent.Children, current)
-	current.Parent = parent
+	current.parent = parent
 	trace.current = current
 }
 
@@ -78,7 +83,7 @@ func (trace *Tracer) Waited(tags ...string) {
 	if trace.current == nil {
 		return
 	}
-	trace.current.Waited = timestamppb.Now()
+	trace.current.Waited = time.Now()
 	trace.current.setTags(tags)
 	return
 }
@@ -95,13 +100,13 @@ func (trace *Tracer) Finish(tags ...string) {
 	if trace.current == nil {
 		return
 	}
-	if trace.current.Waited == nil {
+	if trace.current.Waited.IsZero() {
 		trace.current.Waited = trace.current.Begin
 	}
-	trace.current.End = timestamppb.Now()
+	trace.current.End = time.Now()
 	trace.current.setTags(tags)
-	if trace.current.Parent != nil {
-		trace.current = trace.current.Parent
+	if trace.current.parent != nil {
+		trace.current = trace.current.parent
 	}
 }
 
@@ -115,7 +120,7 @@ func (trace *Tracer) Mount(child *Span) {
 	if trace.current.Children == nil {
 		trace.current.Children = make([]*Span, 0, 1)
 	}
-	child.Parent = trace.current
+	child.parent = trace.current
 	child.mountChildrenParent()
 	trace.current.Children = append(trace.current.Children, child)
 }

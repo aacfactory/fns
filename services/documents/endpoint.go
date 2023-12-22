@@ -32,14 +32,14 @@ func New(name string, title string, description string) Endpoint {
 }
 
 type Endpoint struct {
-	Id          []string         `json:"id,omitempty"`
-	Version     versions.Version `json:"version"`
-	Name        string           `json:"name"`
-	Title       string           `json:"title"`
-	Description string           `json:"description"`
-	Internal    bool             `json:"internal"`
-	Functions   Fns              `json:"functions"`
-	Elements    Elements         `json:"elements"`
+	Id          []string         `json:"id,omitempty" avro:"id"`
+	Version     versions.Version `json:"version" avro:"version"`
+	Name        string           `json:"name" avro:"name"`
+	Title       string           `json:"title" avro:"title"`
+	Description string           `json:"description" avro:"description"`
+	Internal    bool             `json:"internal" avro:"internal"`
+	Functions   Fns              `json:"functions" avro:"functions"`
+	Elements    Elements         `json:"elements" avro:"elements"`
 }
 
 func (endpoint *Endpoint) Defined() bool {

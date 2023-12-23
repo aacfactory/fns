@@ -18,16 +18,12 @@
 package clusters
 
 import (
-	"bytes"
 	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
-	"github.com/klauspost/compress/zlib"
-	"github.com/valyala/bytebufferpool"
-	"io"
+	"github.com/valyala/fasthttp"
 	"slices"
 	"sort"
 	"strings"
@@ -46,16 +42,9 @@ func NewService(name string, internal bool, functions services.FnInfos, document
 			err = errors.Warning("fns: new endpoint info failed").WithCause(encodeErr)
 			return
 		}
-		buf := bytebufferpool.Get()
-		defer bytebufferpool.Put(buf)
-		w, wErr := zlib.NewWriterLevel(buf, zlib.BestCompression)
-		if wErr != nil {
-			err = errors.Warning("fns: new endpoint info failed").WithCause(wErr)
-			return
-		}
-		_, _ = w.Write(p)
-		_ = w.Close()
-		service.DocumentRaw = bytex.FromString(buf.String())
+		cp := make([]byte, 0)
+		cp = fasthttp.AppendDeflateBytesLevel(cp, p, fasthttp.CompressBestCompression)
+		service.DocumentRaw = cp
 	}
 	return
 }
@@ -71,18 +60,12 @@ func (service Service) Document() (document documents.Endpoint, err error) {
 	if len(service.DocumentRaw) == 0 {
 		return
 	}
-	r, rErr := zlib.NewReader(bytes.NewReader(service.DocumentRaw))
-	if rErr != nil {
-		err = errors.Warning("fns: service get document failed").WithCause(rErr)
+	p := make([]byte, 0)
+	p, err = fasthttp.AppendInflateBytes(p, service.DocumentRaw)
+	if err != nil {
+		err = errors.Warning("fns: service get document failed").WithCause(err)
 		return
 	}
-	p, readErr := io.ReadAll(r)
-	if readErr != nil {
-		_ = r.Close()
-		err = errors.Warning("fns: service get document failed").WithCause(readErr)
-		return
-	}
-	_ = r.Close()
 	document = documents.Endpoint{}
 	decodeErr := avro.Unmarshal(p, &document)
 	if decodeErr != nil {

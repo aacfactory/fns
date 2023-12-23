@@ -27,6 +27,7 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/fns/transports/middlewares/compress"
 	"github.com/aacfactory/json"
 	"net/http"
 	"sync/atomic"
@@ -184,6 +185,11 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		if fn.errs.Value() > 0 {
 			fn.errs.Decr()
 		}
+		respBody, err = compress.DecodeResponse(respHeader, respBody)
+		if err != nil {
+			err = errors.Warning("fns: internal endpoint handle failed").WithCause(err).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
+			return
+		}
 		rsb := ResponseBody{}
 		decodeErr := avro.Unmarshal(respBody, &rsb)
 		if decodeErr != nil {
@@ -200,7 +206,9 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		if rsb.Succeed {
 			v = avros.RawMessage(rsb.Data)
 		} else {
-			err = errors.Decode(rsb.Data)
+			codeErr := &errors.CodeErrorImpl{}
+			_ = avro.Unmarshal(rsb.Data, codeErr)
+			err = codeErr
 		}
 		return
 	}
@@ -216,9 +224,22 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		err = ErrTooEarly
 		break
 	case 555:
+		respBody, err = compress.DecodeResponse(respHeader, respBody)
+		if err != nil {
+			err = errors.Warning("fns: internal endpoint handle failed").WithCause(err).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
+			return
+		}
 		codeErr := &errors.CodeErrorImpl{}
 		_ = avro.Unmarshal(respBody, codeErr)
 		err = codeErr
+		break
+	case 666:
+		respBody, err = compress.DecodeResponse(respHeader, respBody)
+		if err != nil {
+			err = errors.Warning("fns: internal endpoint handle failed").WithCause(err).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
+			return
+		}
+		err = errors.New(666, "***INTERNAL FAILED***", string(respBody))
 		break
 	}
 	return

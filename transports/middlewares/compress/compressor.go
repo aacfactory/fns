@@ -34,7 +34,7 @@ func (g *GzipCompressor) Name() string {
 
 func (g *GzipCompressor) Compress(p []byte) (out []byte, err error) {
 	out = make([]byte, 0, 1)
-	fasthttp.AppendGzipBytesLevel(out, p, g.level)
+	out = fasthttp.AppendGzipBytesLevel(out, p, g.level)
 	return
 }
 
@@ -48,7 +48,7 @@ func (d *DeflateCompressor) Name() string {
 
 func (d *DeflateCompressor) Compress(p []byte) (out []byte, err error) {
 	out = make([]byte, 0, 1)
-	fasthttp.AppendDeflateBytesLevel(out, p, d.level)
+	out = fasthttp.AppendDeflateBytesLevel(out, p, d.level)
 	return
 }
 
@@ -62,6 +62,6 @@ func (b *BrotliCompressor) Name() string {
 
 func (b *BrotliCompressor) Compress(p []byte) (out []byte, err error) {
 	out = make([]byte, 0, 1)
-	fasthttp.AppendBrotliBytesLevel(out, p, b.level)
+	out = fasthttp.AppendBrotliBytesLevel(out, p, b.level)
 	return
 }

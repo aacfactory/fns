@@ -51,6 +51,8 @@ func (kind Kind) String() string {
 		return GzipName
 	case Brotli:
 		return BrotliName
+	case Any:
+		return AnyName
 	default:
 		return ""
 	}

@@ -76,8 +76,11 @@ func (middle *Middleware) Construct(options transports.MiddlewareOptions) error 
 	case DeflateName:
 		middle.compressor = middle.deflate
 		break
-	default:
+	case GzipName:
 		middle.compressor = middle.gzip
+		break
+	default:
+		middle.compressor = middle.deflate
 		break
 	}
 	return nil

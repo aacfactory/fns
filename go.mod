@@ -9,14 +9,13 @@ require (
 	github.com/aacfactory/configures v1.12.1
 	github.com/aacfactory/errors v1.13.12
 	github.com/aacfactory/gcg v1.0.5
-	github.com/aacfactory/json v1.16.6
+	github.com/aacfactory/json v1.16.8
 	github.com/aacfactory/logs v1.13.12
 	github.com/aacfactory/workers v1.8.4
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dgrr/http2 v0.3.6-0.20231023141632-12370d352f5f
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/goccy/go-yaml v1.11.2
-	github.com/klauspost/compress v1.17.4
 	github.com/rs/xid v1.5.0
 	github.com/urfave/cli/v2 v2.26.0
 	github.com/valyala/bytebufferpool v1.0.0
@@ -36,6 +35,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

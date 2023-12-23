@@ -96,13 +96,14 @@ func (handler *endpointsHandler) Match(_ context.Context, method []byte, path []
 		return false
 	}
 	if fi.Readonly {
-		ok := bytes.Equal(method, transports.MethodGet)
-		return ok
+		return bytes.Equal(method, transports.MethodGet)
 	}
 	if !bytes.Equal(method, transports.MethodPost) {
 		return false
 	}
-	ok := bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue) || bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeAvroHeaderValue)
+	ok := bytes.Equal(method, transports.MethodPost) &&
+		(bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue) ||
+			bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeAvroHeaderValue))
 	return ok
 }
 
@@ -212,6 +213,7 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 		return
 	}
 	response := v.(Response)
+
 	if response.Valid() {
 		w.Succeed(response)
 	} else {

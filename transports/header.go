@@ -29,6 +29,7 @@ import (
 var (
 	ContentTypeHeaderName                        = []byte("Content-Type")
 	ContentTypeJsonHeaderValue                   = []byte("application/json")
+	ContentTypeTextHeaderValue                   = []byte("text/plain")
 	ContentTypeAvroHeaderValue                   = []byte("application/avro")
 	ContentLengthHeaderName                      = []byte("Content-Length")
 	AuthorizationHeaderName                      = []byte("Authorization")
@@ -233,6 +234,28 @@ func (encodings AcceptEncodings) Get(name []byte) (quality float64, has bool) {
 		}
 	}
 	return
+}
+
+func (encodings AcceptEncodings) Add(name []byte, quality float64) AcceptEncodings {
+	return append(encodings, AcceptEncoding{
+		Name:    name,
+		Quality: quality,
+	})
+}
+
+func (encodings AcceptEncodings) WriteTo(header Header) {
+	p := make([]byte, 0, 1)
+	for i, encoding := range encodings {
+		if i > 0 {
+			p = append(p, ',', ' ')
+		}
+		p = append(encoding.Name)
+		if encoding.Quality > 0 {
+			p = append(p, ';')
+		}
+		p = append(p, bytex.FromString(strconv.FormatFloat(encoding.Quality, 'f', 1, 64))...)
+	}
+	header.Set(AcceptEncodingHeaderName, p)
 }
 
 var (

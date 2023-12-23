@@ -19,12 +19,11 @@ package transports
 
 import (
 	"bufio"
-	"github.com/aacfactory/avro"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"net"
@@ -50,8 +49,6 @@ type ResponseWriter interface {
 	WriteTimeout() time.Duration
 	WriteDeadline() time.Time
 }
-
-type Marshal func(v any) (p []byte, err error)
 
 type WriteBuffer interface {
 	io.Writer
@@ -128,34 +125,6 @@ func (w *ResultResponseWriter) BodyLen() int {
 	return w.body.Len()
 }
 
-func (w *ResultResponseWriter) GetMarshal() (v Marshal) {
-	qualityOfAvro, hasAvro := w.accepts.Get(ContentTypeAvroHeaderValue)
-	qualityOfJson, hasJson := w.accepts.Get(ContentTypeJsonHeaderValue)
-	if hasAvro && !hasJson {
-		v = avro.Marshal
-		w.header.Set(ContentTypeHeaderName, ContentTypeAvroHeaderValue)
-		return
-	}
-	if hasJson && !hasAvro {
-		v = json.Marshal
-		w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
-		return
-	}
-	if hasAvro && hasJson {
-		if qualityOfAvro < qualityOfJson {
-			v = json.Marshal
-			w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
-		} else {
-			v = avro.Marshal
-			w.header.Set(ContentTypeHeaderName, ContentTypeAvroHeaderValue)
-		}
-		return
-	}
-	v = json.Marshal
-	w.header.Set(ContentTypeHeaderName, ContentTypeJsonHeaderValue)
-	return
-}
-
 func (w *ResultResponseWriter) Succeed(v interface{}) {
 	if v == nil {
 		w.status = http.StatusOK
@@ -169,13 +138,14 @@ func (w *ResultResponseWriter) Succeed(v interface{}) {
 		w.status = http.StatusOK
 		return
 	}
-
-	fn := w.GetMarshal()
-	p, err := fn(v)
+	encoder, contentType := GetMarshaler(w.accepts)
+	p, err := encoder(v)
 	if err != nil {
-		p, _ = fn(errors.Warning("fns: transport write succeed result failed").WithCause(err))
+		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(err))
+		return
 	}
 	w.status = http.StatusOK
+	w.header.Set(ContentTypeHeaderName, contentType)
 	_, _ = w.Write(p)
 	return
 }
@@ -185,9 +155,16 @@ func (w *ResultResponseWriter) Failed(cause error) {
 		cause = errors.Warning("fns: error is lost")
 	}
 	err := errors.Wrap(cause)
-	fn := w.GetMarshal()
-	body, _ := fn(err)
+	encoder, contentType := GetMarshaler(w.accepts)
+	body, bodyErr := encoder(err)
+	if bodyErr != nil {
+		w.status = 666
+		w.header.Set(ContentTypeHeaderName, ContentTypeTextHeaderValue)
+		_, _ = w.Write([]byte(fmt.Sprintf("%+v", bodyErr)))
+		return
+	}
 	w.status = err.Code()
+	w.header.Set(ContentTypeHeaderName, contentType)
 	_, _ = w.Write(body)
 	return
 }

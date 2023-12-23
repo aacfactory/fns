@@ -19,8 +19,10 @@ package proxies
 
 import (
 	"bytes"
+	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
+	"github.com/aacfactory/fns/commons/avros"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/objects"
@@ -36,7 +38,8 @@ import (
 )
 
 var (
-	slashBytes = []byte{'/'}
+	slashBytes     = []byte{'/'}
+	ErrInvalidBody = errors.Warning("fns: invalid body")
 )
 
 func NewProxyHandler(manager clusters.ClusterEndpointsManager, dialer transports.Dialer) transports.MuxHandler {
@@ -66,7 +69,9 @@ func (handler *proxyHandler) Match(_ context.Context, method []byte, path []byte
 		return false
 	}
 	if bytes.Equal(method, transports.MethodPost) {
-		return len(bytes.Split(path, slashBytes)) == 3 && bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue)
+		return len(bytes.Split(path, slashBytes)) == 3 &&
+			(bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue) ||
+				bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeAvroHeaderValue))
 	}
 	if bytes.Equal(method, transports.MethodGet) {
 		return len(bytes.Split(path, slashBytes)) == 3
@@ -134,6 +139,19 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 		}
 		_, _ = groupKeyBuf.Write(body)
 	}
+	var acceptEncoding []byte
+	if bytes.Equal(method, transports.MethodGet) {
+		acceptEncodings := transports.GetAcceptEncodings(r.Header())
+		if _, hasAcceptEncodingJson := acceptEncodings.Get(transports.ContentTypeJsonHeaderValue); hasAcceptEncodingJson {
+			acceptEncoding = transports.ContentTypeJsonHeaderValue
+		} else if _, hasAcceptEncodingAvro := acceptEncodings.Get(transports.ContentTypeAvroHeaderValue); hasAcceptEncodingAvro {
+			acceptEncoding = transports.ContentTypeAvroHeaderValue
+		} else {
+			acceptEncoding = transports.ContentTypeJsonHeaderValue
+		}
+	} else {
+		acceptEncoding = r.Header().Get(transports.ContentTypeHeaderName)
+	}
 
 	groupKey := strconv.FormatUint(mmhash.Sum64(groupKeyBuf.Bytes()), 16)
 	bytebufferpool.Put(groupKeyBuf)
@@ -145,21 +163,48 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
+
 		if address == handler.manager.Address() {
 			var param objects.Object
 			if bytes.Equal(method, transports.MethodGet) {
 				param = transports.ObjectParams(queryParams)
 			} else {
-				param = json.RawMessage(body)
+				if bytes.Equal(acceptEncoding, transports.ContentTypeJsonHeaderValue) {
+					param = json.RawMessage(body)
+				} else if bytes.Equal(acceptEncoding, transports.ContentTypeAvroHeaderValue) {
+					param = avros.RawMessage(body)
+				} else {
+					bytebufferpool.Put(groupKeyBuf)
+					w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
+					return
+				}
 			}
 			response, handleErr := handler.manager.Request(r, service, fn, param)
 			if handleErr != nil {
 				err = handleErr
 				return
 			}
+			if !response.Valid() {
+				v = Response{
+					Header: nil,
+					Value:  nil,
+				}
+				return
+			}
+			var value []byte
+			var valueErr error
+			if bytes.Equal(acceptEncoding, transports.ContentTypeJsonHeaderValue) {
+				value, valueErr = json.Marshal(response.Value())
+			} else {
+				value, valueErr = avro.Marshal(response.Value())
+			}
+			if valueErr != nil {
+				err = errors.Warning("fns: invalid response body").WithCause(valueErr)
+				return
+			}
 			v = Response{
 				Header: nil,
-				Value:  response,
+				Value:  value,
 			}
 			return
 		}
@@ -183,9 +228,10 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 					w.Header().Add(key, value)
 				}
 			})
+
 			v = Response{
 				Header: respHeader,
-				Value:  json.RawMessage(respBody),
+				Value:  respBody,
 			}
 			return
 		}
@@ -206,10 +252,11 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 			}
 		})
 	}
-	w.Succeed(response.Value)
+	w.Header().Set(transports.ContentTypeHeaderName, acceptEncoding)
+	_, _ = w.Write(response.Value)
 }
 
 type Response struct {
 	Header transports.Header
-	Value  interface{}
+	Value  []byte
 }

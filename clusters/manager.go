@@ -58,27 +58,23 @@ func NewManager(id string, version versions.Version, address string, cluster Clu
 
 type ClusterEndpointsManager interface {
 	services.EndpointsManager
-	Address() string
-	PublicFnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, has bool)
+	FnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, internal bool, has bool)
 }
 
 type Manager struct {
-	id            string
-	version       versions.Version
-	address       string
-	log           logs.Logger
-	cluster       Cluster
-	local         services.EndpointsManager
-	worker        workers.Workers
-	dialer        transports.Dialer
-	signature     signatures.Signature
-	registrations Registrations
-	infos         services.EndpointInfos
-	locker        sync.RWMutex
-}
-
-func (manager *Manager) Address() string {
-	return manager.address
+	id             string
+	version        versions.Version
+	address        string
+	log            logs.Logger
+	cluster        Cluster
+	local          services.EndpointsManager
+	worker         workers.Workers
+	dialer         transports.Dialer
+	signature      signatures.Signature
+	registrations  Registrations
+	infos          services.EndpointInfos
+	locker         sync.RWMutex
+	attachedEvents []chan NodeEvent
 }
 
 func (manager *Manager) Add(service services.Service) (err error) {
@@ -111,7 +107,7 @@ func (manager *Manager) Info() (infos services.EndpointInfos) {
 	return
 }
 
-func (manager *Manager) PublicFnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, has bool) {
+func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, internal bool, has bool) {
 	local, localed := manager.local.Get(ctx, endpoint, options...)
 	if localed {
 		if local.Internal() {
@@ -120,9 +116,7 @@ func (manager *Manager) PublicFnAddress(ctx context.Context, endpoint []byte, fn
 		fnNameString := bytex.ToString(fnName)
 		for _, fn := range local.Functions() {
 			if fn.Name() == fnNameString {
-				if fn.Internal() {
-					return
-				}
+				internal = fn.Internal()
 				has = true
 				return
 			}
@@ -141,6 +135,7 @@ func (manager *Manager) PublicFnAddress(ctx context.Context, endpoint []byte, fn
 			return
 		}
 		address = maxed.Address()
+		internal = maxed.Internal()
 		has = true
 		manager.locker.RUnlock()
 		return
@@ -158,6 +153,7 @@ func (manager *Manager) PublicFnAddress(ctx context.Context, endpoint []byte, fn
 			return
 		}
 		address = matched.Address()
+		internal = matched.Internal()
 		has = true
 		manager.locker.RUnlock()
 		return

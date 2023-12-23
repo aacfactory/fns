@@ -38,19 +38,25 @@ type ClientHttp2Config struct {
 	MaxResponseSeconds int  `json:"maxResponseSeconds"`
 }
 
+type DialerConfig struct {
+	CacheSize     int `json:"cacheSize"`
+	ExpireSeconds int `json:"expireSeconds"`
+}
+
 type ClientConfig struct {
-	DialDualStack             bool   `json:"dialDualStack"`
-	MaxConnsPerHost           int    `json:"maxConnsPerHost"`
-	MaxIdleConnDuration       string `json:"maxIdleConnDuration"`
-	MaxConnDuration           string `json:"maxConnDuration"`
-	MaxIdemponentCallAttempts int    `json:"maxIdemponentCallAttempts"`
-	ReadBufferSize            string `json:"readBufferSize"`
-	ReadTimeout               string `json:"readTimeout"`
-	WriteBufferSize           string `json:"writeBufferSize"`
-	WriteTimeout              string `json:"writeTimeout"`
-	MaxResponseBodySize       string `json:"maxResponseBodySize"`
-	MaxConnWaitTimeout        string `json:"maxConnWaitTimeout"`
-	IsTLS                     bool   `json:"isTLS"`
+	DialDualStack             bool         `json:"dialDualStack"`
+	MaxConnsPerHost           int          `json:"maxConnsPerHost"`
+	MaxIdleConnDuration       string       `json:"maxIdleConnDuration"`
+	MaxConnDuration           string       `json:"maxConnDuration"`
+	MaxIdemponentCallAttempts int          `json:"maxIdemponentCallAttempts"`
+	ReadBufferSize            string       `json:"readBufferSize"`
+	ReadTimeout               string       `json:"readTimeout"`
+	WriteBufferSize           string       `json:"writeBufferSize"`
+	WriteTimeout              string       `json:"writeTimeout"`
+	MaxResponseBodySize       string       `json:"maxResponseBodySize"`
+	MaxConnWaitTimeout        string       `json:"maxConnWaitTimeout"`
+	Dialer                    DialerConfig `json:"dialer"`
+	IsTLS                     bool         `json:"isTLS"`
 	http2                     ClientHttp2Config
 	TLSConfig                 *tls.Config `json:"-"`
 	TLSDialer                 ssl.Dialer  `json:"-"`

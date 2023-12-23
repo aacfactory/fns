@@ -19,27 +19,21 @@ package proxies
 
 import (
 	"bytes"
-	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/clusters"
-	"github.com/aacfactory/fns/commons/avros"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/mmhash"
-	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/json"
 	"github.com/valyala/bytebufferpool"
 	"golang.org/x/sync/singleflight"
-	"net/http"
 	"strconv"
 )
 
 var (
-	slashBytes     = []byte{'/'}
-	ErrInvalidBody = errors.Warning("fns: invalid body")
+	slashBytes = []byte{'/'}
 )
 
 func NewProxyHandler(manager clusters.ClusterEndpointsManager, dialer transports.Dialer) transports.MuxHandler {
@@ -65,9 +59,6 @@ func (handler *proxyHandler) Construct(_ transports.MuxHandlerOptions) error {
 }
 
 func (handler *proxyHandler) Match(_ context.Context, method []byte, path []byte, header transports.Header) bool {
-	if len(header.Get(transports.UpgradeHeaderName)) > 0 {
-		return false
-	}
 	if bytes.Equal(method, transports.MethodPost) {
 		return len(bytes.Split(path, slashBytes)) == 3 &&
 			(bytes.Equal(header.Get(transports.ContentTypeHeaderName), transports.ContentTypeJsonHeaderValue) ||
@@ -81,7 +72,6 @@ func (handler *proxyHandler) Match(_ context.Context, method []byte, path []byte
 
 func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Request) {
 	groupKeyBuf := bytebufferpool.Get()
-
 	// path
 	path := r.Path()
 	pathItems := bytes.Split(path, slashBytes)
@@ -139,75 +129,24 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 		}
 		_, _ = groupKeyBuf.Write(body)
 	}
-	var acceptEncoding []byte
-	if bytes.Equal(method, transports.MethodGet) {
-		acceptEncodings := transports.GetAcceptEncodings(r.Header())
-		if _, hasAcceptEncodingJson := acceptEncodings.Get(transports.ContentTypeJsonHeaderValue); hasAcceptEncodingJson {
-			acceptEncoding = transports.ContentTypeJsonHeaderValue
-		} else if _, hasAcceptEncodingAvro := acceptEncodings.Get(transports.ContentTypeAvroHeaderValue); hasAcceptEncodingAvro {
-			acceptEncoding = transports.ContentTypeAvroHeaderValue
-		} else {
-			acceptEncoding = transports.ContentTypeJsonHeaderValue
-		}
-	} else {
-		acceptEncoding = r.Header().Get(transports.ContentTypeHeaderName)
-	}
 
 	groupKey := strconv.FormatUint(mmhash.Sum64(groupKeyBuf.Bytes()), 16)
 	bytebufferpool.Put(groupKeyBuf)
 	v, err, _ := handler.group.Do(groupKey, func() (v interface{}, err error) {
-		address, has := handler.manager.PublicFnAddress(r, service, fn, endpointGetOptions...)
+		address, internal, has := handler.manager.FnAddress(r, service, fn, endpointGetOptions...)
 		if !has {
 			err = errors.NotFound("fns: endpoint was not found").
 				WithMeta("endpoint", bytex.ToString(service)).
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
-
-		if address == handler.manager.Address() {
-			var param objects.Object
-			if bytes.Equal(method, transports.MethodGet) {
-				param = transports.ObjectParams(queryParams)
-			} else {
-				if bytes.Equal(acceptEncoding, transports.ContentTypeJsonHeaderValue) {
-					param = json.RawMessage(body)
-				} else if bytes.Equal(acceptEncoding, transports.ContentTypeAvroHeaderValue) {
-					param = avros.RawMessage(body)
-				} else {
-					bytebufferpool.Put(groupKeyBuf)
-					w.Failed(ErrInvalidBody.WithMeta("path", bytex.ToString(path)))
-					return
-				}
-			}
-			response, handleErr := handler.manager.Request(r, service, fn, param)
-			if handleErr != nil {
-				err = handleErr
-				return
-			}
-			if !response.Valid() {
-				v = Response{
-					Header: nil,
-					Value:  nil,
-				}
-				return
-			}
-			var value []byte
-			var valueErr error
-			if bytes.Equal(acceptEncoding, transports.ContentTypeJsonHeaderValue) {
-				value, valueErr = json.Marshal(response.Value())
-			} else {
-				value, valueErr = avro.Marshal(response.Value())
-			}
-			if valueErr != nil {
-				err = errors.Warning("fns: invalid response body").WithCause(valueErr)
-				return
-			}
-			v = Response{
-				Header: nil,
-				Value:  value,
-			}
+		if internal {
+			err = errors.NotFound("fns: fn was internal").
+				WithMeta("endpoint", bytex.ToString(service)).
+				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
+
 		client, clientErr := handler.dialer.Dial(bytex.FromString(address))
 		if clientErr != nil {
 			err = errors.Warning("fns: dial endpoint failed").WithCause(clientErr).
@@ -222,20 +161,11 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
-		if status == http.StatusOK {
-			respHeader.Foreach(func(key []byte, values [][]byte) {
-				for _, value := range values {
-					w.Header().Add(key, value)
-				}
-			})
-
-			v = Response{
-				Header: respHeader,
-				Value:  respBody,
-			}
-			return
+		v = Response{
+			Status: status,
+			Header: respHeader,
+			Value:  respBody,
 		}
-		err = errors.Decode(respBody)
 		return
 	})
 
@@ -252,11 +182,12 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 			}
 		})
 	}
-	w.Header().Set(transports.ContentTypeHeaderName, acceptEncoding)
+	w.SetStatus(response.Status)
 	_, _ = w.Write(response.Value)
 }
 
 type Response struct {
+	Status int
 	Header transports.Header
 	Value  []byte
 }

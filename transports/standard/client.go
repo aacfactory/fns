@@ -34,18 +34,24 @@ import (
 	"time"
 )
 
+type DialerConfig struct {
+	CacheSize     int `json:"cacheSize"`
+	ExpireSeconds int `json:"expireSeconds"`
+}
+
 type ClientConfig struct {
-	MaxConnsPerHost       int         `json:"maxConnsPerHost"`
-	MaxResponseHeaderSize string      `json:"maxResponseHeaderSize"`
-	Timeout               string      `json:"timeout"`
-	DisableKeepAlive      bool        `json:"disableKeepAlive"`
-	MaxIdleConnsPerHost   int         `json:"maxIdleConnsPerHost"`
-	IdleConnTimeout       string      `json:"idleConnTimeout"`
-	TLSHandshakeTimeout   string      `json:"tlsHandshakeTimeout"`
-	ExpectContinueTimeout string      `json:"expectContinueTimeout"`
-	IsTLS                 bool        `json:"isTLS"`
-	TLSConfig             *tls.Config `json:"-"`
-	TLSDialer             ssl.Dialer  `json:"-"`
+	MaxConnsPerHost       int          `json:"maxConnsPerHost"`
+	MaxResponseHeaderSize string       `json:"maxResponseHeaderSize"`
+	Timeout               string       `json:"timeout"`
+	DisableKeepAlive      bool         `json:"disableKeepAlive"`
+	MaxIdleConnsPerHost   int          `json:"maxIdleConnsPerHost"`
+	IdleConnTimeout       string       `json:"idleConnTimeout"`
+	TLSHandshakeTimeout   string       `json:"tlsHandshakeTimeout"`
+	ExpectContinueTimeout string       `json:"expectContinueTimeout"`
+	Dialer                DialerConfig `json:"dialer"`
+	IsTLS                 bool         `json:"isTLS"`
+	TLSConfig             *tls.Config  `json:"-"`
+	TLSDialer             ssl.Dialer   `json:"-"`
 }
 
 func (config *ClientConfig) MaxConnectionsPerHost() (n int) {

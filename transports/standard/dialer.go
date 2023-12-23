@@ -20,16 +20,27 @@ package standard
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/caches/lru"
 	"github.com/aacfactory/fns/transports"
 	"golang.org/x/sync/singleflight"
-	"sync"
+	"time"
 )
 
 func NewDialer(opts *ClientConfig) (dialer *Dialer, err error) {
+	cacheSize := opts.Dialer.CacheSize
+	if cacheSize < 1 {
+		cacheSize = 64
+	}
+	cacheSeconds := opts.Dialer.ExpireSeconds
+	if cacheSeconds < 1 {
+		cacheSeconds = 24 * 60 * 60
+	}
 	dialer = &Dialer{
-		config:  opts,
-		group:   &singleflight.Group{},
-		clients: sync.Map{},
+		config: opts,
+		group:  &singleflight.Group{},
+		clients: lru.NewWithExpire[string, transports.Client](cacheSize, time.Duration(cacheSeconds)*time.Second, func(key string, value transports.Client) {
+			value.Close()
+		}),
 	}
 	return
 }
@@ -37,13 +48,13 @@ func NewDialer(opts *ClientConfig) (dialer *Dialer, err error) {
 type Dialer struct {
 	config  *ClientConfig
 	group   *singleflight.Group
-	clients sync.Map
+	clients *lru.LRU[string, transports.Client]
 }
 
 func (dialer *Dialer) Dial(addressBytes []byte) (client transports.Client, err error) {
 	address := bytex.ToString(addressBytes)
 	cc, doErr, _ := dialer.group.Do(address, func() (clients interface{}, err error) {
-		hosted, has := dialer.clients.Load(address)
+		hosted, has := dialer.clients.Get(address)
 		if has {
 			clients = hosted
 			return
@@ -52,7 +63,7 @@ func (dialer *Dialer) Dial(addressBytes []byte) (client transports.Client, err e
 		if err != nil {
 			return
 		}
-		dialer.clients.Store(address, hosted)
+		dialer.clients.Add(address, hosted)
 		clients = hosted
 		return
 	})
@@ -73,11 +84,5 @@ func (dialer *Dialer) createClient(address string) (client transports.Client, er
 }
 
 func (dialer *Dialer) Close() {
-	dialer.clients.Range(func(key, value any) bool {
-		client, ok := value.(*Client)
-		if ok {
-			client.host.CloseIdleConnections()
-		}
-		return true
-	})
+	dialer.clients.Purge()
 }

@@ -88,7 +88,7 @@ func Write(ctx context.Context, path string, dir string) (err error) {
 	}
 	process.Add("main: writing", Unit(main))
 	// docker file
-	docker, dockerErr := NewDockerFile(path, dir)
+	docker, dockerErr := NewDockerFile(path, dir, mod.path)
 	if dockerErr != nil {
 		err = dockerErr
 		return

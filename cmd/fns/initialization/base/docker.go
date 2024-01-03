@@ -19,14 +19,16 @@ package base
 
 import (
 	"context"
+	"fmt"
 	"github.com/aacfactory/errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
 	dockerfile = `# USAGE
-# docker build -t fns.aacfactory.com/fapp:latest --build-arg VERSION=${VERSION} .
+# docker build -t $$IMAGE_NAME:latest --build-arg VERSION=${VERSION} .
 
 FROM golang:1.21-alpine3.19 AS builder
 
@@ -63,7 +65,25 @@ ENTRYPOINT ["./fapp"]
 `
 )
 
-func NewDockerFile(path string, dir string) (mf *DockerFile, err error) {
+func DockerImageNameFromMod(mp string) (name string) {
+	modItems := strings.Split(mp, "/")
+	modItemsLen := len(modItems)
+	if modItemsLen == 1 {
+		name = mp
+	} else {
+		appName := modItems[modItemsLen-1]
+		domain := modItems[0]
+		if modItemsLen > 2 {
+			for i := modItemsLen - 2; i > 0; i-- {
+				appName = modItems[i] + "-" + appName
+			}
+		}
+		name = fmt.Sprintf("%s:%s", domain, appName)
+	}
+	return
+}
+
+func NewDockerFile(path string, dir string, modPath string) (mf *DockerFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -71,7 +91,9 @@ func NewDockerFile(path string, dir string) (mf *DockerFile, err error) {
 			return
 		}
 	}
+	name := DockerImageNameFromMod(modPath)
 	mf = &DockerFile{
+		name:     name,
 		path:     path,
 		filename: filepath.ToSlash(filepath.Join(dir, "Dockerfile")),
 	}
@@ -79,6 +101,7 @@ func NewDockerFile(path string, dir string) (mf *DockerFile, err error) {
 }
 
 type DockerFile struct {
+	name     string
 	path     string
 	filename string
 }
@@ -89,7 +112,8 @@ func (f *DockerFile) Name() (name string) {
 }
 
 func (f *DockerFile) Write(_ context.Context) (err error) {
-	writeErr := os.WriteFile(f.filename, []byte(dockerfile), 0644)
+	content := strings.Replace(dockerfile, "$$IMAGE_NAME", f.name, 1)
+	writeErr := os.WriteFile(f.filename, []byte(content), 0644)
 	if writeErr != nil {
 		err = errors.Warning("fns: dockerfile write failed").WithCause(writeErr).WithMeta("filename", f.filename)
 		return

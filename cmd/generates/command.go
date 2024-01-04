@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/cmd/generates/files"
 	"github.com/aacfactory/fns/cmd/generates/modules"
 	"github.com/aacfactory/fns/cmd/generates/sources"
 	"github.com/urfave/cli/v2"
@@ -165,6 +166,13 @@ func (act *action) Handle(c *cli.Context) (err error) {
 		if work == "" {
 			err = errors.Warning("generates: generate failed").WithCause(errors.Warning("work option is invalid"))
 			return
+		}
+	} else {
+		parentDir := filepath.Dir(projectDir)
+		if parentDir != "" {
+			if files.ExistFile(filepath.Join(parentDir, "go.work")) {
+				work = filepath.Join(parentDir, "go.work")
+			}
 		}
 	}
 	ctx := c.Context

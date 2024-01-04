@@ -37,8 +37,14 @@ var Command = &cli.Command{
 		&cli.StringFlag{
 			Name:     "mod",
 			Aliases:  []string{"m"},
-			Required: true,
+			Required: false,
 			Usage:    "project go mod path",
+		},
+		&cli.StringFlag{
+			Name:     "img",
+			Aliases:  []string{"i"},
+			Required: false,
+			Usage:    "project docker image name",
 		},
 	},
 	Action: func(ctx *cli.Context) (err error) {
@@ -55,11 +61,18 @@ var Command = &cli.Command{
 		}
 		projectDir = filepath.ToSlash(projectDir)
 		projectPath := strings.TrimSpace(ctx.String("mod"))
+		img := strings.TrimSpace(ctx.String("img"))
 		if projectPath == "" {
-			err = errors.Warning("fns: init fns project failed").WithCause(errors.Warning("path is required")).WithMeta("dir", projectDir)
+			// huh
+			if err = useForm(); err != nil {
+				err = errors.Warning("fns: init fns project failed").WithCause(err).WithMeta("dir", projectDir)
+				return
+			}
+			projectPath = modPath
+			img = dockerImageName
 			return
 		}
-		writeErr := base.Write(ctx.Context, projectPath, projectDir)
+		writeErr := base.Write(ctx.Context, projectPath, img, projectDir)
 		if writeErr != nil {
 			err = errors.Warning("fns: init fns project failed").WithCause(writeErr).WithMeta("dir", projectDir).WithMeta("path", projectPath)
 			return

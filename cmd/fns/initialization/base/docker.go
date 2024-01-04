@@ -83,7 +83,7 @@ func DockerImageNameFromMod(mp string) (name string) {
 	return
 }
 
-func NewDockerFile(path string, dir string, modPath string) (mf *DockerFile, err error) {
+func NewDockerFile(path string, dir string, dockerImageName string) (mf *DockerFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -91,9 +91,8 @@ func NewDockerFile(path string, dir string, modPath string) (mf *DockerFile, err
 			return
 		}
 	}
-	name := DockerImageNameFromMod(modPath)
 	mf = &DockerFile{
-		name:     name,
+		name:     dockerImageName,
 		path:     path,
 		filename: filepath.ToSlash(filepath.Join(dir, "Dockerfile")),
 	}

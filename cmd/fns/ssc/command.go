@@ -30,7 +30,7 @@ import (
 var Command = &cli.Command{
 	Name:        "ssc",
 	Aliases:     nil,
-	Usage:       "fns scc --sa=ECDSA --cn={CN} {output dir}",
+	Usage:       "fns scc --sa=ECDSA --cn={CN} --expire={days} {output dir}",
 	Description: "create self sign cert",
 	ArgsUsage:   "",
 	Category:    "",

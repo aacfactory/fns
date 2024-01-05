@@ -72,7 +72,7 @@ func NewWithWork(path string, workPath string) (v *Module, err error) {
 				WithCause(parseWorkErr)
 			return
 		}
-		dir := filepath.Dir(path)
+		dir := filepath.ToSlash(filepath.Dir(path))
 		for _, use := range work.Uses {
 			if use.Dir == dir {
 				v = use

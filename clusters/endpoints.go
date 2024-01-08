@@ -27,19 +27,24 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
+	"math/rand"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 func NewEndpoint(address string, id string, version versions.Version, name string, internal bool, document documents.Endpoint, client transports.Client, signature signatures.Signature) (endpoint *Endpoint) {
 	endpoint = &Endpoint{
-		address:   address,
-		id:        id,
-		version:   version,
-		name:      name,
-		internal:  internal,
-		document:  document,
+		info: services.EndpointInfo{
+			Id:        id,
+			Version:   version,
+			Address:   address,
+			Name:      name,
+			Internal:  internal,
+			Functions: nil,
+			Document:  document,
+		},
 		running:   atomic.Bool{},
 		functions: make(services.Fns, 0, 1),
 		client:    client,
@@ -51,12 +56,7 @@ func NewEndpoint(address string, id string, version versions.Version, name strin
 }
 
 type Endpoint struct {
-	address   string
-	id        string
-	version   versions.Version
-	name      string
-	internal  bool
-	document  documents.Endpoint
+	info      services.EndpointInfo
 	running   atomic.Bool
 	functions services.Fns
 	client    transports.Client
@@ -68,20 +68,24 @@ func (endpoint *Endpoint) Running() bool {
 	return endpoint.running.Load()
 }
 
+func (endpoint *Endpoint) Id() string {
+	return endpoint.info.Id
+}
+
 func (endpoint *Endpoint) Address() string {
-	return endpoint.address
+	return endpoint.info.Address
 }
 
 func (endpoint *Endpoint) Name() string {
-	return endpoint.name
+	return endpoint.info.Name
 }
 
 func (endpoint *Endpoint) Internal() bool {
-	return endpoint.internal
+	return endpoint.info.Internal
 }
 
 func (endpoint *Endpoint) Document() documents.Endpoint {
-	return endpoint.document
+	return endpoint.info.Document
 }
 
 func (endpoint *Endpoint) Functions() services.Fns {
@@ -99,11 +103,11 @@ func (endpoint *Endpoint) IsHealth() bool {
 
 func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
 	fn := &Fn{
-		endpointName: endpoint.name,
+		endpointName: endpoint.info.Name,
 		name:         name,
 		internal:     internal,
 		readonly:     readonly,
-		path:         bytex.FromString(fmt.Sprintf("/%s/%s", endpoint.name, name)),
+		path:         bytex.FromString(fmt.Sprintf("/%s/%s", endpoint.info.Name, name)),
 		signature:    endpoint.signature,
 		errs:         endpoint.errs,
 		health:       atomic.Bool{},
@@ -111,40 +115,217 @@ func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
 	}
 	fn.health.Store(true)
 	endpoint.functions = endpoint.functions.Add(fn)
+	endpoint.info.Functions = append(endpoint.info.Functions, services.FnInfo{
+		Name:     name,
+		Readonly: readonly,
+		Internal: internal,
+	})
+	sort.Sort(endpoint.info.Functions)
 }
 
 func (endpoint *Endpoint) Info() services.EndpointInfo {
-	fnInfos := make(services.FnInfos, 0, len(endpoint.functions))
-	for _, fn := range endpoint.functions {
-		fnInfos = append(fnInfos, services.FnInfo{
-			Name:     fn.Name(),
-			Readonly: fn.Readonly(),
-			Internal: fn.Internal(),
-		})
-	}
-	sort.Sort(fnInfos)
-	return services.EndpointInfo{
-		Id:        endpoint.id,
-		Version:   endpoint.version,
-		Address:   endpoint.address,
-		Name:      endpoint.name,
-		Internal:  endpoint.internal,
-		Functions: fnInfos,
-		Document:  endpoint.document,
-	}
+	return endpoint.info
 }
 
-type Endpoints []*Endpoint
+type VersionEndpoints struct {
+	version versions.Version
+	values  []*Endpoint
+	length  uint64
+	pos     uint64
+}
 
-func (list Endpoints) Len() int {
+func (endpoints *VersionEndpoints) Add(ep *Endpoint) {
+	endpoints.values = append(endpoints.values, ep)
+	endpoints.length++
+	return
+}
+
+func (endpoints *VersionEndpoints) Remove(id []byte) (ok bool) {
+	if endpoints.length == 0 {
+		return
+	}
+	idStr := bytex.ToString(id)
+	pos := -1
+	for i, value := range endpoints.values {
+		if value.Id() == idStr {
+			pos = i
+			break
+		}
+	}
+	if pos == -1 {
+		return
+	}
+	endpoints.values = append(endpoints.values[:pos], endpoints.values[pos+1:]...)
+	endpoints.length--
+	ok = true
+	return
+}
+
+func (endpoints *VersionEndpoints) Get(id []byte) (ep *Endpoint) {
+	if endpoints.length == 0 {
+		return
+	}
+	idStr := bytex.ToString(id)
+	for _, value := range endpoints.values {
+		if value.Id() == idStr {
+			ep = value
+			return
+		}
+	}
+	return
+}
+
+func (endpoints *VersionEndpoints) Next() (ep *Endpoint) {
+	if endpoints.length == 0 {
+		return
+	}
+	for i := uint64(0); i < endpoints.length; i++ {
+		pos := atomic.AddUint64(&endpoints.pos, 1) % endpoints.length
+		target := endpoints.values[pos]
+		if target.Running() && target.IsHealth() {
+			ep = target
+			return
+		}
+	}
+	return
+}
+
+type SortedVersionEndpoints []*VersionEndpoints
+
+func (list SortedVersionEndpoints) Len() int {
 	return len(list)
 }
 
-func (list Endpoints) Less(i, j int) bool {
+func (list SortedVersionEndpoints) Less(i, j int) bool {
 	return list[i].version.LessThan(list[j].version)
 }
 
-func (list Endpoints) Swap(i, j int) {
+func (list SortedVersionEndpoints) Swap(i, j int) {
 	list[i], list[j] = list[j], list[i]
+	return
+}
+
+func (list SortedVersionEndpoints) Get(version versions.Version) *VersionEndpoints {
+	for _, vps := range list {
+		if vps.version.Equals(version) {
+			return vps
+		}
+	}
+	return nil
+}
+
+func (list SortedVersionEndpoints) Add(ep *Endpoint) SortedVersionEndpoints {
+	vps := list.Get(ep.info.Version)
+	if vps == nil {
+		vps = &VersionEndpoints{
+			version: ep.info.Version,
+			values:  make([]*Endpoint, 0),
+			length:  0,
+			pos:     0,
+		}
+		vps.Add(ep)
+		newList := append(list, vps)
+		sort.Sort(newList)
+		return newList
+	} else {
+		vps.Add(ep)
+		return list
+	}
+}
+
+type Endpoints struct {
+	values SortedVersionEndpoints
+	length uint64
+	lock   sync.RWMutex
+}
+
+func (endpoints *Endpoints) Add(ep *Endpoint) {
+	endpoints.lock.Lock()
+	defer endpoints.lock.Unlock()
+	endpoints.values = endpoints.values.Add(ep)
+	endpoints.length++
+	return
+}
+
+func (endpoints *Endpoints) Remove(id []byte) {
+	endpoints.lock.Lock()
+	defer endpoints.lock.Unlock()
+	evict := -1
+	for i, value := range endpoints.values {
+		if value.Remove(id) {
+			if value.length == 0 {
+				evict = i
+			}
+			break
+		}
+	}
+	if evict == -1 {
+		return
+	}
+	endpoints.values = append(endpoints.values[:evict], endpoints.values[evict+1:]...)
+	endpoints.length--
+}
+
+func (endpoints *Endpoints) MaxOne() (ep *Endpoint) {
+	endpoints.lock.RLock()
+	defer endpoints.lock.RUnlock()
+	if endpoints.length == 0 {
+		return
+	}
+	ep = endpoints.values[endpoints.length-1].Next()
+	return
+}
+
+func (endpoints *Endpoints) Get(id []byte) (ep *Endpoint) {
+	endpoints.lock.RLock()
+	defer endpoints.lock.RUnlock()
+	if endpoints.length == 0 {
+		return
+	}
+	for _, value := range endpoints.values {
+		target := value.Get(id)
+		if target == nil {
+			continue
+		}
+		if target.Running() && target.IsHealth() {
+			ep = target
+		}
+		return
+	}
+	return
+}
+
+func (endpoints *Endpoints) Range(interval versions.Interval) (ep *Endpoint) {
+	endpoints.lock.RLock()
+	defer endpoints.lock.RUnlock()
+	if endpoints.length == 0 {
+		return
+	}
+	targets := make([]*Endpoint, 0, 1)
+	for _, value := range endpoints.values {
+		if interval.Accept(value.version) {
+			for _, endpoint := range value.values {
+				if endpoint.Running() && endpoint.IsHealth() {
+					targets = append(targets, endpoint)
+				}
+			}
+		}
+	}
+	pos := rand.Intn(len(targets))
+	ep = targets[pos]
+	return
+}
+
+func (endpoints *Endpoints) Infos() (v services.EndpointInfos) {
+	endpoints.lock.RLock()
+	defer endpoints.lock.RUnlock()
+	if endpoints.length == 0 {
+		return
+	}
+	for _, value := range endpoints.values {
+		for _, ep := range value.values {
+			v = append(v, ep.info)
+		}
+	}
 	return
 }

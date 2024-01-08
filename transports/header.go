@@ -73,8 +73,6 @@ var (
 	DeviceIdHeaderName                           = []byte("X-Fns-Device-Id")
 	DeviceIpHeaderName                           = []byte("X-Fns-Device-Ip")
 	ResponseRetryAfterHeaderName                 = []byte("Retry-After")
-	ResponseTimingAllowOriginHeaderName          = []byte("Timing-Allow-Origin")
-	ResponseXFrameOptionsSameOriginHeaderName    = []byte("SAMEORIGIN")
 	UserHeaderNamePrefix                         = []byte("XU-")
 )
 
@@ -312,5 +310,35 @@ func GetAcceptEncodings(header Header) (encodings AcceptEncodings) {
 		return
 	}
 	sort.Sort(encodings)
+	return
+}
+
+func AddXU(header Header, name []byte, value []byte) {
+	if idx := bytes.Index(name, UserHeaderNamePrefix); idx < 0 {
+		name = append(UserHeaderNamePrefix, name...)
+	}
+	header.Add(name, value)
+}
+
+func SetXU(header Header, name []byte, value []byte) {
+	if idx := bytes.Index(name, UserHeaderNamePrefix); idx < 0 {
+		name = append(UserHeaderNamePrefix, name...)
+	}
+	header.Set(name, value)
+}
+
+func GetXU(header Header, name []byte) (value []byte) {
+	if idx := bytes.Index(name, UserHeaderNamePrefix); idx < 0 {
+		name = append(UserHeaderNamePrefix, name...)
+	}
+	value = header.Get(name)
+	return
+}
+
+func ValuesXU(header Header, name []byte) (value [][]byte) {
+	if idx := bytes.Index(name, UserHeaderNamePrefix); idx < 0 {
+		name = append(UserHeaderNamePrefix, name...)
+	}
+	value = header.Values(name)
 	return
 }

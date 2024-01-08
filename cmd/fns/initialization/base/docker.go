@@ -43,7 +43,7 @@ COPY . .
 
 RUN mkdir /dist \
     && go generate \
-    && go build -ldflags "-X main.Version=${VERSION}" -o /dist/fapp \
+    && go build -ldflags "-s -w -X main.Version=${VERSION}" -o /dist/fapp \
     && cp -r configs /dist/configs
 
 

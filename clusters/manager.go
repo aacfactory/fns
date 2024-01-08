@@ -40,18 +40,18 @@ import (
 
 func NewManager(id string, version versions.Version, address string, cluster Cluster, local services.EndpointsManager, worker workers.Workers, log logs.Logger, dialer transports.Dialer, signature signatures.Signature) ClusterEndpointsManager {
 	v := &Manager{
-		id:            id,
-		version:       version,
-		address:       address,
-		log:           log.With("cluster", "endpoints"),
-		cluster:       cluster,
-		local:         local,
-		worker:        worker,
-		dialer:        dialer,
-		signature:     signature,
-		registrations: make(Registrations, 0, 1),
-		infos:         nil,
-		locker:        sync.RWMutex{},
+		id:        id,
+		version:   version,
+		address:   address,
+		log:       log.With("cluster", "endpoints"),
+		cluster:   cluster,
+		local:     local,
+		worker:    worker,
+		dialer:    dialer,
+		signature: signature,
+		registration: &Registration{
+			values: sync.Map{},
+		},
 	}
 	return v
 }
@@ -62,19 +62,16 @@ type ClusterEndpointsManager interface {
 }
 
 type Manager struct {
-	id             string
-	version        versions.Version
-	address        string
-	log            logs.Logger
-	cluster        Cluster
-	local          services.EndpointsManager
-	worker         workers.Workers
-	dialer         transports.Dialer
-	signature      signatures.Signature
-	registrations  Registrations
-	infos          services.EndpointInfos
-	locker         sync.RWMutex
-	attachedEvents []chan NodeEvent
+	id           string
+	version      versions.Version
+	address      string
+	log          logs.Logger
+	cluster      Cluster
+	local        services.EndpointsManager
+	worker       workers.Workers
+	dialer       transports.Dialer
+	signature    signatures.Signature
+	registration *Registration
 }
 
 func (manager *Manager) Add(service services.Service) (err error) {
@@ -101,45 +98,43 @@ func (manager *Manager) Add(service services.Service) (err error) {
 }
 
 func (manager *Manager) Info() (infos services.EndpointInfos) {
-	manager.locker.RLock()
-	infos = manager.infos
-	manager.locker.RUnlock()
+	infos = manager.registration.Infos()
+	if infos == nil {
+		infos = make(services.EndpointInfos, 0)
+	}
+	local := manager.local.Info()
+	infos = append(infos, local...)
+	sort.Sort(infos)
 	return
 }
 
 func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName []byte, options ...services.EndpointGetOption) (address string, internal bool, has bool) {
-	local, localed := manager.local.Get(ctx, endpoint, options...)
-	if localed {
-		if local.Internal() {
-			return
-		}
+	local, inLocal := manager.local.Get(ctx, endpoint, options...)
+	if inLocal {
 		fnNameString := bytex.ToString(fnName)
 		for _, fn := range local.Functions() {
 			if fn.Name() == fnNameString {
+				address = manager.address
 				internal = fn.Internal()
 				has = true
 				return
 			}
 		}
 	}
-	manager.locker.RLock()
-	registration, found := manager.registrations.Get(endpoint)
-	if !found {
-		manager.locker.RUnlock()
-		return
-	}
+
 	if len(options) == 0 {
-		maxed, exist := registration.MaxOne()
-		if !exist {
-			manager.locker.RUnlock()
+		matched := manager.registration.MaxOne(endpoint)
+		if matched == nil {
 			return
 		}
-		address = maxed.Address()
-		internal = maxed.Internal()
-		has = true
-		manager.locker.RUnlock()
+		if fn, hasFn := matched.Functions().Find(fnName); hasFn {
+			address = matched.Address()
+			internal = fn.Internal()
+			has = true
+		}
 		return
 	}
+
 	opt := services.EndpointGetOptions{}
 	for _, option := range options {
 		option(&opt)
@@ -147,59 +142,64 @@ func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName [
 
 	interval, hasVersion := opt.Versions().Get(endpoint)
 	if hasVersion {
-		matched, exist := registration.Range(interval)
-		if !exist {
-			manager.locker.RUnlock()
+		matched := manager.registration.Range(endpoint, interval)
+		if matched == nil {
 			return
 		}
-		address = matched.Address()
-		internal = matched.Internal()
-		has = true
-		manager.locker.RUnlock()
+		if fn, hasFn := matched.Functions().Find(fnName); hasFn {
+			address = matched.Address()
+			internal = fn.Internal()
+			has = true
+		}
 		return
 	}
-	manager.locker.RUnlock()
+	if endpointId := opt.Id(); len(endpointId) > 0 {
+		matched := manager.registration.Get(endpoint, endpointId)
+		if matched == nil {
+			return
+		}
+		if fn, hasFn := matched.Functions().Find(fnName); hasFn {
+			address = matched.Address()
+			internal = fn.Internal()
+			has = true
+		}
+		return
+	}
 	return
 }
 
 func (manager *Manager) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
-	local, localed := manager.local.Get(ctx, name, options...)
-	if localed {
+	local, inLocal := manager.local.Get(ctx, name, options...)
+	if inLocal {
 		endpoint = local
 		has = true
 		return
 	}
-	manager.locker.RLock()
-	registration, found := manager.registrations.Get(name)
-	if !found {
-		manager.locker.RUnlock()
-		return
-	}
+
 	if len(options) == 0 {
-		endpoint, has = registration.MaxOne()
-		manager.locker.RUnlock()
+		endpoint = manager.registration.MaxOne(name)
+		has = endpoint != nil
 		return
 	}
 	opt := services.EndpointGetOptions{}
 	for _, option := range options {
 		option(&opt)
 	}
+
 	if eid := opt.Id(); len(eid) > 0 {
-		endpoint, has = registration.Get(eid)
-		manager.locker.RUnlock()
+		endpoint = manager.registration.Get(name, eid)
+		has = endpoint != nil
 		return
 	}
 	if intervals := opt.Versions(); len(intervals) > 0 {
 		interval, matched := intervals.Get(name)
 		if !matched {
-			manager.locker.RUnlock()
 			return
 		}
-		endpoint, has = registration.Range(interval)
-		manager.locker.RUnlock()
+		endpoint = manager.registration.Range(name, interval)
+		has = endpoint != nil
 		return
 	}
-	manager.locker.RUnlock()
 	return
 }
 
@@ -287,12 +287,6 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 }
 
 func (manager *Manager) Listen(ctx context.Context) (err error) {
-	// copy info
-	manager.infos = manager.local.Info()
-	for i, info := range manager.infos {
-		info.Address = manager.address
-		manager.infos[i] = info
-	}
 	// watching
 	manager.watching()
 	// cluster.join
@@ -339,7 +333,7 @@ func (manager *Manager) watching() {
 			}
 			switch event.Kind {
 			case Add:
-				endpoints := make(Endpoints, 0, 1)
+				endpoints := make([]*Endpoint, 0, 1)
 				client, clientErr := eps.dialer.Dial(bytex.FromString(event.Node.Address))
 				if eps.log.DebugEnabled() {
 					succeed := "succeed"
@@ -385,7 +379,6 @@ func (manager *Manager) watching() {
 					break
 				}
 				// get document
-				infos := eps.local.Info()[:]
 				for _, endpoint := range event.Node.Services {
 					document, documentErr := endpoint.Document()
 					if documentErr != nil {
@@ -402,35 +395,18 @@ func (manager *Manager) watching() {
 						ep.AddFn(fnInfo.Name, fnInfo.Internal, fnInfo.Readonly)
 					}
 					endpoints = append(endpoints, ep)
-					infos = append(infos, ep.Info())
 				}
-				sort.Sort(infos)
-				eps.locker.Lock()
 				for _, endpoint := range endpoints {
-					eps.registrations = eps.registrations.Add(endpoint)
+					eps.registration.Add(endpoint)
 				}
-				eps.infos = infos
-				eps.locker.Unlock()
 				if eps.log.DebugEnabled() {
 					eps.log.Debug().With("cluster", "registrations").Message(fmt.Sprintf("fns: %s added", event.Node.Address))
 				}
 				break
 			case Remove:
-				eps.locker.Lock()
 				for _, endpoint := range event.Node.Services {
-					eps.registrations = eps.registrations.Remove(endpoint.Name, event.Node.Id)
-					idx := -1
-					for i, info := range eps.infos {
-						if info.Id == event.Node.Id && info.Name == endpoint.Name {
-							idx = i
-							break
-						}
-					}
-					if idx != -1 {
-						eps.infos = append(eps.infos[:idx], eps.infos[idx+1:]...)
-					}
+					eps.registration.Remove(endpoint.Name, event.Node.Id)
 				}
-				eps.locker.Unlock()
 				break
 			default:
 				break

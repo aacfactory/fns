@@ -20,174 +20,81 @@ package clusters
 import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/versions"
-	"sort"
+	"github.com/aacfactory/fns/services"
 	"sync"
-	"sync/atomic"
 )
 
 type Registration struct {
-	name   string
-	length int
-	pos    uint64
-	values Endpoints
-	lock   sync.RWMutex
+	values sync.Map
 }
 
-func (registration *Registration) Add(endpoint *Endpoint) {
-	_, exist := registration.Get(bytex.FromString(endpoint.id))
-	if exist {
-		return
-	}
-	registration.lock.Lock()
-	defer registration.lock.Unlock()
-	registration.values = append(registration.values, endpoint)
-	sort.Sort(registration.values)
-	registration.length = len(registration.values)
-}
-
-func (registration *Registration) Remove(id string) {
-	registration.lock.Lock()
-	defer registration.lock.Unlock()
-	n := -1
-	for i, value := range registration.values {
-		if value.id == id {
-			n = i
-			break
+func (r *Registration) Add(endpoint *Endpoint) {
+	key := endpoint.Name()
+	var eps *Endpoints
+	exist, has := r.values.Load(key)
+	if has {
+		eps = exist.(*Endpoints)
+	} else {
+		eps = &Endpoints{
+			values: nil,
+			length: 0,
+			lock:   sync.RWMutex{},
 		}
+		r.values.Store(key, eps)
 	}
-	if n == -1 {
-		return
-	}
-	registration.values = append(registration.values[:n], registration.values[n+1:]...)
-	registration.length = len(registration.values)
+	eps.Add(endpoint)
 }
 
-func (registration *Registration) Get(id []byte) (endpoint *Endpoint, has bool) {
-	registration.lock.RLock()
-	defer registration.lock.RUnlock()
-	if registration.length == 0 {
+func (r *Registration) Remove(name string, id string) {
+	exist, has := r.values.Load(name)
+	if !has {
 		return
 	}
-	idString := bytex.ToString(id)
-	for _, value := range registration.values {
-		if value.Running() {
-			if value.id == idString {
-				endpoint = value
-				has = endpoint.IsHealth()
-				break
-			}
-		}
+	eps := exist.(*Endpoints)
+	eps.Remove(bytex.FromString(id))
+}
+
+func (r *Registration) Get(name []byte, id []byte) (ep *Endpoint) {
+	key := bytex.ToString(name)
+	exist, has := r.values.Load(key)
+	if !has {
+		return
 	}
+	eps := exist.(*Endpoints)
+	ep = eps.Get(id)
 	return
 }
 
-func (registration *Registration) Range(interval versions.Interval) (endpoint *Endpoint, has bool) {
-	registration.lock.RLock()
-	defer registration.lock.RUnlock()
-	if registration.length == 0 {
+func (r *Registration) Range(name []byte, interval versions.Interval) (ep *Endpoint) {
+	key := bytex.ToString(name)
+	exist, has := r.values.Load(key)
+	if !has {
 		return
 	}
-	targets := make([]*Endpoint, 0, 1)
-	for _, value := range registration.values {
-		if value.Running() {
-			if interval.Accept(value.version) {
-				targets = append(targets, value)
-			}
-		}
-	}
-	n := uint64(len(targets))
-	idx := atomic.AddUint64(&registration.pos, 1)
-	for i := uint64(0); i < n; i++ {
-		pos := idx % n
-		endpoint = targets[pos]
-		if endpoint.IsHealth() {
-			has = true
-			break
-		}
-		idx++
-	}
+	eps := exist.(*Endpoints)
+	ep = eps.Range(interval)
 	return
 }
 
-func (registration *Registration) MaxOne() (endpoint *Endpoint, has bool) {
-	registration.lock.RLock()
-	defer registration.lock.RUnlock()
-	if registration.length == 0 {
+func (r *Registration) MaxOne(name []byte) (ep *Endpoint) {
+	key := bytex.ToString(name)
+	exist, has := r.values.Load(key)
+	if !has {
 		return
 	}
-	targets := make([]*Endpoint, 0, 1)
-	maxed := registration.values[registration.length-1]
-	if maxed.Running() {
-		targets = append(targets, maxed)
-	}
-	for i := registration.length - 2; i > -1; i-- {
-		prev := registration.values[i]
-		if prev.Running() {
-			if prev.version.Equals(maxed.version) {
-				targets = append(targets, prev)
-				continue
-			}
-		}
-		break
-	}
-	n := uint64(len(targets))
-	idx := atomic.AddUint64(&registration.pos, 1)
-	for i := uint64(0); i < n; i++ {
-		pos := idx % n
-		endpoint = targets[pos]
-		if endpoint.IsHealth() {
-			has = true
-			break
-		}
-		idx++
-	}
+	eps := exist.(*Endpoints)
+	ep = eps.MaxOne()
 	return
 }
 
-type Registrations []*Registration
-
-func (registrations Registrations) Get(name []byte) (v *Registration, has bool) {
-	ns := bytex.ToString(name)
-	for _, registration := range registrations {
-		if registration.length > 0 && registration.name == ns {
-			v = registration
-			has = true
-			break
+func (r *Registration) Infos() (v services.EndpointInfos) {
+	r.values.Range(func(key, value any) bool {
+		eps := value.(*Endpoints)
+		vv := eps.Infos()
+		if len(vv) > 0 {
+			v = append(v, vv...)
 		}
-	}
+		return true
+	})
 	return
-}
-
-func (registrations Registrations) Add(endpoint *Endpoint) Registrations {
-	name := endpoint.name
-	for i, named := range registrations {
-		if named.length > 0 && named.name == name {
-			named.Add(endpoint)
-			registrations[i] = named
-			return registrations
-		}
-	}
-	registration := Registration{
-		name:   name,
-		length: 0,
-		pos:    0,
-		values: make(Endpoints, 0, 1),
-		lock:   sync.RWMutex{},
-	}
-	registration.Add(endpoint)
-	return append(registrations, &registration)
-}
-
-func (registrations Registrations) Remove(name string, id string) Registrations {
-	for i, named := range registrations {
-		if named.length > 0 && named.name == name {
-			named.Remove(id)
-			if named.length == 0 {
-				return append(registrations[:i], registrations[i+1:]...)
-			}
-			registrations[i] = named
-			return registrations
-		}
-	}
-	return registrations
 }

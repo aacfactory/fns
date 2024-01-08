@@ -43,7 +43,7 @@ func parseFieldTag(tag string) (tags map[string]string) {
 		if i == 0 || i+1 >= len(tag) || tag[i] != ':' || tag[i+1] != '"' {
 			break
 		}
-		name := string(tag[:i])
+		name := tag[:i]
 		tag = tag[i+1:]
 
 		i = 1

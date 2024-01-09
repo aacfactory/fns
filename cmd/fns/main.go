@@ -28,9 +28,9 @@ import (
 
 const (
 	Name      = "FNS"
-	Version   = "v1.2.32"
+	Version   = "v1.2.33"
 	Usage     = "see COMMANDS"
-	Copyright = `Copyright 2021 Wang Min Xiang
+	Copyright = `Copyright 2024 Wang Min Xiang
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

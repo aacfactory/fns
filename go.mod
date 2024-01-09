@@ -14,7 +14,7 @@ require (
 	github.com/aacfactory/workers v1.8.4
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/charmbracelet/huh v0.2.3
-	github.com/charmbracelet/huh/spinner v0.0.0-20231222231237-4bd4657a36ac
+	github.com/charmbracelet/huh/spinner v0.0.0-20240108162426-58163e7b5b2f
 	github.com/dgrr/http2 v0.3.6-0.20231023141632-12370d352f5f
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/goccy/go-yaml v1.11.2
@@ -23,10 +23,10 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.51.0
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/crypto v0.17.0
+	golang.org/x/crypto v0.18.0
 	golang.org/x/mod v0.14.0
-	golang.org/x/sync v0.5.0
-	golang.org/x/sys v0.15.0
+	golang.org/x/sync v0.6.0
+	golang.org/x/sys v0.16.0
 )
 
 require (
@@ -77,7 +77,7 @@ require (
 	github.com/yuin/goldmark v1.6.0 // indirect
 	github.com/yuin/goldmark-emoji v1.0.2 // indirect
 	golang.org/x/net v0.19.0 // indirect
-	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/term v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.16.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect

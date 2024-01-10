@@ -146,7 +146,11 @@ func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
 			return
 		})
 		if fn.metric {
-			metrics.EndWithCause(r, err)
+			if err != nil {
+				metrics.EndWithCause(r, err)
+			} else {
+				metrics.End(r)
+			}
 		}
 	} else {
 		if fn.metric {
@@ -175,7 +179,11 @@ func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
 		// handle
 		v, err = fn.handler(r)
 		if fn.metric {
-			metrics.EndWithCause(r, err)
+			if err != nil {
+				metrics.EndWithCause(r, err)
+			} else {
+				metrics.End(r)
+			}
 		}
 	}
 	return

@@ -208,6 +208,7 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 		)
 		return
 	})
+	handler.group.Forget(groupKey)
 	if err != nil {
 		w.Failed(err)
 		return

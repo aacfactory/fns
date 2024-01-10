@@ -19,8 +19,9 @@ package objects_test
 
 import (
 	"fmt"
+	"github.com/aacfactory/avro"
+	"github.com/aacfactory/fns/commons/avros"
 	"github.com/aacfactory/fns/commons/objects"
-	"github.com/aacfactory/json"
 	"testing"
 	"time"
 )
@@ -29,7 +30,19 @@ func TestValue(t *testing.T) {
 	now := time.Now()
 	s := objects.New(now)
 	fmt.Println(objects.Value[time.Time](s))
-	p, _ := json.Marshal(now)
-	s = json.RawMessage(p)
+	p, _ := avro.Marshal(now)
+	s = avros.RawMessage(p)
 	fmt.Println(objects.Value[time.Time](s))
+}
+
+func TestBytes(t *testing.T) {
+	pp, _ := avro.Marshal([]byte("0123456789"))
+	r := raw(pp)
+	s := objects.New(r)
+	p, err := objects.Value[[]byte](s)
+	fmt.Println(string(p), err)
+}
+
+func raw(pp []byte) any {
+	return avros.RawMessage(pp)
 }

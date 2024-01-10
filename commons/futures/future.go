@@ -90,8 +90,11 @@ func New() (p Promise, f Future) {
 	return
 }
 
-func Release(p Promise, _ Future) {
-	pp, ok := p.(promise)
+func Release(f Future) {
+	if f == nil {
+		return
+	}
+	pp, ok := f.(future)
 	if ok {
 		pool.Put(pp.ch)
 	}
@@ -143,6 +146,23 @@ func (f future) Get(ctx context.Context) (r Result, err error) {
 		}
 		r = objects.New(data.val)
 		break
+	}
+	Release(f)
+	return
+}
+
+func Await(ctx context.Context, ff ...Future) (r []Result, err error) {
+	errs := errors.MakeErrors()
+	for _, f := range ff {
+		fr, fErr := f.Get(ctx)
+		if fErr != nil {
+			errs.Append(fErr)
+			continue
+		}
+		r = append(r, fr)
+	}
+	if len(errs) > 0 {
+		err = errs.Error()
 	}
 	return
 }

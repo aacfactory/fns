@@ -28,7 +28,6 @@ import (
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -138,6 +137,78 @@ func (manager *Manager) Get(_ context.Context, name []byte, options ...EndpointG
 	return
 }
 
+func (manager *Manager) RequestAsync(req Request) (future futures.Future, err error) {
+
+	var endpointGetOptions []EndpointGetOption
+	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
+		endpointGetOptions = make([]EndpointGetOption, 0, 1)
+		endpointGetOptions = append(endpointGetOptions, EndpointId(endpointId))
+	}
+	if acceptedVersions := req.Header().AcceptedVersions(); len(acceptedVersions) > 0 {
+		if endpointGetOptions == nil {
+			endpointGetOptions = make([]EndpointGetOption, 0, 1)
+		}
+		endpointGetOptions = append(endpointGetOptions, EndpointVersions(acceptedVersions))
+	}
+
+	name, fn := req.Fn()
+
+	endpoint, found := manager.Get(req, name, endpointGetOptions...)
+	if !found {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		return
+	}
+
+	function, hasFunction := endpoint.Functions().Find(fn)
+	if !hasFunction {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		return
+	}
+
+	// log
+	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	// components
+	service, ok := endpoint.(Service)
+	if ok {
+		components := service.Components()
+		if len(components) > 0 {
+			WithComponents(req, name, components)
+		}
+	}
+	// ctx <<<
+	// tracing
+	trace, hasTrace := tracings.Load(req)
+	if hasTrace {
+		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
+	}
+
+	// promise
+	var promise futures.Promise
+	promise, future = futures.New()
+	// dispatch
+	dispatched := manager.worker.Dispatch(req, FnTask{
+		Fn:      function,
+		Promise: promise,
+	})
+	if !dispatched {
+		// release futures
+		futures.Release(future)
+		future = nil
+		// tracing
+		if hasTrace {
+			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
+		}
+		err = errors.TooMayRequest("fns: too may request, try again later.").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+	}
+	return
+}
+
 func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error) {
 	// valid params
 	if len(name) == 0 {
@@ -151,77 +222,14 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 
 	// request
 	req := AcquireRequest(ctx, name, fn, param, options...)
+	defer ReleaseRequest(req)
 
-	var endpointGetOptions []EndpointGetOption
-	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
-		endpointGetOptions = make([]EndpointGetOption, 0, 1)
-		endpointGetOptions = append(endpointGetOptions, EndpointId(endpointId))
-	}
-	if acceptedVersions := req.Header().AcceptedVersions(); len(acceptedVersions) > 0 {
-		if endpointGetOptions == nil {
-			endpointGetOptions = make([]EndpointGetOption, 0, 1)
-		}
-		endpointGetOptions = append(endpointGetOptions, EndpointVersions(acceptedVersions))
-	}
-	endpoint, found := manager.Get(ctx, name, endpointGetOptions...)
-	if !found {
-		err = errors.NotFound("fns: endpoint was not found").
-			WithMeta("endpoint", bytex.ToString(name)).
-			WithMeta("fn", bytex.ToString(fn))
-		ReleaseRequest(req)
-		return
-	}
-
-	function, hasFunction := endpoint.Functions().Find(fn)
-	if !hasFunction {
-		err = errors.NotFound("fns: endpoint was not found").
-			WithMeta("endpoint", bytex.ToString(name)).
-			WithMeta("fn", bytex.ToString(fn))
-		ReleaseRequest(req)
-		return
-	}
-
-	// ctx >>>
-	ctx = req
-	// log
-	fLog.With(ctx, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
-	// components
-	service, ok := endpoint.(Service)
-	if ok {
-		components := service.Components()
-		if len(components) > 0 {
-			WithComponents(ctx, name, components)
-		}
-	}
-	// ctx <<<
-	// tracing
-	trace, hasTrace := tracings.Load(ctx)
-	if hasTrace {
-		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
-	}
-
-	// promise
-	promise, future := futures.New()
-	// dispatch
-	dispatched := manager.worker.Dispatch(ctx, FnTask{
-		Fn:      function,
-		Promise: promise,
-	})
-	if !dispatched {
-		// release futures
-		futures.Release(promise, future)
-		// tracing
-		if hasTrace {
-			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
-		}
-		err = errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
-			WithMeta("endpoint", bytex.ToString(name)).
-			WithMeta("fn", bytex.ToString(fn))
-		ReleaseRequest(req)
+	future, reqErr := manager.RequestAsync(req)
+	if reqErr != nil {
+		err = reqErr
 		return
 	}
 	response, err = future.Get(ctx)
-	ReleaseRequest(req)
 	return
 }
 

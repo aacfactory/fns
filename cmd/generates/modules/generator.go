@@ -73,26 +73,37 @@ func (generator *Generator) Generate(ctx context.Context, mod *sources.Module) (
 	process.Add("generates: writing", serviceCodeFileUnits...)
 	process.Add("generates: deploys", Unit(NewDeploysFile(filepath.ToSlash(filepath.Join(mod.Dir, "modules")), services)))
 
-	_ = spinner.New().Type(spinner.Dots).Title("Generating...").Action(func() {
+	if generator.verbose {
 		results := process.Start(ctx)
 		for {
 			result, ok := <-results
 			if !ok {
-				if generator.verbose {
-					fmt.Println("generates: generate finished")
-				}
+				fmt.Println("generates: generate finished")
 				break
 			}
-			if generator.verbose {
-				fmt.Println(result, "->", fmt.Sprintf("[%d/%d]", result.UnitNo, result.UnitNum), result.Data)
-			}
+			fmt.Println(result, "->", fmt.Sprintf("[%d/%d]", result.UnitNo, result.UnitNum), result.Data)
 			if result.Error != nil {
 				err = result.Error
 				_ = process.Abort(1 * time.Second)
 				return
 			}
 		}
-	}).Run()
+	} else {
+		_ = spinner.New().Type(spinner.Dots).Title("Generating...").Action(func() {
+			results := process.Start(ctx)
+			for {
+				result, ok := <-results
+				if !ok {
+					break
+				}
+				if result.Error != nil {
+					err = result.Error
+					_ = process.Abort(1 * time.Second)
+					return
+				}
+			}
+		}).Run()
+	}
 
 	return
 }

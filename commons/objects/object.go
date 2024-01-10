@@ -19,9 +19,7 @@ package objects
 
 import (
 	"fmt"
-	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
-	"github.com/aacfactory/json"
 	"reflect"
 )
 
@@ -41,7 +39,6 @@ func New(src interface{}) Object {
 type Object interface {
 	Valid() (ok bool)
 	Unmarshal(dst any) (err error)
-	Marshal() (p []byte, err error)
 	Value() (v any)
 }
 
@@ -99,31 +96,6 @@ func (obj object) Unmarshal(dst interface{}) (err error) {
 		return
 	}
 
-	// bytes
-	bytes, isBytes := obj.value.([]byte)
-	if isBytes {
-		isBytesDst := dpv.Elem().Type().Kind() == reflect.Slice && dpv.Elem().Type().Elem().Kind() == reflect.Uint8
-		if isBytesDst {
-			dpv.Elem().Set(reflect.ValueOf(bytes))
-			return
-		}
-		if json.Validate(bytes) {
-			err = json.Unmarshal(bytes, dst)
-			if err != nil {
-				err = errors.Warning("fns: unmarshal object failed").WithCause(err)
-				return
-			}
-			return
-		} else {
-			err = avro.Unmarshal(bytes, dst)
-			if err != nil {
-				err = errors.Warning("fns: unmarshal object failed").WithCause(err)
-				return
-			}
-			return
-		}
-	}
-
 	// copy
 	sv := reflect.ValueOf(obj.value)
 	st := sv.Type()
@@ -154,21 +126,6 @@ func (obj object) Unmarshal(dst interface{}) (err error) {
 		}
 	}
 	err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not matched"))
-	return
-}
-
-func (obj object) Marshal() (p []byte, err error) {
-	v, ok := obj.value.(Object)
-	if ok {
-		p, err = v.Marshal()
-		return
-	}
-	bytes, isBytes := obj.value.([]byte)
-	if isBytes && json.Validate(bytes) {
-		p = bytes
-		return
-	}
-	p, err = json.Marshal(obj.value)
 	return
 }
 

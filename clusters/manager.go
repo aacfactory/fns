@@ -32,7 +32,6 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
-	"net/http"
 	"sort"
 	"sync"
 	"time"
@@ -203,20 +202,7 @@ func (manager *Manager) Get(ctx context.Context, name []byte, options ...service
 	return
 }
 
-func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...services.RequestOption) (response services.Response, err error) {
-	// valid params
-	if len(name) == 0 {
-		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
-		return
-	}
-	if len(fn) == 0 {
-		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
-		return
-	}
-
-	// request
-	req := services.AcquireRequest(ctx, name, fn, param, options...)
-
+func (manager *Manager) RequestAsync(req services.Request) (future futures.Future, err error) {
 	var endpointGetOptions []services.EndpointGetOption
 	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
 		endpointGetOptions = make([]services.EndpointGetOption, 0, 1)
@@ -228,12 +214,14 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		}
 		endpointGetOptions = append(endpointGetOptions, services.EndpointVersions(acceptedVersions))
 	}
-	endpoint, found := manager.Get(ctx, name, endpointGetOptions...)
+
+	name, fn := req.Fn()
+
+	endpoint, found := manager.Get(req, name, endpointGetOptions...)
 	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
 			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
-		services.ReleaseRequest(req)
 		return
 	}
 
@@ -242,7 +230,6 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		err = errors.NotFound("fns: endpoint was not found").
 			WithMeta("endpoint", bytex.ToString(name)).
 			WithMeta("fn", bytex.ToString(fn))
-		services.ReleaseRequest(req)
 		return
 	}
 
@@ -259,30 +246,54 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	// ctx <<<
 
 	// tracing
-	trace, hasTrace := tracings.Load(ctx)
+	trace, hasTrace := tracings.Load(req)
 	if hasTrace {
 		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
 	}
 	// promise
-	promise, future := futures.New()
+	var promise futures.Promise
+	promise, future = futures.New()
 	// dispatch
 	dispatched := manager.worker.Dispatch(req, services.FnTask{
 		Fn:      function,
 		Promise: promise,
 	})
 	if !dispatched {
+		// release futures
+		futures.Release(future)
+		future = nil
 		// tracing
 		if hasTrace {
 			trace.Finish("succeed", "false", "cause", "***TOO MANY REQUEST***")
 		}
-		promise.Failed(
-			errors.New(http.StatusTooManyRequests, "***TOO MANY REQUEST***", "fns: too may request, try again later.").
-				WithMeta("endpoint", bytex.ToString(name)).
-				WithMeta("fn", bytex.ToString(fn)),
-		)
+		err = errors.TooMayRequest("fns: too may request, try again later.").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
 	}
-	response, err = future.Get(req)
-	services.ReleaseRequest(req)
+	return
+}
+
+func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...services.RequestOption) (response services.Response, err error) {
+	// valid params
+	if len(name) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
+		return
+	}
+	if len(fn) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
+		return
+	}
+
+	// request
+	req := services.AcquireRequest(ctx, name, fn, param, options...)
+	defer services.ReleaseRequest(req)
+
+	future, reqErr := manager.RequestAsync(req)
+	if reqErr != nil {
+		err = reqErr
+		return
+	}
+	response, err = future.Get(ctx)
 	return
 }
 

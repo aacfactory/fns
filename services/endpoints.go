@@ -18,6 +18,7 @@
 package services
 
 import (
+	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/services/documents"
@@ -128,7 +129,8 @@ func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 type Endpoints interface {
 	Info() (infos EndpointInfos)
 	Get(ctx context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
-	Request(ctx context.Context, name []byte, fn []byte, param interface{}, options ...RequestOption) (response Response, err error)
+	RequestAsync(req Request) (future futures.Future, err error)
+	Request(ctx context.Context, name []byte, fn []byte, param any, options ...RequestOption) (response Response, err error)
 }
 
 type Services []Service

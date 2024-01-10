@@ -120,6 +120,48 @@ type Request interface {
 	Param() (param Param)
 }
 
+func NewRequest(ctx context.Context, service []byte, fn []byte, param interface{}, options ...RequestOption) (v Request) {
+	opt := &RequestOptions{
+		header: Header{},
+	}
+	if options != nil && len(options) > 0 {
+		for _, option := range options {
+			option(opt)
+		}
+	}
+	if len(opt.header.processId) == 0 {
+		opt.header.processId = uid.Bytes()
+	}
+	parent, hasParent := TryLoadRequest(ctx)
+	if hasParent {
+		header := parent.Header()
+		if len(opt.header.requestId) == 0 && len(header.requestId) > 0 {
+			opt.header.requestId = header.requestId
+		}
+		if len(opt.header.deviceId) == 0 && len(header.deviceId) > 0 {
+			opt.header.deviceId = header.deviceId
+		}
+		if len(opt.header.deviceIp) == 0 && len(header.deviceIp) > 0 {
+			opt.header.deviceIp = header.deviceIp
+		}
+		if len(opt.header.token) == 0 && len(header.token) > 0 {
+			opt.header.token = header.token
+		}
+		if len(opt.header.acceptedVersions) == 0 && len(header.acceptedVersions) > 0 {
+			opt.header.acceptedVersions = header.acceptedVersions
+		}
+		opt.header.internal = true
+	}
+	r := new(request)
+	r.Context = context.Wrap(ctx)
+	r.header = opt.header
+	r.service = service
+	r.fn = fn
+	r.param = NewParam(param)
+	v = r
+	return
+}
+
 func AcquireRequest(ctx context.Context, service []byte, fn []byte, param interface{}, options ...RequestOption) (v Request) {
 	opt := &RequestOptions{
 		header: Header{},

@@ -215,7 +215,7 @@ func (handler *endpointsHandler) Handle(w transports.ResponseWriter, r transport
 	response := v.(Response)
 
 	if response.Valid() {
-		w.Succeed(response)
+		w.Succeed(response.Value())
 	} else {
 		w.Succeed(nil)
 	}

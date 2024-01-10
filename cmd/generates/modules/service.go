@@ -201,6 +201,7 @@ func (service *Service) loadFunctions() (err error) {
 				return
 			}
 			proxyIdent := cases.Camel().Format(nameAtoms)
+			proxyAsyncIdent := fmt.Sprintf("%sAsync", proxyIdent)
 			constIdent := fmt.Sprintf("_%sFnName", ident)
 			handlerIdent := fmt.Sprintf("_%s", ident)
 			annotations, parseAnnotationsErr := sources.ParseAnnotations(doc)
@@ -222,6 +223,7 @@ func (service *Service) loadFunctions() (err error) {
 				Ident:           ident,
 				VarIdent:        constIdent,
 				ProxyIdent:      proxyIdent,
+				ProxyAsyncIdent: proxyAsyncIdent,
 				HandlerIdent:    handlerIdent,
 				Annotations:     annotations,
 				Param:           nil,

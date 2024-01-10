@@ -60,6 +60,7 @@ type Function struct {
 	Ident           string
 	VarIdent        string
 	ProxyIdent      string
+	ProxyAsyncIdent string
 	HandlerIdent    string
 	Annotations     sources.Annotations
 	Param           *FunctionField
@@ -162,12 +163,12 @@ func (f *Function) Cache() (cmd string, ttl string, has bool) {
 		has = true
 		break
 	case "set":
-		if len(anno.Params[0]) == 1 {
+		if len(anno.Params) == 1 {
 			ttl = "10"
 			has = true
 			break
 		}
-		ttl = anno.Params[0]
+		ttl = anno.Params[1]
 		sec, ttlErr := strconv.Atoi(ttl)
 		if ttlErr != nil {
 			ttl = "10"
@@ -185,12 +186,12 @@ func (f *Function) Cache() (cmd string, ttl string, has bool) {
 		has = true
 		break
 	case "get-set":
-		if len(anno.Params[0]) == 1 {
+		if len(anno.Params) == 1 {
 			ttl = "10"
 			has = true
 			break
 		}
-		ttl = anno.Params[0]
+		ttl = anno.Params[1]
 		sec, ttlErr := strconv.Atoi(ttl)
 		if ttlErr != nil {
 			ttl = "10"

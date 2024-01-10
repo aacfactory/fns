@@ -34,11 +34,6 @@ func (raw RawMessage) Unmarshal(dst any) (err error) {
 	return
 }
 
-func (raw RawMessage) Marshal() (p []byte, err error) {
-	p = raw
-	return
-}
-
 func (raw RawMessage) Value() (v any) {
 	v = raw
 	return

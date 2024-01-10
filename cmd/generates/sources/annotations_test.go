@@ -39,7 +39,7 @@ func TestParseAnnotations(t *testing.T) {
 @auth
 @permission
 @sql:tx name
-@cache get set`
+@cache get-set 10`
 	annos, err := sources.ParseAnnotations(s)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("%+v", err))

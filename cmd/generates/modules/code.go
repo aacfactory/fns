@@ -869,7 +869,7 @@ func (s *ServiceFile) functionHandlerCode(ctx context.Context, function *Functio
 		}
 	}
 	// return
-	body.Tab().Token("return").Line()
+	body.Tab().Token("return")
 	handler.Body(body)
 	// body <<<
 

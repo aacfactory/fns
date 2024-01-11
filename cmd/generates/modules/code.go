@@ -516,27 +516,6 @@ func (s *ServiceFile) functionProxyAsyncCode(ctx context.Context, function *Func
 		}
 		proxy.AddParam("param", param)
 	}
-	var result gcg.Code = nil
-	if function.Result != nil {
-		if s.service.Path == function.Result.Type.Path {
-			result = gcg.Ident(function.Result.Type.Name)
-		} else {
-			pkg, hasPKG := s.service.Imports.Path(function.Result.Type.Path)
-			if !hasPKG {
-				err = errors.Warning("modules: make function proxy code failed").
-					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
-					WithMeta("function", function.Name()).
-					WithCause(errors.Warning("import of result was not found").WithMeta("path", function.Result.Type.Path))
-				return
-			}
-			if pkg.Alias == "" {
-				result = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Result.Type.Name)
-			} else {
-				result = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Result.Type.Name)
-			}
-		}
-		proxy.AddResult("result", result)
-	}
 	proxy.AddResult("future", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/commons/futures"), "Future"))
 	proxy.AddResult("err", gcg.Ident("error"))
 	// body >>>

@@ -27,6 +27,7 @@ import (
 type Promise interface {
 	Succeed(v interface{})
 	Failed(err error)
+	Close()
 }
 
 type Result interface {
@@ -38,15 +39,7 @@ type Future interface {
 }
 
 var (
-	pool = sync.Pool{
-		New: func() any {
-			return &sch{
-				locker: new(sync.Mutex),
-				ch:     make(chan value, 1),
-				closed: false,
-			}
-		},
-	}
+	pool = sync.Pool{}
 )
 
 type sch struct {
@@ -67,10 +60,9 @@ func (s *sch) send(v value) {
 
 func (s *sch) destroy() {
 	s.locker.Lock()
-	s.closed = true
-	close(s.ch)
-	if len(s.ch) > 0 {
-		<-s.ch
+	if !s.closed {
+		s.closed = true
+		close(s.ch)
 	}
 	s.locker.Unlock()
 }
@@ -80,7 +72,17 @@ func (s *sch) get() <-chan value {
 }
 
 func New() (p Promise, f Future) {
-	ch := pool.Get().(*sch)
+	var ch *sch
+	cached := pool.Get()
+	if cached == nil {
+		ch = &sch{
+			locker: new(sync.Mutex),
+			ch:     make(chan value, 1),
+			closed: false,
+		}
+	} else {
+		ch = cached.(*sch)
+	}
 	p = promise{
 		ch: ch,
 	}
@@ -90,14 +92,8 @@ func New() (p Promise, f Future) {
 	return
 }
 
-func Release(f Future) {
-	if f == nil {
-		return
-	}
-	pp, ok := f.(future)
-	if ok {
-		pool.Put(pp.ch)
-	}
+func ReleaseUnused(p Promise) {
+	pool.Put(p.(promise).ch)
 }
 
 type value struct {
@@ -113,6 +109,7 @@ func (p promise) Succeed(v interface{}) {
 	p.ch.send(value{
 		val: v,
 	})
+	//p.Close()
 }
 
 func (p promise) Failed(err error) {
@@ -122,6 +119,11 @@ func (p promise) Failed(err error) {
 	p.ch.send(value{
 		err: err,
 	})
+	//p.Close()
+}
+
+func (p promise) Close() {
+	p.ch.destroy()
 }
 
 type future struct {
@@ -147,7 +149,6 @@ func (f future) Get(ctx context.Context) (r Result, err error) {
 		r = objects.New(data.val)
 		break
 	}
-	Release(f)
 	return
 }
 

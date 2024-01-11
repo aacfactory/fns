@@ -39,6 +39,14 @@ func Wrap(ctx context.Context) Context {
 	}
 }
 
+func Fork(ctx context.Context) Context {
+	return &context_{
+		Context: ctx,
+		users:   make(Entries, 0, 1),
+		locals:  make(Entries, 0, 1),
+	}
+}
+
 func TODO() Context {
 	return Wrap(context.TODO())
 }

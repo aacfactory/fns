@@ -259,8 +259,8 @@ func (manager *Manager) RequestAsync(req services.Request) (future futures.Futur
 		Promise: promise,
 	})
 	if !dispatched {
-		// release futures
-		futures.Release(future)
+		// release promise
+		futures.ReleaseUnused(promise)
 		future = nil
 		// tracing
 		if hasTrace {

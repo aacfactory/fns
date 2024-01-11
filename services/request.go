@@ -153,7 +153,7 @@ func NewRequest(ctx context.Context, service []byte, fn []byte, param interface{
 		opt.header.internal = true
 	}
 	r := new(request)
-	r.Context = context.Wrap(ctx)
+	r.Context = context.Fork(ctx)
 	r.header = opt.header
 	r.service = service
 	r.fn = fn
@@ -215,7 +215,7 @@ func ReleaseRequest(r Request) {
 	if !ok {
 		return
 	}
-	context.Release(req)
+	context.Release(req.Context)
 	req.Context = nil
 	requestPool.Put(req)
 }

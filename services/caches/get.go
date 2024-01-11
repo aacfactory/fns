@@ -39,6 +39,7 @@ func Load(ctx context.Context, param any, value any) (has bool, err error) {
 			err = errors.Warning("fns: get cache failed").WithCause(err)
 			return
 		}
+		has = true
 	}
 	return
 }
@@ -77,12 +78,12 @@ func Get(ctx context.Context, param any) (p []byte, has bool, err error) {
 }
 
 type getFnParam struct {
-	Key string `json:"key"`
+	Key string `json:"key" avro:"key"`
 }
 
 type getResult struct {
-	Has   bool   `json:"has"`
-	Value []byte `json:"value"`
+	Has   bool   `json:"has" avro:"has"`
+	Value []byte `json:"value" avro:"value"`
 }
 
 type getFn struct {

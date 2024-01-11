@@ -74,7 +74,11 @@ var Command = &cli.Command{
 			err = errors.Warning("fns: init fns project failed").WithCause(writeErr).WithMeta("dir", projectDir).WithMeta("path", projectPath)
 			return
 		}
-		fmt.Println("fns: project has been initialized, please run `go mod tidy` to fetch requires and run `go generate` to generate source files!")
+		if work {
+			fmt.Println("fns: project has been initialized, please run `go work sync` and `go mod tidy` to fetch requires and run `go generate` to generate source files!")
+		} else {
+			fmt.Println("fns: project has been initialized, please run `go mod tidy` to fetch requires and run `go generate` to generate source files!")
+		}
 		return
 	},
 }

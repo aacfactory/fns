@@ -29,7 +29,7 @@ import (
 var Command = &cli.Command{
 	Name:        "init",
 	Aliases:     nil,
-	Usage:       "fns init --mod={mod} {project dir}",
+	Usage:       "fns init --mod={mod} --img={docker image name} --work={true} {project dir}",
 	Description: "init fns project",
 	ArgsUsage:   "",
 	Category:    "",
@@ -37,8 +37,14 @@ var Command = &cli.Command{
 		&cli.StringFlag{
 			Name:     "mod",
 			Aliases:  []string{"m"},
-			Required: false,
+			Required: true,
 			Usage:    "project go mod path",
+		},
+		&cli.BoolFlag{
+			Name:     "work",
+			Aliases:  []string{"w"},
+			Required: false,
+			Usage:    "use go work",
 		},
 		&cli.StringFlag{
 			Name:     "img",
@@ -62,17 +68,8 @@ var Command = &cli.Command{
 		projectDir = filepath.ToSlash(projectDir)
 		projectPath := strings.TrimSpace(ctx.String("mod"))
 		img := strings.TrimSpace(ctx.String("img"))
-		if projectPath == "" {
-			// huh
-			if err = useForm(); err != nil {
-				err = errors.Warning("fns: init fns project failed").WithCause(err).WithMeta("dir", projectDir)
-				return
-			}
-			projectPath = modPath
-			img = dockerImageName
-			return
-		}
-		writeErr := base.Write(ctx.Context, projectPath, img, projectDir)
+		work := ctx.Bool("work")
+		writeErr := base.Write(ctx.Context, projectPath, img, work, projectDir)
 		if writeErr != nil {
 			err = errors.Warning("fns: init fns project failed").WithCause(writeErr).WithMeta("dir", projectDir).WithMeta("path", projectPath)
 			return

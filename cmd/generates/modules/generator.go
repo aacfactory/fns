@@ -23,7 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/generates/processes"
 	"github.com/aacfactory/fns/cmd/generates/sources"
-	"github.com/charmbracelet/huh/spinner"
+	"github.com/aacfactory/fns/cmd/generates/spinner"
 	"path/filepath"
 	"time"
 )
@@ -89,21 +89,25 @@ func (generator *Generator) Generate(ctx context.Context, mod *sources.Module) (
 			}
 		}
 	} else {
-		_ = spinner.New().Type(spinner.Dots).Title("Generating...").Action(func() {
-			results := process.Start(ctx)
-			for {
-				result, ok := <-results
-				if !ok {
-					break
-				}
-				if result.Error != nil {
-					err = result.Error
-					_ = process.Abort(1 * time.Second)
-					return
-				}
+		sp := spinner.New(
+			spinner.CharSets[11], 100*time.Millisecond,
+			spinner.WithSuffix("  generating..."),
+			spinner.WithColor("fgGreen"),
+		)
+		sp.Start()
+		results := process.Start(ctx)
+		for {
+			result, ok := <-results
+			if !ok {
+				break
 			}
-		}).Run()
+			if result.Error != nil {
+				err = result.Error
+				_ = process.Abort(1 * time.Second)
+				break
+			}
+		}
+		sp.Stop()
 	}
-
 	return
 }

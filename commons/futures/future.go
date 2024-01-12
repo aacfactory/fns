@@ -25,7 +25,7 @@ import (
 )
 
 type Promise interface {
-	Succeed(v interface{})
+	Succeed(v any)
 	Failed(err error)
 	Close()
 }
@@ -35,7 +35,7 @@ type Result interface {
 }
 
 type Future interface {
-	Get(ctx context.Context) (result Result, err error)
+	Await(ctx context.Context) (result Result, err error)
 }
 
 var (
@@ -105,11 +105,10 @@ type promise struct {
 	ch *sch
 }
 
-func (p promise) Succeed(v interface{}) {
+func (p promise) Succeed(v any) {
 	p.ch.send(value{
 		val: v,
 	})
-	//p.Close()
 }
 
 func (p promise) Failed(err error) {
@@ -119,7 +118,6 @@ func (p promise) Failed(err error) {
 	p.ch.send(value{
 		err: err,
 	})
-	//p.Close()
 }
 
 func (p promise) Close() {
@@ -130,7 +128,7 @@ type future struct {
 	ch *sch
 }
 
-func (f future) Get(ctx context.Context) (r Result, err error) {
+func (f future) Await(ctx context.Context) (r Result, err error) {
 	select {
 	case <-ctx.Done():
 		f.ch.destroy()
@@ -152,18 +150,14 @@ func (f future) Get(ctx context.Context) (r Result, err error) {
 	return
 }
 
-func Await(ctx context.Context, ff ...Future) (r []Result, err error) {
-	errs := errors.MakeErrors()
+func Await(ctx context.Context, ff ...Future) (r []any) {
 	for _, f := range ff {
-		fr, fErr := f.Get(ctx)
+		fr, fErr := f.Await(ctx)
 		if fErr != nil {
-			errs.Append(fErr)
+			r = append(r, fErr)
 			continue
 		}
 		r = append(r, fr)
-	}
-	if len(errs) > 0 {
-		err = errs.Error()
 	}
 	return
 }

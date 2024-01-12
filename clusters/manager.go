@@ -174,7 +174,6 @@ func (manager *Manager) Get(ctx context.Context, name []byte, options ...service
 		has = true
 		return
 	}
-
 	if len(options) == 0 {
 		endpoint = manager.registration.MaxOne(name)
 		has = endpoint != nil
@@ -202,7 +201,19 @@ func (manager *Manager) Get(ctx context.Context, name []byte, options ...service
 	return
 }
 
-func (manager *Manager) RequestAsync(req services.Request) (future futures.Future, err error) {
+func (manager *Manager) RequestAsync(ctx context.Context, name []byte, fn []byte, param any, options ...services.RequestOption) (future futures.Future, err error) {
+	// valid params
+	if len(name) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
+		return
+	}
+	if len(fn) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
+		return
+	}
+	// request
+	req := services.NewRequest(ctx, name, fn, param, options...)
+	// get endpoint
 	var endpointGetOptions []services.EndpointGetOption
 	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
 		endpointGetOptions = make([]services.EndpointGetOption, 0, 1)
@@ -214,9 +225,6 @@ func (manager *Manager) RequestAsync(req services.Request) (future futures.Futur
 		}
 		endpointGetOptions = append(endpointGetOptions, services.EndpointVersions(acceptedVersions))
 	}
-
-	name, fn := req.Fn()
-
 	endpoint, found := manager.Get(req, name, endpointGetOptions...)
 	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
@@ -224,7 +232,7 @@ func (manager *Manager) RequestAsync(req services.Request) (future futures.Futur
 			WithMeta("fn", bytex.ToString(fn))
 		return
 	}
-
+	// get fn
 	function, hasFunction := endpoint.Functions().Find(fn)
 	if !hasFunction {
 		err = errors.NotFound("fns: endpoint was not found").
@@ -232,7 +240,6 @@ func (manager *Manager) RequestAsync(req services.Request) (future futures.Futur
 			WithMeta("fn", bytex.ToString(fn))
 		return
 	}
-
 	// log
 	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
@@ -243,8 +250,6 @@ func (manager *Manager) RequestAsync(req services.Request) (future futures.Futur
 			services.WithComponents(req, name, components)
 		}
 	}
-	// ctx <<<
-
 	// tracing
 	trace, hasTrace := tracings.Load(req)
 	if hasTrace {
@@ -287,13 +292,63 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 	// request
 	req := services.AcquireRequest(ctx, name, fn, param, options...)
 	defer services.ReleaseRequest(req)
-
-	future, reqErr := manager.RequestAsync(req)
-	if reqErr != nil {
-		err = reqErr
+	// get endpoint
+	var endpointGetOptions []services.EndpointGetOption
+	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
+		endpointGetOptions = make([]services.EndpointGetOption, 0, 1)
+		endpointGetOptions = append(endpointGetOptions, services.EndpointId(endpointId))
+	}
+	if acceptedVersions := req.Header().AcceptedVersions(); len(acceptedVersions) > 0 {
+		if endpointGetOptions == nil {
+			endpointGetOptions = make([]services.EndpointGetOption, 0, 1)
+		}
+		endpointGetOptions = append(endpointGetOptions, services.EndpointVersions(acceptedVersions))
+	}
+	endpoint, found := manager.Get(req, name, endpointGetOptions...)
+	if !found {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
 		return
 	}
-	response, err = future.Get(ctx)
+	// get fn
+	function, hasFunction := endpoint.Functions().Find(fn)
+	if !hasFunction {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		return
+	}
+	// log
+	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	// components
+	service, ok := endpoint.(services.Service)
+	if ok {
+		components := service.Components()
+		if len(components) > 0 {
+			services.WithComponents(req, name, components)
+		}
+	}
+	// tracing
+	trace, hasTrace := tracings.Load(req)
+	if hasTrace {
+		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
+		trace.Waited()
+	}
+	// handle
+	result, handleErr := function.Handle(req)
+	if handleErr != nil {
+		codeErr := errors.Wrap(handleErr).WithMeta("endpoint", bytex.ToString(name)).WithMeta("fn", bytex.ToString(fn))
+		if hasTrace {
+			trace.Finish("succeed", "false", "cause", codeErr.Name())
+		}
+		err = codeErr
+		return
+	}
+	if hasTrace {
+		trace.Finish("succeed", "true")
+	}
+	response = services.NewResponse(result)
 	return
 }
 

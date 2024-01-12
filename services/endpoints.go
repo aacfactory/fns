@@ -129,7 +129,7 @@ func EndpointVersions(requestVersions versions.Intervals) EndpointGetOption {
 type Endpoints interface {
 	Info() (infos EndpointInfos)
 	Get(ctx context.Context, name []byte, options ...EndpointGetOption) (endpoint Endpoint, has bool)
-	RequestAsync(req Request) (future futures.Future, err error)
+	RequestAsync(ctx context.Context, name []byte, fn []byte, param any, options ...RequestOption) (future futures.Future, err error)
 	Request(ctx context.Context, name []byte, fn []byte, param any, options ...RequestOption) (response Response, err error)
 }
 

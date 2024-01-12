@@ -137,8 +137,19 @@ func (manager *Manager) Get(_ context.Context, name []byte, options ...EndpointG
 	return
 }
 
-func (manager *Manager) RequestAsync(req Request) (future futures.Future, err error) {
-
+func (manager *Manager) RequestAsync(ctx context.Context, name []byte, fn []byte, param any, options ...RequestOption) (future futures.Future, err error) {
+	// valid params
+	if len(name) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("name is nil"))
+		return
+	}
+	if len(fn) == 0 {
+		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
+		return
+	}
+	// request
+	req := NewRequest(ctx, name, fn, param, options...)
+	// get endpoint
 	var endpointGetOptions []EndpointGetOption
 	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
 		endpointGetOptions = make([]EndpointGetOption, 0, 1)
@@ -150,9 +161,6 @@ func (manager *Manager) RequestAsync(req Request) (future futures.Future, err er
 		}
 		endpointGetOptions = append(endpointGetOptions, EndpointVersions(acceptedVersions))
 	}
-
-	name, fn := req.Fn()
-
 	endpoint, found := manager.Get(req, name, endpointGetOptions...)
 	if !found {
 		err = errors.NotFound("fns: endpoint was not found").
@@ -160,7 +168,7 @@ func (manager *Manager) RequestAsync(req Request) (future futures.Future, err er
 			WithMeta("fn", bytex.ToString(fn))
 		return
 	}
-
+	// get fn
 	function, hasFunction := endpoint.Functions().Find(fn)
 	if !hasFunction {
 		err = errors.NotFound("fns: endpoint was not found").
@@ -168,7 +176,6 @@ func (manager *Manager) RequestAsync(req Request) (future futures.Future, err er
 			WithMeta("fn", bytex.ToString(fn))
 		return
 	}
-
 	// log
 	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
@@ -179,13 +186,11 @@ func (manager *Manager) RequestAsync(req Request) (future futures.Future, err er
 			WithComponents(req, name, components)
 		}
 	}
-	// ctx <<<
 	// tracing
 	trace, hasTrace := tracings.Load(req)
 	if hasTrace {
 		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
 	}
-
 	// promise
 	var promise futures.Promise
 	promise, future = futures.New()
@@ -219,17 +224,66 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		err = errors.Warning("fns: endpoints handle request failed").WithCause(fmt.Errorf("fn is nil"))
 		return
 	}
-
 	// request
 	req := AcquireRequest(ctx, name, fn, param, options...)
 	defer ReleaseRequest(req)
-
-	future, reqErr := manager.RequestAsync(req)
-	if reqErr != nil {
-		err = reqErr
+	// get endpoint
+	var endpointGetOptions []EndpointGetOption
+	if endpointId := req.Header().EndpointId(); len(endpointId) > 0 {
+		endpointGetOptions = make([]EndpointGetOption, 0, 1)
+		endpointGetOptions = append(endpointGetOptions, EndpointId(endpointId))
+	}
+	if acceptedVersions := req.Header().AcceptedVersions(); len(acceptedVersions) > 0 {
+		if endpointGetOptions == nil {
+			endpointGetOptions = make([]EndpointGetOption, 0, 1)
+		}
+		endpointGetOptions = append(endpointGetOptions, EndpointVersions(acceptedVersions))
+	}
+	endpoint, found := manager.Get(req, name, endpointGetOptions...)
+	if !found {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
 		return
 	}
-	response, err = future.Get(ctx)
+	// get fn
+	function, hasFunction := endpoint.Functions().Find(fn)
+	if !hasFunction {
+		err = errors.NotFound("fns: endpoint was not found").
+			WithMeta("endpoint", bytex.ToString(name)).
+			WithMeta("fn", bytex.ToString(fn))
+		return
+	}
+	// log
+	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	// components
+	service, ok := endpoint.(Service)
+	if ok {
+		components := service.Components()
+		if len(components) > 0 {
+			WithComponents(req, name, components)
+		}
+	}
+	// tracing
+	trace, hasTrace := tracings.Load(req)
+	if hasTrace {
+		trace.Begin(req.Header().ProcessId(), name, fn, "scope", "local")
+		trace.Waited()
+	}
+	// handle
+	result, handleErr := function.Handle(req)
+	if handleErr != nil {
+		codeErr := errors.Wrap(handleErr).WithMeta("endpoint", bytex.ToString(name)).WithMeta("fn", bytex.ToString(fn))
+		if hasTrace {
+			trace.Finish("succeed", "false", "cause", codeErr.Name())
+		}
+		err = codeErr
+		return
+	}
+	if hasTrace {
+		trace.Finish("succeed", "true")
+	}
+	response = NewResponse(result)
 	return
 }
 

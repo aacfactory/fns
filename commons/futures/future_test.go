@@ -35,7 +35,7 @@ func TestNew(t *testing.T) {
 	}(wg, p)
 
 	wg.Wait()
-	r, err := f.Get(context.TODO())
+	r, err := f.Await(context.TODO())
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -50,6 +50,6 @@ func BenchmarkNew(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p, f := futures.New()
 		p.Succeed(1)
-		_, _ = f.Get(context.TODO())
+		_, _ = f.Await(context.TODO())
 	}
 }

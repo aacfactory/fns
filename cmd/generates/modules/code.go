@@ -516,6 +516,26 @@ func (s *ServiceFile) functionProxyAsyncCode(ctx context.Context, function *Func
 		}
 		proxy.AddParam("param", param)
 	}
+	var result gcg.Code = nil
+	if function.Result != nil {
+		if s.service.Path == function.Result.Type.Path {
+			result = gcg.Ident(function.Result.Type.Name)
+		} else {
+			pkg, hasPKG := s.service.Imports.Path(function.Result.Type.Path)
+			if !hasPKG {
+				err = errors.Warning("modules: make function proxy code failed").
+					WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+					WithMeta("function", function.Name()).
+					WithCause(errors.Warning("import of result was not found").WithMeta("path", function.Result.Type.Path))
+				return
+			}
+			if pkg.Alias == "" {
+				result = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Result.Type.Name)
+			} else {
+				result = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Result.Type.Name)
+			}
+		}
+	}
 	proxy.AddResult("future", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/commons/futures"), "Future"))
 	proxy.AddResult("err", gcg.Ident("error"))
 	// body >>>
@@ -534,17 +554,37 @@ func (s *ServiceFile) functionProxyAsyncCode(ctx context.Context, function *Func
 				body.Tab().Token("}").Line()
 			}
 		}
+		// cache
+		cacheCmd, _, hasCache := function.Cache()
+		if hasCache && function.Result != nil {
+			if cacheCmd == "get" || cacheCmd == "get-set" {
+				body.Tab().Token("// cache get").Line()
+				body.Tab().Tab().Token("cached := ").Add(result).Token("{}").Line()
+				body.Tab().Tab().Token("cacheExist, cacheGetErr := caches.Load(ctx, param, &cached)").Line()
+				body.Tab().Token("if cacheGetErr != nil {").Line()
+				body.Tab().Tab().Token("log := logs.Load(ctx)", gcg.NewPackage("github.com/aacfactory/fns/logs")).Line()
+				body.Tab().Tab().Token("if log.WarnEnabled() {").Line()
+				body.Tab().Tab().Tab().Token("log.Warn().Cause(cacheGetErr).With(\"fns\", \"caches\").Message(\"fns: get cache failed\")").Line()
+				body.Tab().Tab().Token("}").Line()
+				body.Tab().Token("}").Line()
+				body.Tab().Token("if cacheExist {").Line()
+				body.Tab().Tab().Token("var promise futures.Promise").Line()
+				body.Tab().Tab().Token("promise, future = futures.New()").Line()
+				body.Tab().Tab().Token("promise.Succeed(services.NewResponse(cached))").Line()
+				body.Tab().Tab().Token("return").Line()
+				body.Tab().Token("}").Line()
+			}
+		}
 	}
 
 	// handle
 	body.Tab().Token("// handle").Line()
 	body.Tab().Token("eps := runtime.Endpoints(ctx)").Line()
 	if function.Param != nil {
-		body.Tab().Token(fmt.Sprintf("req := services.NewRequest(ctx, _endpointName, %s, param)", function.VarIdent)).Line()
+		body.Tab().Token(fmt.Sprintf("future, err = eps.RequestAsync(ctx, _endpointName, %s, param)", function.VarIdent)).Line()
 	} else {
-		body.Tab().Token(fmt.Sprintf("req := services.NewRequest(ctx, _endpointName, %s, nil)", function.VarIdent)).Line()
+		body.Tab().Token(fmt.Sprintf("future, err = eps.RequestAsync(ctx, _endpointName, %s, nil)", function.VarIdent)).Line()
 	}
-	body.Tab().Token("future, err = eps.RequestAsync(req)").Line()
 	// return
 	body.Tab().Token("return")
 	// body <<<

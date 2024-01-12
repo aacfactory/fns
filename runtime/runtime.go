@@ -92,10 +92,12 @@ func (rt *Runtime) Shared() shareds.Shared {
 }
 
 func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {
-	name := "[task]"
+	name := ""
 	named, ok := task.(workers.NamedTask)
 	if ok {
 		name = named.Name()
+	} else {
+		name = "[task]"
 	}
 	fLog.With(ctx, rt.log.With("task", name))
 	With(ctx, rt)
@@ -103,10 +105,12 @@ func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {
 }
 
 func (rt *Runtime) Execute(ctx context.Context, task workers.Task) {
-	name := "[task]"
+	name := ""
 	named, ok := task.(workers.NamedTask)
 	if ok {
 		name = named.Name()
+	} else {
+		name = "[task]"
 	}
 	fLog.With(ctx, rt.log.With("task", name))
 	With(ctx, rt)

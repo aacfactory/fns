@@ -276,11 +276,11 @@ func (endpoints *Endpoints) MaxOne() (ep *Endpoint) {
 	return
 }
 
-func (endpoints *Endpoints) Get(id []byte) (ep *Endpoint) {
+func (endpoints *Endpoints) Get(id []byte) *Endpoint {
 	endpoints.lock.RLock()
 	defer endpoints.lock.RUnlock()
 	if endpoints.length == 0 {
-		return
+		return nil
 	}
 	for _, value := range endpoints.values {
 		target := value.Get(id)
@@ -288,18 +288,18 @@ func (endpoints *Endpoints) Get(id []byte) (ep *Endpoint) {
 			continue
 		}
 		if target.Running() && target.IsHealth() {
-			ep = target
+			return target
 		}
-		return
+		return nil
 	}
-	return
+	return nil
 }
 
-func (endpoints *Endpoints) Range(interval versions.Interval) (ep *Endpoint) {
+func (endpoints *Endpoints) Range(interval versions.Interval) *Endpoint {
 	endpoints.lock.RLock()
 	defer endpoints.lock.RUnlock()
 	if endpoints.length == 0 {
-		return
+		return nil
 	}
 	targets := make([]*Endpoint, 0, 1)
 	for _, value := range endpoints.values {
@@ -312,8 +312,7 @@ func (endpoints *Endpoints) Range(interval versions.Interval) (ep *Endpoint) {
 		}
 	}
 	pos := rand.Intn(len(targets))
-	ep = targets[pos]
-	return
+	return targets[pos]
 }
 
 func (endpoints *Endpoints) Infos() (v services.EndpointInfos) {

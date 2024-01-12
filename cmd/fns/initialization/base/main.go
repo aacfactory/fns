@@ -55,7 +55,6 @@ func (f *MainFile) Write(_ context.Context) (err error) {
 		content = `package main
 
 import (
-	"fmt"
 	"github.com/aacfactory/fns"
 	"github.com/aacfactory/fns/context"
 	"#path#/modules"
@@ -67,7 +66,7 @@ var (
 	Version = "v0.0.1"
 )
 
-//go:generate go run -mod=mod "#path#/internal/generator -v .
+//go:generate go run -mod=mod #path#/internal/generator -v .
 func main() {
 	// set system environment to make config be active, e.g.: export FNS-ACTIVE=local
 	fns.

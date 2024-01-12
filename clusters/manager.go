@@ -32,6 +32,7 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
+	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -123,7 +124,7 @@ func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName [
 
 	if len(options) == 0 {
 		matched := manager.registration.MaxOne(endpoint)
-		if matched == nil {
+		if matched == nil || reflect.ValueOf(matched).IsNil() {
 			return
 		}
 		if fn, hasFn := matched.Functions().Find(fnName); hasFn {
@@ -142,7 +143,7 @@ func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName [
 	interval, hasVersion := opt.Versions().Get(endpoint)
 	if hasVersion {
 		matched := manager.registration.Range(endpoint, interval)
-		if matched == nil {
+		if matched == nil || reflect.ValueOf(matched).IsNil() {
 			return
 		}
 		if fn, hasFn := matched.Functions().Find(fnName); hasFn {
@@ -154,7 +155,7 @@ func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName [
 	}
 	if endpointId := opt.Id(); len(endpointId) > 0 {
 		matched := manager.registration.Get(endpoint, endpointId)
-		if matched == nil {
+		if matched == nil || reflect.ValueOf(matched).IsNil() {
 			return
 		}
 		if fn, hasFn := matched.Functions().Find(fnName); hasFn {
@@ -168,34 +169,38 @@ func (manager *Manager) FnAddress(ctx context.Context, endpoint []byte, fnName [
 }
 
 func (manager *Manager) Get(ctx context.Context, name []byte, options ...services.EndpointGetOption) (endpoint services.Endpoint, has bool) {
+	// local
 	local, inLocal := manager.local.Get(ctx, name, options...)
 	if inLocal {
 		endpoint = local
 		has = true
 		return
 	}
+	// max one
 	if len(options) == 0 {
 		endpoint = manager.registration.MaxOne(name)
-		has = endpoint != nil
+		has = !reflect.ValueOf(endpoint).IsNil()
 		return
 	}
+
 	opt := services.EndpointGetOptions{}
 	for _, option := range options {
 		option(&opt)
 	}
-
+	// get by id
 	if eid := opt.Id(); len(eid) > 0 {
 		endpoint = manager.registration.Get(name, eid)
-		has = endpoint != nil
+		has = !reflect.ValueOf(endpoint).IsNil()
 		return
 	}
+	// get by intervals
 	if intervals := opt.Versions(); len(intervals) > 0 {
 		interval, matched := intervals.Get(name)
 		if !matched {
 			return
 		}
 		endpoint = manager.registration.Range(name, interval)
-		has = endpoint != nil
+		has = !reflect.ValueOf(endpoint).IsNil()
 		return
 	}
 	return

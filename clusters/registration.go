@@ -54,37 +54,34 @@ func (r *Registration) Remove(name string, id string) {
 	eps.Remove(bytex.FromString(id))
 }
 
-func (r *Registration) Get(name []byte, id []byte) (ep *Endpoint) {
+func (r *Registration) Get(name []byte, id []byte) *Endpoint {
 	key := bytex.ToString(name)
 	exist, has := r.values.Load(key)
 	if !has {
-		return
+		return nil
 	}
 	eps := exist.(*Endpoints)
-	ep = eps.Get(id)
-	return
+	return eps.Get(id)
 }
 
-func (r *Registration) Range(name []byte, interval versions.Interval) (ep *Endpoint) {
+func (r *Registration) Range(name []byte, interval versions.Interval) *Endpoint {
 	key := bytex.ToString(name)
 	exist, has := r.values.Load(key)
 	if !has {
-		return
+		return nil
 	}
 	eps := exist.(*Endpoints)
-	ep = eps.Range(interval)
-	return
+	return eps.Range(interval)
 }
 
-func (r *Registration) MaxOne(name []byte) (ep *Endpoint) {
+func (r *Registration) MaxOne(name []byte) *Endpoint {
 	key := bytex.ToString(name)
 	exist, has := r.values.Load(key)
 	if !has {
-		return
+		return nil
 	}
 	eps := exist.(*Endpoints)
-	ep = eps.MaxOne()
-	return
+	return eps.MaxOne()
 }
 
 func (r *Registration) Infos() (v services.EndpointInfos) {

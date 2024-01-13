@@ -18,6 +18,7 @@
 package clusters_test
 
 import (
+	"fmt"
 	"github.com/aacfactory/avro"
 	"github.com/aacfactory/fns/clusters"
 	"github.com/aacfactory/fns/commons/avros"
@@ -57,10 +58,10 @@ func TestResponseBody(t *testing.T) {
 		Id  string
 		Now time.Time
 	}
-	p, _ := avro.Marshal(Data{
+	p, _ := avro.Marshal([]Data{{
 		Id:  "id",
 		Now: time.Now(),
-	})
+	}})
 
 	rsb := clusters.ResponseBody{
 		Succeed:     true,
@@ -80,7 +81,7 @@ func TestResponseBody(t *testing.T) {
 		t.Error(decodeErr)
 		return
 	}
-	data := Data{}
+	data := make([]Data, 0)
 	decodeErr = avro.Unmarshal(rsb.Data, &data)
 	if decodeErr != nil {
 		t.Error(decodeErr)
@@ -88,9 +89,9 @@ func TestResponseBody(t *testing.T) {
 	}
 	t.Log(data)
 	t.Log(string(rsb.Attachments[0].Key), string(rsb.Attachments[0].Value))
-	d2, d2Err := services.ValueOfResponse[Data](avros.RawMessage(rsb.Data))
+	d2, d2Err := services.ValueOfResponse[[]Data](avros.RawMessage(rsb.Data))
 	if d2Err != nil {
-		t.Error(d2Err)
+		t.Error(fmt.Sprintf("%+v", d2Err))
 		return
 	}
 	t.Log(d2)

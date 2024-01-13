@@ -336,8 +336,29 @@ func (s *ServiceFile) serviceConstructCode(ctx context.Context) (code gcg.Code, 
 	body.Tab().Token("}").Line()
 
 	for _, function := range s.service.Functions {
+		result := gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/services/commons"), "NIL")
+		if function.Result != nil {
+			if s.service.Path == function.Result.Type.Path {
+				result = gcg.Ident(function.Result.Type.Name)
+			} else {
+				pkg, hasPKG := s.service.Imports.Path(function.Result.Type.Path)
+				if !hasPKG {
+					err = errors.Warning("modules: make function proxy code failed").
+						WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
+						WithMeta("function", function.Name()).
+						WithCause(errors.Warning("import of result was not found").WithMeta("path", function.Result.Type.Path))
+					return
+				}
+				if pkg.Alias == "" {
+					result = gcg.QualifiedIdent(gcg.NewPackage(pkg.Path), function.Result.Type.Name)
+				} else {
+					result = gcg.QualifiedIdent(gcg.NewPackageWithAlias(pkg.Path, pkg.Alias), function.Result.Type.Name)
+				}
+			}
+		}
 		body.Tab().Token("svc.AddFunction(")
-		body.Token(fmt.Sprintf("commons.NewFn(string(%s)", function.VarIdent))
+		body.Token("commons.NewFn[").Add(result).Token("](")
+		body.Token(fmt.Sprintf("string(%s)", function.VarIdent))
 		body.Token(fmt.Sprintf(", %v", function.Readonly()))
 		body.Token(fmt.Sprintf(", %v", function.Internal()))
 		body.Token(fmt.Sprintf(", %v", function.Authorization()))
@@ -841,6 +862,10 @@ func (s *ServiceFile) functionHandlerCode(ctx context.Context, function *Functio
 	} else {
 		body.Tab().Token(fmt.Sprintf("v, err = %s(ctx, param)", function.Ident)).Line()
 	}
+	body.Tab().Token("if err != nil {").Line()
+	body.Tab().Tab().Token("return").Line()
+	body.Tab().Token("}").Line()
+
 	// cache
 	cacheCmd, cacheTTL, hasCache := function.Cache()
 	if hasCache && function.Param != nil {

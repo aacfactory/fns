@@ -24,13 +24,22 @@ import (
 	"github.com/aacfactory/fns/services/authorizations"
 	"github.com/aacfactory/fns/services/metrics"
 	"github.com/aacfactory/fns/services/permissions"
+	"reflect"
 )
 
-func NewFn(name string, readonly bool, internal bool, authorized bool, permission bool, metric bool, barrier bool, handler FnHandler, middlewares ...FnHandlerMiddleware) services.Fn {
+var (
+	nilType = reflect.TypeOf(new(NIL))
+)
+
+type NIL struct{}
+
+// todo use options
+// add validate cache cache-control
+func NewFn[R any](name string, readonly bool, internal bool, authorized bool, permission bool, metric bool, barrier bool, handler FnHandler, middlewares ...FnHandlerMiddleware) services.Fn {
 	if len(middlewares) > 0 {
 		handler = FnHandlerMiddlewares(middlewares).Handler(handler)
 	}
-	return &Fn{
+	return &Fn[R]{
 		name:       name,
 		internal:   internal,
 		readonly:   readonly,
@@ -39,6 +48,7 @@ func NewFn(name string, readonly bool, internal bool, authorized bool, permissio
 		metric:     metric,
 		barrier:    barrier,
 		handler:    handler,
+		hasResult:  reflect.TypeOf(new(R)) != nilType,
 	}
 }
 
@@ -85,7 +95,7 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // zh: {zh_message}
 // en: {en_message}
 // <<<
-type Fn struct {
+type Fn[R any] struct {
 	name       string
 	internal   bool
 	readonly   bool
@@ -94,21 +104,22 @@ type Fn struct {
 	metric     bool
 	barrier    bool
 	handler    FnHandler
+	hasResult  bool
 }
 
-func (fn *Fn) Name() string {
+func (fn *Fn[R]) Name() string {
 	return fn.name
 }
 
-func (fn *Fn) Internal() bool {
+func (fn *Fn[R]) Internal() bool {
 	return fn.internal
 }
 
-func (fn *Fn) Readonly() bool {
+func (fn *Fn[R]) Readonly() bool {
 	return fn.readonly
 }
 
-func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
+func (fn *Fn[R]) Handle(r services.Request) (v interface{}, err error) {
 	if fn.internal && !r.Header().Internal() {
 		err = errors.NotAcceptable("fns: fn cannot be accessed externally")
 		return
@@ -126,7 +137,7 @@ func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
 		if fn.metric {
 			metrics.Begin(r)
 		}
-		v, err = runtime.Barrier(r, key, func() (result interface{}, err error) {
+		obj, doErr := runtime.Barrier(r, key, func() (result interface{}, err error) {
 			// authorization
 			if fn.authorized {
 				err = fn.verifyAuthorization(r)
@@ -145,6 +156,11 @@ func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
 			result, err = fn.handler(r)
 			return
 		})
+		if doErr == nil && fn.hasResult {
+			v, err = services.ValueOfResponse[R](obj)
+		} else {
+			err = doErr
+		}
 		if fn.metric {
 			if err != nil {
 				metrics.EndWithCause(r, err)
@@ -189,7 +205,7 @@ func (fn *Fn) Handle(r services.Request) (v interface{}, err error) {
 	return
 }
 
-func (fn *Fn) verifyAuthorization(r services.Request) (err error) {
+func (fn *Fn[R]) verifyAuthorization(r services.Request) (err error) {
 	authorization, has, loadErr := authorizations.Load(r)
 	if loadErr != nil {
 		err = authorizations.ErrUnauthorized.WithCause(loadErr)
@@ -220,7 +236,7 @@ func (fn *Fn) verifyAuthorization(r services.Request) (err error) {
 	return
 }
 
-func (fn *Fn) verifyPermission(r services.Request) (err error) {
+func (fn *Fn[R]) verifyPermission(r services.Request) (err error) {
 	err = permissions.EnforceContext(r)
 	return
 }

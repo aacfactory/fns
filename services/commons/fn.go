@@ -33,22 +33,35 @@ var (
 
 type NIL struct{}
 
+type FnOptions struct {
+	readonly      bool
+	internal      bool
+	deprecated    bool
+	authorization bool
+	permission    bool
+	cacheMod      []string
+	cacheControl  []string
+	metric        bool
+	barrier       bool
+}
+
 // todo use options
 // add validate cache cache-control
-func NewFn[R any](name string, readonly bool, internal bool, authorized bool, permission bool, metric bool, barrier bool, handler FnHandler, middlewares ...FnHandlerMiddleware) services.Fn {
+func NewFn[P any, R any](name string, readonly bool, internal bool, authorization bool, permission bool, metric bool, barrier bool, handler FnHandler, middlewares ...FnHandlerMiddleware) services.Fn {
 	if len(middlewares) > 0 {
 		handler = FnHandlerMiddlewares(middlewares).Handler(handler)
 	}
 	return &Fn[R]{
-		name:       name,
-		internal:   internal,
-		readonly:   readonly,
-		authorized: authorized,
-		permission: permission,
-		metric:     metric,
-		barrier:    barrier,
-		handler:    handler,
-		hasResult:  reflect.TypeOf(new(R)) != nilType,
+		name:          name,
+		internal:      internal,
+		readonly:      readonly,
+		authorization: authorization,
+		permission:    permission,
+		metric:        metric,
+		barrier:       barrier,
+		handler:       handler,
+		hasParam:      reflect.TypeOf(new(P)) != nilType,
+		hasResult:     reflect.TypeOf(new(R)) != nilType,
 	}
 }
 
@@ -78,8 +91,8 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // @authorization
 // @permission
 // @validation
-// @cache {command} {ttl}
-// @cache-control {options}
+// @cache {get} {set} {get-set} {remove} {ttl}
+// @cache-control {max-age=sec} {public=true} {must-revalidate} {proxy-revalidate}
 // @barrier
 // @metric
 // @middlewares >>>
@@ -96,15 +109,16 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // en: {en_message}
 // <<<
 type Fn[R any] struct {
-	name       string
-	internal   bool
-	readonly   bool
-	authorized bool
-	permission bool
-	metric     bool
-	barrier    bool
-	handler    FnHandler
-	hasResult  bool
+	name          string
+	internal      bool
+	readonly      bool
+	authorization bool
+	permission    bool
+	metric        bool
+	barrier       bool
+	handler       FnHandler
+	hasParam      bool
+	hasResult     bool
 }
 
 func (fn *Fn[R]) Name() string {
@@ -126,7 +140,7 @@ func (fn *Fn[R]) Handle(r services.Request) (v interface{}, err error) {
 	}
 	if fn.barrier {
 		var key []byte
-		if fn.authorized {
+		if fn.authorization {
 			key, err = services.HashRequest(r, services.HashRequestWithToken())
 		} else {
 			key, err = services.HashRequest(r)
@@ -139,7 +153,7 @@ func (fn *Fn[R]) Handle(r services.Request) (v interface{}, err error) {
 		}
 		obj, doErr := runtime.Barrier(r, key, func() (result interface{}, err error) {
 			// authorization
-			if fn.authorized {
+			if fn.authorization {
 				err = fn.verifyAuthorization(r)
 				if err != nil {
 					return
@@ -173,7 +187,7 @@ func (fn *Fn[R]) Handle(r services.Request) (v interface{}, err error) {
 			metrics.Begin(r)
 		}
 		// authorization
-		if fn.authorized {
+		if fn.authorization {
 			err = fn.verifyAuthorization(r)
 			if err != nil {
 				if fn.metric {

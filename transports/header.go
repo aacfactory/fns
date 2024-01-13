@@ -72,6 +72,7 @@ var (
 	HandleLatencyHeaderName                      = []byte("X-Fns-Handle-Latency")
 	DeviceIdHeaderName                           = []byte("X-Fns-Device-Id")
 	DeviceIpHeaderName                           = []byte("X-Fns-Device-Ip")
+	DeprecatedHeaderName                         = []byte("X-Fns-Deprecated")
 	ResponseRetryAfterHeaderName                 = []byte("Retry-After")
 	UserHeaderNamePrefix                         = []byte("XU-")
 )

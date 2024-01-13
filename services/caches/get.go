@@ -27,18 +27,20 @@ import (
 	"github.com/aacfactory/fns/services"
 )
 
-func Load(ctx context.Context, param any, value any) (has bool, err error) {
+func Load[E any](ctx context.Context, param any) (value E, has bool, err error) {
 	p, exist, getErr := Get(ctx, param)
 	if getErr != nil {
 		err = getErr
 		return
 	}
 	if exist {
-		err = avro.Unmarshal(p, value)
+		result := new(E)
+		err = avro.Unmarshal(p, result)
 		if err != nil {
 			err = errors.Warning("fns: get cache failed").WithCause(err)
 			return
 		}
+		value = *result
 		has = true
 	}
 	return

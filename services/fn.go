@@ -18,6 +18,8 @@
 package services
 
 import (
+	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/transports"
 	"sort"
 	"strings"
 	"unsafe"
@@ -126,4 +128,10 @@ func (f Fns) Find(name []byte) (v Fn, found bool) {
 		v = f[i]
 	}
 	return
+}
+
+func MarkDeprecated(ctx context.Context) {
+	if header, has := transports.TryLoadResponseHeader(ctx); has {
+		header.Set(transports.DeprecatedHeaderName, []byte{'t', 'r', 'u', 'e'})
+	}
 }

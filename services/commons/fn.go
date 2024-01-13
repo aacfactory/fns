@@ -18,13 +18,20 @@
 package commons
 
 import (
+	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/authorizations"
+	"github.com/aacfactory/fns/services/caches"
 	"github.com/aacfactory/fns/services/metrics"
 	"github.com/aacfactory/fns/services/permissions"
+	"github.com/aacfactory/fns/services/validators"
+	"github.com/aacfactory/fns/transports/middlewares/cachecontrol"
 	"reflect"
+	"strconv"
+	"time"
 )
 
 var (
@@ -34,34 +41,191 @@ var (
 type NIL struct{}
 
 type FnOptions struct {
-	readonly      bool
-	internal      bool
-	deprecated    bool
-	authorization bool
-	permission    bool
-	cacheMod      []string
-	cacheControl  []string
-	metric        bool
-	barrier       bool
+	readonly        bool
+	internal        bool
+	deprecated      bool
+	validation      bool
+	validationTitle string
+	authorization   bool
+	permission      bool
+	cacheCommand    string
+	cacheTTL        time.Duration
+	cacheControl    []cachecontrol.MakeOption
+	metric          bool
+	barrier         bool
+	middlewares     []FnHandlerMiddleware
 }
 
-// todo use options
-// add validate cache cache-control
-func NewFn[P any, R any](name string, readonly bool, internal bool, authorization bool, permission bool, metric bool, barrier bool, handler FnHandler, middlewares ...FnHandlerMiddleware) services.Fn {
-	if len(middlewares) > 0 {
-		handler = FnHandlerMiddlewares(middlewares).Handler(handler)
+type FnOption func(opt *FnOptions) (err error)
+
+func Readonly() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.readonly = true
+		return
 	}
-	return &Fn[R]{
-		name:          name,
-		internal:      internal,
-		readonly:      readonly,
-		authorization: authorization,
-		permission:    permission,
-		metric:        metric,
-		barrier:       barrier,
-		handler:       handler,
-		hasParam:      reflect.TypeOf(new(P)) != nilType,
-		hasResult:     reflect.TypeOf(new(R)) != nilType,
+}
+
+func Internal() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.internal = true
+		return
+	}
+}
+
+func Deprecated() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.deprecated = true
+		return
+	}
+}
+
+func Validation(title string) FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.validation = true
+		if title == "" {
+			title = "invalid"
+		}
+		opt.validationTitle = title
+		return
+	}
+}
+
+func Authorization() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.authorization = true
+		return
+	}
+}
+
+func Permission() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.permission = true
+		return
+	}
+}
+
+func Metric() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.metric = true
+		return
+	}
+}
+
+func Barrier() FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.barrier = true
+		return
+	}
+}
+
+const (
+	GetCacheMod    = "get"
+	GetSetCacheMod = "get-set"
+	SetCacheMod    = "set"
+	RemoveCacheMod = "remove"
+)
+
+func Cache(mod string, param string) FnOption {
+	return func(opt *FnOptions) (err error) {
+		switch mod {
+		case GetCacheMod:
+			opt.cacheCommand = GetCacheMod
+			break
+		case GetSetCacheMod:
+			if param == "" {
+				param = "60"
+			}
+			sec, secErr := strconv.ParseInt(param, 10, 64)
+			if secErr != nil {
+				err = errors.Warning("invalid cache param")
+				break
+			}
+			if sec < 1 {
+				sec = 60
+			}
+			opt.cacheCommand = GetSetCacheMod
+			opt.cacheTTL = time.Duration(sec) * time.Second
+			break
+		case SetCacheMod:
+			if param == "" {
+				param = "60"
+			}
+			sec, secErr := strconv.ParseInt(param, 10, 64)
+			if secErr != nil {
+				err = errors.Warning("invalid cache param")
+				break
+			}
+			if sec < 1 {
+				sec = 60
+			}
+			opt.cacheCommand = SetCacheMod
+			opt.cacheTTL = time.Duration(sec) * time.Second
+			break
+		case RemoveCacheMod:
+			opt.cacheCommand = RemoveCacheMod
+			break
+		default:
+			err = errors.Warning("invalid cache mod")
+			break
+		}
+		return
+	}
+}
+
+func CacheControl(maxAge int, public bool, mustRevalidate bool, proxyRevalidate bool) FnOption {
+	return func(opt *FnOptions) (err error) {
+		if maxAge > 0 {
+			opt.cacheControl = append(opt.cacheControl, cachecontrol.MaxAge(maxAge))
+			if public {
+				opt.cacheControl = append(opt.cacheControl, cachecontrol.Public())
+			}
+			if mustRevalidate {
+				opt.cacheControl = append(opt.cacheControl, cachecontrol.MustRevalidate())
+			}
+			if proxyRevalidate {
+				opt.cacheControl = append(opt.cacheControl, cachecontrol.ProxyRevalidate())
+			}
+		}
+		return
+	}
+}
+
+func Middleware(middlewares ...FnHandlerMiddleware) FnOption {
+	return func(opt *FnOptions) (err error) {
+		opt.middlewares = append(opt.middlewares, middlewares...)
+		return
+	}
+}
+
+func NewFn[P any, R any](name string, handler FnHandler, options ...FnOption) services.Fn {
+	opt := FnOptions{}
+	for _, option := range options {
+		if optErr := option(&opt); optErr != nil {
+			panic(fmt.Sprintf("%+v", errors.Warning("new fn failed").WithMeta("fn", name).WithCause(optErr)))
+			return nil
+		}
+	}
+	if len(opt.middlewares) > 0 {
+		handler = FnHandlerMiddlewares(opt.middlewares).Handler(handler)
+	}
+	return &Fn[P, R]{
+		name:                    name,
+		internal:                opt.internal,
+		readonly:                opt.readonly,
+		deprecated:              opt.deprecated,
+		validation:              opt.validation,
+		validationTitle:         opt.validationTitle,
+		authorization:           opt.authorization,
+		permission:              opt.permission,
+		metric:                  opt.metric,
+		barrier:                 opt.barrier,
+		cacheCommand:            opt.cacheCommand,
+		cacheTTL:                opt.cacheTTL,
+		cacheControl:            len(opt.cacheControl) > 0,
+		cacheControlMakeOptions: opt.cacheControl,
+		handler:                 handler,
+		hasParam:                reflect.TypeOf(new(P)) != nilType,
+		hasResult:               reflect.TypeOf(new(R)) != nilType,
 	}
 }
 
@@ -96,7 +260,7 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // @barrier
 // @metric
 // @middlewares >>>
-// {path}.{IdentName}
+// {path}.{Name}
 // ...
 // <<<
 // @title {title}
@@ -108,35 +272,45 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // zh: {zh_message}
 // en: {en_message}
 // <<<
-type Fn[R any] struct {
-	name          string
-	internal      bool
-	readonly      bool
-	authorization bool
-	permission    bool
-	metric        bool
-	barrier       bool
-	handler       FnHandler
-	hasParam      bool
-	hasResult     bool
+type Fn[P any, R any] struct {
+	name                    string
+	internal                bool
+	readonly                bool
+	deprecated              bool
+	authorization           bool
+	permission              bool
+	validation              bool
+	validationTitle         string
+	metric                  bool
+	barrier                 bool
+	cacheCommand            string
+	cacheTTL                time.Duration
+	cacheControl            bool
+	cacheControlMakeOptions []cachecontrol.MakeOption
+	handler                 FnHandler
+	hasParam                bool
+	hasResult               bool
 }
 
-func (fn *Fn[R]) Name() string {
+func (fn *Fn[P, R]) Name() string {
 	return fn.name
 }
 
-func (fn *Fn[R]) Internal() bool {
+func (fn *Fn[P, R]) Internal() bool {
 	return fn.internal
 }
 
-func (fn *Fn[R]) Readonly() bool {
+func (fn *Fn[P, R]) Readonly() bool {
 	return fn.readonly
 }
 
-func (fn *Fn[R]) Handle(r services.Request) (v interface{}, err error) {
+func (fn *Fn[P, R]) Handle(r services.Request) (v interface{}, err error) {
 	if fn.internal && !r.Header().Internal() {
 		err = errors.NotAcceptable("fns: fn cannot be accessed externally")
 		return
+	}
+	if fn.metric {
+		metrics.Begin(r)
 	}
 	if fn.barrier {
 		var key []byte
@@ -148,78 +322,123 @@ func (fn *Fn[R]) Handle(r services.Request) (v interface{}, err error) {
 		if err != nil {
 			return
 		}
-		if fn.metric {
-			metrics.Begin(r)
-		}
-		obj, doErr := runtime.Barrier(r, key, func() (result interface{}, err error) {
-			// authorization
-			if fn.authorization {
-				err = fn.verifyAuthorization(r)
-				if err != nil {
-					return
-				}
-			}
-			// permission
-			if fn.permission {
-				err = fn.verifyPermission(r)
-				if err != nil {
-					return
-				}
-			}
-			// handle
-			result, err = fn.handler(r)
+		resp, doErr := runtime.Barrier(r, key, func() (result interface{}, err error) {
+			result, err = fn.handle(r)
 			return
 		})
 		if doErr == nil && fn.hasResult {
-			v, err = services.ValueOfResponse[R](obj)
+			v, err = services.ValueOfResponse[R](resp)
 		} else {
 			err = doErr
 		}
-		if fn.metric {
-			if err != nil {
-				metrics.EndWithCause(r, err)
-			} else {
-				metrics.End(r)
-			}
-		}
 	} else {
-		if fn.metric {
-			metrics.Begin(r)
+		v, err = fn.handle(r)
+	}
+	if fn.metric {
+		if err != nil {
+			metrics.EndWithCause(r, err)
+		} else {
+			metrics.End(r)
 		}
-		// authorization
-		if fn.authorization {
-			err = fn.verifyAuthorization(r)
-			if err != nil {
-				if fn.metric {
-					metrics.EndWithCause(r, err)
-				}
+	}
+	// cache control
+	if fn.cacheControl && !reflect.ValueOf(v).IsNil() {
+		cachecontrol.Make(r, fn.cacheControlMakeOptions...)
+	}
+	// deprecated
+	if fn.deprecated {
+		services.MarkDeprecated(r)
+	}
+	return
+}
+
+func (fn *Fn[P, R]) handle(r services.Request) (v any, err error) {
+	var param P
+	paramScanned := false
+	// validation
+	if fn.hasParam {
+		if param, err = fn.param(r); err != nil {
+			return
+		}
+		paramScanned = true
+		if fn.validation {
+			if err = validators.ValidateWithErrorTitle(param, fn.validationTitle); err != nil {
 				return
 			}
 		}
-		// permission
-		if fn.permission {
-			err = fn.verifyPermission(r)
-			if err != nil {
-				if fn.metric {
-					metrics.EndWithCause(r, err)
-				}
+	}
+	// authorization
+	if fn.authorization {
+		err = fn.verifyAuthorization(r)
+		if err != nil {
+			return
+		}
+	}
+	// permission
+	if fn.permission {
+		if err = permissions.EnforceContext(r); err != nil {
+			return
+		}
+	}
+	// cache get or get-set
+	if fn.hasParam && (fn.cacheCommand == GetCacheMod || fn.cacheCommand == GetSetCacheMod) {
+		if !paramScanned {
+			if param, err = fn.param(r); err != nil {
 				return
 			}
 		}
-		// handle
-		v, err = fn.handler(r)
-		if fn.metric {
-			if err != nil {
-				metrics.EndWithCause(r, err)
-			} else {
-				metrics.End(r)
+		result, cached, cacheErr := caches.Load[R](r, param)
+		if cacheErr != nil {
+			log := logs.Load(r)
+			if log.WarnEnabled() {
+				log.Warn().Cause(cacheErr).With("fns", "caches").Message("fns: get cache failed")
 			}
+		}
+		if cached {
+			v = result
+			return
+		}
+	}
+	// handle
+	v, err = fn.handler(r)
+	// cache set or remove
+	if fn.hasParam && fn.cacheCommand != "" {
+		switch fn.cacheCommand {
+		case SetCacheMod, GetSetCacheMod:
+			if fn.hasResult {
+				if cacheErr := caches.Set(r, param, v, fn.cacheTTL); cacheErr != nil {
+					log := logs.Load(r)
+					if log.WarnEnabled() {
+						log.Warn().Cause(cacheErr).With("fns", "caches").Message("fns: set cache failed")
+					}
+				}
+			}
+			break
+		case RemoveCacheMod:
+			if cacheErr := caches.Remove(r, param); cacheErr != nil {
+				log := logs.Load(r)
+				if log.WarnEnabled() {
+					log.Warn().Cause(cacheErr).With("fns", "caches").Message("fns: set cache failed")
+				}
+			}
+			break
+		default:
+			break
 		}
 	}
 	return
 }
 
-func (fn *Fn[R]) verifyAuthorization(r services.Request) (err error) {
+func (fn *Fn[P, R]) param(r services.Request) (param P, err error) {
+	param, err = services.ValueOfParam[P](r.Param())
+	if err != nil {
+		err = errors.BadRequest("scan params failed").WithCause(err)
+		return
+	}
+	return
+}
+
+func (fn *Fn[P, R]) verifyAuthorization(r services.Request) (err error) {
 	authorization, has, loadErr := authorizations.Load(r)
 	if loadErr != nil {
 		err = authorizations.ErrUnauthorized.WithCause(loadErr)
@@ -247,10 +466,5 @@ func (fn *Fn[R]) verifyAuthorization(r services.Request) (err error) {
 		}
 		authorizations.With(r, authorization)
 	}
-	return
-}
-
-func (fn *Fn[R]) verifyPermission(r services.Request) (err error) {
-	err = permissions.EnforceContext(r)
 	return
 }

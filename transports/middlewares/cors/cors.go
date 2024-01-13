@@ -125,6 +125,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 		string(transports.RequestIdHeaderName), string(transports.HandleLatencyHeaderName),
 		string(transports.CacheControlHeaderName), string(transports.ETagHeaderName), string(transports.ClearSiteDataHeaderName), string(transports.AgeHeaderName),
 		string(transports.ResponseRetryAfterHeaderName), string(transports.SignatureHeaderName),
+		string(transports.DeprecatedHeaderName),
 	}
 	for _, header := range defaultExposedHeaders {
 		if !slices.Contains(config.ExposedHeaders, header) {

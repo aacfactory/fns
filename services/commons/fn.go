@@ -321,6 +321,7 @@ func (fn *Fn[P, R]) Handle(r services.Request) (v interface{}, err error) {
 }
 
 func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
+	log := logs.Load(r)
 	var param P
 	paramScanned := false
 	// validation
@@ -333,6 +334,9 @@ func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
 			if err = validators.ValidateWithErrorTitle(param, fn.validationTitle); err != nil {
 				return
 			}
+			if log.DebugEnabled() {
+				log.Debug().With("validation", true).Message("fns: fn param is valid")
+			}
 		}
 	}
 	// authorization
@@ -341,13 +345,20 @@ func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
 		if err != nil {
 			return
 		}
+		if log.DebugEnabled() {
+			log.Debug().With("authorization", true).Message("fns: fn authorization is valid")
+		}
 	}
 	// permission
 	if fn.permission {
 		if err = permissions.EnforceContext(r); err != nil {
 			return
 		}
+		if log.DebugEnabled() {
+			log.Debug().With("permission", true).Message("fns: fn permission is valid")
+		}
 	}
+
 	// cache get or get-set
 	if fn.hasParam && (fn.cacheCommand == GetCacheMod || fn.cacheCommand == GetSetCacheMod) {
 		if !paramScanned {
@@ -357,10 +368,12 @@ func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
 		}
 		result, cached, cacheErr := caches.Load[R](r, param)
 		if cacheErr != nil {
-			log := logs.Load(r)
 			if log.WarnEnabled() {
 				log.Warn().Cause(cacheErr).With("fns", "caches").Message("fns: get cache failed")
 			}
+		}
+		if log.DebugEnabled() {
+			log.Debug().With("cache-hit", cached).Message("fns: get fn result from cache")
 		}
 		if cached {
 			v = result
@@ -375,18 +388,24 @@ func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
 		case SetCacheMod, GetSetCacheMod:
 			if fn.hasResult {
 				if cacheErr := caches.Set(r, param, v, fn.cacheTTL); cacheErr != nil {
-					log := logs.Load(r)
 					if log.WarnEnabled() {
 						log.Warn().Cause(cacheErr).With("fns", "caches").Message("fns: set cache failed")
+					}
+				} else {
+					if log.DebugEnabled() {
+						log.Debug().With("cache-set", true).Message("fns: set fn result into cache succeed")
 					}
 				}
 			}
 			break
 		case RemoveCacheMod:
 			if cacheErr := caches.Remove(r, param); cacheErr != nil {
-				log := logs.Load(r)
 				if log.WarnEnabled() {
 					log.Warn().Cause(cacheErr).With("fns", "caches").Message("fns: set cache failed")
+				} else {
+					if log.DebugEnabled() {
+						log.Debug().With("cache-remove", true).Message("fns: remove fn result from cache succeed")
+					}
 				}
 			}
 			break

@@ -23,7 +23,7 @@ import (
 	"reflect"
 )
 
-func New(src interface{}) Object {
+func New(src any) Object {
 	if src == nil {
 		return object{}
 	}

@@ -56,7 +56,7 @@ func HttpTransportHandlerAdaptor(h transports.Handler, maxRequestBody int, write
 		w.Context = ctx
 		w.writer = writer
 		w.header = WrapHttpHeader(writer.Header())
-		w.result = transports.AcquireResultResponseWriter(writeTimeout, transports.GetAcceptEncodings(r.Header()))
+		w.result = transports.AcquireResultResponseWriter(writeTimeout, r.Header().Get(transports.ContentTypeHeaderName))
 
 		h.Handle(w, r)
 		w.result.Header().Foreach(func(key []byte, values [][]byte) {

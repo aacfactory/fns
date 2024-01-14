@@ -232,22 +232,25 @@ func (client *Client) Do(ctx context.Context, method []byte, path []byte, header
 		err = client.host.Do(req, resp)
 	}
 
-	fasthttp.ReleaseRequest(req)
-
 	if err != nil {
 		err = errors.Warning("fns: transport client do failed").
 			WithCause(err).
 			WithMeta("transport", transportName).WithMeta("method", bytex.ToString(method)).WithMeta("path", bytex.ToString(path))
+		fasthttp.ReleaseRequest(req)
 		fasthttp.ReleaseResponse(resp)
 		return
 	}
 
 	status = resp.StatusCode()
-	responseHeader = ResponseHeader{
-		&resp.Header,
-	}
+
+	responseHeader = transports.NewHeader()
+	resp.Header.VisitAll(func(key, value []byte) {
+		responseHeader.Add(key, value)
+	})
+
 	responseBody = resp.Body()
 
+	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 	return
 }

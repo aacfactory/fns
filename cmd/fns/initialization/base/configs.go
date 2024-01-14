@@ -134,7 +134,7 @@ func (f *ConfigFile) Write(_ context.Context) (err error) {
 	case "local":
 		config.Log = logs.Config{
 			Level:           logs.Debug,
-			Formatter:       logs.TextConsoleFormatter,
+			Formatter:       logs.TextColorfulConsoleFormatter,
 			Console:         logs.Stdout,
 			DisableConsole:  false,
 			Consumes:        0,

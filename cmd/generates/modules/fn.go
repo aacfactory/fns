@@ -120,6 +120,9 @@ func (f *Function) Validation() (title string, ok bool) {
 		return
 	}
 	title = anno.Params[0]
+	if title == "" {
+		title = "invalid"
+	}
 	ok = true
 	return
 }

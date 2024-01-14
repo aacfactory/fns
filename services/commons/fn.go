@@ -36,10 +36,8 @@ import (
 )
 
 var (
-	nilType = reflect.TypeOf(new(NIL))
+	emptyType = reflect.TypeOf(new(services.Empty))
 )
-
-type NIL struct{}
 
 type FnHandler[P any, R any] func(ctx context.Context, param P) (v R, err error)
 
@@ -216,8 +214,8 @@ func NewFn[P any, R any](name string, handler FnHandler[P, R], options ...FnOpti
 		cacheControl:            len(opt.cacheControl) > 0,
 		cacheControlMakeOptions: opt.cacheControl,
 		handler:                 handler,
-		hasParam:                reflect.TypeOf(new(P)) != nilType,
-		hasResult:               reflect.TypeOf(new(R)) != nilType,
+		hasParam:                reflect.TypeOf(new(P)) != emptyType,
+		hasResult:               reflect.TypeOf(new(R)) != emptyType,
 	}
 }
 
@@ -312,7 +310,7 @@ func (fn *Fn[P, R]) Handle(r services.Request) (v interface{}, err error) {
 		}
 	}
 	// cache control
-	if fn.cacheControl && !reflect.ValueOf(v).IsNil() {
+	if fn.cacheControl {
 		cachecontrol.Make(r, fn.cacheControlMakeOptions...)
 	}
 	// deprecated

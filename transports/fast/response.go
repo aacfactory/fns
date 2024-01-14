@@ -56,7 +56,7 @@ func (w *ResponseWriter) SetCookie(cookie *transports.Cookie) {
 }
 
 func (w *ResponseWriter) Header() transports.Header {
-	return ResponseHeader{
+	return &ResponseHeader{
 		&w.Context.Response.Header,
 	}
 }

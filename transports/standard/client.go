@@ -265,7 +265,6 @@ func (c *Client) Do(ctx context.Context, method []byte, path []byte, header tran
 	status = resp.StatusCode
 	responseHeader = WrapHttpHeader(resp.Header)
 	responseBody = bytex.FromString(b.String())
-
 	return
 }
 

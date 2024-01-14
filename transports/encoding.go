@@ -18,33 +18,22 @@
 package transports
 
 import (
+	"bytes"
 	"github.com/aacfactory/avro"
 	"github.com/aacfactory/json"
 )
 
 type Marshal func(v any) (p []byte, err error)
 
-func GetMarshaler(accepts AcceptEncodings) (v Marshal, contentType []byte) {
-	qualityOfAvro, hasAvro := accepts.Get(ContentTypeAvroHeaderValue)
-	qualityOfJson, hasJson := accepts.Get(ContentTypeJsonHeaderValue)
-	if hasAvro && !hasJson {
-		v = avro.Marshal
-		contentType = ContentTypeAvroHeaderValue
-		return
-	}
-	if hasJson && !hasAvro {
+func GetMarshaler(ct []byte) (v Marshal, contentType []byte) {
+	if len(ct) == 0 {
 		v = json.Marshal
 		contentType = ContentTypeJsonHeaderValue
 		return
 	}
-	if hasAvro && hasJson {
-		if qualityOfAvro < qualityOfJson {
-			v = json.Marshal
-			contentType = ContentTypeJsonHeaderValue
-		} else {
-			v = avro.Marshal
-			contentType = ContentTypeAvroHeaderValue
-		}
+	if bytes.Equal(ct, ContentTypeAvroHeaderValue) {
+		v = avro.Marshal
+		contentType = ContentTypeAvroHeaderValue
 		return
 	}
 	v = json.Marshal

@@ -50,12 +50,12 @@ func (h RequestHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	if fn == nil {
 		return
 	}
-	keys := h.ctx.Request.Header.PeekKeys()
-	if len(keys) == 0 {
-		return
-	}
+	keys := make([][]byte, 0)
+	h.ctx.Request.Header.VisitAll(func(key, value []byte) {
+		keys = append(keys, key)
+	})
 	for _, key := range keys {
-		fn(key, h.ctx.Request.Header.PeekAll(bytex.ToString(key)))
+		fn(key, h.Values(key))
 	}
 }
 
@@ -71,43 +71,43 @@ type ResponseHeader struct {
 	*fasthttp.ResponseHeader
 }
 
-func (h ResponseHeader) Add(key []byte, value []byte) {
+func (h *ResponseHeader) Add(key []byte, value []byte) {
 	h.ResponseHeader.AddBytesKV(key, value)
 }
 
-func (h ResponseHeader) Set(key []byte, value []byte) {
+func (h *ResponseHeader) Set(key []byte, value []byte) {
 	h.ResponseHeader.SetBytesKV(key, value)
 }
 
-func (h ResponseHeader) Get(key []byte) []byte {
+func (h *ResponseHeader) Get(key []byte) []byte {
 	return h.ResponseHeader.PeekBytes(key)
 }
 
-func (h ResponseHeader) Del(key []byte) {
+func (h *ResponseHeader) Del(key []byte) {
 	h.ResponseHeader.DelBytes(key)
 }
 
-func (h ResponseHeader) Values(key []byte) [][]byte {
+func (h *ResponseHeader) Values(key []byte) [][]byte {
 	return h.ResponseHeader.PeekAll(bytex.ToString(key))
 }
 
-func (h ResponseHeader) Foreach(fn func(key []byte, values [][]byte)) {
+func (h *ResponseHeader) Foreach(fn func(key []byte, values [][]byte)) {
 	if fn == nil {
 		return
 	}
-	keys := h.PeekKeys()
-	if len(keys) == 0 {
-		return
-	}
+	keys := make([][]byte, 0)
+	h.VisitAll(func(key, value []byte) {
+		keys = append(keys, key)
+	})
 	for _, key := range keys {
-		fn(key, h.ResponseHeader.PeekAll(bytex.ToString(key)))
+		fn(key, h.Values(key))
 	}
 }
 
-func (h ResponseHeader) Len() int {
+func (h *ResponseHeader) Len() int {
 	return h.ResponseHeader.Len()
 }
 
-func (h ResponseHeader) Reset() {
+func (h *ResponseHeader) Reset() {
 	h.ResponseHeader.Reset()
 }

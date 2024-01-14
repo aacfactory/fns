@@ -43,19 +43,19 @@ func handlerAdaptor(h transports.Handler, writeTimeout time.Duration) fasthttp.R
 		r := Request{
 			Context: c,
 		}
-		result := transports.AcquireResultResponseWriter(writeTimeout, transports.GetAcceptEncodings(r.Header()))
+		result := transports.AcquireResultResponseWriter(writeTimeout, r.Header().Get(transports.ContentTypeHeaderName))
 		w := ResponseWriter{
 			Context: c,
 			result:  result,
 		}
 
 		h.Handle(&w, &r)
+		ctx.SetStatusCode(w.Status())
 		w.result.Header().Foreach(func(key []byte, values [][]byte) {
 			for _, value := range values {
 				ctx.Response.Header.AddBytesKV(key, value)
 			}
 		})
-		ctx.SetStatusCode(w.Status())
 		if bodyLen := w.BodyLen(); bodyLen > 0 {
 			body := w.Body()
 			n := 0

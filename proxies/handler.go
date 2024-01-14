@@ -168,6 +168,7 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 		}
 		return
 	})
+	handler.group.Forget(groupKey)
 
 	if err != nil {
 		w.Failed(err)

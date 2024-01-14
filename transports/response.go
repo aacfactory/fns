@@ -59,7 +59,7 @@ var (
 	responseWriterPool = sync.Pool{}
 )
 
-func AcquireResultResponseWriter(timeout time.Duration, accepts AcceptEncodings) *ResultResponseWriter {
+func AcquireResultResponseWriter(timeout time.Duration, contentType []byte) *ResultResponseWriter {
 	deadline := time.Time{}
 	if timeout > 0 {
 		deadline = deadline.Add(timeout)
@@ -68,16 +68,16 @@ func AcquireResultResponseWriter(timeout time.Duration, accepts AcceptEncodings)
 	cached := responseWriterPool.Get()
 	if cached == nil {
 		return &ResultResponseWriter{
-			accepts:  accepts,
-			status:   0,
-			timeout:  timeout,
-			deadline: deadline,
-			header:   NewHeader(),
-			body:     buf,
+			contentType: contentType,
+			status:      0,
+			timeout:     timeout,
+			deadline:    deadline,
+			header:      NewHeader(),
+			body:        buf,
 		}
 	}
 	r := cached.(*ResultResponseWriter)
-	r.accepts = accepts
+	r.contentType = contentType
 	r.body = buf
 	r.timeout = timeout
 	r.deadline = deadline
@@ -87,7 +87,7 @@ func AcquireResultResponseWriter(timeout time.Duration, accepts AcceptEncodings)
 func ReleaseResultResponseWriter(w *ResultResponseWriter) {
 	bytebufferpool.Put(w.body)
 	w.header.Reset()
-	w.accepts = nil
+	w.contentType = nil
 	w.body = nil
 	w.status = 0
 	w.timeout = 0
@@ -96,12 +96,12 @@ func ReleaseResultResponseWriter(w *ResultResponseWriter) {
 }
 
 type ResultResponseWriter struct {
-	accepts  AcceptEncodings
-	status   int
-	timeout  time.Duration
-	deadline time.Time
-	header   Header
-	body     *bytebufferpool.ByteBuffer
+	contentType []byte
+	status      int
+	timeout     time.Duration
+	deadline    time.Time
+	header      Header
+	body        *bytebufferpool.ByteBuffer
 }
 
 func (w *ResultResponseWriter) Status() int {
@@ -138,7 +138,7 @@ func (w *ResultResponseWriter) Succeed(v interface{}) {
 		w.status = http.StatusOK
 		return
 	}
-	encoder, contentType := GetMarshaler(w.accepts)
+	encoder, contentType := GetMarshaler(w.contentType)
 	p, err := encoder(v)
 	if err != nil {
 		w.Failed(errors.Warning("fns: transport write succeed result failed").WithCause(err))
@@ -155,7 +155,7 @@ func (w *ResultResponseWriter) Failed(cause error) {
 		cause = errors.Warning("fns: error is lost")
 	}
 	err := errors.Wrap(cause)
-	encoder, contentType := GetMarshaler(w.accepts)
+	encoder, contentType := GetMarshaler(w.contentType)
 	body, bodyErr := encoder(err)
 	if bodyErr != nil {
 		w.status = 666

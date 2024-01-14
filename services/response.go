@@ -26,7 +26,13 @@ type Response interface {
 	objects.Object
 }
 
-func NewResponse(src interface{}) Response {
+func NewResponse(src any) Response {
+	if src == nil {
+		return objects.New(nil)
+	}
+	if _, isEmpty := src.(Empty); isEmpty {
+		return objects.New(nil)
+	}
 	return objects.New(src)
 }
 

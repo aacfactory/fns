@@ -84,7 +84,7 @@ func (s *ServiceFile) Write(ctx context.Context) (err error) {
 	file.AddCode(names)
 
 	// fn handler and proxy
-	proxies, proxiesErr := s.functionsCode(ctx)
+	proxies, proxiesErr := s.functionProxiesCode(ctx)
 	if proxiesErr != nil {
 		err = errors.Warning("modules: code file write failed").
 			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
@@ -356,6 +356,7 @@ func (s *ServiceFile) serviceConstructCode(ctx context.Context) (code gcg.Code, 
 				}
 			}
 		}
+		// todo mod
 		body.Tab().Token("svc.AddFunction(")
 		body.Token("commons.NewFn[").Add(result).Token("](")
 		body.Token(fmt.Sprintf("string(%s)", function.VarIdent))
@@ -366,26 +367,6 @@ func (s *ServiceFile) serviceConstructCode(ctx context.Context) (code gcg.Code, 
 		body.Token(fmt.Sprintf(", %v", function.Metric()))
 		body.Token(fmt.Sprintf(", %v", function.Barrier()))
 		body.Token(fmt.Sprintf(", %s", function.HandlerIdent))
-		middlewares := function.Middlewares()
-		for _, middleware := range middlewares {
-			if idx := strings.LastIndexByte(middleware, '.'); idx > 0 {
-				pkg := middleware[0:idx]
-				name := middleware[idx+1:]
-				middleImport, hasMiddleImport := s.service.Imports.Path(pkg)
-				if !hasMiddleImport {
-					middlewareImports := sources.Imports{}
-					middlewareImports.Add(&sources.Import{
-						Path:  pkg,
-						Alias: "",
-					})
-					s.service.Imports = sources.MergeImports([]sources.Imports{s.service.Imports, middlewareImports})
-					middleImport, _ = s.service.Imports.Path(pkg)
-				}
-				body.Token(fmt.Sprintf(", &%s.%s{}", middleImport.Ident(), name))
-			} else {
-				body.Token(fmt.Sprintf(", &%s{}", middleware))
-			}
-		}
 		body.Token("))")
 		body.Line()
 	}
@@ -473,7 +454,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 	return
 }
 
-func (s *ServiceFile) functionsCode(ctx context.Context) (code gcg.Code, err error) {
+func (s *ServiceFile) functionProxiesCode(ctx context.Context) (code gcg.Code, err error) {
 	if ctx.Err() != nil {
 		err = errors.Warning("modules: service write failed").
 			WithMeta("kind", "service").WithMeta("service", s.service.Name).WithMeta("file", s.Name()).
@@ -481,7 +462,6 @@ func (s *ServiceFile) functionsCode(ctx context.Context) (code gcg.Code, err err
 		return
 	}
 	stmt := gcg.Statements()
-
 	for _, function := range s.service.Functions {
 		stmt.Add(gcg.Token("// +-------------------------------------------------------------------------------------------------------------------+").Line().Line())
 		// proxy
@@ -498,15 +478,7 @@ func (s *ServiceFile) functionsCode(ctx context.Context) (code gcg.Code, err err
 			return
 		}
 		stmt.Add(proxyAsync).Line()
-		// handler
-		handler, handlerErr := s.functionHandlerCode(ctx, function)
-		if handlerErr != nil {
-			err = handlerErr
-			return
-		}
-		stmt.Add(handler).Line()
 	}
-
 	code = stmt
 	return
 }

@@ -20,6 +20,7 @@ package commons
 import (
 	"fmt"
 	"github.com/aacfactory/errors"
+	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
@@ -40,6 +41,8 @@ var (
 
 type NIL struct{}
 
+type FnHandler[P any, R any] func(ctx context.Context, param P) (v R, err error)
+
 type FnOptions struct {
 	readonly        bool
 	internal        bool
@@ -53,7 +56,6 @@ type FnOptions struct {
 	cacheControl    []cachecontrol.MakeOption
 	metric          bool
 	barrier         bool
-	middlewares     []FnHandlerMiddleware
 }
 
 type FnOption func(opt *FnOptions) (err error)
@@ -190,23 +192,13 @@ func CacheControl(maxAge int, public bool, mustRevalidate bool, proxyRevalidate 
 	}
 }
 
-func Middleware(middlewares ...FnHandlerMiddleware) FnOption {
-	return func(opt *FnOptions) (err error) {
-		opt.middlewares = append(opt.middlewares, middlewares...)
-		return
-	}
-}
-
-func NewFn[P any, R any](name string, handler FnHandler, options ...FnOption) services.Fn {
+func NewFn[P any, R any](name string, handler FnHandler[P, R], options ...FnOption) services.Fn {
 	opt := FnOptions{}
 	for _, option := range options {
 		if optErr := option(&opt); optErr != nil {
 			panic(fmt.Sprintf("%+v", errors.Warning("new fn failed").WithMeta("fn", name).WithCause(optErr)))
 			return nil
 		}
-	}
-	if len(opt.middlewares) > 0 {
-		handler = FnHandlerMiddlewares(opt.middlewares).Handler(handler)
 	}
 	return &Fn[P, R]{
 		name:                    name,
@@ -229,24 +221,6 @@ func NewFn[P any, R any](name string, handler FnHandler, options ...FnOption) se
 	}
 }
 
-type FnHandler func(ctx services.Request) (v any, err error)
-
-type FnHandlerMiddleware interface {
-	Handler(next FnHandler) FnHandler
-}
-
-type FnHandlerMiddlewares []FnHandlerMiddleware
-
-func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
-	if len(middlewares) == 0 {
-		return handler
-	}
-	for i := len(middlewares) - 1; i > -1; i-- {
-		handler = middlewares[i].Handler(handler)
-	}
-	return handler
-}
-
 // Fn
 // builtin fn handler wrapper
 // supported annotations
@@ -259,10 +233,6 @@ func (middlewares FnHandlerMiddlewares) Handler(handler FnHandler) FnHandler {
 // @cache-control {max-age=sec} {public=true} {must-revalidate} {proxy-revalidate}
 // @barrier
 // @metric
-// @middlewares >>>
-// {path}.{Name}
-// ...
-// <<<
 // @title {title}
 // @description >>>
 // {description}
@@ -287,7 +257,7 @@ type Fn[P any, R any] struct {
 	cacheTTL                time.Duration
 	cacheControl            bool
 	cacheControlMakeOptions []cachecontrol.MakeOption
-	handler                 FnHandler
+	handler                 FnHandler[P, R]
 	hasParam                bool
 	hasResult               bool
 }
@@ -352,7 +322,7 @@ func (fn *Fn[P, R]) Handle(r services.Request) (v interface{}, err error) {
 	return
 }
 
-func (fn *Fn[P, R]) handle(r services.Request) (v any, err error) {
+func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
 	var param P
 	paramScanned := false
 	// validation
@@ -400,7 +370,7 @@ func (fn *Fn[P, R]) handle(r services.Request) (v any, err error) {
 		}
 	}
 	// handle
-	v, err = fn.handler(r)
+	v, err = fn.handler(r, param)
 	// cache set or remove
 	if fn.hasParam && fn.cacheCommand != "" {
 		switch fn.cacheCommand {

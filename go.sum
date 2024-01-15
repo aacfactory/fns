@@ -6,6 +6,8 @@ github.com/aacfactory/cases v1.1.0 h1:oY7wSX57PJav72ZDFmmdmWPrEUXjc5zh8ckDAJM4iS
 github.com/aacfactory/cases v1.1.0/go.mod h1:Utk93dgZ/xXw2GTSM1QU2y1+R4LDEUVel2LtO09Mxt0=
 github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=
 github.com/aacfactory/configures v1.12.1/go.mod h1:Iw63k3WoJD8eb1HWE6cvkBTFXfoeCqutuj8vVnia1Kg=
+github.com/aacfactory/copier v1.4.0 h1:cOJtDCv3Pa8Hn4J918mOpypOMemuUaI0niT6JLvYUiI=
+github.com/aacfactory/copier v1.4.0/go.mod h1:6XqGCM+rMs0oT3VbPNmEYQHJWXV475WILT4SwA9IQ6I=
 github.com/aacfactory/errors v1.13.12 h1:h9UayzDvwp4ak23fs7Sb7PTYEosVx2lYraWAoL9lpkI=
 github.com/aacfactory/errors v1.13.12/go.mod h1:D63VqtkV+Yrz9st8R97h6mxaaI8bAVvkQMpQ0zsjNec=
 github.com/aacfactory/gcg v1.0.5 h1:PqRSru7R7oefBWQcMnvYPWs12YBOXlHyDXxkPSq0JCQ=

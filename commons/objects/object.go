@@ -19,8 +19,8 @@ package objects
 
 import (
 	"fmt"
+	"github.com/aacfactory/copier"
 	"github.com/aacfactory/errors"
-	"reflect"
 )
 
 func New(src any) Object {
@@ -77,55 +77,20 @@ func (obj object) Unmarshal(dst interface{}) (err error) {
 		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("dst is nil"))
 		return
 	}
-	if !obj.Valid() {
+	if obj.value == nil {
 		return
 	}
 	o, isObject := obj.value.(Object)
 	if isObject {
 		err = o.Unmarshal(dst)
-		if err != nil {
-			err = errors.Warning("fns: unmarshal object failed").WithCause(err)
-			return
-		}
 		return
 	}
-
-	dpv := reflect.ValueOf(dst)
-	if dpv.Kind() != reflect.Ptr {
-		err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not pointer"))
-		return
-	}
-
 	// copy
-	sv := reflect.ValueOf(obj.value)
-	st := sv.Type()
-	dv := reflect.Indirect(dpv)
-	dt := dv.Type()
-	if sv.Kind() == reflect.Ptr {
-		if sv.IsNil() {
-			return
-		}
-		sv = sv.Elem()
-	}
-	if sv.IsValid() && st.AssignableTo(dt) {
-		dv.Set(sv)
+	cpErr := copier.Copy(dst, obj.value)
+	if cpErr != nil {
+		err = errors.Warning("fns: unmarshal object failed").WithCause(cpErr)
 		return
 	}
-	if dv.Kind() == sv.Kind() && st.ConvertibleTo(dt) {
-		dv.Set(sv.Convert(dt))
-		return
-	}
-	if dv.Type().Kind() == reflect.Interface && dv.CanSet() {
-		if st.Implements(dt) {
-			dv.Set(sv)
-			return
-		}
-		if sv.CanAddr() && sv.Addr().Type().Implements(dt) {
-			dv.Set(sv.Addr())
-			return
-		}
-	}
-	err = errors.Warning("fns: unmarshal object failed").WithCause(fmt.Errorf("type of dst is not matched"))
 	return
 }
 

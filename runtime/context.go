@@ -83,7 +83,6 @@ func Barrier(ctx context.Context, key []byte, fn func() (result interface{}, err
 	rt := Load(ctx)
 	barrier := rt.Barrier()
 	result, err = barrier.Do(ctx, key, fn)
-	barrier.Forget(ctx, key)
 	return
 }
 

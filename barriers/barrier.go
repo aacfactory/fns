@@ -32,7 +32,6 @@ type Result interface {
 
 type Barrier interface {
 	Do(ctx context.Context, key []byte, fn func() (result interface{}, err error)) (result Result, err error)
-	Forget(ctx context.Context, key []byte)
 }
 
 type BarrierBuilder interface {
@@ -57,21 +56,16 @@ func (b *barrier) Do(_ context.Context, key []byte, fn func() (result interface{
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
+	groupKey := bytex.ToString(key)
 	v, doErr, _ := b.group.Do(bytex.ToString(key), func() (v interface{}, err error) {
 		v, err = fn()
 		return
 	})
+	b.group.Forget(groupKey)
 	if doErr != nil {
 		err = errors.Wrap(doErr)
 		return
 	}
 	r = objects.New(v)
 	return
-}
-
-func (b *barrier) Forget(_ context.Context, key []byte) {
-	if len(key) == 0 {
-		key = []byte{'-'}
-	}
-	b.group.Forget(bytex.ToString(key))
 }

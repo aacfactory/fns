@@ -671,6 +671,7 @@ func (types *Types) parseType(ctx context.Context, spec *ast.TypeSpec, scope *Ty
 		v = result
 		return
 	})
+	types.group.Forget(key)
 	if doErr != nil {
 		err = doErr
 		return

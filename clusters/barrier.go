@@ -24,7 +24,6 @@ import (
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/objects"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/json"
 	"golang.org/x/sync/singleflight"
@@ -114,7 +113,7 @@ func NewBarrier(config BarrierConfig, shared shareds.Shared) (b barriers.Barrier
 	interval := config.Interval
 	loops := 0
 	if ttl < 1 {
-		ttl = 10 * time.Second
+		ttl = 1 * time.Second
 	}
 	if interval < 1 {
 		interval = 100 * time.Millisecond
@@ -157,7 +156,7 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 	if len(key) == 0 {
 		key = []byte{'-'}
 	}
-
+	groupKey := bytex.ToString(key)
 	r, doErr, _ := b.group.Do(bytex.ToString(key), func() (r interface{}, err error) {
 		if b.standalone {
 			r, err = fn()
@@ -167,6 +166,7 @@ func (b *Barrier) Do(ctx context.Context, key []byte, fn func() (result interfac
 		r, err = b.doRemote(ctx, key, fn)
 		return
 	})
+	b.group.Forget(groupKey)
 	if doErr != nil {
 		err = errors.Wrap(doErr)
 		return
@@ -243,20 +243,5 @@ func (b *Barrier) doRemote(ctx context.Context, key []byte, fn func() (result in
 			return
 		}
 	}
-
 	return
-}
-
-func (b *Barrier) Forget(ctx context.Context, key []byte) {
-	if len(key) == 0 {
-		key = []byte{'-'}
-	}
-	b.group.Forget(bytex.ToString(key))
-	if b.standalone {
-		return
-	}
-
-	store := runtime.Load(ctx).Shared().Store()
-	key = append(prefix, key...)
-	_ = store.SetWithTTL(ctx, key, NewBarrierValue().Forget(), b.ttl)
 }

@@ -28,6 +28,7 @@ import (
 )
 
 type Work struct {
+	Dir      string
 	Filename string
 	Uses     []*Module
 	Replaces []*Module
@@ -129,7 +130,11 @@ func (work *Work) Parse() (err error) {
 			if replace.New.Version != "" {
 				replaceDir = filepath.Join(PKG(), fmt.Sprintf("%s@%s", replace.New.Path, replace.New.Version))
 			} else {
-				replaceDir = filepath.Join(PKG(), replace.New.Path)
+				if filepath.IsAbs(replace.New.Path) {
+					replaceDir = replace.New.Path
+				} else {
+					replaceDir = filepath.Join(work.Dir, replace.New.Path)
+				}
 			}
 			replaceDir = filepath.ToSlash(replaceDir)
 			if !files.ExistFile(replaceDir) {
@@ -137,7 +142,7 @@ func (work *Work) Parse() (err error) {
 					WithCause(errors.Warning("sources: replace dir was not found").WithMeta("replace", replaceDir))
 				return
 			}
-			moduleFile := filepath.ToSlash(filepath.Join(replaceDir, "mod.go"))
+			moduleFile := filepath.ToSlash(filepath.Join(replaceDir, "go.mod"))
 			if !files.ExistFile(moduleFile) {
 				err = errors.Warning("sources: parse work failed").WithMeta("work", path).
 					WithCause(errors.Warning("sources: replace mod file was not found").

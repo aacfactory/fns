@@ -81,7 +81,7 @@ func Write(ctx context.Context, path string, dockerImageName string, work bool, 
 	}
 	process.Add("repositories: writing", Unit(repositories))
 	// main
-	main, mainErr := NewMainFile(path, dir)
+	main, mainErr := NewMainFile(path, dir, work)
 	if mainErr != nil {
 		err = mainErr
 		return

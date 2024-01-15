@@ -25,7 +25,7 @@ import (
 	"strings"
 )
 
-func NewMainFile(path string, dir string) (mf *MainFile, err error) {
+func NewMainFile(path string, dir string, useWork bool) (mf *MainFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -36,6 +36,7 @@ func NewMainFile(path string, dir string) (mf *MainFile, err error) {
 	mf = &MainFile{
 		path:     path,
 		filename: filepath.ToSlash(filepath.Join(dir, "main.go")),
+		useWork:  useWork,
 	}
 	return
 }
@@ -43,6 +44,7 @@ func NewMainFile(path string, dir string) (mf *MainFile, err error) {
 type MainFile struct {
 	path     string
 	filename string
+	useWork  bool
 }
 
 func (f *MainFile) Name() (name string) {
@@ -62,11 +64,11 @@ import (
 
 var (
 	// Version
-	// go build -ldflags "-X main.Version=${VERSION}" -o bin
+	// go build -ldflags "-s -w -X main.Version=${VERSION}" -o fapp
 	Version = "v0.0.1"
 )
 
-//go:generate go run -mod=mod #path#/internal/generator -v .
+//go:generate go run#mod_arg# #path#/internal/generator -v .
 func main() {
 	// set system environment to make config be active, e.g.: export FNS-ACTIVE=local
 	fns.
@@ -80,7 +82,13 @@ func main() {
 }
 `
 	)
-	writeErr := os.WriteFile(f.filename, []byte(strings.ReplaceAll(content, "#path#", f.path)), 0644)
+	modArg := ""
+	if !f.useWork {
+		modArg = " -mod=mod"
+	}
+	p := strings.ReplaceAll(content, "#mod_arg#", modArg)
+	p = strings.ReplaceAll(p, "#path#", f.path)
+	writeErr := os.WriteFile(f.filename, []byte(p), 0644)
 	if writeErr != nil {
 		err = errors.Warning("fns: main file write failed").WithCause(writeErr).WithMeta("filename", f.filename)
 		return

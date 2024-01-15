@@ -61,7 +61,8 @@ func NewWithWork(path string, workPath string) (v *Module, err error) {
 	}
 	if workPath != "" {
 		work := &Work{
-			Filename: workPath,
+			Dir:      filepath.ToSlash(filepath.Dir(workPath)),
+			Filename: filepath.ToSlash(workPath),
 			Uses:     nil,
 			Replaces: nil,
 			parsed:   false,

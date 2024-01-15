@@ -28,7 +28,7 @@ import (
 
 const (
 	Name      = "FNS"
-	Version   = "v1.2.63"
+	Version   = "v1.2.66"
 	Usage     = "see COMMANDS"
 	Copyright = `Copyright 2024 Wang Min Xiang
 

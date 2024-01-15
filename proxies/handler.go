@@ -29,6 +29,7 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/valyala/bytebufferpool"
 	"golang.org/x/sync/singleflight"
+	"net/textproto"
 	"strconv"
 )
 
@@ -154,7 +155,17 @@ func (handler *proxyHandler) Handle(w transports.ResponseWriter, r transports.Re
 				WithMeta("fn", bytex.ToString(fn))
 			return
 		}
-		status, respHeader, respBody, doErr := client.Do(r, method, path, r.Header(), body)
+
+		header := transports.AcquireHeader()
+		defer transports.ReleaseHeader(header)
+		r.Header().Foreach(func(key []byte, values [][]byte) {
+			for _, value := range values {
+				header.Add(key, value)
+			}
+		})
+		removeHopByHopHeaders(header)
+
+		status, respHeader, respBody, doErr := client.Do(r, method, path, header, body)
 		if doErr != nil {
 			err = errors.Warning("fns: send request to endpoint failed").WithCause(doErr).
 				WithMeta("endpoint", bytex.ToString(service)).
@@ -191,4 +202,38 @@ type Response struct {
 	Status int
 	Header transports.Header
 	Value  []byte
+}
+
+var hopHeaders = [][]byte{
+	[]byte("Connection"),
+	[]byte("Proxy-Connection"),
+	[]byte("Keep-Alive"),
+	[]byte("Proxy-Authenticate"),
+	[]byte("Proxy-Authorization"),
+	[]byte("Te"),
+	[]byte("Trailer"),
+	[]byte("Transfer-Encoding"),
+	[]byte("Upgrade"),
+	[]byte("Origin"),
+}
+
+var (
+	comma = []byte{','}
+)
+
+func removeHopByHopHeaders(h transports.Header) {
+	// RFC 7230, section 6.1: Remove headers listed in the "Connection" header.
+	for _, f := range h.Values(transports.ConnectionHeaderName) {
+		for _, sf := range bytes.Split(f, comma) {
+			if sf = bytex.FromString(textproto.TrimString(bytex.ToString(sf))); len(sf) > 0 {
+				h.Del(sf)
+			}
+		}
+	}
+	// RFC 2616, section 13.5.1: Remove a set of known hop-by-hop headers.
+	// This behavior is superseded by the RFC 7230 Connection header, but
+	// preserve it for backwards compatibility.
+	for _, f := range hopHeaders {
+		h.Del(f)
+	}
 }

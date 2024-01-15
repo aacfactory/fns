@@ -23,7 +23,7 @@ var (
 	comma = []byte{','}
 )
 
-func parseHeaderList(headerList [][]byte) [][]byte {
+func parseHeaderList(headerList [][]byte) ([][]byte, bool) {
 	out := headerList
 	copied := false
 	for i, v := range headerList {
@@ -49,5 +49,5 @@ func parseHeaderList(headerList [][]byte) [][]byte {
 			}
 		}
 	}
-	return out
+	return out, copied
 }

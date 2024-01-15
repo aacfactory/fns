@@ -44,6 +44,7 @@ type corsMiddleware struct {
 	maxAge              int
 	allowCredentials    bool
 	allowPrivateNetwork bool
+	preflightVary       [][]byte
 	handler             transports.Handler
 }
 
@@ -148,6 +149,11 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 	c.allowCredentials = config.AllowCredentials
 	c.allowPrivateNetwork = config.AllowPrivateNetwork
 
+	if c.allowPrivateNetwork {
+		c.preflightVary = [][]byte{[]byte("Origin, Access-Control-Request-Method, Access-Control-Request-Headers, Access-Control-Request-Private-Network")}
+	} else {
+		c.preflightVary = [][]byte{[]byte("Origin, Access-Control-Request-Method, Access-Control-Request-Headers")}
+	}
 	return
 }
 
@@ -177,11 +183,13 @@ func (c *corsMiddleware) handlePreflight(w transports.ResponseWriter, r transpor
 	if !bytes.Equal(r.Method(), methodOptions) {
 		return
 	}
-	headers.Add(varyHeader, originHeader)
-	headers.Add(varyHeader, accessControlRequestMethodHeader)
-	headers.Add(varyHeader, accessControlRequestHeadersHeader)
-	if c.allowPrivateNetwork {
-		headers.Add(varyHeader, accessControlRequestPrivateNetworkHeader)
+
+	if vary := headers.Get(varyHeader); len(vary) > 0 {
+		headers.Add(varyHeader, c.preflightVary[0])
+	} else {
+		for _, preflightVary := range c.preflightVary {
+			headers.Add(varyHeader, preflightVary)
+		}
 	}
 
 	if len(origin) == 0 {
@@ -195,25 +203,37 @@ func (c *corsMiddleware) handlePreflight(w transports.ResponseWriter, r transpor
 	if !c.isMethodAllowed(reqMethod) {
 		return
 	}
-	reqHeaders := parseHeaderList(r.Header().Values(accessControlRequestHeadersHeader))
+	reqHeadersRaw := r.Header().Values(accessControlRequestHeadersHeader)
+	reqHeaders, reqHeadersEdited := parseHeaderList(reqHeadersRaw)
 	if !c.areHeadersAllowed(reqHeaders) {
 		return
 	}
 	if c.allowedOriginsAll {
 		headers.Set(accessControlAllowOriginHeader, all)
 	} else {
-		headers.Set(accessControlAllowOriginHeader, origin)
+		origins := w.Header().Values(originHeader)
+		for _, ori := range origins {
+			headers.Add(accessControlAllowOriginHeader, ori)
+		}
 	}
 	headers.Set(accessControlAllowMethodsHeader, bytes.ToUpper(reqMethod))
 	if len(reqHeaders) > 0 {
-		headers.Set(accessControlAllowHeadersHeader, bytes.Join(reqHeaders, joinBytes))
+		if reqHeadersEdited || len(reqHeaders) != len(reqHeadersRaw) {
+			headers.Set(accessControlAllowHeadersHeader, bytes.Join(reqHeaders, joinBytes))
+		} else {
+			for _, raw := range reqHeadersRaw {
+				headers.Add(accessControlAllowHeadersHeader, raw)
+			}
+		}
 	}
 	if c.allowCredentials {
 		headers.Set(accessControlAllowCredentialsHeader, trueBytes)
 	}
+
 	if c.allowPrivateNetwork && bytes.Equal(r.Header().Get(accessControlRequestPrivateNetworkHeader), trueBytes) {
 		headers.Set(accessControlAllowPrivateNetworkHeader, trueBytes)
 	}
+
 	if c.maxAge > 0 {
 		headers.Set(accessControlMaxAgeHeader, bytex.FromString(strconv.Itoa(c.maxAge)))
 	}
@@ -223,7 +243,6 @@ func (c *corsMiddleware) handleActualRequest(w transports.ResponseWriter, r tran
 	headers := w.Header()
 	origin := r.Header().Get(originHeader)
 
-	headers.Add(varyHeader, originHeader)
 	if len(origin) == 0 {
 		return
 	}
@@ -237,10 +256,15 @@ func (c *corsMiddleware) handleActualRequest(w transports.ResponseWriter, r tran
 	if c.allowedOriginsAll {
 		headers.Set(accessControlAllowOriginHeader, all)
 	} else {
-		headers.Set(accessControlAllowOriginHeader, origin)
+		origins := w.Header().Values(originHeader)
+		for _, ori := range origins {
+			headers.Add(accessControlAllowOriginHeader, ori)
+		}
 	}
 	if len(c.exposedHeaders) > 0 {
-		headers.Set(accessControlExposeHeadersHeader, bytes.Join(c.exposedHeaders, joinBytes))
+		for _, exposedHeader := range c.exposedHeaders {
+			headers.Add(accessControlExposeHeadersHeader, exposedHeader)
+		}
 	}
 	if c.allowCredentials {
 		headers.Set(accessControlAllowCredentialsHeader, trueBytes)

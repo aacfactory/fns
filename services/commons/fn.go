@@ -309,13 +309,15 @@ func (fn *Fn[P, R]) Handle(r services.Request) (v interface{}, err error) {
 			metrics.End(r)
 		}
 	}
-	// cache control
-	if fn.cacheControl {
-		cachecontrol.Make(r, fn.cacheControlMakeOptions...)
-	}
-	// deprecated
-	if fn.deprecated {
-		services.MarkDeprecated(r)
+	if !r.Header().Internal() {
+		// cache control
+		if fn.cacheControl {
+			cachecontrol.Make(r, fn.cacheControlMakeOptions...)
+		}
+		// deprecated
+		if fn.deprecated {
+			services.MarkDeprecated(r)
+		}
 	}
 	return
 }

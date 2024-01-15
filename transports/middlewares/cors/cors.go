@@ -120,6 +120,7 @@ func (c *corsMiddleware) Construct(options transports.MiddlewareOptions) (err er
 		config.ExposedHeaders = make([]string, 0, 1)
 	}
 	defaultExposedHeaders := []string{
+		string(transports.VaryHeaderName),
 		string(transports.DeviceIdHeaderName),
 		string(transports.EndpointIdHeaderName), string(transports.EndpointVersionHeaderName),
 		string(transports.ContentEncodingHeaderName),

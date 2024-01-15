@@ -17,7 +17,9 @@
 
 package compress
 
-import "github.com/valyala/fasthttp"
+import (
+	"github.com/valyala/fasthttp"
+)
 
 type Compressor interface {
 	Name() string

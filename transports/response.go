@@ -39,11 +39,12 @@ type ResponseWriter interface {
 	SetStatus(status int)
 	SetCookie(cookie *Cookie)
 	Header() Header
-	Succeed(v interface{})
+	Succeed(v any)
 	Failed(cause error)
 	Write(body []byte) (int, error)
 	Body() []byte
 	BodyLen() int
+	ResetBody()
 	Hijack(func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error)
 	Hijacked() bool
 	WriteTimeout() time.Duration
@@ -125,7 +126,11 @@ func (w *ResultResponseWriter) BodyLen() int {
 	return w.body.Len()
 }
 
-func (w *ResultResponseWriter) Succeed(v interface{}) {
+func (w *ResultResponseWriter) ResetBody() {
+	w.body.Reset()
+}
+
+func (w *ResultResponseWriter) Succeed(v any) {
 	if v == nil {
 		w.status = http.StatusOK
 		return

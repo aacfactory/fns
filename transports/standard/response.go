@@ -88,6 +88,10 @@ func (w *ResponseWriter) BodyLen() int {
 	return w.result.BodyLen()
 }
 
+func (w *ResponseWriter) ResetBody() {
+	w.result.ResetBody()
+}
+
 func (w *ResponseWriter) Hijack(f func(ctx context.Context, conn net.Conn, rw *bufio.ReadWriter) (err error)) (async bool, err error) {
 	if f == nil {
 		err = errors.Warning("fns: hijack function is nil")

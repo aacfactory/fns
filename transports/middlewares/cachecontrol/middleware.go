@@ -70,10 +70,12 @@ func (middleware *Middleware) Construct(options transports.MiddlewareOptions) (e
 		err = errors.Warning("fns: construct cache control middleware failed").WithCause(configErr)
 		return
 	}
-	middleware.enable = config.Enable
-	middleware.maxAge = config.MaxAge
-	if middleware.maxAge < 1 {
-		middleware.maxAge = 60
+	if config.Enable {
+		middleware.enable = config.Enable
+		middleware.maxAge = config.MaxAge
+		if middleware.maxAge < 1 {
+			middleware.maxAge = 60
+		}
 	}
 	return
 }
@@ -187,6 +189,9 @@ func (middleware *Middleware) Close() (err error) {
 
 func hashRequest(r transports.Request) (p []byte) {
 	b := bytebufferpool.Get()
+	// device id
+	deviceId := r.Header().Get(transports.DeviceIdHeaderName)
+	_, _ = b.Write(deviceId)
 	// path
 	_, _ = b.Write(r.Path())
 	// param

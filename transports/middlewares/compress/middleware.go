@@ -19,7 +19,6 @@ package compress
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/transports"
@@ -129,7 +128,6 @@ func (middle *Middleware) Handler(next transports.Handler) transports.Handler {
 			}
 			kind := getKind(r)
 			var c Compressor = nil
-			fmt.Println(kind.String())
 			switch kind {
 			case Any, Default:
 				c = middle.compressor

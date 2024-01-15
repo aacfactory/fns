@@ -4,8 +4,8 @@ github.com/aacfactory/avro v1.2.12 h1:VZoDgq6zIlxkkcmhsi9rmoGiT050pvlYGKKsoyPCYX
 github.com/aacfactory/avro v1.2.12/go.mod h1:8swXenEp4SKDLzS6sO7U6Ux8jZoTJZwjen8oJn4KwJo=
 github.com/aacfactory/cases v1.1.0 h1:oY7wSX57PJav72ZDFmmdmWPrEUXjc5zh8ckDAJM4iSQ=
 github.com/aacfactory/cases v1.1.0/go.mod h1:Utk93dgZ/xXw2GTSM1QU2y1+R4LDEUVel2LtO09Mxt0=
-github.com/aacfactory/configures v1.12.1 h1:dt8EafWfEG1xTfZ1lO4UY56i5EieI4lkG+VzxMtLnTQ=
-github.com/aacfactory/configures v1.12.1/go.mod h1:Iw63k3WoJD8eb1HWE6cvkBTFXfoeCqutuj8vVnia1Kg=
+github.com/aacfactory/configures v1.13.0 h1:2QWGuxZe3WiqOj6ooUL4qTpgzlQl83Kysocsa+R/EIg=
+github.com/aacfactory/configures v1.13.0/go.mod h1:WzxQwZPyGtgYZSCXXU+7MDDNWQsOHfFUxgQGzfbkGVs=
 github.com/aacfactory/copier v1.4.0 h1:cOJtDCv3Pa8Hn4J918mOpypOMemuUaI0niT6JLvYUiI=
 github.com/aacfactory/copier v1.4.0/go.mod h1:6XqGCM+rMs0oT3VbPNmEYQHJWXV475WILT4SwA9IQ6I=
 github.com/aacfactory/errors v1.13.12 h1:h9UayzDvwp4ak23fs7Sb7PTYEosVx2lYraWAoL9lpkI=

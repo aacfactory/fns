@@ -6,7 +6,7 @@ require (
 	github.com/aacfactory/afssl v1.12.0
 	github.com/aacfactory/avro v1.2.12
 	github.com/aacfactory/cases v1.1.0
-	github.com/aacfactory/configures v1.12.1
+	github.com/aacfactory/configures v1.13.0
 	github.com/aacfactory/copier v1.4.0
 	github.com/aacfactory/errors v1.13.12
 	github.com/aacfactory/gcg v1.0.5

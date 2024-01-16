@@ -19,20 +19,9 @@ package base_test
 
 import (
 	"github.com/aacfactory/fns/cmd/fns/initialization/base"
-	"golang.org/x/mod/modfile"
-	"path/filepath"
 	"testing"
 )
 
 func TestDockerImageNameFromMod(t *testing.T) {
 	t.Log(base.DockerImageNameFromMod("company.com/scope/app"))
-}
-
-func TestGoVersion(t *testing.T) {
-	t.Log(modfile.GoVersionRE.MatchString("1.21.6"))
-}
-
-func TestPath(t *testing.T) {
-	s := "D:/workspace/go/src/github.com/local/s1"
-	t.Log(filepath.Base(s))
 }

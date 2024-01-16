@@ -19,7 +19,6 @@ package base
 
 import (
 	"context"
-	"fmt"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/generates/files"
 	"golang.org/x/mod/modfile"
@@ -37,9 +36,6 @@ func NewWorkFile(path string, dir string) (f *WorkFile, err error) {
 			return
 		}
 	}
-	fmt.Println("work:", dir)
-	fmt.Println("work:", filepath.ToSlash(filepath.Join(filepath.Dir(dir), "go.work")))
-
 	f = &WorkFile{
 		path:     path,
 		modDir:   dir,

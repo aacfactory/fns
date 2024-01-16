@@ -23,6 +23,7 @@ import (
 	"github.com/aacfactory/errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ const (
 	dockerfile = `# USAGE
 # docker build -t $$IMAGE_NAME:latest --build-arg VERSION=${VERSION} .
 
-FROM golang:1.21-alpine3.19 AS builder
+FROM golang:$$GO_VERSION-alpine AS builder
 
 ARG VERSION=v0.0.1
 ENV GO111MODULE on
@@ -47,7 +48,7 @@ RUN mkdir /dist \
     && cp -r configs /dist/configs
 
 
-FROM alpine3.19
+FROM alpine
 
 COPY --from=builder /dist /
 
@@ -112,6 +113,8 @@ func (f *DockerFile) Name() (name string) {
 
 func (f *DockerFile) Write(_ context.Context) (err error) {
 	content := strings.Replace(dockerfile, "$$IMAGE_NAME", f.name, 1)
+	goVersion := runtime.Version()[2:]
+	content = strings.Replace(content, "$$GO_VERSION", goVersion, 1)
 	writeErr := os.WriteFile(f.filename, []byte(content), 0644)
 	if writeErr != nil {
 		err = errors.Warning("fns: dockerfile write failed").WithCause(writeErr).WithMeta("filename", f.filename)

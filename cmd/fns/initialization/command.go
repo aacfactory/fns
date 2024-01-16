@@ -22,14 +22,17 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/cmd/fns/initialization/base"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/mod/modfile"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 )
 
 var Command = &cli.Command{
 	Name:        "init",
 	Aliases:     nil,
-	Usage:       "fns init --mod={mod} --img={docker image name} --work={true} {project dir}",
+	Usage:       "fns init --mod={mod} --img={docker image name} --work={true} --version={go version} {project dir}",
 	Description: "init fns project",
 	ArgsUsage:   "",
 	Category:    "",
@@ -52,6 +55,11 @@ var Command = &cli.Command{
 			Required: false,
 			Usage:    "project docker image name",
 		},
+		&cli.StringFlag{
+			Name:     "version",
+			Required: false,
+			Usage:    "go version, e.g.: 1.21.0",
+		},
 	},
 	Action: func(ctx *cli.Context) (err error) {
 		projectDir := strings.TrimSpace(ctx.Args().First())
@@ -69,7 +77,15 @@ var Command = &cli.Command{
 		projectPath := strings.TrimSpace(ctx.String("mod"))
 		img := strings.TrimSpace(ctx.String("img"))
 		work := ctx.Bool("work")
-		writeErr := base.Write(ctx.Context, projectPath, img, work, projectDir)
+		goVersion := ctx.String("version")
+		if goVersion == "" {
+			goVersion = runtime.Version()[2:]
+		}
+		if !ValidGoVersion(goVersion) {
+			err = errors.Warning("fns: init fns project failed").WithCause(fmt.Errorf("go version must be gte %s", runtime.Version())).WithMeta("dir", projectDir).WithMeta("path", projectPath)
+			return
+		}
+		writeErr := base.Write(ctx.Context, goVersion, projectPath, img, work, projectDir)
 		if writeErr != nil {
 			err = errors.Warning("fns: init fns project failed").WithCause(writeErr).WithMeta("dir", projectDir).WithMeta("path", projectPath)
 			return
@@ -81,4 +97,40 @@ var Command = &cli.Command{
 		}
 		return
 	},
+}
+
+func ParseGoVersion(s string) (v Version) {
+	ss := strings.Split(s, ".")
+	if len(ss) > 0 {
+		v.Major, _ = strconv.Atoi(ss[0])
+	}
+	if len(ss) > 1 {
+		v.Miner, _ = strconv.Atoi(ss[1])
+	}
+	if len(ss) > 2 {
+		v.Miner, _ = strconv.Atoi(ss[2])
+	}
+	return
+}
+
+type Version struct {
+	Major int
+	Miner int
+	Patch int
+}
+
+func ValidGoVersion(target string) (ok bool) {
+	if !modfile.GoVersionRE.MatchString(target) {
+		return
+	}
+	tv := ParseGoVersion(target)
+	rv := ParseGoVersion(runtime.Version()[2:])
+	if tv.Major >= rv.Major {
+		if tv.Miner >= rv.Miner {
+			if tv.Patch >= rv.Patch {
+				ok = true
+			}
+		}
+	}
+	return
 }

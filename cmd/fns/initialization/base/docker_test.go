@@ -19,9 +19,14 @@ package base_test
 
 import (
 	"github.com/aacfactory/fns/cmd/fns/initialization/base"
+	"golang.org/x/mod/modfile"
 	"testing"
 )
 
 func TestDockerImageNameFromMod(t *testing.T) {
 	t.Log(base.DockerImageNameFromMod("company.com/scope/app"))
+}
+
+func TestGoVersion(t *testing.T) {
+	t.Log(modfile.GoVersionRE.MatchString("1.21.6"))
 }

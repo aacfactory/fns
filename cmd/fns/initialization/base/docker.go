@@ -23,7 +23,6 @@ import (
 	"github.com/aacfactory/errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -84,7 +83,7 @@ func DockerImageNameFromMod(mp string) (name string) {
 	return
 }
 
-func NewDockerFile(path string, dir string, dockerImageName string) (mf *DockerFile, err error) {
+func NewDockerFile(goVersion string, path string, dir string, dockerImageName string) (mf *DockerFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -93,17 +92,19 @@ func NewDockerFile(path string, dir string, dockerImageName string) (mf *DockerF
 		}
 	}
 	mf = &DockerFile{
-		name:     dockerImageName,
-		path:     path,
-		filename: filepath.ToSlash(filepath.Join(dir, "Dockerfile")),
+		name:      dockerImageName,
+		path:      path,
+		filename:  filepath.ToSlash(filepath.Join(dir, "Dockerfile")),
+		goVersion: goVersion,
 	}
 	return
 }
 
 type DockerFile struct {
-	name     string
-	path     string
-	filename string
+	name      string
+	path      string
+	filename  string
+	goVersion string
 }
 
 func (f *DockerFile) Name() (name string) {
@@ -113,8 +114,7 @@ func (f *DockerFile) Name() (name string) {
 
 func (f *DockerFile) Write(_ context.Context) (err error) {
 	content := strings.Replace(dockerfile, "$$IMAGE_NAME", f.name, 1)
-	goVersion := runtime.Version()[2:]
-	content = strings.Replace(content, "$$GO_VERSION", goVersion, 1)
+	content = strings.Replace(content, "$$GO_VERSION", f.goVersion, 1)
 	writeErr := os.WriteFile(f.filename, []byte(content), 0644)
 	if writeErr != nil {
 		err = errors.Warning("fns: dockerfile write failed").WithCause(writeErr).WithMeta("filename", f.filename)

@@ -27,14 +27,14 @@ import (
 	"time"
 )
 
-func Write(ctx context.Context, path string, dockerImageName string, work bool, dir string) (err error) {
+func Write(ctx context.Context, goVersion string, path string, dockerImageName string, work bool, dir string) (err error) {
 	if files.ExistFile(filepath.Join(dir, "go.mod")) {
 		err = errors.Warning("fnc: go.mod is exist")
 		return
 	}
 	process := processes.New()
 	// mod
-	mod, modErr := NewModFile(path, dir)
+	mod, modErr := NewModFile(goVersion, path, dir)
 	if modErr != nil {
 		err = modErr
 		return
@@ -91,7 +91,7 @@ func Write(ctx context.Context, path string, dockerImageName string, work bool, 
 	if dockerImageName == "" {
 		dockerImageName = DockerImageNameFromMod(path)
 	}
-	docker, dockerErr := NewDockerFile(path, dir, dockerImageName)
+	docker, dockerErr := NewDockerFile(goVersion, path, dir, dockerImageName)
 	if dockerErr != nil {
 		err = dockerErr
 		return
@@ -99,7 +99,7 @@ func Write(ctx context.Context, path string, dockerImageName string, work bool, 
 	process.Add("Dockerfile: writing", Unit(docker))
 	// work
 	if work {
-		wk, wkErr := NewWorkFile(path, dir)
+		wk, wkErr := NewWorkFile(goVersion, path, dir)
 		if wkErr != nil {
 			err = wkErr
 			return

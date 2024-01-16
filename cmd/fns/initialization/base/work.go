@@ -24,11 +24,9 @@ import (
 	"golang.org/x/mod/modfile"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 )
 
-func NewWorkFile(path string, dir string) (f *WorkFile, err error) {
+func NewWorkFile(goVersion string, path string, dir string) (f *WorkFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -37,17 +35,19 @@ func NewWorkFile(path string, dir string) (f *WorkFile, err error) {
 		}
 	}
 	f = &WorkFile{
-		path:     path,
-		modDir:   dir,
-		filename: filepath.ToSlash(filepath.Join(filepath.Dir(dir), "go.work")),
+		path:      path,
+		modDir:    dir,
+		filename:  filepath.ToSlash(filepath.Join(filepath.Dir(dir), "go.work")),
+		goVersion: goVersion,
 	}
 	return
 }
 
 type WorkFile struct {
-	path     string
-	modDir   string
-	filename string
+	path      string
+	modDir    string
+	filename  string
+	goVersion string
 }
 
 func (f *WorkFile) Name() (name string) {
@@ -70,13 +70,7 @@ func (f *WorkFile) Write(ctx context.Context) (err error) {
 		return
 	}
 	if wf.Go == nil {
-		goVersion := runtime.Version()[2:]
-		goVersionItems := strings.Split(goVersion, ".")
-		if len(goVersionItems) < 2 {
-			err = errors.Warning("fns: work file write failed").WithCause(errors.Warning("invalid go runtime version").WithMeta("version", runtime.Version())).WithMeta("filename", f.filename)
-			return
-		}
-		versionErr := wf.AddGoStmt(strings.Join(goVersionItems[0:2], "."))
+		versionErr := wf.AddGoStmt(f.goVersion)
 		if versionErr != nil {
 			err = errors.Warning("fns: work file write failed").WithCause(versionErr).WithMeta("filename", f.filename)
 			return

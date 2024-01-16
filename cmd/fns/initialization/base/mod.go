@@ -24,11 +24,9 @@ import (
 	"golang.org/x/mod/modfile"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 )
 
-func NewModFile(path string, dir string) (f *ModFile, err error) {
+func NewModFile(goVersion string, path string, dir string) (f *ModFile, err error) {
 	if !filepath.IsAbs(dir) {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -37,15 +35,17 @@ func NewModFile(path string, dir string) (f *ModFile, err error) {
 		}
 	}
 	f = &ModFile{
-		path:     path,
-		filename: filepath.ToSlash(filepath.Join(dir, "go.mod")),
+		path:      path,
+		filename:  filepath.ToSlash(filepath.Join(dir, "go.mod")),
+		goVersion: goVersion,
 	}
 	return
 }
 
 type ModFile struct {
-	path     string
-	filename string
+	path      string
+	filename  string
+	goVersion string
 }
 
 func (f *ModFile) Name() (name string) {
@@ -60,13 +60,7 @@ func (f *ModFile) Write(ctx context.Context) (err error) {
 		err = errors.Warning("fns: mod file write failed").WithCause(pathErr).WithMeta("filename", f.filename)
 		return
 	}
-	goVersion := runtime.Version()[2:]
-	goVersionItems := strings.Split(goVersion, ".")
-	if len(goVersionItems) < 2 {
-		err = errors.Warning("fns: mod file write failed").WithCause(errors.Warning("invalid go runtime version").WithMeta("version", runtime.Version())).WithMeta("filename", f.filename)
-		return
-	}
-	versionErr := mf.AddGoStmt(strings.Join(goVersionItems[0:2], "."))
+	versionErr := mf.AddGoStmt(f.goVersion)
 	if versionErr != nil {
 		err = errors.Warning("fns: mod file write failed").WithCause(versionErr).WithMeta("filename", f.filename)
 		return

@@ -30,12 +30,11 @@ var (
 	sharedHeader      = []byte("X-Fns-Shared")
 )
 
-func NewShared(client transports.Client, signature signatures.Signature) shareds.Shared {
+type ClientFetcher func() transports.Client
+
+func NewShared(client ClientFetcher, signature signatures.Signature) shareds.Shared {
 	return &Shared{
-		lockers: &Lockers{
-			client:    client,
-			signature: signature,
-		},
+		lockers: shareds.LocalLockers(),
 		store: &Store{
 			client:    client,
 			signature: signature,
@@ -68,21 +67,17 @@ func (shared *Shared) Close() {}
 
 func NewSharedHandler(shared shareds.Shared) transports.Handler {
 	return &SharedHandler{
-		lockers: NewSharedLockersHandler(shared.Lockers()),
-		store:   NewSharedStoreHandler(shared.Store()),
+		store: NewSharedStoreHandler(shared.Store()),
 	}
 }
 
 type SharedHandler struct {
-	lockers transports.Handler
-	store   transports.Handler
+	store transports.Handler
 }
 
 func (handler *SharedHandler) Handle(w transports.ResponseWriter, r transports.Request) {
 	kind := r.Header().Get(sharedHeader)
-	if bytes.Equal(kind, sharedHeaderLockersValue) {
-		handler.lockers.Handle(w, r)
-	} else if bytes.Equal(kind, sharedHeaderStoreValue) {
+	if bytes.Equal(kind, sharedHeaderStoreValue) {
 		handler.store.Handle(w, r)
 	} else {
 		w.Failed(errors.Warning("fns: X-Fns-Shared is required"))

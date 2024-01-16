@@ -19,6 +19,7 @@ package clusters
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/aacfactory/avro"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/avros"
@@ -29,11 +30,14 @@ import (
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/fns/transports/middlewares/compress"
 	"github.com/aacfactory/json"
+	"github.com/aacfactory/logs"
 	"net/http"
 	"sync/atomic"
 )
 
 type Fn struct {
+	log          logs.Logger
+	address      string
 	endpointName string
 	name         string
 	internal     bool
@@ -165,6 +169,15 @@ func (fn *Fn) Handle(ctx services.Request) (v interface{}, err error) {
 		}
 		err = errors.Warning("fns: internal endpoint handle failed").WithCause(doErr).WithMeta("endpoint", fn.endpointName).WithMeta("fn", fn.name)
 		return
+	}
+	// debug
+	if fn.log.DebugEnabled() {
+		fn.log.Debug().
+			With("address", fn.address).
+			With("endpoint", fn.endpointName).
+			With("fn", fn.name).
+			With("status", status).
+			Message(fmt.Sprintf("fns: status of internal endpoint is %d", status))
 	}
 
 	// try copy transport response header

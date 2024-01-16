@@ -461,7 +461,7 @@ func (manager *Manager) watching() {
 						}
 						continue
 					}
-					ep := NewEndpoint(event.Node.Address, event.Node.Id, event.Node.Version, endpoint.Name, endpoint.Internal, document, client, eps.signature)
+					ep := NewEndpoint(manager.log, event.Node.Address, event.Node.Id, event.Node.Version, endpoint.Name, endpoint.Internal, document, client, eps.signature)
 					for _, fnInfo := range endpoint.Functions {
 						ep.AddFn(fnInfo.Name, fnInfo.Internal, fnInfo.Readonly)
 					}

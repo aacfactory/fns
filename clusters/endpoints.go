@@ -27,6 +27,7 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/documents"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/logs"
 	"math/rand"
 	"sort"
 	"sync"
@@ -34,8 +35,9 @@ import (
 	"time"
 )
 
-func NewEndpoint(address string, id string, version versions.Version, name string, internal bool, document documents.Endpoint, client transports.Client, signature signatures.Signature) (endpoint *Endpoint) {
+func NewEndpoint(log logs.Logger, address string, id string, version versions.Version, name string, internal bool, document documents.Endpoint, client transports.Client, signature signatures.Signature) (endpoint *Endpoint) {
 	endpoint = &Endpoint{
+		log: log.With("endpoint", name),
 		info: services.EndpointInfo{
 			Id:        id,
 			Version:   version,
@@ -56,6 +58,7 @@ func NewEndpoint(address string, id string, version versions.Version, name strin
 }
 
 type Endpoint struct {
+	log       logs.Logger
 	info      services.EndpointInfo
 	running   atomic.Bool
 	functions services.Fns
@@ -103,7 +106,9 @@ func (endpoint *Endpoint) IsHealth() bool {
 
 func (endpoint *Endpoint) AddFn(name string, internal bool, readonly bool) {
 	fn := &Fn{
+		log:          endpoint.log.With("fn", name),
 		endpointName: endpoint.info.Name,
+		address:      endpoint.info.Address,
 		name:         name,
 		internal:     internal,
 		readonly:     readonly,

@@ -22,10 +22,13 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/barriers"
 	"github.com/aacfactory/fns/clusters/proxy"
+	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/json"
 	"github.com/aacfactory/logs"
 	"strings"
 	"time"
@@ -75,11 +78,6 @@ func (cluster *Development) Construct(options ClusterOptions) (err error) {
 		return
 	}
 	cluster.address = []byte(address)
-	cluster.client, err = cluster.dialer.Dial(cluster.address)
-	if err != nil {
-		err = errors.Warning("fns: dev cluster construct failed").WithCause(err)
-		return
-	}
 	return
 }
 
@@ -88,6 +86,11 @@ func (cluster *Development) AddService(_ Service) {
 }
 
 func (cluster *Development) Join(ctx context.Context) (err error) {
+	cluster.client, err = cluster.dialer.Dial(cluster.address)
+	if err != nil {
+		err = errors.Warning("fns: dev cluster join failed").WithCause(err)
+		return
+	}
 	ctx, cluster.closeFn = context.WithCancel(ctx)
 	go cluster.watching(ctx)
 	return
@@ -105,8 +108,12 @@ func (cluster *Development) NodeEvents() (events <-chan NodeEvent) {
 }
 
 func (cluster *Development) Shared() (shared shareds.Shared) {
-	shared = proxy.NewShared(cluster.client, cluster.signature)
+	shared = proxy.NewShared(cluster.Client, cluster.signature)
 	return
+}
+
+func (cluster *Development) Client() transports.Client {
+	return cluster.client
 }
 
 func (cluster *Development) Barrier() (barrier barriers.Barrier) {
@@ -115,6 +122,7 @@ func (cluster *Development) Barrier() (barrier barriers.Barrier) {
 }
 
 func (cluster *Development) watching(ctx context.Context) {
+	cluster.fetchAndUpdate(ctx)
 	stop := false
 	timer := time.NewTimer(10 * time.Second)
 	for {
@@ -123,12 +131,7 @@ func (cluster *Development) watching(ctx context.Context) {
 			stop = true
 			break
 		case <-timer.C:
-			nodes := cluster.fetchNodes(ctx)
-			events := nodes.Difference(cluster.nodes)
-			for _, event := range events {
-				cluster.events <- event
-			}
-			cluster.nodes = nodes
+			cluster.fetchAndUpdate(ctx)
 			break
 		}
 		if stop {
@@ -138,6 +141,35 @@ func (cluster *Development) watching(ctx context.Context) {
 	}
 }
 
+func (cluster *Development) fetchAndUpdate(ctx context.Context) {
+	nodes := cluster.fetchNodes(ctx)
+	if len(nodes) == 0 {
+		if len(cluster.nodes) == 0 {
+			return
+		}
+		cluster.events <- NodeEvent{
+			Kind: Remove,
+			Node: cluster.nodes[0],
+		}
+	} else {
+		op, _ := json.Marshal(cluster.nodes)
+		np, _ := json.Marshal(nodes)
+		if mmhash.Sum64(op) == mmhash.Sum64(np) {
+			return
+		}
+		cluster.events <- NodeEvent{
+			Kind: Remove,
+			Node: nodes[0],
+		}
+		cluster.events <- NodeEvent{
+			Kind: Add,
+			Node: nodes[0],
+		}
+	}
+	cluster.nodes = nodes
+	return
+}
+
 func (cluster *Development) fetchNodes(ctx context.Context) (nodes Nodes) {
 	infos, infosErr := proxy.FetchEndpointInfos(ctx, cluster.client, cluster.signature)
 	if infosErr != nil {
@@ -145,6 +177,10 @@ func (cluster *Development) fetchNodes(ctx context.Context) (nodes Nodes) {
 			cluster.log.Warn().Cause(infosErr).With("cluster", developmentName).Message("fns: fetch endpoint infos failed")
 		}
 		return
+	}
+	for i, info := range infos {
+		info.Address = bytex.ToString(cluster.address)
+		infos[i] = info
 	}
 	nodes = MapEndpointInfosToNodes(infos)
 	return

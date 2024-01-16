@@ -18,6 +18,7 @@
 package proxy
 
 import (
+	"bytes"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
@@ -33,7 +34,7 @@ var (
 )
 
 type Store struct {
-	client    transports.Client
+	client    ClientFetcher
 	signature signatures.Signature
 }
 
@@ -66,7 +67,7 @@ func (store *Store) Get(ctx context.Context, key []byte) (value []byte, has bool
 	// signature
 	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
-	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
+	status, _, responseBody, doErr := store.client().Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development store get failed").WithCause(doErr)
 		return
@@ -78,7 +79,7 @@ func (store *Store) Get(ctx context.Context, key []byte) (value []byte, has bool
 			err = errors.Warning("fns: development store get failed").WithCause(decodeErr)
 			return
 		}
-		if len(result.Error) > 0 {
+		if len(result.Error) > 0 && !bytes.Equal(result.Error, json.NullBytes) {
 			err = errors.Decode(result.Error)
 			return
 		}
@@ -119,7 +120,7 @@ func (store *Store) Set(ctx context.Context, key []byte, value []byte) (err erro
 	// signature
 	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
-	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
+	status, _, responseBody, doErr := store.client().Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development store set failed").WithCause(doErr)
 		return
@@ -131,7 +132,7 @@ func (store *Store) Set(ctx context.Context, key []byte, value []byte) (err erro
 			err = errors.Warning("fns: development store set failed").WithCause(decodeErr)
 			return
 		}
-		if len(result.Error) > 0 {
+		if len(result.Error) > 0 && !bytes.Equal(result.Error, json.NullBytes) {
 			err = errors.Decode(result.Error)
 			return
 		}
@@ -172,7 +173,7 @@ func (store *Store) SetWithTTL(ctx context.Context, key []byte, value []byte, tt
 	// signature
 	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
-	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
+	status, _, responseBody, doErr := store.client().Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development store set with ttl failed").WithCause(doErr)
 		return
@@ -184,7 +185,7 @@ func (store *Store) SetWithTTL(ctx context.Context, key []byte, value []byte, tt
 			err = errors.Warning("fns: development store set with ttl failed").WithCause(decodeErr)
 			return
 		}
-		if len(result.Error) > 0 {
+		if len(result.Error) > 0 && !bytes.Equal(result.Error, json.NullBytes) {
 			err = errors.Decode(result.Error)
 			return
 		}
@@ -224,7 +225,7 @@ func (store *Store) Incr(ctx context.Context, key []byte, delta int64) (v int64,
 	// signature
 	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
-	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
+	status, _, responseBody, doErr := store.client().Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development store incr failed").WithCause(doErr)
 		return
@@ -236,7 +237,7 @@ func (store *Store) Incr(ctx context.Context, key []byte, delta int64) (v int64,
 			err = errors.Warning("fns: development store incr failed").WithCause(decodeErr)
 			return
 		}
-		if len(result.Error) > 0 {
+		if len(result.Error) > 0 && !bytes.Equal(result.Error, json.NullBytes) {
 			err = errors.Decode(result.Error)
 			return
 		}
@@ -274,7 +275,7 @@ func (store *Store) Remove(ctx context.Context, key []byte) (err error) {
 	// signature
 	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
 	// do
-	status, _, responseBody, doErr := store.client.Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
+	status, _, responseBody, doErr := store.client().Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
 	if doErr != nil {
 		err = errors.Warning("fns: development store remove failed").WithCause(doErr)
 		return
@@ -286,7 +287,7 @@ func (store *Store) Remove(ctx context.Context, key []byte) (err error) {
 			err = errors.Warning("fns: development store remove failed").WithCause(decodeErr)
 			return
 		}
-		if len(result.Error) > 0 {
+		if len(result.Error) > 0 && !bytes.Equal(result.Error, json.NullBytes) {
 			err = errors.Decode(result.Error)
 			return
 		}

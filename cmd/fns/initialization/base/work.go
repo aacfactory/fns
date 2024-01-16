@@ -36,7 +36,7 @@ func NewWorkFile(goVersion string, path string, dir string) (f *WorkFile, err er
 	}
 	f = &WorkFile{
 		path:      path,
-		modDir:    dir,
+		modDir:    filepath.ToSlash(dir),
 		filename:  filepath.ToSlash(filepath.Join(filepath.Dir(dir), "go.work")),
 		goVersion: goVersion,
 	}
@@ -76,8 +76,11 @@ func (f *WorkFile) Write(ctx context.Context) (err error) {
 			return
 		}
 	}
-	wf.AddNewUse(f.modDir, f.path)
 
+	modDir := filepath.ToSlash(f.modDir)
+	workDir := filepath.ToSlash(filepath.Dir(modDir))
+
+	wf.AddNewUse(f.modDir[len(workDir)+1:], f.path)
 	b := modfile.Format(wf.Syntax)
 	writeErr := os.WriteFile(f.filename, b, 0644)
 	if writeErr != nil {

@@ -78,4 +78,7 @@ func (s *localShared) Store() (store Store) {
 	return s.store
 }
 
-func (s *localShared) Close() {}
+func (s *localShared) Close() {
+	s.store.Close()
+	s.lockers.Close()
+}

@@ -18,16 +18,15 @@
 package shareds
 
 import (
-	"encoding/binary"
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
-	"github.com/aacfactory/fns/commons/caches"
-	"github.com/aacfactory/fns/commons/container/bmap"
-	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/logs"
+	"github.com/tidwall/btree"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -37,6 +36,7 @@ type Store interface {
 	SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error)
 	Remove(ctx context.Context, key []byte) (err error)
 	Incr(ctx context.Context, key []byte, delta int64) (v int64, err error)
+	Expire(ctx context.Context, key []byte, ttl time.Duration) (err error)
 	Close()
 }
 
@@ -55,7 +55,7 @@ func RegisterLocalStoreBuild(build LocalStoreBuild) {
 type LocalStoreBuild func(log logs.Logger, config configures.Config) (Store, error)
 
 type DefaultLocalSharedStoreConfig struct {
-	CacheSize string `json:"cacheSize,omitempty" yaml:"cacheSize,omitempty"`
+	ShrinkDuration time.Duration `json:"shrinkDuration"`
 }
 
 func defaultLocalStoreBuild(log logs.Logger, config configures.Config) (store Store, err error) {
@@ -65,29 +65,30 @@ func defaultLocalStoreBuild(log logs.Logger, config configures.Config) (store St
 		err = errors.Warning("fns: build default local shared store failed").WithCause(cfgErr)
 		return
 	}
-	if cfg.CacheSize == "" {
-		cfg.CacheSize = "64MB"
+	shrinkDuration := cfg.ShrinkDuration
+	if shrinkDuration == 0 {
+		shrinkDuration = 1 * time.Hour
 	}
-	cacheSize, cacheSizeErr := bytex.ParseBytes(cfg.CacheSize)
-	if cacheSizeErr != nil {
-		err = errors.Warning("fns: build default local shared store failed").WithCause(errors.Warning("parse cacheSize failed").WithCause(cacheSizeErr))
-		return
+	s := &localStore{
+		log:            log,
+		shrinkDuration: shrinkDuration,
+		closeCh:        make(chan struct{}, 1),
+		locker:         sync.RWMutex{},
+		values:         btree.NewMap[string, Entry](0),
 	}
-	cache := caches.New(cacheSize)
-	store = &localStore{
-		log:       log,
-		locker:    new(sync.RWMutex),
-		cache:     cache,
-		persisted: bmap.New[uint64, []byte](),
+	if shrinkDuration > 0 {
+		go s.shrink()
 	}
+	store = s
 	return
 }
 
 type localStore struct {
-	log       logs.Logger
-	locker    *sync.RWMutex
-	cache     *caches.Cache
-	persisted bmap.BMap[uint64, []byte]
+	log            logs.Logger
+	shrinkDuration time.Duration
+	closeCh        chan struct{}
+	locker         sync.RWMutex
+	values         *btree.Map[string, Entry]
 }
 
 func (store *localStore) Get(_ context.Context, key []byte) (value []byte, has bool, err error) {
@@ -97,16 +98,25 @@ func (store *localStore) Get(_ context.Context, key []byte) (value []byte, has b
 	}
 	store.locker.RLock()
 	defer store.locker.RUnlock()
-	value, has = store.cache.Get(key)
-	if has {
+	sk := bytex.ToString(key)
+	entry, exist := store.values.Get(sk)
+	if !exist {
 		return
 	}
-	k := mmhash.Sum64(key)
-	var p interface{}
-	p, has = store.persisted.Get(k)
-	if has {
-		value, has = p.([]byte)
+	if entry.Expired() {
 		return
+	}
+	has = true
+	switch v := entry.Value.(type) {
+	case []byte:
+		value = v
+		break
+	case *atomic.Int64:
+		value = bytex.FromString(strconv.FormatInt(v.Load(), 64))
+		break
+	default:
+		has = false
+		break
 	}
 	return
 }
@@ -118,23 +128,32 @@ func (store *localStore) Set(_ context.Context, key []byte, value []byte) (err e
 	}
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	k := mmhash.Sum64(key)
-	store.persisted.Set(k, value)
+	sk := bytex.ToString(key)
+	store.values.Set(sk, Entry{
+		key:      sk,
+		Value:    value,
+		Deadline: time.Time{},
+	})
 	return
 }
 
-func (store *localStore) SetWithTTL(_ context.Context, key []byte, value []byte, ttl time.Duration) (err error) {
+func (store *localStore) SetWithTTL(ctx context.Context, key []byte, value []byte, ttl time.Duration) (err error) {
 	if key == nil || len(key) == 0 {
 		err = errors.Warning("fns: shared store set failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
 		return
 	}
-	store.locker.Lock()
-	defer store.locker.Unlock()
-	err = store.cache.SetWithTTL(key, value, ttl)
-	if err != nil {
-		err = errors.Warning("fns: shared store set failed").WithCause(err).WithMeta("key", string(key))
+	if ttl < 1 {
+		err = store.Set(ctx, key, value)
 		return
 	}
+	store.locker.Lock()
+	defer store.locker.Unlock()
+	sk := bytex.ToString(key)
+	store.values.Set(sk, Entry{
+		key:      sk,
+		Value:    value,
+		Deadline: time.Now().Add(ttl),
+	})
 	return
 }
 
@@ -145,16 +164,30 @@ func (store *localStore) Incr(_ context.Context, key []byte, delta int64) (v int
 	}
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	k := mmhash.Sum64(key)
-	n := int64(0)
-	p, has := store.persisted.Get(k)
-	if has {
-		n, _ = binary.Varint(p)
+	sk := bytex.ToString(key)
+	var n *atomic.Int64
+	entry, exist := store.values.Get(sk)
+	if exist {
+		if entry.Expired() {
+			n = new(atomic.Int64)
+		} else {
+			nn, ok := entry.Value.(*atomic.Int64)
+			if !ok {
+				err = errors.Warning("fns: shared store incr failed").WithCause(errors.Warning("value of key is not int64")).WithMeta("shared", "local").WithMeta("key", string(key))
+				return
+			}
+			n = nn
+		}
+	} else {
+		n = new(atomic.Int64)
+		entry = Entry{
+			key:      sk,
+			Value:    n,
+			Deadline: time.Time{},
+		}
 	}
-	v = n + delta
-	encoded := make([]byte, 10)
-	binary.PutVarint(encoded, n)
-	store.persisted.Set(k, encoded)
+	v = n.Add(delta)
+	store.values.Set(sk, entry)
 	return
 }
 
@@ -165,11 +198,79 @@ func (store *localStore) Remove(_ context.Context, key []byte) (err error) {
 	}
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	store.cache.Remove(key)
-	k := mmhash.Sum64(key)
-	store.persisted.Remove(k)
+	sk := bytex.ToString(key)
+	store.values.Delete(sk)
 	return
 }
 
+func (store *localStore) Expire(ctx context.Context, key []byte, ttl time.Duration) (err error) {
+	if key == nil || len(key) == 0 {
+		err = errors.Warning("fns: shared store expire key failed").WithCause(errors.Warning("key is required")).WithMeta("shared", "local").WithMeta("key", string(key))
+		return
+	}
+	store.locker.Lock()
+	defer store.locker.Unlock()
+	sk := bytex.ToString(key)
+	entry, exist := store.values.Get(sk)
+	if !exist {
+		return
+	}
+	if ttl < 1 {
+		entry.Deadline = time.Time{}
+	} else {
+		entry.Deadline = time.Now().Add(ttl)
+	}
+	store.values.Set(sk, entry)
+	return
+}
+
+func (store *localStore) shrink() {
+	timer := time.NewTimer(store.shrinkDuration)
+	stop := false
+	for {
+		select {
+		case <-store.closeCh:
+			stop = true
+			break
+		case <-timer.C:
+			store.locker.Lock()
+			expires := make([]string, 0, 1)
+			values := store.values.Values()
+			for _, value := range values {
+				if value.Expired() {
+					expires = append(expires, value.key)
+				}
+			}
+			for _, expire := range expires {
+				store.values.Delete(expire)
+			}
+			store.locker.Unlock()
+			timer.Reset(store.shrinkDuration)
+			break
+		}
+		if stop {
+			break
+		}
+	}
+	timer.Stop()
+}
+
 func (store *localStore) Close() {
+	if store.shrinkDuration > 0 {
+		store.closeCh <- struct{}{}
+	}
+	close(store.closeCh)
+}
+
+type Entry struct {
+	key      string
+	Value    any
+	Deadline time.Time
+}
+
+func (entry *Entry) Expired() bool {
+	if entry.Deadline.IsZero() {
+		return false
+	}
+	return time.Now().After(entry.Deadline)
 }

@@ -287,6 +287,7 @@ func New(options ...Option) (app Application) {
 		version:         appVersion,
 		rt:              rt,
 		status:          status,
+		shared:          shared,
 		log:             logger,
 		config:          config,
 		amp:             amp,
@@ -313,6 +314,7 @@ type application struct {
 	version         versions.Version
 	rt              *runtime.Runtime
 	status          *switchs.Switch
+	shared          shareds.Shared
 	log             logs.Logger
 	config          configs.Config
 	amp             *procs.AutoMaxProcs
@@ -474,6 +476,8 @@ func (app *application) shutdown() {
 		if app.proxy != nil {
 			app.proxy.Shutdown(ctx)
 		}
+		// shared
+		app.shared.Close()
 		// log
 		_ = app.log.Shutdown(ctx)
 		cancel()

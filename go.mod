@@ -20,6 +20,7 @@ require (
 	github.com/goccy/go-yaml v1.11.2
 	github.com/mattn/go-isatty v0.0.20
 	github.com/rs/xid v1.5.0
+	github.com/tidwall/btree v1.7.0
 	github.com/urfave/cli/v2 v2.27.1
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.51.0
@@ -27,7 +28,6 @@ require (
 	golang.org/x/crypto v0.18.0
 	golang.org/x/mod v0.14.0
 	golang.org/x/sync v0.6.0
-	golang.org/x/sys v0.16.0
 	golang.org/x/term v0.16.0
 )
 
@@ -53,6 +53,7 @@ require (
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20231213231151-1d8dd44e695e // indirect
 	golang.org/x/net v0.20.0 // indirect
+	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect

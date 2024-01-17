@@ -297,6 +297,57 @@ func (store *Store) Remove(ctx context.Context, key []byte) (err error) {
 	return
 }
 
+type StoreExpireParam struct {
+	Key []byte        `json:"key"`
+	TTL time.Duration `json:"ttl"`
+}
+
+type StoreExpireResult struct {
+	Error json.RawMessage `json:"error"`
+}
+
+func (store *Store) Expire(ctx context.Context, key []byte, ttl time.Duration) (err error) {
+	// param
+	param := StoreExpireParam{
+		Key: key,
+		TTL: ttl,
+	}
+	p, _ := json.Marshal(param)
+	command := Command{
+		Command: "expire",
+		Payload: p,
+	}
+	body, _ := json.Marshal(command)
+
+	header := transports.AcquireHeader()
+	defer transports.ReleaseHeader(header)
+	header.Set(transports.ContentTypeHeaderName, contentType)
+	header.Set(sharedHeader, sharedHeaderStoreValue)
+	// signature
+	header.Set(transports.SignatureHeaderName, store.signature.Sign(body))
+	// do
+	status, _, responseBody, doErr := store.client().Do(ctx, transports.MethodPost, sharedHandlerPath, header, body)
+	if doErr != nil {
+		err = errors.Warning("fns: development store expire failed").WithCause(doErr)
+		return
+	}
+	if status == 200 {
+		result := StoreExpireResult{}
+		decodeErr := json.Unmarshal(responseBody, &result)
+		if decodeErr != nil {
+			err = errors.Warning("fns: development store expire failed").WithCause(decodeErr)
+			return
+		}
+		if len(result.Error) > 0 && !bytes.Equal(result.Error, json.NullBytes) {
+			err = errors.Decode(result.Error)
+			return
+		}
+		return
+	}
+	err = errors.Warning("fns: development store expire failed").WithMeta("status", strconv.Itoa(status))
+	return
+}
+
 func (store *Store) Close() {}
 
 // +-------------------------------------------------------------------------------------------------------------------+
@@ -396,6 +447,21 @@ func (handler *SharedStoreHandler) Handle(w transports.ResponseWriter, r transpo
 		}
 		result := StoreRemoveResult{}
 		err := handler.store.Remove(r, param.Key)
+		if err == nil {
+		} else {
+			result.Error, _ = json.Marshal(errors.Wrap(err))
+		}
+		w.Succeed(result)
+		break
+	case "expire":
+		param := StoreExpireParam{}
+		paramErr := json.Unmarshal(cmd.Payload, &param)
+		if paramErr != nil {
+			w.Failed(ErrInvalidBody.WithCause(paramErr))
+			return
+		}
+		result := StoreExpireResult{}
+		err := handler.store.Expire(r, param.Key, param.TTL)
 		if err == nil {
 		} else {
 			result.Error, _ = json.Marshal(errors.Wrap(err))

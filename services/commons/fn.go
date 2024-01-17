@@ -343,7 +343,7 @@ func (fn *Fn[P, R]) handle(r services.Request) (v R, err error) {
 	}
 	// authorization
 	if fn.authorization {
-		err = fn.verifyAuthorization(r)
+		err = authorizations.ValidateContext(r)
 		if err != nil {
 			return
 		}
@@ -423,37 +423,6 @@ func (fn *Fn[P, R]) param(r services.Request) (param P, err error) {
 	if err != nil {
 		err = errors.BadRequest("scan params failed").WithCause(err)
 		return
-	}
-	return
-}
-
-func (fn *Fn[P, R]) verifyAuthorization(r services.Request) (err error) {
-	authorization, has, loadErr := authorizations.Load(r)
-	if loadErr != nil {
-		err = authorizations.ErrUnauthorized.WithCause(loadErr)
-		return
-	}
-	if !has {
-		err = authorizations.ErrUnauthorized
-		return
-	}
-	if authorization.Exist() {
-		if !authorization.Validate() {
-			err = authorizations.ErrUnauthorized
-			return
-		}
-	} else {
-		token := r.Header().Token()
-		if len(token) == 0 {
-			err = authorizations.ErrUnauthorized
-			return
-		}
-		authorization, err = authorizations.Decode(r, token)
-		if err != nil {
-			err = authorizations.ErrUnauthorized.WithCause(err)
-			return
-		}
-		authorizations.With(r, authorization)
 	}
 	return
 }

@@ -18,7 +18,9 @@
 package authorizations
 
 import (
+	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/services"
+	"time"
 )
 
 var (
@@ -68,17 +70,35 @@ type service struct {
 }
 
 func (svc *service) Construct(options services.Options) (err error) {
+	config := Config{}
+	configErr := options.Config.As(&config)
+	if configErr != nil {
+		err = errors.Warning("fns: authorizations construct failed").WithCause(configErr)
+		return
+	}
+	if config.ExpireTTL < 1 {
+		config.ExpireTTL = 3 * 24 * time.Hour
+	}
+	if config.AutoRefresh {
+		if config.AutoRefreshWindow < 1 || config.AutoRefreshWindow >= config.ExpireTTL {
+			config.AutoRefreshWindow = config.ExpireTTL / 10
+		}
+	}
 	err = svc.Abstract.Construct(options)
 	if err != nil {
 		return
 	}
-	svc.AddFunction(&encodeFn{
-		encoder: svc.encoder,
-		store:   svc.store,
+	svc.AddFunction(&validateFn{
+		encoder:       svc.encoder,
+		store:         svc.store,
+		autoRefresh:   config.AutoRefresh,
+		refreshWindow: config.AutoRefreshWindow,
+		expireTTL:     config.ExpireTTL,
 	})
-	svc.AddFunction(&decodeFn{
-		encoder: svc.encoder,
-		store:   svc.store,
+	svc.AddFunction(&createFn{
+		encoder:   svc.encoder,
+		store:     svc.store,
+		expireTTL: config.ExpireTTL,
 	})
 	svc.AddFunction(&listFn{
 		store: svc.store,

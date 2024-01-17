@@ -74,6 +74,15 @@ func (fn *listFn) Handle(ctx services.Request) (v any, err error) {
 		err = errors.Warning("authorizations: list failed").WithCause(listErr)
 		return
 	}
-	v = entries
+	if len(entries) == 0 {
+		return
+	}
+	validates := make([]Authorization, 0, 1)
+	for _, entry := range entries {
+		if entry.Validate() {
+			validates = append(validates, entry)
+		}
+	}
+	v = validates
 	return
 }

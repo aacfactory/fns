@@ -20,7 +20,6 @@ package authorizations
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/fns/services"
 	"time"
 )
 
@@ -53,36 +52,3 @@ func (authorization Authorization) Validate() bool {
 }
 
 var ErrUnauthorized = errors.Unauthorized("unauthorized")
-
-func Validate(ctx context.Context) (err error) {
-	authorization, has, loadErr := Load(ctx)
-	if loadErr != nil {
-		err = ErrUnauthorized.WithCause(loadErr)
-		return
-	}
-	if has {
-		if authorization.Validate() {
-			return
-		}
-		err = ErrUnauthorized
-		return
-	}
-
-	r := services.LoadRequest(ctx)
-	token := r.Header().Token()
-	if len(token) == 0 {
-		err = ErrUnauthorized
-		return
-	}
-	authorization, err = Decode(ctx, token)
-	if err != nil {
-		err = ErrUnauthorized.WithCause(err).WithMeta("token", string(token))
-		return
-	}
-	if !authorization.Validate() {
-		err = ErrUnauthorized
-		return
-	}
-	With(ctx, authorization)
-	return
-}

@@ -21,8 +21,9 @@ import (
 	"github.com/aacfactory/fns/commons/versions"
 )
 
-func New(name string, title string, description string) Endpoint {
+func New(name string, title string, description string, version versions.Version) Endpoint {
 	return Endpoint{
+		Version:     version,
 		Name:        name,
 		Title:       title,
 		Description: description,
@@ -32,7 +33,6 @@ func New(name string, title string, description string) Endpoint {
 }
 
 type Endpoint struct {
-	Id          []string         `json:"id,omitempty" avro:"id"`
 	Version     versions.Version `json:"version" avro:"version"`
 	Name        string           `json:"name" avro:"name"`
 	Title       string           `json:"title" avro:"title"`
@@ -81,20 +81,5 @@ func (endpoint *Endpoint) addElement(element Element) (ref Element) {
 		}
 		endpoint.Elements = endpoint.Elements.Add(unpacked)
 	}
-	return
-}
-
-type Endpoints []Endpoint
-
-func (endpoints Endpoints) Len() int {
-	return len(endpoints)
-}
-
-func (endpoints Endpoints) Less(i, j int) bool {
-	return endpoints[i].Name < endpoints[j].Name
-}
-
-func (endpoints Endpoints) Swap(i, j int) {
-	endpoints[i], endpoints[j] = endpoints[j], endpoints[i]
 	return
 }

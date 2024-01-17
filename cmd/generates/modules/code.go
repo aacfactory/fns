@@ -548,7 +548,7 @@ func (s *ServiceFile) serviceDocumentCode(ctx context.Context) (code gcg.Code, e
 	docFnCode.Name("Document")
 	docFnCode.AddResult("document", gcg.QualifiedIdent(gcg.NewPackage("github.com/aacfactory/fns/services/documents"), "Endpoint"))
 	body := gcg.Statements()
-	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", \"%s\")", strings.ReplaceAll(s.service.Title, "\n", "\\n"), strings.ReplaceAll(s.service.Description, "\n", "\\n")))
+	body.Token(fmt.Sprintf("document = documents.New(svc.Name(), \"%s\", \"%s\", svc.Version())", strings.ReplaceAll(s.service.Title, "\n", "\\n"), strings.ReplaceAll(s.service.Description, "\n", "\\n")))
 	if s.service.Internal {
 		body.Token("document.SetInternal()").Line()
 	}

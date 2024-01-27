@@ -56,7 +56,7 @@ func (entries *Entries) Set(key []byte, val any) {
 	return
 }
 
-func (entries *Entries) Remove(key []byte) {
+func (entries *Entries) Remove(key []byte) (ok bool) {
 	s := *entries
 	n := -1
 	for i, entry := range s {
@@ -68,6 +68,7 @@ func (entries *Entries) Remove(key []byte) {
 	if n > -1 {
 		s = append(s[:n], s[n+1:]...)
 		*entries = s
+		ok = true
 	}
 	return
 }

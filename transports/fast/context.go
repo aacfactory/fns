@@ -35,6 +35,10 @@ func (ctx *Context) SetUserValue(key []byte, val any) {
 	ctx.RequestCtx.SetUserValueBytes(key, val)
 }
 
+func (ctx *Context) RemoveUserValue(key []byte) {
+	ctx.RequestCtx.RemoveUserValue(key)
+}
+
 func (ctx *Context) UserValues(fn func(key []byte, val any)) {
 	ctx.RequestCtx.VisitUserValues(fn)
 }
@@ -49,6 +53,10 @@ func (ctx *Context) LocalValue(key []byte) any {
 
 func (ctx *Context) SetLocalValue(key []byte, val any) {
 	ctx.locals.Set(key, val)
+}
+
+func (ctx *Context) RemoveLocalValue(key []byte) {
+	ctx.locals.Remove(key)
 }
 
 func (ctx *Context) LocalValues(fn func(key []byte, val any)) {

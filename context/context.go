@@ -55,9 +55,11 @@ type Context interface {
 	context.Context
 	UserValue(key []byte) any
 	SetUserValue(key []byte, val any)
+	RemoveUserValue(key []byte)
 	UserValues(fn func(key []byte, val any))
 	LocalValue(key []byte) any
 	SetLocalValue(key []byte, val any)
+	RemoveLocalValue(key []byte)
 	LocalValues(fn func(key []byte, val any))
 }
 
@@ -83,6 +85,16 @@ func (c *context_) SetUserValue(key []byte, val any) {
 	c.users.Set(key, val)
 }
 
+func (c *context_) RemoveUserValue(key []byte) {
+	if c.users.Remove(key) {
+		return
+	}
+	parent, ok := c.Context.(Context)
+	if ok {
+		parent.RemoveUserValue(key)
+	}
+}
+
 func (c *context_) UserValues(fn func(key []byte, val any)) {
 	parent, ok := c.Context.(Context)
 	if ok {
@@ -105,6 +117,16 @@ func (c *context_) LocalValue(key []byte) any {
 
 func (c *context_) SetLocalValue(key []byte, val any) {
 	c.locals.Set(key, val)
+}
+
+func (c *context_) RemoveLocalValue(key []byte) {
+	if c.locals.Remove(key) {
+		return
+	}
+	parent, ok := c.Context.(Context)
+	if ok {
+		parent.RemoveLocalValue(key)
+	}
 }
 
 func (c *context_) LocalValues(fn func(key []byte, val any)) {

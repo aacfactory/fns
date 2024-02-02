@@ -15,19 +15,23 @@
  *
  */
 
-package operators
+package operators_test
 
-import "context"
+import (
+	"fmt"
+	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/context/operators"
+	"testing"
+)
 
-func Foreach[T any](ctx context.Context, array []T, fn func(context.Context, int, T) error) (err error) {
-	if array == nil || len(array) == 0 {
+func TestMap(t *testing.T) {
+	nn := []int{1, 2, 3, 4, 5}
+	ss, ssErr := operators.MapSlice(context.TODO(), nn, func(ctx context.Context, n int) (string, error) {
+		return fmt.Sprintf("%d", n), nil
+	})
+	if ssErr != nil {
+		t.Errorf("%+v", ssErr)
 		return
 	}
-	for i, e := range array {
-		err = fn(ctx, i, e)
-		if err != nil {
-			return
-		}
-	}
-	return
+	t.Log(ss)
 }

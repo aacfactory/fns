@@ -15,14 +15,17 @@
  *
  */
 
-package operators
+package sort_test
 
-import "context"
+import (
+	"github.com/aacfactory/fns/commons/sort"
+	"testing"
+)
 
-func Ternary(ctx context.Context, condition func(ctx context.Context) (ok bool), truthy func(ctx context.Context), falsy func(ctx context.Context)) {
-	if condition(ctx) {
-		truthy(ctx)
-	} else {
-		falsy(ctx)
-	}
+func TestSort(t *testing.T) {
+	ss := []string{"0", "1", "3", "2"}
+	sort.Sort[string](ss, func(a string, b string) bool {
+		return a < b
+	})
+	t.Log(ss)
 }

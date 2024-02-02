@@ -15,19 +15,28 @@
  *
  */
 
-package operators_test
+package operators
 
-import (
-	"context"
-	"fmt"
-	"github.com/aacfactory/fns/commons/operators"
-	"testing"
-)
+import "github.com/aacfactory/fns/context"
 
-func TestMap(t *testing.T) {
-	nn := []int{1, 2, 3, 4, 5}
-	ss, ssErr := operators.Map(context.TODO(), nn, func(ctx context.Context, n int) (string, error) {
-		return fmt.Sprintf("%d", n), nil
-	})
-	fmt.Println(ss, ssErr)
+type FilterFn[T any] func(ctx context.Context, element T) (ok bool, err error)
+
+func Filter[T any](ctx context.Context, elements []T, fn FilterFn[T]) (targets []T, err error) {
+	if elements == nil || len(elements) == 0 {
+		return
+	}
+	for _, e := range elements {
+		found, findErr := fn(ctx, e)
+		if findErr != nil {
+			err = findErr
+			return
+		}
+		if found {
+			if targets == nil {
+				targets = make([]T, 0, 1)
+			}
+			targets = append(targets, e)
+		}
+	}
+	return
 }

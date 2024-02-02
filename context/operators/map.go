@@ -17,22 +17,27 @@
 
 package operators
 
-import "context"
+import "github.com/aacfactory/fns/context"
 
-func Filter[T any](ctx context.Context, array []T, fn func(context.Context, T) (bool, error)) (r []T, err error) {
-	r = make([]T, 0, 1)
-	if array == nil || len(array) == 0 {
+type MapFn[S any, D any] func(ctx context.Context, src S) (dst D, err error)
+
+func Map[S any, D any](ctx context.Context, src S, fn MapFn[S, D]) (dst D, err error) {
+	dst, err = fn(ctx, src)
+	return
+}
+
+func MapSlice[S any, D any](ctx context.Context, src []S, fn MapFn[S, D]) (dst []D, err error) {
+	dst = make([]D, 0, 1)
+	if src == nil || len(src) == 0 {
 		return
 	}
-	for _, e := range array {
-		found, findErr := fn(ctx, e)
-		if findErr != nil {
-			err = findErr
+	for _, s := range src {
+		d, mapErr := fn(ctx, s)
+		if mapErr != nil {
+			err = mapErr
 			return
 		}
-		if found {
-			r = append(r, e)
-		}
+		dst = append(dst, d)
 	}
 	return
 }

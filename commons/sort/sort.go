@@ -15,26 +15,18 @@
  *
  */
 
-package operators
+package sort
 
 import (
-	"context"
 	"sort"
 )
 
-func Sort[T any](ctx context.Context, array []T, less func(context.Context, T, T) (bool, error)) (rr []T, err error) {
-	if array == nil || len(array) == 0 {
-		rr = array
+func Sort[T any](elements []T, lessFn func(a T, b T) bool) {
+	if elements == nil || len(elements) == 0 {
 		return
 	}
-	sort.Slice(array, func(i, j int) bool {
-		n, cErr := less(ctx, array[i], array[j])
-		if cErr != nil {
-			err = cErr
-			return false
-		}
-		return n
+	sort.Slice(elements, func(i, j int) bool {
+		return lessFn(elements[i], elements[j])
 	})
-	rr = array
 	return
 }

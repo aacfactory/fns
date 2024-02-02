@@ -17,19 +17,17 @@
 
 package operators
 
-import "context"
+import "github.com/aacfactory/fns/context"
 
-func Find[T any](ctx context.Context, array []T, fn func(context.Context, T) (bool, error)) (r T, found bool, err error) {
-	if array == nil || len(array) == 0 {
+type ForeachFn[T any] func(ctx context.Context, i int, element T) (err error)
+
+func Foreach[T any](ctx context.Context, elements []T, fn ForeachFn[T]) (err error) {
+	if elements == nil || len(elements) == 0 {
 		return
 	}
-	for _, e := range array {
-		found, err = fn(ctx, e)
+	for i, e := range elements {
+		err = fn(ctx, i, e)
 		if err != nil {
-			return
-		}
-		if found {
-			r = e
 			return
 		}
 	}

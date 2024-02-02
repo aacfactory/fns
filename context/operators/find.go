@@ -17,25 +17,23 @@
 
 package operators
 
-import "context"
+import "github.com/aacfactory/fns/context"
 
-func Map[S any, R any](ctx context.Context, src []S, fn func(context.Context, S) (R, error)) (dst []R, err error) {
-	dst = make([]R, 0, 1)
-	if src == nil || len(src) == 0 {
+type FindFn[T any] func(ctx context.Context, element T) (found bool, err error)
+
+func Find[T any](ctx context.Context, elements []T, fn FindFn[T]) (target T, found bool, err error) {
+	if elements == nil || len(elements) == 0 {
 		return
 	}
-	for _, s := range src {
-		d, mapErr := fn(ctx, s)
-		if mapErr != nil {
-			err = mapErr
+	for _, e := range elements {
+		found, err = fn(ctx, e)
+		if err != nil {
 			return
 		}
-		dst = append(dst, d)
+		if found {
+			target = e
+			return
+		}
 	}
-	return
-}
-
-func MapOne[S any, R any](ctx context.Context, src S, fn func(context.Context, S) (R, error)) (dst R, err error) {
-	dst, err = fn(ctx, src)
 	return
 }

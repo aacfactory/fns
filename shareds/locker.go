@@ -22,6 +22,7 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
+	"github.com/aacfactory/fns/commons/spinlock"
 	"github.com/aacfactory/fns/context"
 	"sync"
 	"sync/atomic"
@@ -95,7 +96,7 @@ func (locker *localLocker) Unlock(_ context.Context) (err error) {
 
 func LocalLockers() Lockers {
 	v := &localLockers{
-		mutex:     &sync.Mutex{},
+		mutex:     new(spinlock.Locker),
 		lockers:   make(map[string]*reuseLocker),
 		releaseCh: make(chan []byte, 10240),
 	}
@@ -104,7 +105,7 @@ func LocalLockers() Lockers {
 }
 
 type localLockers struct {
-	mutex     *sync.Mutex
+	mutex     sync.Locker
 	lockers   map[string]*reuseLocker
 	releaseCh chan []byte
 }
@@ -118,7 +119,7 @@ func (lockers *localLockers) Acquire(_ context.Context, key []byte, ttl time.Dur
 	rl, has := lockers.lockers[bytex.ToString(key)]
 	if !has {
 		rl = &reuseLocker{
-			mutex: &sync.Mutex{},
+			mutex: new(spinlock.Locker),
 			times: 0,
 		}
 		lockers.lockers[bytex.ToString(key)] = rl

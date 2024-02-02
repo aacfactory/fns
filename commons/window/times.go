@@ -18,12 +18,15 @@
 package window
 
 import (
+	"github.com/aacfactory/fns/commons/spinlock"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 func NewTimes(win time.Duration) *Times {
 	return &Times{
+		locker:   new(spinlock.Locker),
 		n:        0,
 		window:   win,
 		deadline: time.Now().Truncate(win),
@@ -31,12 +34,15 @@ func NewTimes(win time.Duration) *Times {
 }
 
 type Times struct {
+	locker   sync.Locker
 	n        int64
 	window   time.Duration
 	deadline time.Time
 }
 
 func (times *Times) Incr() int64 {
+	times.locker.Lock()
+	defer times.locker.Unlock()
 	if times.deadline.Before(time.Now()) {
 		times.deadline = time.Now().Truncate(times.window)
 		atomic.StoreInt64(&times.n, 1)
@@ -46,6 +52,8 @@ func (times *Times) Incr() int64 {
 }
 
 func (times *Times) Decr() int64 {
+	times.locker.Lock()
+	defer times.locker.Unlock()
 	if times.deadline.Before(time.Now()) {
 		times.deadline = time.Now().Truncate(times.window)
 		atomic.StoreInt64(&times.n, 0)

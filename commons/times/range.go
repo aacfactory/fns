@@ -18,7 +18,6 @@
 package times
 
 import (
-	"github.com/aacfactory/json"
 	"time"
 )
 
@@ -49,7 +48,7 @@ func (tr *TimeRange) IsZero() (ok bool) {
 	return
 }
 
-func NewDateRange(left json.Date, right json.Date) (v *DateRange) {
+func NewDateRange(left Date, right Date) (v *DateRange) {
 	v = &DateRange{
 		Beg: left,
 		End: right,
@@ -64,11 +63,11 @@ type DateRange struct {
 	// Beg
 	// @title Beg
 	// @description `2006-01-01`
-	Beg json.Date `json:"beg"`
+	Beg Date `json:"beg"`
 	// End
 	// @title End
 	// @description `2006-01-01`
-	End json.Date `json:"end"`
+	End Date `json:"end"`
 }
 
 func (dr *DateRange) IsZero() (ok bool) {

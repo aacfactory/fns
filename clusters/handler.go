@@ -29,6 +29,7 @@ import (
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
+	"github.com/aacfactory/json"
 )
 
 var (
@@ -136,7 +137,7 @@ func (handler *InternalHandler) Handle(w transports.ResponseWriter, r transports
 	}
 	// user values
 	for _, userValue := range rb.ContextUserValues {
-		r.SetUserValue(userValue.Key, userValue.Value)
+		r.SetUserValue(userValue.Key, json.RawMessage(userValue.Value))
 	}
 
 	// header >>>

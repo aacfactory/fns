@@ -63,7 +63,9 @@ go install github.com/aacfactory/fns/cmd/fns@latest
 ```shell
 mkdir {your project path}
 cd {your project path}
-fns init --mod={mod_name} . 
+fns init --mod={mod} --img={docker image name} --work={true} --version={go version} . 
+## Example
+# fns init --mod=foo.com/project --img={foo.com/project} --work=true --version=1.21.0 .
 ```
 
 ### 编写代码
@@ -78,7 +80,7 @@ fns init --mod={mod_name} .
 五、运行`go generate`[生成代码](https://github.com/aacfactory/fns/blob/main/docs/generation.md)。
 
 ### 运行项目
-设置环境变量激活配置。
+设置环境变量激活[配置](https://github.com/aacfactory/fns/blob/main/docs/config.md)。
 
 如`FNS-ACTIVE=local`，则运行时使用`fns-local.yaml`的配置。
 

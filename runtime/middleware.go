@@ -21,8 +21,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/commons/uid"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/logs"
 	"net/http"
 	"sync"
 )

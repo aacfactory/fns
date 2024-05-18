@@ -20,7 +20,7 @@ package tracings
 import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/fns/context"
-	"github.com/aacfactory/logs"
+	"github.com/aacfactory/fns/logs"
 )
 
 type ReporterOptions struct {

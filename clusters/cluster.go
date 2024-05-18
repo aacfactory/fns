@@ -25,10 +25,10 @@ import (
 	"github.com/aacfactory/fns/clusters/proxy"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"strings"
 )

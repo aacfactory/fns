@@ -25,12 +25,11 @@ import (
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
-	fLog "github.com/aacfactory/fns/logs"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/services/tracings"
 	"github.com/aacfactory/fns/transports"
-	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"reflect"
 	"sort"
@@ -246,7 +245,7 @@ func (manager *Manager) RequestAsync(ctx context.Context, name []byte, fn []byte
 		return
 	}
 	// log
-	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	logs.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(services.Service)
 	if ok {
@@ -325,7 +324,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		return
 	}
 	// log
-	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	logs.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(services.Service)
 	if ok {

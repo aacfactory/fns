@@ -23,8 +23,8 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/services/documents"
-	"github.com/aacfactory/logs"
 	"sort"
 )
 

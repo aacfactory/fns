@@ -22,10 +22,9 @@ import (
 	"github.com/aacfactory/fns/commons/switchs"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
-	fLog "github.com/aacfactory/fns/logs"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/services"
 	"github.com/aacfactory/fns/shareds"
-	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 )
 
@@ -99,7 +98,7 @@ func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {
 	} else {
 		name = "[task]"
 	}
-	fLog.With(ctx, rt.log.With("task", name))
+	logs.With(ctx, rt.log.With("task", name))
 	With(ctx, rt)
 	return rt.worker.Dispatch(ctx, task)
 }
@@ -112,7 +111,7 @@ func (rt *Runtime) Execute(ctx context.Context, task workers.Task) {
 	} else {
 		name = "[task]"
 	}
-	fLog.With(ctx, rt.log.With("task", name))
+	logs.With(ctx, rt.log.With("task", name))
 	With(ctx, rt)
 	rt.worker.MustDispatch(ctx, task)
 	return

@@ -20,9 +20,9 @@ package caches
 import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
-	"github.com/aacfactory/logs"
 	"time"
 )
 

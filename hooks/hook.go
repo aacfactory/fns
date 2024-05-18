@@ -21,8 +21,8 @@ import (
 	"github.com/aacfactory/configures"
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/json"
-	"github.com/aacfactory/logs"
 )
 
 type Config map[string]json.RawMessage

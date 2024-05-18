@@ -24,9 +24,8 @@ import (
 	"github.com/aacfactory/fns/commons/futures"
 	"github.com/aacfactory/fns/commons/versions"
 	"github.com/aacfactory/fns/context"
-	fLog "github.com/aacfactory/fns/logs"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/services/tracings"
-	"github.com/aacfactory/logs"
 	"github.com/aacfactory/workers"
 	"sort"
 	"strings"
@@ -177,7 +176,7 @@ func (manager *Manager) RequestAsync(ctx context.Context, name []byte, fn []byte
 		return
 	}
 	// log
-	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	logs.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(Service)
 	if ok {
@@ -255,7 +254,7 @@ func (manager *Manager) Request(ctx context.Context, name []byte, fn []byte, par
 		return
 	}
 	// log
-	fLog.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
+	logs.With(req, manager.log.With("service", bytex.ToString(name)).With("fn", bytex.ToString(fn)))
 	// components
 	service, ok := endpoint.(Service)
 	if ok {
@@ -297,7 +296,7 @@ func (manager *Manager) Listen(ctx context.Context) (err error) {
 		errCh := make(chan error, 1)
 		name := ln.Name()
 		lnCtx := context.WithValue(ctx, "listener", name)
-		fLog.With(lnCtx, manager.log.With("service", name))
+		logs.With(lnCtx, manager.log.With("service", name))
 		if components := ln.Components(); len(components) > 0 {
 			WithComponents(lnCtx, bytex.FromString(name), components)
 		}

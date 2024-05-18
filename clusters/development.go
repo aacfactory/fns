@@ -26,10 +26,10 @@ import (
 	"github.com/aacfactory/fns/commons/mmhash"
 	"github.com/aacfactory/fns/commons/signatures"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/logs"
 	"github.com/aacfactory/fns/shareds"
 	"github.com/aacfactory/fns/transports"
 	"github.com/aacfactory/json"
-	"github.com/aacfactory/logs"
 	"strings"
 	"time"
 )

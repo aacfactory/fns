@@ -54,10 +54,32 @@ func init() {
     validators.AddValidateRegister(register) 
 }
 ```
+
 ## Cache
+函数的缓存操作，其函数必须有入参，且入参必须实现`github.com/aacfactory/fns/caches.KeyParam`。
+
+`KeyParam`为提供缓存的`key`。
+
+| 参数      | 说明                                              |
+|---------|-------------------------------------------------|
+| get     | 获取缓存                                            |
+| set     | 设置缓存，后跟秒数（如 set 60）。                            |
+| get-set | 先去缓存，命中直接返回，未命中走函数，函数正确则把返回值加入缓存。后跟秒数，如 set 60。 |
+| remove  | 函数处理后且正确的情况下，删除缓存。                              |
+
+
 
 ## Cache-control
+Http的`Cache-Control`，当且仅当`@readonly`开启且非`@internal`时有效。
 
+其参数如下：
+
+| 参数               | 说明                                                                 |
+|------------------|--------------------------------------------------------------------|
+| max-age={sec}    | sec为秒数。设置缓存存储的最大周期，超过这个时间缓存被认为过期 (单位秒)。                            |
+| public={bool}    | bool为true或false。 表明响应可以被任何对象（包括：发送请求的客户端，代理服务器，等等）缓存，即使是通常不可缓存的内容。 |
+| must-revalidate  | 一旦资源过期（比如已经超过max-age），在成功向原始服务器验证之前，缓存不能用该资源响应后续请求。                |
+| proxy-revalidate | 与 must-revalidate 作用相同，但它仅适用于共享缓存（例如代理），并被私有缓存忽略。                  |
 
 ## 案例
 ```go

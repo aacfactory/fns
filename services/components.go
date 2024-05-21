@@ -75,3 +75,10 @@ func LoadComponent[C Component](ctx context.Context, service []byte, name string
 	c, has = v.(C)
 	return
 }
+
+func GetComponent[C Component](ctx context.Context, name string) (c C, has bool) {
+	req := LoadRequest(ctx)
+	service, _ := req.Fn()
+	c, has = LoadComponent[C](ctx, service, name)
+	return
+}

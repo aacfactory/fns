@@ -19,7 +19,7 @@ Golang的函数式框架。标准化协议来简化开发过程。
   * [x] [支持可检索的日志格式](https://github.com/aacfactory/fns/blob/main/docs/logs.md)
   * [x] [自动化分布式API文档](https://github.com/aacfactory/fns/blob/main/docs/openapi.md)
 * [x] 高并发
-  * [x] [协程池](https://github.com/aacfactory/fns/blob/main/docs/goroutines.md)
+  * [x] 协程池
   * [x] 支持 Fasthttp
   * [x] [栅栏](https://github.com/aacfactory/fns/blob/main/docs/barrier.md)
 * [x] TLS

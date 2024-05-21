@@ -223,6 +223,8 @@ func NewFn[P any, R any](name string, handler FnHandler[P, R], options ...FnOpti
 // builtin fn handler wrapper
 // supported annotations
 // @fn {name}
+// @internal
+// @deprecated
 // @readonly
 // @authorization
 // @permission

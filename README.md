@@ -7,7 +7,7 @@ Golang的函数式框架。标准化协议来简化开发过程。
 ## 特性
 * [x] 标准化
   * [x] 万物皆[函数](https://github.com/aacfactory/fns/blob/main/docs/fn.md)
-  * [x] 天然分布式[服务](https://github.com/aacfactory/fns/blob/main/docs/service.md)
+  * [x] 天然分布式[服务](https://github.com/aacfactory/fns/blob/main/docs/architecture.md#Service)
 * [x] 适用于企业开发。
   * [x] [环境化配置](https://github.com/aacfactory/fns/blob/main/docs/config.md)
   * [x] [敏捷开发](https://github.com/aacfactory/fns/blob/main/docs/agile.md)
@@ -73,7 +73,7 @@ fns init --mod={mod} --img={docker image name} --work={true} --version={go versi
 
 二、设置[配置](https://github.com/aacfactory/fns/blob/main/docs/config.md)与[依赖](https://github.com/aacfactory/fns/blob/main/docs/dependence.md)
 
-三、创建[服务标识](https://github.com/aacfactory/fns/blob/main/docs/service.md)。
+三、创建[服务标识](https://github.com/aacfactory/fns/blob/main/docs/architecture.md#Service)。
 
 四、创建[函数](https://github.com/aacfactory/fns/blob/main/docs/fn.md)。
 
@@ -92,18 +92,18 @@ fns init --mod={mod} --img={docker image name} --work={true} --version={go versi
 开启[API文档](https://github.com/aacfactory/fns-contrib/blob/main/transports/handlers/documents/README.md)功能，通过浏览器或相关OPENAPI工具进行查阅。
 
 ## 集群
-开启[集群](https://github.com/aacfactory/fns/blob/main/docs/cluster.md)功能即可，无需其它改动。
+开启[集群](https://github.com/aacfactory/fns/blob/main/docs/architecture.md#Cluster)功能即可，无需其它改动。
 
 当运行在`kubernetes`环境中时，请使用 [inject](https://kubernetes.io/zh-cn/docs/tasks/inject-data-application/environment-variable-expose-pod-information/) 把 POD IP 注入到`FNS-HOST`环境变量中，最后把配置中`cluster.hostRetriever`的值设置为`env`。
 
 ## 客制化HTTP服务
 * [HTTP服务](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Http)
 * [中间件](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Middleware)
-* [处理器](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#handler)
+* [处理器](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Handler)
 
 ## 第三方服务集成
 ### 服务化 
-[服务化](https://github.com/aacfactory/fns/blob/main/docs/service.md)第三方服务的SDK，业务服务通过函数进行调用。
+[服务化](https://github.com/aacfactory/fns/blob/main/docs/architecture.md#Service)第三方服务的SDK，业务服务通过函数进行调用。
 
 ### 组件化
-[组件化](https://github.com/aacfactory/fns/blob/main/docs/component.md)第三方服务的SDK，然后注入到业务服务中。
+[组件化](https://github.com/aacfactory/fns/blob/main/docs/architecture.md#Component)第三方服务的SDK，然后注入到业务服务中。

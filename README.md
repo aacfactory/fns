@@ -10,7 +10,7 @@ Golang的函数式框架。标准化协议来简化开发过程。
   * [x] 天然分布式[服务](https://github.com/aacfactory/fns/blob/main/docs/architecture.md#Service)
 * [x] 适用于企业开发。
   * [x] [环境化配置](https://github.com/aacfactory/fns/blob/main/docs/config.md)
-  * [x] [敏捷开发](https://github.com/aacfactory/fns/blob/main/docs/agile.md)
+  * [x] 敏捷开发
   * [x] [内置身份校验](https://github.com/aacfactory/fns/blob/main/docs/authorizations.md) 
   * [x] [内置权限验证](https://github.com/aacfactory/fns/blob/main/docs/perissions.md) 
   * [x] [内置指标收集](https://github.com/aacfactory/fns/blob/main/docs/metric.md)

@@ -4,9 +4,11 @@
 
 # Cluster
 ![Cluster](https://github.com/aacfactory/fns/blob/main/docs/cluster.png "Cluster")
+
 注册表形式的[集群](https://github.com/aacfactory/fns/blob/main/docs/cluster.md)。
 # Service
 ![Service](https://github.com/aacfactory/fns/blob/main/docs/service.png "Service")
+
 服务为函数包。一个服务代表一个业务领域，[函数](https://github.com/aacfactory/fns/blob/main/docs/fn.md)是业务功能。
 
 在代码中，服务通过标识自动生成。

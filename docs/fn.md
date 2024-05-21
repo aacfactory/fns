@@ -110,11 +110,11 @@ type AddParam struct {
 	// Id
 	// @title user id
 	// @description user id
-	Id string `json:"id" validate:"required" validate-message:""`
+	Id string `json:"id" validate:"required" validate-message:"invalid id"`
 	// Name
 	// @title name
 	// @description name
-	Name string `json:"name" validate:"required" validate-message:""`
+	Name string `json:"name" validate:"required" validate-message:"invalid name"`
 	// Age
 	// @title age
 	// @description age

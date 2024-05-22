@@ -34,46 +34,46 @@ type TokenEncoder interface {
 	Decode(ctx context.Context, token Token) (result Authorization, err error)
 }
 
-type defaultTokenEncoderConfig struct {
-	Key string `json:"key" avro:"key"`
+type hmacTokenEncoderConfig struct {
+	Key string `json:"key" yaml:"key"`
 }
 
-func DefaultTokenEncoder() TokenEncoder {
-	return &defaultTokenEncoder{}
+func HmacTokenEncoder() TokenEncoder {
+	return &hmacTokenEncoder{}
 }
 
-type defaultTokenEncoder struct {
+type hmacTokenEncoder struct {
 	signature signatures.Signature
 }
 
-func (encoder *defaultTokenEncoder) Name() (name string) {
-	return "authorizations:encoder:default"
+func (encoder *hmacTokenEncoder) Name() (name string) {
+	return "encoder"
 }
 
-func (encoder *defaultTokenEncoder) Construct(options services.Options) (err error) {
-	config := defaultTokenEncoderConfig{}
+func (encoder *hmacTokenEncoder) Construct(options services.Options) (err error) {
+	config := hmacTokenEncoderConfig{}
 	configErr := options.Config.As(&config)
 	if configErr != nil {
-		err = errors.Warning("authorizations: build default token encoder failed").WithMeta("encoder", encoder.Name()).WithCause(configErr)
+		err = errors.Warning("authorizations: build default token encoder failed").WithMeta("encoder", "hmac").WithCause(configErr)
 		return
 	}
 	key := strings.TrimSpace(config.Key)
 	if key == "" {
-		err = errors.Warning("authorizations: build default token encoder failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("key is require"))
+		err = errors.Warning("authorizations: build default token encoder failed").WithMeta("encoder", "hmac").WithCause(errors.Warning("key is require"))
 		return
 	}
 	encoder.signature = signatures.HMAC([]byte(key))
 	return
 }
 
-func (encoder *defaultTokenEncoder) Shutdown(_ context.Context) {
+func (encoder *hmacTokenEncoder) Shutdown(_ context.Context) {
 	return
 }
 
-func (encoder *defaultTokenEncoder) Encode(_ context.Context, param Authorization) (token Token, err error) {
+func (encoder *hmacTokenEncoder) Encode(_ context.Context, param Authorization) (token Token, err error) {
 	p, encodeErr := avro.Marshal(param)
 	if encodeErr != nil {
-		err = errors.Warning("authorizations: encode token failed").WithMeta("encoder", encoder.Name()).WithCause(encodeErr)
+		err = errors.Warning("authorizations: encode token failed").WithMeta("encoder", "hmac").WithCause(encodeErr)
 		return
 	}
 	pb := make([]byte, base64.URLEncoding.EncodedLen(len(p)))
@@ -98,38 +98,38 @@ func (encoder *defaultTokenEncoder) Encode(_ context.Context, param Authorizatio
 	return
 }
 
-func (encoder *defaultTokenEncoder) Decode(_ context.Context, token Token) (result Authorization, err error) {
+func (encoder *hmacTokenEncoder) Decode(_ context.Context, token Token) (result Authorization, err error) {
 	if len(token) < 4 {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	after, found := bytes.CutPrefix(token, []byte{'F', 'n', 's', ' '})
 	if !found {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	pos := bytes.IndexByte(after, '.')
 	if pos < 1 {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	p, pErr := base64.URLEncoding.DecodeString(string(after[0:pos]))
 	if pErr != nil {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(pErr)
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(pErr)
 		return
 	}
 	s, sErr := base64.URLEncoding.DecodeString(string(after[pos+1:]))
 	if sErr != nil {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(sErr)
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(sErr)
 		return
 	}
 	if !encoder.signature.Verify(p, s) {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(errors.Warning("token is invalid"))
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(errors.Warning("token is invalid"))
 		return
 	}
 	decodeErr := avro.Unmarshal(p, &result)
 	if decodeErr != nil {
-		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", encoder.Name()).WithCause(decodeErr)
+		err = errors.Warning("authorizations: decode token failed").WithMeta("encoder", "hmac").WithCause(decodeErr)
 		return
 	}
 	return

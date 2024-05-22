@@ -1,38 +1,45 @@
 # Authorizations
 
 ---
+Fns的身份验证服务。
 
-The HTTP Authorization request header can be used to provide credentials that authenticate a user agent with a server, allowing access to a protected resource.
-Read [Authorization](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization) for more.
+验证 HTTP 头 [`Authorization`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization) 的值。
 
-## Components
-### Encoding
-`DEFAULT` encoding is builtin `fns`, config is 
+当前提供`hmac`和[`jwt`](https://github.com/aacfactory/fns-contrib/tree/main/authorizations/encoding/jwt)两种实现。
+
+令牌默认存储在共享器中，如由需要，可以代替。
+
+## 配置
+Hmac
 ```yaml
-authorizations:
-  encoding:
-    expireMinutes: 1440
+services:
+  authorizations:
+    expireTTL: "24h"
+    autoRefresh: true
+    autoRefreshWindow: "12h"
+    encoder: 
+      key: "some sk"
 ```
-`JWT` encoding is supplied by `fns-contrib`, read [doc](https://github.com/aacfactory/fns-contrib/tree/main/authorizations/encoding/jwt) for more.
-### Store
-`Discard` store is not persistence user tokens, so `revoke` api is not responded.
 
-`Redis`, `Postgres` and `MYSQL` are supplied by `fns-contrib`, read [doc](https://github.com/aacfactory/fns-contrib/tree/main/authorizations/store) for more.
+## 校验
+在函数上打上`@authorization`注解即可。
 
-## API
-Encoding, it will return a token.
+手动校验：
 ```go
-token, encodingErr := authorizations.Encode(ctx, "userId", userAttributes)
+// 校验指定令牌，当成功后，身份不会自动注入上下文中。
+validated, validErr := authorizations.Validate(ctx, token)
+// 校验当前上下文中的令牌，当成功后，身份会自动注入上下文中。
+validated, validErr := authorizations.ValidateContext(ctx)
 ```
-Verify current user token in request context, if `@authorization` is true, it will be auto invoked.
+
+## 获取身份
 ```go
-verifyErr := authorizations.Verify(ctx)
+authorization, has, err := authorizations.Load(ctx)
 ```
-Revoke token.
+
+## 创建令牌
 ```go
-revokeErr := authorizations.Revoke(ctx, "tokenId")
+token, err := authorizations.Create(ctx, param)
 ```
-Revoke user tokens.
-```go
-revokeErr := authorizations.RevokeUserTokens(ctx, "userId")
-```
+成功创建后，身份会自动注入上下文中。
+

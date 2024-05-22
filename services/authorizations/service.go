@@ -48,8 +48,8 @@ func WithTokenStore(store TokenStore) Option {
 
 func New(options ...Option) services.Service {
 	opt := Options{
-		encoder: &defaultTokenEncoder{},
-		store:   &defaultTokenStore{},
+		encoder: HmacTokenEncoder(),
+		store:   SharingTokenStore(),
 	}
 	for _, option := range options {
 		option(&opt)

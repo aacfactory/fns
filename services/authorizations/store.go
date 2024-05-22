@@ -36,24 +36,28 @@ type TokenStore interface {
 	Remove(ctx context.Context, account Id, ids []Id) (err error)
 }
 
-type defaultTokenStore struct {
+func SharingTokenStore() TokenStore {
+	return &sharingTokenStore{}
+}
+
+type sharingTokenStore struct {
 	keyPrefix []byte
 }
 
-func (store *defaultTokenStore) Name() (name string) {
-	return "default"
+func (store *sharingTokenStore) Name() (name string) {
+	return "store"
 }
 
-func (store *defaultTokenStore) Construct(_ services.Options) (err error) {
+func (store *sharingTokenStore) Construct(_ services.Options) (err error) {
 	store.keyPrefix = []byte("fns:authorizations:")
 	return
 }
 
-func (store *defaultTokenStore) Shutdown(_ context.Context) {
+func (store *sharingTokenStore) Shutdown(_ context.Context) {
 	return
 }
 
-func (store *defaultTokenStore) Get(ctx context.Context, account Id, id Id) (v Authorization, has bool, err error) {
+func (store *sharingTokenStore) Get(ctx context.Context, account Id, id Id) (v Authorization, has bool, err error) {
 	if !id.Exist() {
 		err = errors.Warning("authorizations: get authorization failed").WithCause(fmt.Errorf("id is required"))
 		return
@@ -73,7 +77,7 @@ func (store *defaultTokenStore) Get(ctx context.Context, account Id, id Id) (v A
 	return
 }
 
-func (store *defaultTokenStore) List(ctx context.Context, account Id) (v []Authorization, err error) {
+func (store *sharingTokenStore) List(ctx context.Context, account Id) (v []Authorization, err error) {
 	if !account.Exist() {
 		err = errors.Warning("authorizations: list authorization failed").WithCause(fmt.Errorf("account is required"))
 		return
@@ -97,7 +101,7 @@ func (store *defaultTokenStore) List(ctx context.Context, account Id) (v []Autho
 	return
 }
 
-func (store *defaultTokenStore) Save(ctx context.Context, v Authorization) (err error) {
+func (store *sharingTokenStore) Save(ctx context.Context, v Authorization) (err error) {
 	if !v.Exist() || !v.Validate() {
 		return
 	}
@@ -128,7 +132,7 @@ func (store *defaultTokenStore) Save(ctx context.Context, v Authorization) (err 
 	return
 }
 
-func (store *defaultTokenStore) Remove(ctx context.Context, account Id, ids []Id) (err error) {
+func (store *sharingTokenStore) Remove(ctx context.Context, account Id, ids []Id) (err error) {
 	entries, listErr := store.List(ctx, account)
 	if listErr != nil {
 		err = errors.Warning("authorizations: remove authorization failed").WithCause(listErr)

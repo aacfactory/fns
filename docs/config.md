@@ -26,3 +26,12 @@ services:
   {服务名}:
     ...
 ```
+如[SQL](https://github.com/aacfactory/fns-contrib/tree/main/databases/sql)服务的配置：
+```yaml
+services:
+  sql:
+    kind: "standalone"
+    isolation: 2
+    transactionMaxAge: 10
+    debugLog: true
+```

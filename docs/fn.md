@@ -20,7 +20,7 @@
 | @readonly      | 无      | 否  | 是否为只读，当开启时，HTTP的METHOD为GET，反之为POST。                                              |
 | @internal      | 无      | 否  | 是否为内部函数，当开启时，该函数不可被外部端口访问。                                                       |
 | @deprecated    | 无      | 否  | 是否为废弃函数，只适用于API文档。                                                               |
-| @authorization | 无      | 否  | 是否开启身份校验。                                                                        |
+| @authorization | 无      | 否  | 是否开启身份校验，开启后验证HTTP头为`Authorization`的值。                                           |
 | @permission    | 无      | 否  | 是否开启权限校验。                                                                        |
 | @metric        | 无      | 否  | 是否开启指标功能。                                                                        |
 | @barrier       | 无      | 否  | 是否开启栅栏，建议只用于`@readonly`函数。                                                       |

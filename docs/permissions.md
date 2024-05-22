@@ -13,6 +13,18 @@ services:
     ...
 ```
 
+## 添加依赖
+在`modules/services.go`中的`dependencies`函数中添加。
+```go
+func dependencies() (v []services.Service) {
+	v = []services.Service{
+		// add dependencies here
+		permissions.New(enforcer),
+	}
+	return
+}
+```
+
 ## 权限校验
 校验上下文中`authorization.Account`对当前`fn`的权限。
 ```go

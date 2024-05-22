@@ -21,6 +21,18 @@ services:
       key: "some sk"
 ```
 
+## 添加依赖
+在`modules/services.go`中的`dependencies`函数中添加。
+```go
+func dependencies() (v []services.Service) {
+	v = []services.Service{
+		// add dependencies here
+		authorizations.New(),
+	}
+	return
+}
+```
+
 ## 校验
 在函数上打上`@authorization`注解即可。
 

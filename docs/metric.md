@@ -2,37 +2,48 @@
 
 ------
 
-Measurement each fn handling result stats in request. so there are more than one stats of one request.
+Fns的函数运行指标收集服务。
 
-## Model
+## 函数指标属性
 
-| Name      | Type     | Description            |
-| --------- | -------- | ---------------------- |
-| service   | string   | name of service        |
-| fn        | string   | name of fn             |
-| succeed   | bool     | handled succeed or not |
-| errorCode | int      | code of error          |
-| errorName | string   | name or error          |
-| latency   | duration | time cost              |
+| Name      | Type     | Description |
+|-----------|----------|-------------|
+| endpoint  | string   | 服务端口名       |
+| fn        | string   | 函数名         |
+| latency   | duration | 耗时（毫秒）      |
+| succeed   | bool     | 函数处理是否正确    |
+| errorCode | int      | 错误代码        |
+| errorName | string   | 错误名称        |
+| deviceId  | string   | 访问端设备标识     |
+| deviceIp  | string   | 访问端设备IP     |
 
 
-## Component
-### Reporter 
-It is an interface, so you can use `Prometheus` to implement. 
+## Reporter组件
+上报器，可以使用`Prometheus`进行实现。
 
-## Usage
-Add service in `modules/dependencies.go`
+## 开启服务
+在 `modules/dependencies.go` 添加依赖
 ```go
-func dependencies() (services []service.Service) {
-	services = append(
-		services,
-		stats.Service(&SomeReporter{}),
-	)
+func dependencies() (v []services.Service) {
+    v = []services.Service{
+        // add dependencies here
+		metrics.New(reporter),
+    }
 	return
 }
 ```
-Setup config
+设置配置
 ```yaml
-stats:
-  reporter: {}
+metrics:
+  reporter: {}  # reporter是具体的组件名
+```
+
+## 自动收集
+在函数上增加`@metric`注解。
+
+## 手动收集
+```go
+metrics.Begin(ctx)
+// do something
+metrics.End(ctx)
 ```

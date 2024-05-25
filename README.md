@@ -23,18 +23,18 @@ Golang的函数式框架。标准化协议来简化开发过程。
   * [x] 支持 Fasthttp
   * [x] [栅栏](https://github.com/aacfactory/fns/blob/main/docs/barrier.md)
 * [x] TLS
-  * [x] [自动化自签证书](https://github.com/aacfactory/fns/blob/main/docs/tls.md#SSC)
+  * [x] [自动化自签证书](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#SSC)
 * [x] 多版本HTTP
-  * [x] [Fasthttp](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#fasthttp)
-  * [x] [基于Fasthttp的HTTP2](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#fasthttp2)
-  * [x] [标准库](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#standard)
+  * [x] [Fasthttp](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Fasthttp)
+  * [x] [基于Fasthttp的HTTP2](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Fasthttp2)
+  * [x] [标准库](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Standard)
   * [x] [HTTP3](https://github.com/aacfactory/fns-contrib/blob/main/transports/http3/README.md)
   * [x] [通用的WEBSOCKET](https://github.com/aacfactory/fns-contrib/blob/main/transports/handlers/websockets/readme.md)
 * [x] 集群
   * [x] [分布式共享](https://github.com/aacfactory/fns/blob/main/docs/cluster.md#Sharing)
   * [x] [Hazelcast](https://github.com/aacfactory/fns-contrib/blob/main/cluster/hazelcasts/README.md) 
   * [x] [Redis](https://github.com/aacfactory/fns-contrib/blob/main/databases/redis/README.md)
-  * [x] [Kubernetes](https://github.com/aacfactory/fns/blob/main/docs/kubernetes.md)
+  * [x] [Kubernetes](https://github.com/aacfactory/fns/blob/main/docs/cluster.md#KUBERNETES)
 * [x] 官方服务 
     * [x] 数据库
       * [x] [SQL](https://github.com/aacfactory/fns-contrib/blob/main/databases/sql/README.md)

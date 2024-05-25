@@ -18,58 +18,69 @@
 package metrics
 
 import (
+	sc "context"
 	"github.com/aacfactory/fns/context"
 	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
-	"sync"
-	"time"
+	"sync/atomic"
 )
 
+type ReporterComponent struct {
+	reporter Reporter
+}
+
+func (c *ReporterComponent) Name() (name string) {
+	name = "reporter"
+	return
+}
+
+func (c *ReporterComponent) Construct(options services.Options) (err error) {
+	err = c.reporter.Construct(options)
+	return
+}
+
+func (c *ReporterComponent) Shutdown(ctx context.Context) {
+	c.reporter.Shutdown(ctx)
+}
+
+func (c *ReporterComponent) Report(ctx context.Context, metric Metric) {
+	c.reporter.Report(ctx, metric)
+}
+
 type Reporter interface {
-	services.Component
+	Construct(options services.Options) (err error)
+	Shutdown(ctx context.Context)
 	Report(ctx context.Context, metric Metric)
 }
 
-type Event struct {
+var (
+	endpointStatus = atomic.Int64{}
+)
+
+type ReportTask struct {
 	rt     *runtime.Runtime
 	metric Metric
 }
 
-var (
-	events = make(chan Event, 4096)
-	timers = sync.Pool{New: func() any {
-		return time.NewTimer(10 * time.Microsecond)
-	}}
-)
-
-func listen() {
-	for {
-		event, ok := <-events
-		if !ok {
-			break
-		}
-		rt := event.rt
-		eps := rt.Endpoints()
-		ctx := runtime.With(context.TODO(), event.rt)
-		_, _ = eps.Request(ctx, endpointName, reportFnName, event.metric)
-	}
+func (task *ReportTask) Name() (name string) {
+	name = "metric"
+	return
 }
 
-func report(ctx context.Context, metric Metric) {
-	rt := runtime.Load(ctx)
-	if rt == nil {
-		return
+func (task *ReportTask) Execute(_ sc.Context) {
+	rt := task.rt
+	ctx := runtime.With(context.TODO(), rt)
+	eps := rt.Endpoints()
+	if endpointStatus.Load() < 5 {
+		_, has := eps.Get(ctx, endpointName)
+		if has {
+			endpointStatus.Store(5)
+		} else {
+			endpointStatus.Add(1)
+		}
 	}
-	timer := timers.Get().(*time.Timer)
-	select {
-	case <-timer.C:
-		break
-	case events <- Event{
-		rt:     rt,
-		metric: metric,
-	}:
-		break
+	if endpointStatus.Load() > 4 {
+		_, _ = eps.Request(ctx, endpointName, reportFnName, task.metric, services.WithInternalRequest())
 	}
-	timer.Reset(10 * time.Microsecond)
-	timers.Put(timer)
+	return
 }

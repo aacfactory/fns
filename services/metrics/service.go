@@ -29,7 +29,9 @@ var (
 
 func New(reporter Reporter) services.Service {
 	return &service{
-		Abstract: services.NewAbstract(string(endpointName), true, reporter),
+		Abstract: services.NewAbstract(string(endpointName), true, &ReporterComponent{
+			reporter: reporter,
+		}),
 	}
 }
 

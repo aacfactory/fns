@@ -18,8 +18,8 @@ Fns的函数运行指标收集服务。
 | deviceIp  | string   | 访问端设备IP     |
 
 
-## Reporter组件
-上报器，可以使用`Prometheus`进行实现。
+## Reporter
+上报器，实现`metrics.Reporter`，可以使用`Prometheus`进行实现。
 
 ## 开启服务
 在 `modules/dependencies.go` 添加依赖
@@ -35,7 +35,7 @@ func dependencies() (v []services.Service) {
 设置配置
 ```yaml
 metrics:
-  reporter: {}  # reporter是具体的组件名
+  reporter: {}  
 ```
 
 ## 自动收集

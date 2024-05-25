@@ -21,6 +21,7 @@ import (
 	"github.com/aacfactory/errors"
 	"github.com/aacfactory/fns/commons/bytex"
 	"github.com/aacfactory/fns/context"
+	"github.com/aacfactory/fns/runtime"
 	"github.com/aacfactory/fns/services"
 	"time"
 )
@@ -73,6 +74,10 @@ func EndWithCause(ctx context.Context, cause error) {
 	if v == nil {
 		return
 	}
+	rt := runtime.Load(ctx)
+	if rt == nil {
+		return
+	}
 	metric, has := v.(Metric)
 	if !has {
 		return
@@ -93,5 +98,8 @@ func EndWithCause(ctx context.Context, cause error) {
 		metric.ErrorCode = err.Code()
 		metric.ErrorName = err.Name()
 	}
-	report(ctx, metric)
+	runtime.TryExecute(ctx, &ReportTask{
+		rt:     rt,
+		metric: metric,
+	})
 }

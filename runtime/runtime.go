@@ -98,9 +98,9 @@ func (rt *Runtime) TryExecute(ctx context.Context, task workers.Task) bool {
 	} else {
 		name = "[task]"
 	}
-	logs.With(ctx, rt.log.With("task", name))
-	With(ctx, rt)
-	return rt.worker.Dispatch(ctx, task)
+	nc := context.Fork(ctx)
+	logs.With(nc, rt.log.With("task", name))
+	return rt.worker.Dispatch(nc, task)
 }
 
 func (rt *Runtime) Execute(ctx context.Context, task workers.Task) {
@@ -111,8 +111,8 @@ func (rt *Runtime) Execute(ctx context.Context, task workers.Task) {
 	} else {
 		name = "[task]"
 	}
-	logs.With(ctx, rt.log.With("task", name))
-	With(ctx, rt)
-	rt.worker.MustDispatch(ctx, task)
+	nc := context.Fork(ctx)
+	logs.With(nc, rt.log.With("task", name))
+	rt.worker.MustDispatch(nc, task)
 	return
 }

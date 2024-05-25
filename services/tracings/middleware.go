@@ -33,7 +33,18 @@ type Config struct {
 	Reporter    json.RawMessage `json:"reporter"`
 }
 
-type Middleware struct {
+func Middleware(reporter Reporter) (v transports.Middleware) {
+	v = &middleware{
+		log:      nil,
+		enable:   false,
+		events:   nil,
+		cancel:   nil,
+		reporter: reporter,
+	}
+	return
+}
+
+type middleware struct {
 	log      logs.Logger
 	enable   bool
 	events   chan *Trace
@@ -41,11 +52,11 @@ type Middleware struct {
 	reporter Reporter
 }
 
-func (middle *Middleware) Name() string {
+func (middle *middleware) Name() string {
 	return "tracings"
 }
 
-func (middle *Middleware) Construct(options transports.MiddlewareOptions) (err error) {
+func (middle *middleware) Construct(options transports.MiddlewareOptions) (err error) {
 	middle.log = options.Log
 	config := Config{}
 	configErr := options.Config.As(&config)
@@ -55,7 +66,7 @@ func (middle *Middleware) Construct(options transports.MiddlewareOptions) (err e
 	}
 	if config.Enable {
 		reporterConfig, reporterConfigErr := configures.NewJsonConfig(config.Reporter)
-		if configErr != nil {
+		if reporterConfigErr != nil {
 			err = errors.Warning("fns: tracing middleware construct failed").WithCause(reporterConfigErr)
 			return
 		}
@@ -81,11 +92,12 @@ func (middle *Middleware) Construct(options transports.MiddlewareOptions) (err e
 		for i := 0; i < batchSize; i++ {
 			middle.listen(ctx)
 		}
+		middle.enable = true
 	}
 	return
 }
 
-func (middle *Middleware) Handler(next transports.Handler) transports.Handler {
+func (middle *middleware) Handler(next transports.Handler) transports.Handler {
 	if middle.enable {
 		return transports.HandlerFunc(func(w transports.ResponseWriter, r transports.Request) {
 			id := r.Header().Get(transports.RequestIdHeaderName)
@@ -103,13 +115,14 @@ func (middle *Middleware) Handler(next transports.Handler) transports.Handler {
 	return next
 }
 
-func (middle *Middleware) Close() {
+func (middle *middleware) Close() (err error) {
 	if middle.cancel != nil {
 		middle.cancel()
 	}
+	return
 }
 
-func (middle *Middleware) listen(ctx context.Context) {
+func (middle *middleware) listen(ctx context.Context) {
 	go func(ctx context.Context, events chan *Trace, reporter Reporter) {
 		stop := false
 		for {

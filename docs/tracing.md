@@ -2,47 +2,49 @@
 
 ------
 
-Trace the `fn` used in the request. the tracer will be reported when origin request was finished.
+跟踪`fn`请求链。它是一个Http的Middleware。如需使用，请添加[Middleware](https://github.com/aacfactory/fns/blob/main/docs/trasnport.md#Middleware)。
 
-## Model
+## 添加中间件
+在`main.go`中添加，并实现一个`tracings.Reporter`加入到Middleware中。
+```go
+fns.New(
+	fns.Middleware(tracings.Middleware(reporter)),  // reporter是上报器
+)
+```
+
+## 配置
+```yaml
+transport:
+  middlewares:
+    tracings:
+      enable: true        # 是否起效。
+      batchSize: 4        # 并行数，默认4。
+      channelSize: 4096   # channel 大小，默认4096。
+      reporter: {}        # 上报器的相关配置
+```
+
+## 数据模型
 ### Tracer
-| Name | Type   | Description         |
-|------|--------|---------------------|
-| id   | string | id of tracer        |
-| span | Span   | root span of tracer |
+| 属性   | 类型     | 描述  |
+|------|--------|-----|
+| id   | string | 标识  |
+| span | Span   | 根跨度 |
 
 ### Span
 
-| Name       | Type     | Description                 |
-|------------|----------|-----------------------------|
-| id         | string   | id of span                  |
-| service    | string   | service name                |
-| fn         | string   | fn name                     |
-| tracerId   | string   | tracer id                   |
-| startAt    | time     | start time of fn handing    |
-| finishedAt | time     | finished time of fn handled |
-| children   | []Span   | sub spans                   |
-| tags       | []string | tags                        |
+| 属性       | 类型                | 描述    |
+|----------|-------------------|-------|
+| id       | string            | 跨度标识  |
+| endpoint | string            | 服务端口名 |
+| fn       | string            | 函数名   |
+| begin    | string            | 开始时间  |
+| waited   | time              | 等待时间  |
+| end      | time              | 结束时间  |
+| tags     | map[string]string | 标签    |
+| children | []Span            | 子跨度   |
 
-
-
-## Component
-### Reporter
-It is an interface, so you can use `opentracing` to implement.
-
-## Usage
-Add service in `modules/dep.go`
+## 获取上下文中的跟踪器
+如需要手动记录，可在上下文中获取。
 ```go
-func dependencies() (services []service.Service) {
-	services = append(
-		services,
-		tracings.Service(&SomeReporter{}),
-	)
-	return
-}
-```
-Setup config
-```yaml
-tracings:
-  reporter: {}
+tracer, has := tracings.Load(ctx)
 ```

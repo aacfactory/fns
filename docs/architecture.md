@@ -26,3 +26,22 @@ package foo
 | @service     | string | 是  | 服务名，必须是英文的，用于程序中寻址。 |
 | @title       | string | 否  | 标题，用于API文档。         |
 | @description | string | 否  | 描述，用于API文档。         |
+
+## Listenable
+监听服务，在`Service`上增加了`Listen`函数。 
+
+在应用启动后，开启服务监听。一般适用于消息队列服务，监听事件除非函数。
+
+## Component
+服务组件，一般用于向服务注入第三方SDK。
+
+创建组件：
+1. 一般会在服务包下创建一个子包，名为`components`。
+2. 在包里实现`services.Component`。
+3. 在结构体上打上`@component`进行组件注入。
+4. 配置组件，在服务配置中添加组件名的属性作为组件配置。
+
+函数中获取当前服务的组件：
+```go
+component, has := services.GetComponent[T](ctx, componentName)
+```

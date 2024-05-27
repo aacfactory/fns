@@ -32,6 +32,7 @@ Golang的函数式框架。标准化协议来简化开发过程。
   * [x] [通用的WEBSOCKET](https://github.com/aacfactory/fns-contrib/blob/main/transports/handlers/websockets/readme.md)
 * [x] 集群
   * [x] [分布式共享](https://github.com/aacfactory/fns/blob/main/docs/cluster.md#Sharing)
+  * [x] [请求自动代理](https://github.com/aacfactory/fns/blob/main/docs/cluster.md#Proxy)
   * [x] [Hazelcast](https://github.com/aacfactory/fns-contrib/blob/main/cluster/hazelcasts/README.md) 
   * [x] [Redis](https://github.com/aacfactory/fns-contrib/blob/main/databases/redis/README.md)
   * [x] [Kubernetes](https://github.com/aacfactory/fns/blob/main/docs/cluster.md#KUBERNETES)

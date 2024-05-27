@@ -8,7 +8,7 @@ Fns是以`yaml`格式的多环境方式进行配置。
 
 ## 基本配置项
 
-### 运行时
+### Runtime
 配置协程池、容器内`GOMAXPROCS`等。
 ```yaml
 runtime:
@@ -19,7 +19,7 @@ runtime:
     maxIdleSeconds: 5
 ```
 
-### Service
+### Services
 服务配置。
 ```yaml
 services:
@@ -34,4 +34,12 @@ services:
     isolation: 2
     transactionMaxAge: 10
     debugLog: true
+```
+
+### Hook
+[钩子](https://github.com/aacfactory/fns/blob/main/docs/hooks.md)配置：
+```yaml
+hooks:
+  {钩子名}:
+    ...
 ```

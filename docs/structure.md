@@ -1,7 +1,6 @@
-# Project structure
+# 项目结构
 
 ---
-
 
 ```
 |-- main.go                             # main
@@ -16,8 +15,8 @@
      |-- generator/
           |-- main.go                   # code generator bin
 |-- modules/                            # biz modules
-     |-- services.go                    # all services (it will be auto regenerated after invoking `go generate` command)
-     |-- dependencies.go                # dependency services 
+     |-- services.go                    # all services
+     |-- fns.go                         # dependency services  (it will be auto regenerated after invoking `go generate` command)
      |-- foo/                           # biz service
           |-- doc.go                    # definition of service
           |-- fns.go                    # fn service (it will be auto regenerated after invoking `go generate` command)

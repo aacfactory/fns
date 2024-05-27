@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-func Middleware() transports.Middleware {
+func New() transports.Middleware {
 	return &middleware{}
 }
 

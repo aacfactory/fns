@@ -28,28 +28,14 @@ fns.New(
 ```
 
 ### Fasthttp
-传输器为`fast.Transport`。
-
-配置：
-```yaml
-
-```
+传输器为`fast.Transport`，其相关配置见`fast.Config`。
 
 ### Fasthttp2
-传输器为`fast.Transport`。只需开启即可。注意：它是不稳定的。
+同`fast.Transport`，只需开启`fast.Config`中的`http2`配置。
 
-配置：
-```yaml
-
-```
 
 ### Standard
-传输器为`standard.Transport`。
-
-配置：
-```yaml
-
-```
+传输器为`standard.Transport`，其相关配置见`standard.Config`。
 
 ### Http3
 详情见[HTTP3](https://github.com/aacfactory/fns-contrib/blob/main/transports/http3/README.md)。

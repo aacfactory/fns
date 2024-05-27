@@ -194,12 +194,12 @@ func (kps Keypairs) Certificates() (tlcps []tlcp.Certificate, standards []tls.Ce
 }
 
 type ServerConfig struct {
-	ClientAuth int      `json:"clientAuth"`
+	ClientAuth string   `json:"clientAuth"`
 	Keypair    Keypairs `json:"keypair"`
 }
 
 func (config *ServerConfig) Config() (gm *tlcp.Config, standard *tls.Config, err error) {
-	clientAuth := tls.ClientAuthType(config.ClientAuth)
+	clientAuth := config.ClientAuthType()
 	if clientAuth < tls.NoClientCert || clientAuth > tls.RequireAndVerifyClientCert {
 		err = errors.Warning("fns: build server side tls config failed").WithCause(fmt.Errorf("clientAuth is invalid"))
 		return
@@ -226,6 +226,24 @@ func (config *ServerConfig) Config() (gm *tlcp.Config, standard *tls.Config, err
 		}
 	}
 	return
+}
+
+func (config *ServerConfig) ClientAuthType() tls.ClientAuthType {
+	clientAuth := strings.ToLower(strings.TrimSpace(config.ClientAuth))
+	switch clientAuth {
+	case "no_client_cert":
+		return tls.NoClientCert
+	case "request_client_cert":
+		return tls.RequestClientCert
+	case "require_any_client_cert":
+		return tls.RequireAnyClientCert
+	case "verify_client_cert_if_given":
+		return tls.VerifyClientCertIfGiven
+	case "require_and_verify_client_cert":
+		return tls.RequireAndVerifyClientCert
+	default:
+		return tls.NoClientCert
+	}
 }
 
 type ClientConfig struct {

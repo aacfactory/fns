@@ -71,14 +71,48 @@ fns.New(
 安全传输。
 
 ### FILE
-文件模式，kind为`DEFAULT`。
+文件模式，kind为`DEFAULT`，支持国密。
 
 配置：
 ```yaml
 tls:
   kind: "DEFAULT"
-  options: 
-    
+  options:
+    ca:
+      - "ca.cert"
+      - "ca2.cert"
+    server:
+      clientAuth: "" 
+      keypair:
+        - cert: "cert.pem"
+          key: "key.pem"
+          password: "when needed"
+    client:
+      insecureSkipVerify: false
+      keypair:
+        - cert: "cert.pem"
+          key: "key.pem"
+          password: "when needed"
 ```
 
+ClientAuth 枚举值：
+* no_client_cert
+* request_client_cert
+* require_any_client_cert
+* verify_client_cert_if_given
+* require_and_verify_client_cert
+
 ### SSC
+自签模式，kind为`SSC`。只需给定一个根证书即可，其它子证书会根据根证书生成，建立根证书的有效时长偏长。
+
+配置:
+```yaml
+tls:
+  kind: "SSC"
+  options:
+    ca: "ca.cert"
+    caKey: "ca.key"
+    clientAuth: "require_and_verify_client_cert"
+    serverName: "foo"
+    insecureSkipVerify: false
+```
